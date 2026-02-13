@@ -1,0 +1,61 @@
+{
+  "groups": {
+    "120363423357339667@g.us": {
+      "name": "General",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363423189270382@g.us": {
+      "name": "Events",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363423376896818@g.us": {
+      "name": "Entertainment",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363421084703266@g.us": {
+      "name": "Hobbies",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363423476654822@g.us": {
+      "name": "Book Club",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363407643871544@g.us": {
+      "name": "Shitposting",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363405986870419@g.us": {
+      "name": "Introductions",
+      "enabled": true,
+      "requireMention": true
+    },
+    "120363427236939160@g.us": {
+      "name": "Guild of Musicians",
+      "enabled": true,
+      "requireMention": true
+    }
+  },
+  "mentionPatterns": [
+    "@garbanzo",
+    "@Garbanzo",
+    "@garbanzo bean",
+    "@Garbanzo Bean",
+    "@bot"
+  ],
+  "admins": {
+    "owner": {
+      "name": "Josh Hickman",
+      "jid": "17819754407@s.whatsapp.net"
+    },
+    "moderators": [
+      { "name": "George Sotelo" },
+      { "name": "Rana M" }
+    ]
+  }
+}

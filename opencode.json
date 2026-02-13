@@ -1,0 +1,78 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5",
+
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 300000
+      }
+    },
+    "openrouter": {
+      "options": {
+        "baseURL": "https://openrouter.ai/api/v1"
+      },
+      "whitelist": [
+        "anthropic/claude-sonnet-4-5",
+        "anthropic/claude-haiku-4-5",
+        "anthropic/claude-opus-4-6",
+        "google/gemini-2.5-flash",
+        "deepseek/deepseek-chat-v3-0324"
+      ]
+    },
+    "ollama-terra": {
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "models": {
+        "qwen3:8b": {},
+        "qwen3:30b-a3b": {}
+      }
+    },
+    "ollama-macbook": {
+      "options": {
+        "baseURL": "http://100.103.40.102:11434/v1"
+      },
+      "models": {
+        "qwen3:30b-a3b": {}
+      }
+    }
+  },
+
+  "instructions": ["AGENTS.md"],
+
+  "permission": {
+    "bash": "ask",
+    "edit": "allow",
+    "mcp": "ask"
+  },
+
+  "agent": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-5",
+      "steps": 25,
+      "temperature": 0,
+      "permission": {
+        "bash": "ask",
+        "edit": "allow",
+        "mcp": "ask"
+      }
+    },
+    "plan": {
+      "model": "anthropic/claude-sonnet-4-5",
+      "mode": "primary",
+      "permission": {
+        "edit": "deny",
+        "bash": "ask"
+      }
+    }
+  },
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 8192
+  }
+}
