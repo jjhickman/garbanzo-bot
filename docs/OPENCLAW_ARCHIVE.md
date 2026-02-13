@@ -40,14 +40,52 @@ Rotate them before using in the new project. See `garbanzo-bot/docs/SECURITY.md`
 
 ## Services to Stop
 
-When ready to decommission OpenClaw:
-```bash
-# Stop the OpenClaw gateway (port 18789/18790)
-# Find the process
-ps aux | grep openclaw-gatewa
-# Kill it
-kill <pid>
+### Already Done (2026-02-13)
 
-# Disable Tailscale Funnel (currently exposing OpenClaw gateway publicly)
-tailscale funnel off
+- ✅ Tailscale Funnel disabled (`tailscale funnel off`)
+- ✅ `openclaw-webhooks.service` stopped and disabled (port 18790 closed)
+
+### Still Running — 9 Services
+
+These are user-level systemd services that start on boot. They consume ~1.7GB RAM collectively and serve no purpose without WhatsApp connected.
+
+```bash
+# Stop all OpenClaw services
+systemctl --user stop \
+  openclaw-gateway \
+  openclaw-classifiers \
+  openclaw-embeddings \
+  openclaw-ml-features \
+  openclaw-public-docs \
+  openclaw-task-router \
+  openclaw-voice-bridge \
+  openclaw-mbta-sse \
+  openclaw-mbta-forwarder
+
+# Prevent them from restarting on boot
+systemctl --user disable \
+  openclaw-gateway \
+  openclaw-classifiers \
+  openclaw-embeddings \
+  openclaw-ml-features \
+  openclaw-public-docs \
+  openclaw-task-router \
+  openclaw-voice-bridge \
+  openclaw-mbta-sse \
+  openclaw-mbta-forwarder
 ```
+
+| Service | Port | What It Does |
+|---------|------|-------------|
+| `openclaw-gateway` | 18789 | Main gateway process (~465MB) |
+| `openclaw-classifiers` | 8091 | sklearn message classifier (~223MB) |
+| `openclaw-embeddings` | 8089 | sentence-transformers embeddings (~965MB) |
+| `openclaw-ml-features` | 8092 | ML features gateway (~80MB) |
+| `openclaw-public-docs` | 8085 | Python docs server (~20MB) |
+| `openclaw-task-router` | — | Task routing (~21MB) |
+| `openclaw-voice-bridge` | — | Voice bridge (~22MB) |
+| `openclaw-mbta-sse` | — | MBTA SSE alert stream |
+| `openclaw-mbta-forwarder` | — | MBTA alert forwarder |
+
+> **Note:** Don't delete `~/.openclaw/` yet — the artifacts listed above may be useful
+> during Phase 2–3 development. Once those features are rebuilt, it can be archived or removed.
