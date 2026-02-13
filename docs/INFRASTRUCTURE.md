@@ -1,6 +1,6 @@
 # Infrastructure Reference
 
-> Preserved from OpenClaw project. Describes the hardware and network available to Garbanzo Bot.
+> Hardware and network available to Garbanzo Bot.
 
 ## Fleet
 
@@ -16,12 +16,15 @@
 
 | Service | Port | Binding | Notes |
 |---------|------|---------|-------|
-| Ollama | 11434 | all (needs fixing) | 98.8 tok/s, qwen3:8b default |
+| Ollama | 11434 | localhost | 98.8 tok/s, qwen3:8b default |
 | ChromaDB | 8000 | localhost | RAG embeddings |
-| Whisper STT | 8090 | localhost | Speech-to-text |
-| Embeddings | 8089 | localhost | nomic-embed-text |
-| Classifiers | 8091 | localhost | Content classification |
-| ML Gateway | 8092 | localhost | Unified ML API |
+| Whisper STT | 8090 | localhost | Speech-to-text (Docker) |
+| Piper TTS | 10200 | 0.0.0.0 | Text-to-speech (Docker) |
+| OpenWakeWord | 10400 | 0.0.0.0 | Wake word detection (Docker) |
+
+> **Note:** All OpenClaw services (gateway, embeddings, classifiers, ML gateway, task-router,
+> voice-bridge, MBTA SSE/forwarder, webhooks, public-docs) were decommissioned 2026-02-13.
+> See `docs/OPENCLAW_ARCHIVE.md` for details.
 
 ## Network
 
@@ -41,7 +44,7 @@
 
 ## Known Quirks
 
-- Terra: use `~/.openclaw/workspace/.venv/bin/python3` for ChromaDB (system Python 3.14 incompatible)
+- Terra: system Python is 3.14 — ChromaDB may need a dedicated venv (3.12 compatible)
 - MacBook: needs `caffeinate` daemon to prevent lid-close sleep
 - NAS: `scp`/`rsync` broken on UGOS Pro — use `cat | ssh cat >` for transfers
 - Desktop: dual-boot, not always-on

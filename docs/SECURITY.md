@@ -20,7 +20,7 @@
 | `MBTA_API_KEY` | .env + openclaw.json | Rotate |
 | `VETTLY_API_KEY` | .env | Rotate |
 | `BRAVE_SEARCH_API_KEY` | .env | Rotate |
-| `OPENCLAW_GATEWAY_TOKEN` | .env | Decommission with OpenClaw |
+| `OPENCLAW_GATEWAY_TOKEN` | .env | ✅ Decommissioned — OpenClaw stopped |
 | `PUBSUB_VERIFICATION_TOKEN` | .env | Rotate |
 | `CALENDAR_CHANNEL_TOKEN` | .env | Rotate |
 
@@ -100,9 +100,9 @@ Then use Tailscale serve for cross-machine Ollama access (encrypted, authenticat
 
 | Item | Status |
 |------|--------|
-| OpenClaw gateway bound to localhost (18789) | ✅ Correct |
+| OpenClaw fully decommissioned (all services stopped + disabled) | ✅ Done |
 | ChromaDB bound to localhost (8000) | ✅ Correct |
-| ML services (8089–8092, 8100, 8102) bound to localhost | ✅ Correct |
+| ML services were bound to localhost (now stopped with OpenClaw) | ✅ N/A |
 | Whisper Docker bound to localhost (8090) | ✅ Correct |
 | Tailscale mesh active across 5+ devices | ✅ Solid |
 | SSH running (key auth recommended) | ✅ Normal |
@@ -123,6 +123,7 @@ Then use Tailscale serve for cross-machine Ollama access (encrypted, authenticat
 | 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
 | 4 | Tailscale Funnel exposing OpenClaw | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
 | 5 | Port 18790 on `0.0.0.0` | Stopped + disabled `openclaw-webhooks.service` via `systemctl --user` | ✅ Port closed |
+| — | **Full OpenClaw decommission** | All 10 systemd services stopped + disabled, artifacts preserved to `archive/openclaw/` | ✅ Zero processes, zero ports |
 
 ### Remaining — Manual Steps
 

@@ -1,0 +1,53 @@
+{
+  "current_boss": {
+    "name": "The Winter Dragon of Apathy",
+    "month": "February",
+    "hp_max": 1000,
+    "hp_current": 1000,
+    "weaknesses": ["In-person gatherings", "Warm vibes", "Community spirit"],
+    "resistances": ["Staying home", "Netflix binges", "Cold weather excuses"],
+    "description": "A frost-wyrm that threatens to freeze Bostonians in their homes during the cold months. Only community gatherings can melt its icy grip!",
+    "emoji": "🐉❄️",
+    "damage_tracking": [],
+    "start_date": "2025-02-01",
+    "end_date": "2025-02-28",
+    "rewards": {
+      "participation": 500,
+      "top_3_damage": 1000,
+      "defeat_bonus": 250
+    }
+  },
+  "upcoming_bosses": [
+    {
+      "name": "The Spring Bloom Elemental",
+      "month": "March",
+      "hp_max": 1200,
+      "description": "A chaotic nature spirit encouraging everyone to get outside and explore Boston's awakening parks",
+      "emoji": "🌸✨"
+    },
+    {
+      "name": "The Summer Heatwave Titan",
+      "month": "July",
+      "hp_max": 1500,
+      "description": "A fire giant that demands beach trips and outdoor festivals to be appeased",
+      "emoji": "🔥☀️"
+    },
+    {
+      "name": "The Fall Harvest Golem",
+      "month": "October",
+      "hp_max": 1300,
+      "description": "An autumn construct requiring apple picking, pumpkin patches, and cozy gatherings",
+      "emoji": "🍂🎃"
+    }
+  ],
+  "damage_values": {
+    "attend_event": 50,
+    "organize_event": 100,
+    "bring_new_member": 75,
+    "post_3_groups": 25,
+    "share_photos": 20,
+    "early_rsvp": 10,
+    "weekend_event": 60,
+    "outdoor_event_winter": 75
+  }
+}

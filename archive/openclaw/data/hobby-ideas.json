@@ -1,0 +1,69 @@
+{
+  "creative": [
+    {"name": "Photography", "difficulty": "beginner", "indoor": true, "outdoor": true, "social": true},
+    {"name": "Painting/Drawing", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Creative Writing", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Pottery/Ceramics", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Calligraphy", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Woodworking", "difficulty": "intermediate", "indoor": true, "outdoor": true, "social": false},
+    {"name": "Embroidery/Cross-stitch", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Knitting/Crochet", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true}
+  ],
+  "active": [
+    {"name": "Rock Climbing", "difficulty": "beginner", "indoor": true, "outdoor": true, "social": true},
+    {"name": "Hiking", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true},
+    {"name": "Cycling", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true},
+    {"name": "Yoga", "difficulty": "beginner", "indoor": true, "outdoor": true, "social": true},
+    {"name": "Martial Arts", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Dance (Salsa/Swing/etc.)", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Tennis", "difficulty": "intermediate", "indoor": true, "outdoor": true, "social": true},
+    {"name": "Kayaking", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true}
+  ],
+  "musical": [
+    {"name": "Guitar", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Piano/Keyboard", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Singing/Vocals", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Drums/Percussion", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true},
+    {"name": "DJ/Music Production", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Violin/Strings", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true}
+  ],
+  "culinary": [
+    {"name": "Cooking", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Baking", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Coffee/Espresso Art", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Fermentation (Kombucha/Kimchi)", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Cocktail Mixing", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Cheese Making", "difficulty": "advanced", "indoor": true, "outdoor": false, "social": false}
+  ],
+  "tech": [
+    {"name": "Programming/Coding", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "3D Printing", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Arduino/Electronics", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Video Editing", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Graphic Design", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Web Development", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false}
+  ],
+  "intellectual": [
+    {"name": "Chess", "difficulty": "beginner", "indoor": true, "outdoor": true, "social": true},
+    {"name": "Language Learning", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Astronomy", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true},
+    {"name": "History Research", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Philosophy Reading", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Podcasting", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": true}
+  ],
+  "collecting": [
+    {"name": "Vinyl Records", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Plants/Gardening", "difficulty": "beginner", "indoor": true, "outdoor": true, "social": false},
+    {"name": "Board Games", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Sneakers", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true},
+    {"name": "Vintage Cameras", "difficulty": "intermediate", "indoor": true, "outdoor": false, "social": false},
+    {"name": "Comic Books", "difficulty": "beginner", "indoor": true, "outdoor": false, "social": true}
+  ],
+  "nature": [
+    {"name": "Birdwatching", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true},
+    {"name": "Foraging", "difficulty": "intermediate", "indoor": false, "outdoor": true, "social": true},
+    {"name": "Nature Photography", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": false},
+    {"name": "Stargazing", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true},
+    {"name": "Camping", "difficulty": "beginner", "indoor": false, "outdoor": true, "social": true}
+  ]
+}
