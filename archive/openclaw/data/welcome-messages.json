@@ -1,0 +1,56 @@
+{
+  "messages": [
+    {
+      "template": "🫘 Welcome {name}! Excited to have you here. Drop a quick intro whenever you're ready - we're a friendly bunch!",
+      "tone": "casual"
+    },
+    {
+      "template": "👋 Hey {name}! Welcome to the crew. Tell us a bit about yourself when you get a chance!",
+      "tone": "casual"
+    },
+    {
+      "template": "🎉 Welcome {name}! We're glad you're here. Jump in anytime - no pressure, just good vibes.",
+      "tone": "welcoming"
+    },
+    {
+      "template": "Hey {name}! 🫘 Nice to meet you. Feel free to introduce yourself and let us know what brings you to Boston!",
+      "tone": "friendly"
+    },
+    {
+      "template": "Welcome aboard {name}! 🎉 This is a great community for making connections in Boston. Drop an intro when ready!",
+      "tone": "encouraging"
+    },
+    {
+      "template": "🫘 {name} is here! Welcome! We're all about good times and good people. Tell us about yourself!",
+      "tone": "upbeat"
+    },
+    {
+      "template": "Welcome {name}! 👋 Glad to have you in the community. Share a bit about yourself whenever you're comfortable!",
+      "tone": "warm"
+    },
+    {
+      "template": "Hey {name}! Welcome to the Boston crew. 🫘 Drop an intro, ask questions, make friends - we're here for it!",
+      "tone": "inviting"
+    },
+    {
+      "template": "🎉 Welcome {name}! New faces = new adventures. Tell us what you're into and let's make some plans!",
+      "tone": "adventurous"
+    },
+    {
+      "template": "Welcome {name}! 🫘 This community is all about connection and fun. Introduce yourself and let's get to know you!",
+      "tone": "enthusiastic"
+    }
+  ],
+  "icebreaker_prompts": [
+    "What brought you to Boston?",
+    "What's your go-to Boston spot?",
+    "Coffee, tea, or neither?",
+    "Favorite Boston neighborhood?",
+    "What do you do for fun?",
+    "Any hidden talents?",
+    "Favorite local restaurant?",
+    "What are you hoping to find in this community?",
+    "Fun fact about yourself?",
+    "What's on your Boston bucket list?"
+  ]
+}

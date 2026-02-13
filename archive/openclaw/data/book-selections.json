@@ -1,0 +1,135 @@
+{
+  "fiction": [
+    {
+      "title": "The Nickel Boys",
+      "author": "Colson Whitehead",
+      "pages": 224,
+      "genre": "Historical Fiction",
+      "year": 2019,
+      "why_read": "Pulitzer winner about reform school horrors in Jim Crow South",
+      "discussion_topics": ["racial injustice", "institutional abuse", "American history"]
+    },
+    {
+      "title": "Tomorrow, and Tomorrow, and Tomorrow",
+      "author": "Gabrielle Zevin",
+      "pages": 416,
+      "genre": "Contemporary Fiction",
+      "year": 2022,
+      "why_read": "Beautiful story about friendship, video game design, and creativity",
+      "discussion_topics": ["friendship", "ambition", "art vs commerce", "gaming culture"]
+    },
+    {
+      "title": "The Overstory",
+      "author": "Richard Powers",
+      "pages": 512,
+      "genre": "Literary Fiction",
+      "year": 2018,
+      "why_read": "Pulitzer winner connecting human lives through trees and nature",
+      "discussion_topics": ["environmentalism", "interconnectedness", "activism"]
+    },
+    {
+      "title": "A Gentleman in Moscow",
+      "author": "Amor Towles",
+      "pages": 462,
+      "genre": "Historical Fiction",
+      "year": 2016,
+      "why_read": "Charming story of Russian aristocrat under house arrest",
+      "discussion_topics": ["resilience", "elegance", "Russian history", "confinement"]
+    },
+    {
+      "title": "The Night Circus",
+      "author": "Erin Morgenstern",
+      "pages": 387,
+      "genre": "Fantasy",
+      "year": 2011,
+      "why_read": "Enchanting magical competition in Victorian-era circus",
+      "discussion_topics": ["magic", "competition", "love", "illusion vs reality"]
+    },
+    {
+      "title": "The Ministry for the Future",
+      "author": "Kim Stanley Robinson",
+      "pages": 576,
+      "genre": "Science Fiction",
+      "year": 2020,
+      "why_read": "Near-future climate fiction with solutions-focused approach",
+      "discussion_topics": ["climate change", "policy", "hope", "global cooperation"]
+    },
+    {
+      "title": "Pachinko",
+      "author": "Min Jin Lee",
+      "pages": 496,
+      "genre": "Historical Fiction",
+      "year": 2017,
+      "why_read": "Multi-generational Korean family saga in Japan",
+      "discussion_topics": ["identity", "diaspora", "resilience", "family"]
+    },
+    {
+      "title": "Station Eleven",
+      "author": "Emily St. John Mandel",
+      "pages": 336,
+      "genre": "Post-Apocalyptic Fiction",
+      "year": 2014,
+      "why_read": "Beautiful meditation on art and humanity after pandemic",
+      "discussion_topics": ["survival", "art's purpose", "memory", "civilization"]
+    }
+  ],
+  "nonfiction": [
+    {
+      "title": "How to Know a Person",
+      "author": "David Brooks",
+      "pages": 304,
+      "genre": "Psychology/Self-Help",
+      "year": 2023,
+      "why_read": "Guide to deeper human connection and understanding",
+      "discussion_topics": ["empathy", "conversation", "relationships", "listening"]
+    },
+    {
+      "title": "The Wager",
+      "author": "David Grann",
+      "pages": 352,
+      "genre": "History/Adventure",
+      "year": 2023,
+      "why_read": "True story of shipwreck, mutiny, and survival in 1740s",
+      "discussion_topics": ["survival", "leadership", "truth", "justice"]
+    },
+    {
+      "title": "Empire of Pain",
+      "author": "Patrick Radden Keefe",
+      "pages": 560,
+      "genre": "True Crime/Business",
+      "year": 2021,
+      "why_read": "Sackler family and the opioid crisis",
+      "discussion_topics": ["corporate responsibility", "addiction", "justice"]
+    },
+    {
+      "title": "Crying in H Mart",
+      "author": "Michelle Zauner",
+      "pages": 256,
+      "genre": "Memoir",
+      "year": 2021,
+      "why_read": "Moving memoir about grief, identity, and Korean food",
+      "discussion_topics": ["grief", "cultural identity", "mother-daughter relationships"]
+    },
+    {
+      "title": "The Body Keeps the Score",
+      "author": "Bessel van der Kolk",
+      "pages": 464,
+      "genre": "Psychology/Trauma",
+      "year": 2014,
+      "why_read": "Groundbreaking work on trauma and healing",
+      "discussion_topics": ["trauma", "healing", "mind-body connection"]
+    }
+  ],
+  "discussion_questions_templates": [
+    "What was your favorite moment or passage? Why did it resonate?",
+    "Which character did you relate to most? What made them compelling?",
+    "Were there any plot twists or revelations that surprised you?",
+    "How did the setting/time period influence the story?",
+    "What themes stood out to you?",
+    "Did the ending satisfy you? What would you have changed?",
+    "How did this book compare to others you've read in this genre?",
+    "Would you recommend this to someone? Who would enjoy it?",
+    "What did you learn from this book?",
+    "Are there any real-world connections or parallels you noticed?"
+  ]
+}

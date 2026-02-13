@@ -1,0 +1,106 @@
+{
+  "welcome_message": {
+    "greeting": "🫘 Welcome to the Boston Community, {name}!",
+    "intro_text": "We're a group of folks in the greater Boston area making friends and connections through meetups, shared interests, and good vibes.",
+    "groups_overview": [
+      {
+        "name": "General",
+        "emoji": "💬",
+        "description": "Main chat for everyday conversation and community updates"
+      },
+      {
+        "name": "Events",
+        "emoji": "📅",
+        "description": "Plan and RSVP to meetups - bars, restaurants, activities, adventures"
+      },
+      {
+        "name": "Shitposting",
+        "emoji": "🎪",
+        "description": "Memes, jokes, hot takes, and general chaos (keep it fun, not mean)"
+      },
+      {
+        "name": "Book Club",
+        "emoji": "📚",
+        "description": "Monthly book discussions and reading recommendations"
+      },
+      {
+        "name": "Hobbies",
+        "emoji": "🎨",
+        "description": "Share your crafts, projects, and creative pursuits"
+      },
+      {
+        "name": "Entertainment",
+        "emoji": "🎬",
+        "description": "Movies, TV shows, gaming - what to watch and play"
+      },
+      {
+        "name": "Guild of Musicians",
+        "emoji": "🎸",
+        "description": "For musicians - jam sessions, gear talk, collaboration"
+      }
+    ],
+    "getting_started": [
+      "👋 Introduce yourself in the Introductions group (name, age, neighborhood, interests, what you're looking for)",
+      "📅 Check Events for upcoming meetups and RSVP to what interests you",
+      "💬 Jump into General to chat and get to know people",
+      "🤖 Type '@Garbanzo help' in any group to see what I can do"
+    ],
+    "community_vibe": "We're all about genuine connections - no networking pitches, no selling, just people making friends. Ages 25-45ish, but vibe matters more than numbers.",
+    "questions": "Questions? Ask in General or message an admin: Josh (owner), George, or Rana."
+  },
+  "icebreaker_questions": [
+    "What brought you to Boston, and what's surprised you most about living here?",
+    "If you could have dinner with any famous Bostonian (past or present), who would it be?",
+    "What's your go-to spot in Boston that tourists don't know about?",
+    "What hobby or skill are you currently learning or want to learn?",
+    "Dunkin' or local coffee shop? (This is a test 😄)",
+    "What's your favorite season in Boston and why?",
+    "If you could only eat at one Boston restaurant for the rest of your life, which would it be?",
+    "What's the most Boston thing that's ever happened to you?",
+    "Are you a Red Sox, Celtics, Patriots, or Bruins person? Or none of the above?",
+    "What's your ideal Boston weekend look like?",
+    "What neighborhood do you live in, and what's the best thing about it?",
+    "If you had to convince someone to move to Boston in one sentence, what would you say?",
+    "What's something you love that most people don't understand?",
+    "Are you more of a Cambridge intellectual or a Southie dive bar person?",
+    "What's the last thing you got genuinely excited about?"
+  ],
+  "intro_template": "**Suggested format:**\n\n📍 **Name:** Your name\n🎂 **Age:** Your age\n🏠 **Location:** Your neighborhood/city\n⏰ **How long in Boston:** Years/months\n🎯 **Interests:** Your hobbies and passions\n🔍 **Looking for:** What you hope to get from the community (friends, activity partners, exploring Boston, etc.)\n\n*Feel free to add anything else that makes you, you!*",
+  "group_tour_guide": {
+    "General": {
+      "vibe": "Chill main chat",
+      "post_here": "Random thoughts, questions, daily life, community updates",
+      "dont_post": "Event planning (use Events group), pure memes (Shitposting)"
+    },
+    "Events": {
+      "vibe": "Action-oriented planning",
+      "post_here": "Propose meetups, RSVP, coordinate logistics, share event photos",
+      "dont_post": "Casual conversation (General), personal updates"
+    },
+    "Shitposting": {
+      "vibe": "Chaotic good energy",
+      "post_here": "Memes, jokes, hot takes, absurdist humor, playful roasting",
+      "dont_post": "Mean-spirited stuff, drama, serious personal issues"
+    },
+    "Book Club": {
+      "vibe": "Thoughtful discussion",
+      "post_here": "Book recommendations, reading progress, discussion questions",
+      "dont_post": "Spoilers without warnings, off-topic chatter"
+    },
+    "Hobbies": {
+      "vibe": "Show and tell",
+      "post_here": "Your projects, WIP updates, skill sharing, workshop recommendations",
+      "dont_post": "Finished work only - WIPs welcome!"
+    },
+    "Entertainment": {
+      "vibe": "What to watch/play",
+      "post_here": "Movie/TV recommendations, gaming sessions, watch party planning",
+      "dont_post": "Major spoilers without tags"
+    },
+    "Musicians": {
+      "vibe": "For players/creators",
+      "post_here": "Jam session coordination, gear talk, song sharing, collaboration",
+      "dont_post": "Pure music listening (Entertainment is better)"
+    }
+  }
+}

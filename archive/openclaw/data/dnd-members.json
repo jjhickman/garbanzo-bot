@@ -1,0 +1,92 @@
+{
+  "members": {
+    "+15555550123": {
+      "name": "Josh Hickman",
+      "level": 1,
+      "xp": 0,
+      "class": "Rogue",
+      "alignment": "Neutral Good",
+      "stats": {
+        "STR": 10,
+        "DEX": 14,
+        "CON": 12,
+        "INT": 9,
+        "WIS": 14,
+        "CHA": 7
+      },
+      "quests_completed": 0,
+      "achievements": [
+        "first_event"
+      ],
+      "titles": []
+    },
+    "TestUser": {
+      "name": "Unknown Adventurer",
+      "level": 1,
+      "xp": 0,
+      "class": "Fighter",
+      "alignment": "Neutral Good",
+      "stats": {
+        "STR": 17,
+        "DEX": 12,
+        "CON": 5,
+        "INT": 11,
+        "WIS": 10,
+        "CHA": 15
+      },
+      "quests_completed": 0,
+      "achievements": [
+        "first_event"
+      ],
+      "titles": []
+    }
+  },
+  "comment": "Structure: member_id: {name, level, xp, class, stats, achievements, quests_completed, alignment, character_sheet}",
+  "example": {
+    "member_id_example": {
+      "name": "Josh Hickman",
+      "level": 8,
+      "xp": 35000,
+      "class": "Bard",
+      "subclass": "College of Lore",
+      "alignment": "Chaotic Good",
+      "stats": {
+        "STR": 10,
+        "DEX": 12,
+        "CON": 14,
+        "INT": 15,
+        "WIS": 11,
+        "CHA": 16
+      },
+      "proficiencies": [
+        "Performance (Guitar)",
+        "Performance (Bass)",
+        "Performance (Violin)",
+        "Persuasion",
+        "Insight"
+      ],
+      "special_abilities": [
+        "Jack of All Trades: Can contribute to any conversation",
+        "Song of Rest: Shares music recommendations (+1d6 morale)",
+        "Cutting Words: Legendary roasts in Shitposting"
+      ],
+      "quests_completed": 25,
+      "achievements": [
+        "first_event",
+        "organizer_5",
+        "organizer_10",
+        "socialite_25",
+        "all_groups_active",
+        "community_founder"
+      ],
+      "titles": [
+        "The Gregarious",
+        "Organizer of Gatherings",
+        "Master of Many Instruments"
+      ],
+      "spell_slots_used": 0,
+      "spell_slots_max": 6,
+      "joined_date": "2024-01-01"
+    }
+  }
+}

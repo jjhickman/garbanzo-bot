@@ -1,0 +1,74 @@
+{
+  "alignments": {
+    "lawful_good": {
+      "name": "Lawful Good",
+      "description": "Structured, helpful, follows the rules",
+      "keywords": ["organized", "helpful", "structured", "planning", "volunteer", "reliable"],
+      "recommended_events": ["book_club", "volunteer", "workshop", "museum", "structured_activity"],
+      "avoid_events": ["spontaneous", "chaotic", "last_minute"],
+      "emoji": "⚖️✨"
+    },
+    "neutral_good": {
+      "name": "Neutral Good",
+      "description": "Helpful and flexible, balanced approach",
+      "keywords": ["flexible", "helpful", "balanced", "easygoing", "adaptable"],
+      "recommended_events": ["coffee", "dinner", "museum", "game_night", "movie"],
+      "avoid_events": [],
+      "emoji": "🌟"
+    },
+    "chaotic_good": {
+      "name": "Chaotic Good",
+      "description": "Spontaneous, fun-loving, yes-and energy",
+      "keywords": ["spontaneous", "adventure", "random", "yes", "exciting", "party"],
+      "recommended_events": ["bar_crawl", "adventure", "spontaneous", "party", "concert"],
+      "avoid_events": ["rigid_schedule", "very_structured"],
+      "emoji": "🎉✨"
+    },
+    "lawful_neutral": {
+      "name": "Lawful Neutral",
+      "description": "Prefers structure and clear rules",
+      "keywords": ["rules", "structure", "competitive", "organized", "precise"],
+      "recommended_events": ["trivia", "game_night", "board_games", "competitive"],
+      "avoid_events": ["unstructured", "chaotic"],
+      "emoji": "⚖️"
+    },
+    "true_neutral": {
+      "name": "True Neutral",
+      "description": "Flexible and balanced, goes with the flow",
+      "keywords": ["flexible", "balanced", "whatever", "easygoing", "chill"],
+      "recommended_events": ["anything", "flexible"],
+      "avoid_events": [],
+      "emoji": "🔘"
+    },
+    "chaotic_neutral": {
+      "name": "Chaotic Neutral",
+      "description": "Unpredictable, experimental, wild card",
+      "keywords": ["random", "unpredictable", "weird", "experimental", "chaos"],
+      "recommended_events": ["shitposting_meetup", "weird_events", "experimental", "adventure"],
+      "avoid_events": ["boring", "predictable"],
+      "emoji": "🎭"
+    },
+    "lawful_evil": {
+      "name": "Lawful Evil",
+      "description": "Competitive and strategic (rare)",
+      "keywords": ["competitive", "winning", "strategic", "ruthless"],
+      "recommended_events": ["competitive_trivia", "competitive_games"],
+      "avoid_events": ["cooperative"],
+      "emoji": "👑😈"
+    }
+  },
+  "alignment_detection": {
+    "intro_keywords": {
+      "spontaneous": "chaotic_good",
+      "organized": "lawful_good",
+      "flexible": "neutral_good",
+      "competitive": "lawful_neutral",
+      "adventure": "chaotic_good",
+      "planning": "lawful_good",
+      "random": "chaotic_neutral",
+      "structured": "lawful_neutral",
+      "chill": "true_neutral",
+      "whatever": "true_neutral"
+    }
+  }
+}

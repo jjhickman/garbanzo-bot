@@ -1,0 +1,150 @@
+{
+  "achievements": {
+    "first_event": {
+      "name": "Novice Adventurer",
+      "description": "Attended your first community event",
+      "rarity": "Common",
+      "xp_bonus": 50,
+      "emoji": "🗡️"
+    },
+    "events_5": {
+      "name": "Regular Patron",
+      "description": "Attended 5 community events",
+      "rarity": "Uncommon",
+      "xp_bonus": 100,
+      "emoji": "⚔️"
+    },
+    "events_10": {
+      "name": "Seasoned Adventurer",
+      "description": "Attended 10 community events",
+      "rarity": "Rare",
+      "xp_bonus": 200,
+      "emoji": "🏹"
+    },
+    "events_25": {
+      "name": "The Socialite",
+      "description": "Attended 25+ community events",
+      "rarity": "Very Rare",
+      "xp_bonus": 500,
+      "emoji": "👑",
+      "title": "The Socialite"
+    },
+    "events_50": {
+      "name": "Legendary Hero",
+      "description": "Attended 50+ community events",
+      "rarity": "Legendary",
+      "xp_bonus": 1000,
+      "emoji": "🌟",
+      "title": "Legendary Hero of Boston"
+    },
+    "organizer_1": {
+      "name": "Event Planner",
+      "description": "Organized your first event",
+      "rarity": "Uncommon",
+      "xp_bonus": 150,
+      "emoji": "📋"
+    },
+    "organizer_5": {
+      "name": "Master of Ceremonies",
+      "description": "Organized 5 events",
+      "rarity": "Rare",
+      "xp_bonus": 300,
+      "emoji": "🎭"
+    },
+    "organizer_10": {
+      "name": "Dungeon Master",
+      "description": "Organized 10+ events",
+      "rarity": "Very Rare",
+      "xp_bonus": 500,
+      "emoji": "🎲",
+      "title": "Dungeon Master"
+    },
+    "all_groups_active": {
+      "name": "Jack of All Trades",
+      "description": "Active in all 8 community groups",
+      "rarity": "Rare",
+      "xp_bonus": 300,
+      "emoji": "🃏"
+    },
+    "new_member_bringer": {
+      "name": "The Recruiter",
+      "description": "Brought 5+ new members to the community",
+      "rarity": "Rare",
+      "xp_bonus": 300,
+      "emoji": "🤝"
+    },
+    "music_sharer": {
+      "name": "Bard of Boston",
+      "description": "Shared 50+ music recommendations",
+      "rarity": "Rare",
+      "xp_bonus": 200,
+      "emoji": "🎸",
+      "title": "Bard of Boston"
+    },
+    "book_club_reader": {
+      "name": "Scholar",
+      "description": "Completed 10+ book club reads",
+      "rarity": "Rare",
+      "xp_bonus": 250,
+      "emoji": "📚",
+      "title": "The Scholar"
+    },
+    "trivia_champion": {
+      "name": "Master of Lore",
+      "description": "Won 5+ trivia nights",
+      "rarity": "Very Rare",
+      "xp_bonus": 400,
+      "emoji": "🧠",
+      "title": "Master of Lore"
+    },
+    "project_sharer": {
+      "name": "The Artisan",
+      "description": "Shared 10+ hobby projects",
+      "rarity": "Rare",
+      "xp_bonus": 250,
+      "emoji": "🎨",
+      "title": "The Artisan"
+    },
+    "boss_raid_participant": {
+      "name": "Raid Veteran",
+      "description": "Participated in a monthly boss raid",
+      "rarity": "Uncommon",
+      "xp_bonus": 100,
+      "emoji": "🐉"
+    },
+    "boss_raid_top_damage": {
+      "name": "Dragon Slayer",
+      "description": "Top 3 damage dealer in boss raid",
+      "rarity": "Very Rare",
+      "xp_bonus": 500,
+      "emoji": "⚔️",
+      "title": "Dragon Slayer"
+    },
+    "dungeon_crawler": {
+      "name": "Explorer",
+      "description": "Completed a Boston Dungeon Crawl",
+      "rarity": "Rare",
+      "xp_bonus": 300,
+      "emoji": "🗺️"
+    },
+    "community_founder": {
+      "name": "Founder",
+      "description": "Founded the community",
+      "rarity": "Legendary",
+      "xp_bonus": 0,
+      "emoji": "👑",
+      "title": "Founder and Protector"
+    }
+  },
+  "titles": {
+    "The Socialite": "Attended 25+ events",
+    "Legendary Hero of Boston": "Attended 50+ events",
+    "Dungeon Master": "Organized 10+ events",
+    "Bard of Boston": "Music community pillar",
+    "The Scholar": "Book club devotee",
+    "Master of Lore": "Trivia champion",
+    "The Artisan": "Hobby showcase regular",
+    "Dragon Slayer": "Boss raid hero",
+    "Founder and Protector": "Community founder"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "active_sessions": {},
+  "comment": "Structure: session_id: {participants: {name: {hp, correct, wrong}}, questions_asked, status}",
+  "combat_rules": {
+    "starting_hp": 20,
+    "correct_answer_damage": "1d6",
+    "wrong_answer_self_damage": "1d4",
+    "critical_success": 20,
+    "critical_fail": 1,
+    "heal_on_streak": {
+      "3_correct": "1d4",
+      "5_correct": "1d6"
+    }
+  },
+  "sample_session": {
+    "trivia_2025_02_14": {
+      "participants": {
+        "Josh": {
+          "hp": 20,
+          "max_hp": 20,
+          "correct": 0,
+          "wrong": 0,
+          "damage_dealt": 0,
+          "damage_taken": 0,
+          "streak": 0
+        },
+        "Sarah": {
+          "hp": 20,
+          "max_hp": 20,
+          "correct": 0,
+          "wrong": 0,
+          "damage_dealt": 0,
+          "damage_taken": 0,
+          "streak": 0
+        }
+      },
+      "questions_asked": 0,
+      "status": "active",
+      "started": "2025-02-14T19:00:00",
+      "winner": null
+    }
+  }
+}

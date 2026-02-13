@@ -1,0 +1,160 @@
+{
+  "categories": [
+    {
+      "name": "Music",
+      "keywords": ["guitar", "piano", "drums", "bass", "violin", "singing", "production", "dj", "music theory"],
+      "related_groups": ["Guild of Musicians"]
+    },
+    {
+      "name": "Visual Arts",
+      "keywords": ["painting", "drawing", "photography", "digital art", "sculpture", "ceramics", "printmaking"],
+      "related_groups": ["Hobbies"]
+    },
+    {
+      "name": "Crafts",
+      "keywords": ["knitting", "crochet", "sewing", "embroidery", "woodworking", "jewelry making", "leatherwork"],
+      "related_groups": ["Hobbies"]
+    },
+    {
+      "name": "Cooking & Baking",
+      "keywords": ["cooking", "baking", "fermentation", "bread", "pastry", "cocktails", "coffee", "wine"],
+      "related_groups": ["Hobbies", "General"]
+    },
+    {
+      "name": "Sports & Fitness",
+      "keywords": ["running", "cycling", "climbing", "yoga", "martial arts", "weightlifting", "swimming", "hiking"],
+      "related_groups": ["Hobbies"]
+    },
+    {
+      "name": "Gaming",
+      "keywords": ["video games", "board games", "tabletop rpg", "dnd", "magic the gathering", "chess"],
+      "related_groups": ["Entertainment", "Hobbies"]
+    },
+    {
+      "name": "Reading & Writing",
+      "keywords": ["reading", "writing", "poetry", "creative writing", "journalism", "blogging"],
+      "related_groups": ["Book Club", "Hobbies"]
+    },
+    {
+      "name": "Tech & Making",
+      "keywords": ["coding", "programming", "electronics", "arduino", "3d printing", "robotics", "hacking"],
+      "related_groups": ["Hobbies"]
+    },
+    {
+      "name": "Gardening & Plants",
+      "keywords": ["gardening", "houseplants", "hydroponics", "foraging", "botany"],
+      "related_groups": ["Hobbies"]
+    },
+    {
+      "name": "Collecting",
+      "keywords": ["vinyl records", "coins", "stamps", "vintage", "antiques", "books"],
+      "related_groups": ["Hobbies"]
+    }
+  ],
+  "workshop_venues_boston": [
+    {
+      "name": "MakeIt Labs",
+      "location": "Lowell, MA",
+      "types": ["woodworking", "metalworking", "3d printing", "electronics"],
+      "website": "https://makeitlabs.com"
+    },
+    {
+      "name": "Artisan's Asylum",
+      "location": "Somerville, MA",
+      "types": ["woodworking", "metalworking", "jewelry", "textiles", "welding"],
+      "website": "https://artisansasylum.com"
+    },
+    {
+      "name": "Cambridge Community Art Center",
+      "location": "Cambridge, MA",
+      "types": ["painting", "ceramics", "printmaking", "photography"],
+      "website": "https://c2ae.org"
+    },
+    {
+      "name": "Mudflat Studios",
+      "location": "Somerville, MA",
+      "types": ["ceramics", "pottery", "sculpture"],
+      "website": "https://mudflat.org"
+    },
+    {
+      "name": "Brookline Adult & Community Education",
+      "location": "Brookline, MA",
+      "types": ["cooking", "languages", "arts", "fitness", "tech"],
+      "website": "https://brooklineadulted.org"
+    }
+  ],
+  "project_challenges": [
+    {
+      "month": "January",
+      "theme": "New Beginnings",
+      "prompt": "Start a project you've been putting off",
+      "difficulty": "Your choice"
+    },
+    {
+      "month": "February",
+      "theme": "Love & Warmth",
+      "prompt": "Create something cozy or heartfelt",
+      "difficulty": "Easy"
+    },
+    {
+      "month": "March",
+      "theme": "Green",
+      "prompt": "Make something primarily green in color",
+      "difficulty": "Easy"
+    },
+    {
+      "month": "April",
+      "theme": "Spring Renewal",
+      "prompt": "Upcycle or repair something old",
+      "difficulty": "Medium"
+    },
+    {
+      "month": "May",
+      "theme": "Outdoors",
+      "prompt": "Create something meant to be used outside",
+      "difficulty": "Medium"
+    },
+    {
+      "month": "June",
+      "theme": "Collaboration",
+      "prompt": "Work on a project with another member",
+      "difficulty": "Hard"
+    },
+    {
+      "month": "July",
+      "theme": "Miniature",
+      "prompt": "Make something tiny (fits in your palm)",
+      "difficulty": "Hard"
+    },
+    {
+      "month": "August",
+      "theme": "Music",
+      "prompt": "Create something music-related",
+      "difficulty": "Medium"
+    },
+    {
+      "month": "September",
+      "theme": "Back to School",
+      "prompt": "Learn a new technique and use it",
+      "difficulty": "Medium"
+    },
+    {
+      "month": "October",
+      "theme": "Spooky Season",
+      "prompt": "Make something Halloween-themed",
+      "difficulty": "Easy"
+    },
+    {
+      "month": "November",
+      "theme": "Gratitude",
+      "prompt": "Create a gift for someone",
+      "difficulty": "Your choice"
+    },
+    {
+      "month": "December",
+      "theme": "Festive",
+      "prompt": "Make holiday decorations or gifts",
+      "difficulty": "Easy"
+    }
+  ]
+}

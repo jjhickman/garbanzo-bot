@@ -1,0 +1,12 @@
+{
+        "groups": {
+            "entertainment": {"messages": 0, "active_users": []},
+            "events": {"messages": 0, "active_users": []},
+            "hobbies": {"messages": 0, "active_users": []},
+            "bookclub": {"messages": 0, "active_users": []},
+            "shitposting": {"messages": 0, "active_users": []},
+            "introductions": {"messages": 0, "active_users": []},
+            "general": {"messages": 0, "active_users": []},
+            "musicians": {"messages": 0, "active_users": []}
+        }
+    }

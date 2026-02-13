@@ -1,0 +1,115 @@
+{
+  "fiction": [
+    {
+      "title": "Project Hail Mary",
+      "author": "Andy Weir",
+      "genre": "Sci-Fi",
+      "why": "Funny, smart, and impossible to put down. Perfect for book club discussions.",
+      "boston_connection": null
+    },
+    {
+      "title": "The Martian",
+      "author": "Andy Weir",
+      "genre": "Sci-Fi",
+      "why": "Problem-solving + humor. Great for STEM-minded readers.",
+      "boston_connection": null
+    },
+    {
+      "title": "11/22/63",
+      "author": "Stephen King",
+      "genre": "Historical Fiction",
+      "why": "Time travel meets JFK assassination. King at his best.",
+      "boston_connection": "Set partially in Maine, King's home state"
+    },
+    {
+      "title": "The Midnight Library",
+      "author": "Matt Haig",
+      "genre": "Literary Fiction",
+      "why": "Explores parallel lives and regrets. Thought-provoking discussions.",
+      "boston_connection": null
+    },
+    {
+      "title": "Where the Crawdads Sing",
+      "author": "Delia Owens",
+      "genre": "Mystery",
+      "why": "Beautiful prose, mystery, and nature. Bestseller for a reason.",
+      "boston_connection": null
+    }
+  ],
+  "nonfiction": [
+    {
+      "title": "Educated",
+      "author": "Tara Westover",
+      "genre": "Memoir",
+      "why": "Powerful story of education and family. Sparks great debates.",
+      "boston_connection": null
+    },
+    {
+      "title": "Atomic Habits",
+      "author": "James Clear",
+      "genre": "Self-Help",
+      "why": "Practical, actionable. Great for goal-setting discussions.",
+      "boston_connection": null
+    },
+    {
+      "title": "Sapiens",
+      "author": "Yuval Noah Harari",
+      "genre": "History",
+      "why": "Big-picture human history. Endless discussion topics.",
+      "boston_connection": null
+    },
+    {
+      "title": "The Immortal Life of Henrietta Lacks",
+      "author": "Rebecca Skloot",
+      "genre": "Science/Biography",
+      "why": "Ethics, medicine, and history. Compelling narrative.",
+      "boston_connection": "Medical ethics relevant to Boston's hospital scene"
+    },
+    {
+      "title": "Born to Run",
+      "author": "Christopher McDougall",
+      "genre": "Sports/Adventure",
+      "why": "Running, culture, and adventure. Great for active groups.",
+      "boston_connection": "Boston Marathon culture"
+    }
+  ],
+  "classics": [
+    {
+      "title": "Pride and Prejudice",
+      "author": "Jane Austen",
+      "genre": "Romance/Classic",
+      "why": "Timeless wit and social commentary. Always relevant.",
+      "boston_connection": null
+    },
+    {
+      "title": "1984",
+      "author": "George Orwell",
+      "genre": "Dystopian",
+      "why": "Eerily relevant. Great for political/philosophical discussions.",
+      "boston_connection": null
+    },
+    {
+      "title": "To Kill a Mockingbird",
+      "author": "Harper Lee",
+      "genre": "Classic",
+      "why": "Justice, morality, and growing up. Essential reading.",
+      "boston_connection": null
+    }
+  ],
+  "boston_local": [
+    {
+      "title": "Mystic River",
+      "author": "Dennis Lehane",
+      "genre": "Crime/Mystery",
+      "why": "Gritty Boston noir. Lehane is a local legend.",
+      "boston_connection": "Set in Boston, written by Boston native"
+    },
+    {
+      "title": "The Given Day",
+      "author": "Dennis Lehane",
+      "genre": "Historical Fiction",
+      "why": "Boston history, 1919. Epic and immersive.",
+      "boston_connection": "Set in Boston during historic 1919 police strike"
+    }
+  ]
+}
