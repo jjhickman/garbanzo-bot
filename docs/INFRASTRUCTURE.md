@@ -29,7 +29,7 @@
 ## Network
 
 - **Tailscale mesh VPN** connects all machines
-- **Tailscale Funnel** available for public webhook ingress
+- **Tailscale Funnel** disabled (was exposing OpenClaw; can be re-enabled for webhook ingress)
 - LAN: `192.168.50.0/24`
 - NAS NFS: model storage at `/volume2/models/`
 - Backups: encrypted (age) to NAS `/volume1/backups/`

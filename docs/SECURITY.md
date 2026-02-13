@@ -28,71 +28,42 @@
 
 **Recommendation:** Rotate ALL keys once the new bot is live. Use `.env` only (gitignored), never commit keys to config files. For production, consider using a secrets manager or encrypted env files.
 
-### 2. UFW Firewall Inactive
+### 2. ✅ UFW Firewall Inactive — FIXED
 
-```
-Status: inactive
-```
+~~Terra had no host firewall running.~~
 
-Terra has **no host firewall** running. While the router/NAT provides some protection, and Tailscale handles mesh security, any service bound to `0.0.0.0` is reachable from the LAN.
+Resolved: UFW enabled with deny-incoming default, allowing SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`). 4 rules active.
 
-**Recommendation:**
-```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow ssh
-sudo ufw allow from 100.64.0.0/10   # Tailscale
-sudo ufw allow from 192.168.50.0/24  # LAN (if needed)
-sudo ufw enable
-```
+### 3. ✅ Services Bound to 0.0.0.0 — FIXED
 
-### 3. Services Bound to 0.0.0.0 (LAN-Accessible)
+~~Ollama and OpenClaw were reachable from any device on the LAN.~~
 
-These services are reachable from **any device on your LAN**:
+Resolved: Ollama bound to `127.0.0.1`. All OpenClaw services decommissioned (ports 8085, 8089, 8091, 8092, 18789, 18790 closed).
+
+Remaining services on `0.0.0.0` (low risk, no sensitive data):
 
 | Port | Service | Risk |
 |------|---------|------|
-| 10200 | Piper TTS (Docker) | Low — no sensitive data |
-| 10300 | Wyoming Whisper (Docker) | Low — no sensitive data |
-| 10400 | OpenWakeWord (Docker) | Low — no sensitive data |
-| 11434 | **Ollama** | **MEDIUM** — anyone on LAN can run inference |
-| 8085 | Python docs server | Low |
-| 18790 | **OpenClaw Node process** | **HIGH** — potential control plane access |
-| 22 | SSH | Normal — password/key auth |
-| 111 | rpcbind (NFS) | Low — no NFS exports on Terra |
-
-**Recommendation:** Bind Ollama to localhost (`OLLAMA_HOST=127.0.0.1`). Tailscale handles cross-machine access securely. Stop the OpenClaw node process (port 18790) when migrating away.
+| 10200 | Piper TTS (Docker) | Low |
+| 10300 | Wyoming Whisper (Docker) | Low |
+| 10400 | OpenWakeWord (Docker) | Low |
+| 22 | SSH | Normal |
 
 ---
 
 ## 🟡 Medium Findings
 
-### 4. Tailscale Funnel Exposes Two Services Publicly
+### 4. ✅ Tailscale Funnel — DISABLED
 
-```
-https://terra.tailaba7ac.ts.net (Funnel on)
-├── /     → proxy http://127.0.0.1:18790  (OpenClaw gateway)
-└── /docs → proxy http://127.0.0.1:8085   (docs server)
-```
+~~OpenClaw gateway and docs server were publicly accessible via Tailscale Funnel.~~
 
-The OpenClaw gateway is **publicly accessible via Tailscale Funnel**. Anyone who discovers the URL can hit the gateway.
+Resolved: `tailscale funnel off` — no serve config remains. Funnel can be re-enabled later if webhook ingress is needed for the new bot.
 
-**Recommendation:** Disable Funnel until you need webhook ingress for the new bot:
-```bash
-tailscale funnel off
-```
+### 5. ✅ Ollama Bound to All Interfaces — FIXED
 
-### 5. Ollama Bound to All Interfaces
+~~Ollama was on `*:11434`, accessible from LAN and Tailscale mesh.~~
 
-Ollama listens on `*:11434` — accessible from LAN, Tailscale mesh, and (if Funnel were misconfigured) potentially the internet.
-
-**Recommendation:**
-```bash
-# In /etc/systemd/system/ollama.service.d/override.conf
-[Service]
-Environment="OLLAMA_HOST=127.0.0.1"
-```
-Then use Tailscale serve for cross-machine Ollama access (encrypted, authenticated).
+Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama.service.d/override.conf`).
 
 ---
 
