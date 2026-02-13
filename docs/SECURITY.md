@@ -113,13 +113,33 @@ Then use Tailscale serve for cross-machine Ollama access (encrypted, authenticat
 
 ---
 
-## Action Items for New Project
+## Remediation Log
 
-1. [ ] Rotate all API keys after migration
-2. [ ] Enable UFW with sane defaults
-3. [ ] Bind Ollama to localhost
-4. [ ] Disable Tailscale Funnel (re-enable only for webhook ingress later)
-5. [ ] Stop OpenClaw node process (port 18790)
-6. [ ] New bot: use `.env` only, no keys in JSON configs
-7. [ ] New bot: create a dedicated systemd service (not a bare node process)
-8. [ ] Consider SSH key-only auth (disable password auth)
+### Applied 2026-02-13
+
+| # | Finding | Fix Applied | Verified |
+|---|---------|-------------|----------|
+| 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`) | ✅ 4 rules active |
+| 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
+| 4 | Tailscale Funnel exposing OpenClaw | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
+| 5 | Port 18790 on `0.0.0.0` | Stopped + disabled `openclaw-webhooks.service` via `systemctl --user` | ✅ Port closed |
+
+### Remaining — Manual Steps
+
+1. **[ ] Rotate all API keys** — old keys were exposed to AI agents with file read access in `~/.openclaw/.env` and `~/.openclaw/openclaw.json`
+
+   | Key | Where to rotate |
+   |-----|----------------|
+   | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+   | `GOOGLE_API_KEY` | [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials |
+   | `NEWSAPI_KEY` | [newsapi.org/account](https://newsapi.org/account) |
+   | `MBTA_API_KEY` | [api-v3.mbta.com/portal](https://api-v3.mbta.com/portal) |
+   | `VETTLY_API_KEY` | Vettly dashboard |
+   | `BRAVE_SEARCH_API_KEY` | [api.search.brave.com/app/keys](https://api.search.brave.com/app/keys) |
+   | `PUBSUB_VERIFICATION_TOKEN` | Regenerate — this was a self-generated token |
+   | `CALENDAR_CHANNEL_TOKEN` | Regenerate — this was a self-generated token |
+
+   After rotating, add new keys to `~/garbanzo-bot/.env` **only**. Never put keys in JSON configs.
+
+2. **[ ] Create dedicated systemd service** for the new bot (Phase 1 task — see ROADMAP.md)
+3. **[ ] Consider SSH key-only auth** — disable password auth in `/etc/ssh/sshd_config`
