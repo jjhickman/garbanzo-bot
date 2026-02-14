@@ -211,7 +211,9 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       isMentioned: isMentioned(text, mentionedJids, botJid, botLid),
     }, 'Mention check');
 
-    if (requiresMention(remoteJid) && !isMentioned(text, mentionedJids, botJid, botLid)) return;
+    // Bang commands (!command) bypass the mention requirement — users expect them to just work
+    const isBangCommand = /^\s*!/.test(text);
+    if (requiresMention(remoteJid) && !isBangCommand && !isMentioned(text, mentionedJids, botJid, botLid)) return;
 
     // Soft-muted users get silently ignored
     if (isSoftMuted(senderJid)) {
@@ -251,18 +253,43 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
     }
 
     // Check for character command — sends PDF document + text summary
+    // Validates PDF fields internally; if incomplete, retries and deletes previous attempt
     if (featureCheck?.feature === 'character') {
       const charResult = await handleCharacter(featureCheck.query);
       if (typeof charResult === 'string') {
         await sock.sendMessage(remoteJid, { text: charResult }, { quoted: msg });
       } else {
         // Send text summary first, then PDF document
-        await sock.sendMessage(remoteJid, { text: charResult.summary }, { quoted: msg });
-        await sock.sendMessage(remoteJid, {
+        const summaryMsg = await sock.sendMessage(remoteJid, { text: charResult.summary }, { quoted: msg });
+        const pdfMsg = await sock.sendMessage(remoteJid, {
           document: Buffer.from(charResult.pdfBytes),
           mimetype: 'application/pdf',
           fileName: charResult.fileName,
         });
+
+        // If validation flagged empty fields, retry once and delete old messages
+        if (charResult.hasEmptyFields) {
+          logger.warn({ fileName: charResult.fileName }, 'Character PDF had empty fields — regenerating');
+          const retryResult = await handleCharacter(featureCheck.query);
+          if (typeof retryResult !== 'string' && !retryResult.hasEmptyFields) {
+            // Delete previous attempt
+            if (summaryMsg?.key) {
+              await sock.sendMessage(remoteJid, { delete: summaryMsg.key });
+            }
+            if (pdfMsg?.key) {
+              await sock.sendMessage(remoteJid, { delete: pdfMsg.key });
+            }
+            // Send corrected version
+            await sock.sendMessage(remoteJid, { text: retryResult.summary }, { quoted: msg });
+            await sock.sendMessage(remoteJid, {
+              document: Buffer.from(retryResult.pdfBytes),
+              mimetype: 'application/pdf',
+              fileName: retryResult.fileName,
+            });
+            logger.info({ fileName: retryResult.fileName }, 'Character PDF retry sent, old messages deleted');
+          }
+        }
+
         recordBotResponse(remoteJid);
         recordResponse(senderJid, remoteJid);
       }

@@ -313,16 +313,23 @@ describe('Character — formatCharacterSummary', async () => {
 describe('Character — generateCharacterPDF', async () => {
   const { generateCharacter, generateCharacterPDF } = await import('../src/features/character.js');
 
-  it('generates valid PDF bytes', async () => {
+  it('generates valid PDF bytes with no empty fields', async () => {
     const char = generateCharacter('human', 'fighter');
-    const pdfBytes = await generateCharacterPDF(char);
+    const result = await generateCharacterPDF(char);
 
-    expect(pdfBytes).toBeInstanceOf(Uint8Array);
-    expect(pdfBytes.length).toBeGreaterThan(10000); // A filled PDF should be substantial
+    expect(result.pdfBytes).toBeInstanceOf(Uint8Array);
+    expect(result.pdfBytes.length).toBeGreaterThan(10000); // A filled PDF should be substantial
+    expect(result.emptyFields).toHaveLength(0); // All fields should be filled
 
     // Check PDF magic bytes (%PDF)
-    const header = String.fromCharCode(pdfBytes[0], pdfBytes[1], pdfBytes[2], pdfBytes[3]);
+    const header = String.fromCharCode(result.pdfBytes[0], result.pdfBytes[1], result.pdfBytes[2], result.pdfBytes[3]);
     expect(header).toBe('%PDF');
+  });
+
+  it('generates valid PDF with no empty fields for spellcaster', async () => {
+    const char = generateCharacter('elf', 'wizard');
+    const result = await generateCharacterPDF(char);
+    expect(result.emptyFields).toHaveLength(0);
   });
 
   it('generates different PDFs for different characters', async () => {
@@ -333,7 +340,7 @@ describe('Character — generateCharacterPDF', async () => {
     const pdf2 = await generateCharacterPDF(char2);
 
     // Different characters should produce different PDFs
-    expect(pdf1.length).not.toBe(pdf2.length);
+    expect(pdf1.pdfBytes.length).not.toBe(pdf2.pdfBytes.length);
   });
 });
 
@@ -356,20 +363,22 @@ describe('Character — handleCharacter', async () => {
   it('generates a CharacterResult for empty input (full random)', async () => {
     const result = await handleCharacter('');
     expect(typeof result).not.toBe('string');
-    const charResult = result as { summary: string; pdfBytes: Uint8Array; fileName: string };
+    const charResult = result as { summary: string; pdfBytes: Uint8Array; fileName: string; hasEmptyFields: boolean };
     expect(charResult.summary).toBeTruthy();
     expect(charResult.pdfBytes).toBeInstanceOf(Uint8Array);
     expect(charResult.fileName).toMatch(/\.pdf$/);
+    expect(charResult.hasEmptyFields).toBe(false);
   });
 
   it('generates for specified race and class', async () => {
     const result = await handleCharacter('elf wizard');
     expect(typeof result).not.toBe('string');
-    const charResult = result as { summary: string; pdfBytes: Uint8Array; fileName: string };
+    const charResult = result as { summary: string; pdfBytes: Uint8Array; fileName: string; hasEmptyFields: boolean };
     expect(charResult.summary).toContain('Elf');
     expect(charResult.summary).toContain('Wizard');
     expect(charResult.fileName).toContain('Elf');
     expect(charResult.fileName).toContain('Wizard');
+    expect(charResult.hasEmptyFields).toBe(false);
   });
 
   it('generates for class-only input', async () => {

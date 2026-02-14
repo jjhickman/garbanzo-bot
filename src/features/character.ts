@@ -13,7 +13,7 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 
@@ -347,6 +347,8 @@ export interface CharacterData {
   skin: string;
   hair: string;
   backstory: string;
+  allies: string;
+  factionName: string;
   treasure: string;
   // Page 3 — spellcasting
   isSpellcaster: boolean;
@@ -630,6 +632,59 @@ function generateStartingTreasure(background: string): string {
   return `${gold} gp`;
 }
 
+// ── Allies & Factions ───────────────────────────────────────────────
+
+const BACKGROUND_ALLIES: Record<string, { faction: string; allies: string }> = {
+  Acolyte: {
+    faction: 'Temple of the Dawn',
+    allies: 'The priests and acolytes of my temple are my spiritual family. They took me in when I had nothing and taught me the ways of the divine. I can count on them for shelter and guidance.',
+  },
+  Criminal: {
+    faction: 'The Shadow Network',
+    allies: 'I still have contacts in the criminal underworld. A fence who can move stolen goods, an informant in the city watch, and a safecracker who owes me a favor.',
+  },
+  'Folk Hero': {
+    faction: 'The Common Folk',
+    allies: 'The people of my home village remember what I did for them. Farmers, millers, and tradespeople who would shelter me and share what little they have.',
+  },
+  Noble: {
+    faction: 'House of the Silver Crown',
+    allies: 'My noble family still holds influence in the region. A loyal retainer manages our estate, and distant cousins serve in courts across the land.',
+  },
+  Sage: {
+    faction: 'The Arcane Academy',
+    allies: 'Fellow scholars at the academy correspond with me regularly. The head librarian grants me access to restricted texts, and a colleague researches parallel questions.',
+  },
+  Soldier: {
+    faction: 'The Iron Company',
+    allies: 'My old military company remembers me. The quartermaster saves surplus supplies, and my former sergeant would answer a call to arms without hesitation.',
+  },
+  Charlatan: {
+    faction: 'The Gilded Masks',
+    allies: 'A loose network of con artists who share marks and cover stories. We watch each other\'s backs — mostly because we know too much about each other.',
+  },
+  Entertainer: {
+    faction: 'The Wandering Troupe',
+    allies: 'My former traveling troupe still performs across the region. They offer shelter, news from distant towns, and a warm audience for my latest tales.',
+  },
+  'Guild Artisan': {
+    faction: 'The Artisan\'s Guild',
+    allies: 'My guild provides a network of fellow crafters across many cities. The guild hall offers lodging, tools, and introductions to local merchants.',
+  },
+  Hermit: {
+    faction: 'The Seekers of Truth',
+    allies: 'A small circle of fellow hermits and mystics who share discoveries through coded letters left at forest shrines. We rarely meet face to face.',
+  },
+  Outlander: {
+    faction: 'The Wilder Clans',
+    allies: 'My tribe roams the frontier lands. Hunters, trackers, and elders who know every trail and watering hole. They would welcome me back without question.',
+  },
+  Sailor: {
+    faction: 'The Salted Brotherhood',
+    allies: 'Fellow sailors from my years at sea. A first mate who runs a tavern by the docks, a navigator who charts private routes, and a captain who still owes me wages.',
+  },
+};
+
 // ── Spellcasting Data ───────────────────────────────────────────────
 
 interface SpellcastingInfo {
@@ -824,6 +879,8 @@ export function generateCharacter(raceIndex?: string, classIndex?: string): Char
     skin: appearance.skin,
     hair: appearance.hair,
     backstory,
+    allies: BACKGROUND_ALLIES[background]?.allies ?? 'None yet — adventures await.',
+    factionName: BACKGROUND_ALLIES[background]?.faction ?? '',
     treasure,
     // Page 3
     ...spellInfo,
@@ -921,20 +978,37 @@ const SKILL_FIELDS: Record<string, string> = {
   'Survival': 'Survival',
 };
 
-/** Fill the WotC 5e character sheet template and return PDF bytes */
-export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Array> {
+interface PDFResult {
+  pdfBytes: Uint8Array;
+  emptyFields: string[];
+}
+
+/** Fill the WotC 5e character sheet template and return PDF bytes + validation info */
+export async function generateCharacterPDF(char: CharacterData): Promise<PDFResult> {
   const templateBytes = readFileSync(TEMPLATE_PATH);
   const doc = await PDFDocument.load(templateBytes);
   const form = doc.getForm();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
 
-  // Helper to safely set text fields
+  // Track every field we attempt to set, for post-fill validation
+  const fieldLog: Array<{ name: string; value: string; fontSize?: number; ok: boolean }> = [];
+
+  // The WotC template has no /DA (default appearance) entries, but its
+  // built-in appearance streams handle font/size for most fields.
+  // Only call defaultUpdateAppearances + setFontSize on fields that
+  // need custom small text — otherwise the template's own rendering is used.
   const setText = (fieldName: string, value: string, fontSize?: number) => {
     try {
       const field = form.getTextField(fieldName);
-      if (fontSize) field.setFontSize(fontSize);
+      if (fontSize) {
+        field.defaultUpdateAppearances(font);
+        field.setFontSize(fontSize);
+      }
       field.setText(value);
+      fieldLog.push({ name: fieldName, value, fontSize, ok: true });
     } catch (err) {
-      logger.debug({ fieldName, err }, 'PDF field not found');
+      logger.warn({ fieldName, fontSize, err }, 'PDF setText failed (pass 1)');
+      fieldLog.push({ name: fieldName, value, fontSize, ok: false });
     }
   };
 
@@ -943,7 +1017,7 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
       const field = form.getCheckBox(fieldName);
       field.check();
     } catch (err) {
-      logger.debug({ fieldName, err }, 'PDF checkbox not found');
+      logger.warn({ fieldName, err }, 'PDF setCheck failed');
     }
   };
 
@@ -1060,6 +1134,8 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
   setText('Skin', char.skin);
   setText('Hair', char.hair);
   setText('Backstory', char.backstory, 8);
+  setText('Allies', char.allies, 7);
+  setText('FactionName', char.factionName, 8);
   setText('Feat+Traits', char.classFeatures, 8);  // Page 2: class features
   setText('Treasure', char.treasure, 8);
 
@@ -1078,11 +1154,17 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
     }
 
     // Level 1 spells — fields: Spells 1015, 1023-1033 (12 slots)
+    // Preparation checkboxes: Check Box 251 (first), 309, 3010-3019 (remaining)
     const level1Fields = ['Spells 1015', 'Spells 1023', 'Spells 1024', 'Spells 1025',
       'Spells 1026', 'Spells 1027', 'Spells 1028', 'Spells 1029',
       'Spells 1030', 'Spells 1031', 'Spells 1032', 'Spells 1033'];
+    const level1PrepBoxes = ['Check Box 251', 'Check Box 309', 'Check Box 3010',
+      'Check Box 3011', 'Check Box 3012', 'Check Box 3013', 'Check Box 3014',
+      'Check Box 3015', 'Check Box 3016', 'Check Box 3017', 'Check Box 3018',
+      'Check Box 3019'];
     for (let i = 0; i < char.level1Spells.length && i < level1Fields.length; i++) {
       setText(level1Fields[i], char.level1Spells[i]);
+      if (level1PrepBoxes[i]) setCheck(level1PrepBoxes[i]);  // Mark as prepared
     }
 
     // Level 1 spell slots
@@ -1090,10 +1172,54 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
     setText('SlotsRemaining 19', String(char.level1Slots));
   }
 
+  // ── Post-fill validation + retry ──────────────────────────────
+  const failed = fieldLog.filter((f) => !f.ok);
+  if (failed.length > 0) {
+    logger.warn({ failedCount: failed.length, fields: failed.map((f) => f.name) },
+      'PDF field validation: retrying failed fields with defaultUpdateAppearances');
+
+    for (const entry of failed) {
+      try {
+        const field = form.getTextField(entry.name);
+        field.defaultUpdateAppearances(font);
+        if (entry.fontSize) field.setFontSize(entry.fontSize);
+        field.setText(entry.value);
+        entry.ok = true;
+        logger.info({ fieldName: entry.name }, 'PDF field retry succeeded');
+      } catch (err) {
+        logger.error({ fieldName: entry.name, err }, 'PDF field retry FAILED — field will be empty');
+      }
+    }
+  }
+
+  // Read back all text fields to verify they were actually set
+  const emptyFields: string[] = [];
+  for (const entry of fieldLog) {
+    try {
+      const field = form.getTextField(entry.name);
+      const readBack = field.getText();
+      if (!readBack && entry.value) {
+        emptyFields.push(entry.name);
+      }
+    } catch {
+      // Field might not exist — already logged above
+    }
+  }
+
+  if (emptyFields.length > 0) {
+    logger.error({ emptyFields, count: emptyFields.length },
+      'PDF validation: fields are empty after fill — character sheet is incomplete');
+  }
+
+  const totalFilled = fieldLog.length - emptyFields.length;
+  logger.info({ totalFields: fieldLog.length, filled: totalFilled, empty: emptyFields.length },
+    'PDF field fill summary');
+
   // Flatten the form so it displays correctly on all viewers
   form.flatten();
 
-  return await doc.save();
+  const pdfBytes = await doc.save();
+  return { pdfBytes, emptyFields };
 }
 
 // ── Argument parsing ────────────────────────────────────────────────
@@ -1183,6 +1309,7 @@ export interface CharacterResult {
   summary: string;
   pdfBytes: Uint8Array;
   fileName: string;
+  hasEmptyFields: boolean;
 }
 
 /**
@@ -1205,13 +1332,14 @@ export async function handleCharacter(query: string): Promise<CharacterResult | 
       stats: char.abilities,
     }, 'Generating character sheet');
 
-    const pdfBytes = await generateCharacterPDF(char);
+    const pdfResult = await generateCharacterPDF(char);
     const fileName = `${char.name}_${char.race}_${char.class}_Lvl1.pdf`;
 
     return {
       summary: formatCharacterSummary(char),
-      pdfBytes,
+      pdfBytes: pdfResult.pdfBytes,
       fileName,
+      hasEmptyFields: pdfResult.emptyFields.length > 0,
     };
   } catch (err) {
     logger.error({ err }, 'Character generation failed');
