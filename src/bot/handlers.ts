@@ -17,6 +17,7 @@ import { checkMessage, formatModerationAlert } from '../features/moderation.js';
 import { handleNews } from '../features/news.js';
 import { getHelpMessage } from '../features/help.js';
 import { handleIntroduction, INTRODUCTIONS_JID, triggerIntroCatchUp } from '../features/introductions.js';
+import { handleEvent, handleEventPassive, EVENTS_JID } from '../features/events.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -132,6 +133,15 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
     }
   }
 
+  // ── Events group (passive detection, no @mention needed) ──
+  if (remoteJid === EVENTS_JID) {
+    const eventResponse = await handleEventPassive(text, senderJid, remoteJid);
+    if (eventResponse) {
+      await sock.sendMessage(remoteJid, { text: eventResponse }, { quoted: msg });
+      return;
+    }
+  }
+
   // ── Emoji reactions to bot replies (acknowledgments) ──
   if (isReplyToBot(content, sock.user?.id, sock.user?.lid) && isAcknowledgment(text)) {
     logger.info({ remoteJid, sender: senderJid, text }, 'Acknowledgment reply — reacting');
@@ -229,6 +239,8 @@ async function getResponse(
         return await handleTransit(feature.query);
       case 'news':
         return await handleNews(feature.query);
+      case 'events':
+        return await handleEvent(feature.query, ctx.senderJid, ctx.groupJid);
     }
   }
 

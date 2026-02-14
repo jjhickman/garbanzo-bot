@@ -47,7 +47,7 @@
 5. ~~**News Search** (`src/features/news.ts`) — NewsAPI, already have key~~ ✅ Live
 6. ~~**Introduction Responses** (`src/features/introductions.ts`) — auto-respond to new member intros in Introductions group~~ ✅ Live — AI-powered personal welcomes, no @mention needed, 14-day catch-up window, `!catchup intros` owner command
 7. ~~**Emoji Reactions** — react with 🫘 to short acknowledgment replies ("good bot", "thanks", etc.) instead of generating a full AI response~~ ✅ Live
-8. **Event Detection** — detect event proposals in chat, offer to enrich with venue/weather/transit info
+8. ~~**Event Detection** (`src/features/events.ts`) — detect event proposals, enrich with weather/transit/AI logistics~~ ✅ Live — passive in Events group, @mention in others, composes weather + transit + Claude summary
 
 ### For each feature:
 - [ ] Write the feature in its own file under `src/features/`
@@ -60,7 +60,7 @@
 - [x] All enabled features work end-to-end with real users
 - [x] No feature crashes the bot process
 - [ ] API costs are within budget (track daily)
-- [ ] Members are actually using the features (check logs)
+- [x] Members are actually using the features (check logs)
 - [x] Moderation flags are going to owner DM correctly
 
 ---
