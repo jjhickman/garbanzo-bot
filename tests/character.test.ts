@@ -203,6 +203,86 @@ describe('Character — parseCharacterArgs', async () => {
     expect(result.race).toBe('elf');
     expect(result.class).toBe('wizard');
   });
+
+  it('captures remaining text as description', () => {
+    const result = parseCharacterArgs('halfling rogue with a stolen fortune in a secret vault');
+    expect(result.race).toBe('halfling');
+    expect(result.class).toBe('rogue');
+    expect(result.description).toBe('with a stolen fortune in a secret vault');
+  });
+
+  it('returns no description for race/class only', () => {
+    const result = parseCharacterArgs('elf wizard');
+    expect(result.description).toBeUndefined();
+  });
+
+  it('captures description with class only', () => {
+    const result = parseCharacterArgs('paladin who swore an oath to avenge their family');
+    expect(result.class).toBe('paladin');
+    expect(result.description).toBe('who swore an oath to avenge their family');
+  });
+
+  it('parses level', () => {
+    const result = parseCharacterArgs('elf wizard level 5');
+    expect(result.race).toBe('elf');
+    expect(result.class).toBe('wizard');
+    expect(result.level).toBe(5);
+  });
+
+  it('parses lvl shorthand', () => {
+    expect(parseCharacterArgs('rogue lvl 10').level).toBe(10);
+  });
+
+  it('clamps level to 1-20', () => {
+    expect(parseCharacterArgs('fighter level 25').level).toBe(20);
+    expect(parseCharacterArgs('fighter level 0').level).toBe(1);
+  });
+
+  it('parses name with "named"', () => {
+    const result = parseCharacterArgs('named Bilbo halfling rogue');
+    expect(result.name).toBe('Bilbo');
+    expect(result.race).toBe('halfling');
+    expect(result.class).toBe('rogue');
+  });
+
+  it('parses name with "called"', () => {
+    expect(parseCharacterArgs('elf wizard called Gandalf').name).toBe('Gandalf');
+  });
+
+  it('parses alignment', () => {
+    const result = parseCharacterArgs('halfling rogue chaotic neutral');
+    expect(result.race).toBe('halfling');
+    expect(result.class).toBe('rogue');
+    expect(result.alignment).toBe('Chaotic Neutral');
+  });
+
+  it('parses two-word alignments', () => {
+    expect(parseCharacterArgs('fighter lawful good').alignment).toBe('Lawful Good');
+    expect(parseCharacterArgs('wizard neutral evil').alignment).toBe('Neutral Evil');
+    expect(parseCharacterArgs('paladin chaotic good').alignment).toBe('Chaotic Good');
+  });
+
+  it('parses background', () => {
+    const result = parseCharacterArgs('human wizard sage');
+    expect(result.class).toBe('wizard');
+    expect(result.background).toBe('Sage');
+  });
+
+  it('parses two-word backgrounds', () => {
+    expect(parseCharacterArgs('fighter folk hero').background).toBe('Folk Hero');
+    expect(parseCharacterArgs('rogue guild artisan').background).toBe('Guild Artisan');
+  });
+
+  it('parses all params together', () => {
+    const result = parseCharacterArgs('named Thorin dwarf fighter level 5 lawful good soldier with a grudge against orcs');
+    expect(result.name).toBe('Thorin');
+    expect(result.race).toBe('dwarf');
+    expect(result.class).toBe('fighter');
+    expect(result.level).toBe(5);
+    expect(result.alignment).toBe('Lawful Good');
+    expect(result.background).toBe('Soldier');
+    expect(result.description).toBe('with a grudge against orcs');
+  });
 });
 
 describe('Character — generateCharacter', async () => {
@@ -243,25 +323,25 @@ describe('Character — generateCharacter', async () => {
   });
 
   it('respects specified race', () => {
-    const char = generateCharacter('elf');
+    const char = generateCharacter({ race: 'elf' });
     expect(char.race).toBe('Elf');
     expect(char.raceIndex).toBe('elf');
   });
 
   it('respects specified class', () => {
-    const char = generateCharacter(undefined, 'wizard');
+    const char = generateCharacter({ class: 'wizard' });
     expect(char.class).toBe('Wizard');
     expect(char.classIndex).toBe('wizard');
   });
 
   it('respects both race and class', () => {
-    const char = generateCharacter('dwarf', 'fighter');
+    const char = generateCharacter({ race: 'dwarf', class: 'fighter' });
     expect(char.race).toBe('Dwarf');
     expect(char.class).toBe('Fighter');
   });
 
   it('falls back to random for invalid race/class', () => {
-    const char = generateCharacter('nonsense', 'invalid');
+    const char = generateCharacter({ race: 'nonsense', class: 'invalid' });
     // Should not crash — picks random instead
     expect(char.name).toBeTruthy();
     expect(char.race).toBeTruthy();
@@ -269,24 +349,63 @@ describe('Character — generateCharacter', async () => {
   });
 
   it('barbarian has correct class properties', () => {
-    const char = generateCharacter(undefined, 'barbarian');
+    const char = generateCharacter({ class: 'barbarian' });
     expect(char.hitDie).toBe('1d12');
     expect(char.saveProficiencies).toEqual(expect.arrayContaining(['str', 'con']));
   });
 
   it('wizard has correct class properties', () => {
-    const char = generateCharacter(undefined, 'wizard');
+    const char = generateCharacter({ class: 'wizard' });
     expect(char.hitDie).toBe('1d6');
     expect(char.saveProficiencies).toEqual(expect.arrayContaining(['int', 'wis']));
   });
 
+  it('respects specified level', () => {
+    const char = generateCharacter({ class: 'fighter', level: 5 });
+    expect(char.level).toBe(5);
+    expect(char.profBonus).toBe(3); // ceil(5/4)+1 = 3
+    expect(char.hitDie).toBe('5d10');
+    expect(char.hp).toBeGreaterThan(15); // 10 + 4*6 + 5*conMod minimum
+  });
+
+  it('respects specified name', () => {
+    const char = generateCharacter({ name: 'Thorin', race: 'dwarf', class: 'fighter' });
+    expect(char.name).toBe('Thorin');
+  });
+
+  it('respects specified alignment', () => {
+    const char = generateCharacter({ alignment: 'Chaotic Evil' });
+    expect(char.alignment).toBe('Chaotic Evil');
+  });
+
+  it('respects specified background', () => {
+    const char = generateCharacter({ background: 'Noble' });
+    expect(char.background).toBe('Noble');
+  });
+
+  it('incorporates description into backstory', () => {
+    const char = generateCharacter({ race: 'halfling', class: 'rogue', description: 'with a stolen fortune' });
+    expect(char.backstory).toContain('stolen fortune');
+    expect(char.treasure).toContain('stolen fortune');
+  });
+
+  it('level 10 fighter has correct proficiency bonus', () => {
+    const char = generateCharacter({ class: 'fighter', level: 10 });
+    expect(char.profBonus).toBe(4); // ceil(10/4)+1 = 4
+  });
+
+  it('level 17 wizard has correct proficiency bonus', () => {
+    const char = generateCharacter({ class: 'wizard', level: 17 });
+    expect(char.profBonus).toBe(6); // ceil(17/4)+1 = 6
+  });
+
   it('rogue gets 4 skill proficiencies', () => {
-    const char = generateCharacter(undefined, 'rogue');
+    const char = generateCharacter({ class: 'rogue' });
     expect(char.skillProficiencies).toHaveLength(4);
   });
 
   it('bard gets 3 skill proficiencies', () => {
-    const char = generateCharacter(undefined, 'bard');
+    const char = generateCharacter({ class: 'bard' });
     expect(char.skillProficiencies).toHaveLength(3);
   });
 });
@@ -295,7 +414,7 @@ describe('Character — formatCharacterSummary', async () => {
   const { generateCharacter, formatCharacterSummary } = await import('../src/features/character.js');
 
   it('produces a WhatsApp-formatted summary', () => {
-    const char = generateCharacter('elf', 'wizard');
+    const char = generateCharacter({ race: 'elf', class: 'wizard' });
     const summary = formatCharacterSummary(char);
 
     expect(summary).toContain(char.name);
@@ -314,7 +433,7 @@ describe('Character — generateCharacterPDF', async () => {
   const { generateCharacter, generateCharacterPDF } = await import('../src/features/character.js');
 
   it('generates valid PDF bytes with no empty fields', async () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     const result = await generateCharacterPDF(char);
 
     expect(result.pdfBytes).toBeInstanceOf(Uint8Array);
@@ -327,14 +446,14 @@ describe('Character — generateCharacterPDF', async () => {
   });
 
   it('generates valid PDF with no empty fields for spellcaster', async () => {
-    const char = generateCharacter('elf', 'wizard');
+    const char = generateCharacter({ race: 'elf', class: 'wizard' });
     const result = await generateCharacterPDF(char);
     expect(result.emptyFields).toHaveLength(0);
   });
 
   it('generates different PDFs for different characters', async () => {
-    const char1 = generateCharacter('elf', 'wizard');
-    const char2 = generateCharacter('dwarf', 'barbarian');
+    const char1 = generateCharacter({ race: 'elf', class: 'wizard' });
+    const char2 = generateCharacter({ race: 'dwarf', class: 'barbarian' });
 
     const pdf1 = await generateCharacterPDF(char1);
     const pdf2 = await generateCharacterPDF(char2);
@@ -496,55 +615,55 @@ describe('Character — appearance generation', async () => {
   const { generateCharacter } = await import('../src/features/character.js');
 
   it('generates age within race-appropriate range for elf', () => {
-    const char = generateCharacter('elf', 'wizard');
+    const char = generateCharacter({ race: 'elf', class: 'wizard' });
     const age = parseInt(char.age, 10);
     expect(age).toBeGreaterThanOrEqual(100);
     expect(age).toBeLessThanOrEqual(750);
   });
 
   it('generates age within race-appropriate range for human', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     const age = parseInt(char.age, 10);
     expect(age).toBeGreaterThanOrEqual(18);
     expect(age).toBeLessThanOrEqual(80);
   });
 
   it('generates age within race-appropriate range for dwarf', () => {
-    const char = generateCharacter('dwarf', 'cleric');
+    const char = generateCharacter({ race: 'dwarf', class: 'cleric' });
     const age = parseInt(char.age, 10);
     expect(age).toBeGreaterThanOrEqual(50);
     expect(age).toBeLessThanOrEqual(350);
   });
 
   it('generates height in feet/inches format', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     expect(char.height).toMatch(/^\d+'\d+"$/);
   });
 
   it('generates weight with lbs suffix', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     expect(char.weight).toMatch(/^\d+ lbs$/);
   });
 
   it('generates non-empty eye, skin, and hair colors', () => {
-    const char = generateCharacter('elf', 'ranger');
+    const char = generateCharacter({ race: 'elf', class: 'ranger' });
     expect(char.eyes.length).toBeGreaterThan(0);
     expect(char.skin.length).toBeGreaterThan(0);
     expect(char.hair.length).toBeGreaterThan(0);
   });
 
   it('generates a backstory string', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     expect(char.backstory.length).toBeGreaterThan(20);
   });
 
   it('generates treasure with gp', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     expect(char.treasure).toMatch(/\d+ gp/);
   });
 
   it('halfling has appropriate short height', () => {
-    const char = generateCharacter('halfling', 'rogue');
+    const char = generateCharacter({ race: 'halfling', class: 'rogue' });
     // Halflings are 2'9" to 3'3" — height should start with 2' or 3'
     expect(char.height).toMatch(/^[23]'\d+"$/);
   });
@@ -556,97 +675,97 @@ describe('Character — spellcasting', async () => {
   const { generateCharacter } = await import('../src/features/character.js');
 
   it('wizard is a spellcaster', () => {
-    const char = generateCharacter('elf', 'wizard');
+    const char = generateCharacter({ race: 'elf', class: 'wizard' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('INT');
     expect(char.spellSaveDC).toBeGreaterThanOrEqual(10); // 8 + 2 + mod (min 0)
     expect(char.cantrips.length).toBe(3);
     expect(char.level1Spells.length).toBe(6); // Wizard spellbook
-    expect(char.level1Slots).toBe(2);
+    expect(char.spellSlots[0]).toBe(2);
   });
 
   it('bard is a spellcaster with CHA', () => {
-    const char = generateCharacter('half-elf', 'bard');
+    const char = generateCharacter({ race: 'half-elf', class: 'bard' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('CHA');
     expect(char.cantrips.length).toBe(2);
     expect(char.level1Spells.length).toBe(4);
-    expect(char.level1Slots).toBe(2);
+    expect(char.spellSlots[0]).toBe(2);
   });
 
   it('cleric is a spellcaster with WIS', () => {
-    const char = generateCharacter('dwarf', 'cleric');
+    const char = generateCharacter({ race: 'dwarf', class: 'cleric' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('WIS');
     expect(char.cantrips.length).toBe(3);
     expect(char.level1Spells.length).toBeGreaterThanOrEqual(1); // WIS mod + 1
-    expect(char.level1Slots).toBe(2);
+    expect(char.spellSlots[0]).toBe(2);
   });
 
   it('sorcerer is a spellcaster with CHA', () => {
-    const char = generateCharacter('tiefling', 'sorcerer');
+    const char = generateCharacter({ race: 'tiefling', class: 'sorcerer' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('CHA');
     expect(char.cantrips.length).toBe(4);
     expect(char.level1Spells.length).toBe(2);
-    expect(char.level1Slots).toBe(2);
+    expect(char.spellSlots[0]).toBe(2);
   });
 
   it('warlock is a spellcaster with CHA', () => {
-    const char = generateCharacter('tiefling', 'warlock');
+    const char = generateCharacter({ race: 'tiefling', class: 'warlock' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('CHA');
     expect(char.cantrips.length).toBe(2);
     expect(char.level1Spells.length).toBe(2);
-    expect(char.level1Slots).toBe(1); // Warlock only gets 1 at level 1
+    expect(char.spellSlots[0]).toBe(1); // Warlock only gets 1 at level 1
   });
 
   it('druid is a spellcaster with WIS', () => {
-    const char = generateCharacter('human', 'druid');
+    const char = generateCharacter({ race: 'human', class: 'druid' });
     expect(char.isSpellcaster).toBe(true);
     expect(char.spellcastingAbility).toBe('WIS');
     expect(char.cantrips.length).toBe(2);
     expect(char.level1Spells.length).toBeGreaterThanOrEqual(1);
-    expect(char.level1Slots).toBe(2);
+    expect(char.spellSlots[0]).toBe(2);
   });
 
   it('barbarian is NOT a spellcaster', () => {
-    const char = generateCharacter('half-orc', 'barbarian');
+    const char = generateCharacter({ race: 'half-orc', class: 'barbarian' });
     expect(char.isSpellcaster).toBe(false);
     expect(char.cantrips).toHaveLength(0);
     expect(char.level1Spells).toHaveLength(0);
-    expect(char.level1Slots).toBe(0);
+    expect(char.spellSlots[0]).toBe(0);
   });
 
   it('fighter is NOT a spellcaster', () => {
-    const char = generateCharacter('human', 'fighter');
+    const char = generateCharacter({ race: 'human', class: 'fighter' });
     expect(char.isSpellcaster).toBe(false);
     expect(char.cantrips).toHaveLength(0);
     expect(char.level1Spells).toHaveLength(0);
   });
 
   it('rogue is NOT a spellcaster', () => {
-    const char = generateCharacter('halfling', 'rogue');
+    const char = generateCharacter({ race: 'halfling', class: 'rogue' });
     expect(char.isSpellcaster).toBe(false);
   });
 
   it('monk is NOT a spellcaster', () => {
-    const char = generateCharacter('human', 'monk');
+    const char = generateCharacter({ race: 'human', class: 'monk' });
     expect(char.isSpellcaster).toBe(false);
   });
 
   it('paladin is NOT a spellcaster at level 1', () => {
-    const char = generateCharacter('human', 'paladin');
+    const char = generateCharacter({ race: 'human', class: 'paladin' });
     expect(char.isSpellcaster).toBe(false);
   });
 
   it('ranger is NOT a spellcaster at level 1', () => {
-    const char = generateCharacter('elf', 'ranger');
+    const char = generateCharacter({ race: 'elf', class: 'ranger' });
     expect(char.isSpellcaster).toBe(false);
   });
 
   it('spell save DC = 8 + profBonus + ability mod', () => {
-    const char = generateCharacter('elf', 'wizard');
+    const char = generateCharacter({ race: 'elf', class: 'wizard' });
     if (char.isSpellcaster) {
       // For wizard: ability is INT
       const intMod = Math.floor((char.abilities.int - 10) / 2);
@@ -657,7 +776,7 @@ describe('Character — spellcasting', async () => {
 
   it('cantrips are unique (no duplicates)', () => {
     for (let i = 0; i < 20; i++) {
-      const char = generateCharacter('elf', 'wizard');
+      const char = generateCharacter({ race: 'elf', class: 'wizard' });
       const unique = new Set(char.cantrips);
       expect(unique.size).toBe(char.cantrips.length);
     }
@@ -665,7 +784,7 @@ describe('Character — spellcasting', async () => {
 
   it('level 1 spells are unique (no duplicates)', () => {
     for (let i = 0; i < 20; i++) {
-      const char = generateCharacter('elf', 'wizard');
+      const char = generateCharacter({ race: 'elf', class: 'wizard' });
       const unique = new Set(char.level1Spells);
       expect(unique.size).toBe(char.level1Spells.length);
     }
