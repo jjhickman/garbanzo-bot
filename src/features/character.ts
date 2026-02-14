@@ -357,7 +357,7 @@ export interface CharacterData {
   spellAttackBonus: number;
   cantrips: string[];
   level1Spells: string[];
-  level1Slots: number;
+  spellSlots: number[];  // index 0 = level 1 slots, index 1 = level 2, etc.
 }
 
 // Race → speed
@@ -694,8 +694,68 @@ interface SpellcastingInfo {
   spellAttackBonus: number;
   cantrips: string[];
   level1Spells: string[];
-  level1Slots: number;
+  spellSlots: number[];  // index 0 = level 1 slots, ..., index 8 = level 9 slots
 }
+
+// Full caster spell slot progression (bard, cleric, druid, sorcerer, wizard) — index by character level
+// Each entry: [L1, L2, L3, L4, L5, L6, L7, L8, L9]
+const FULL_CASTER_SLOTS: number[][] = [
+  /* Lv 1 */  [2, 0, 0, 0, 0, 0, 0, 0, 0],
+  /* Lv 2 */  [3, 0, 0, 0, 0, 0, 0, 0, 0],
+  /* Lv 3 */  [4, 2, 0, 0, 0, 0, 0, 0, 0],
+  /* Lv 4 */  [4, 3, 0, 0, 0, 0, 0, 0, 0],
+  /* Lv 5 */  [4, 3, 2, 0, 0, 0, 0, 0, 0],
+  /* Lv 6 */  [4, 3, 3, 0, 0, 0, 0, 0, 0],
+  /* Lv 7 */  [4, 3, 3, 1, 0, 0, 0, 0, 0],
+  /* Lv 8 */  [4, 3, 3, 2, 0, 0, 0, 0, 0],
+  /* Lv 9 */  [4, 3, 3, 3, 1, 0, 0, 0, 0],
+  /* Lv10 */  [4, 3, 3, 3, 2, 0, 0, 0, 0],
+  /* Lv11 */  [4, 3, 3, 3, 2, 1, 0, 0, 0],
+  /* Lv12 */  [4, 3, 3, 3, 2, 1, 0, 0, 0],
+  /* Lv13 */  [4, 3, 3, 3, 2, 1, 1, 0, 0],
+  /* Lv14 */  [4, 3, 3, 3, 2, 1, 1, 0, 0],
+  /* Lv15 */  [4, 3, 3, 3, 2, 1, 1, 1, 0],
+  /* Lv16 */  [4, 3, 3, 3, 2, 1, 1, 1, 0],
+  /* Lv17 */  [4, 3, 3, 3, 2, 1, 1, 1, 1],
+  /* Lv18 */  [4, 3, 3, 3, 3, 1, 1, 1, 1],
+  /* Lv19 */  [4, 3, 3, 3, 3, 2, 1, 1, 1],
+  /* Lv20 */  [4, 3, 3, 3, 3, 2, 2, 1, 1],
+];
+
+// Warlock pact magic slots (all slots are same level, refresh on short rest)
+const WARLOCK_SLOTS: Array<{ count: number; level: number }> = [
+  /* Lv 1 */  { count: 1, level: 1 },
+  /* Lv 2 */  { count: 2, level: 1 },
+  /* Lv 3 */  { count: 2, level: 2 },
+  /* Lv 4 */  { count: 2, level: 2 },
+  /* Lv 5 */  { count: 2, level: 3 },
+  /* Lv 6 */  { count: 2, level: 3 },
+  /* Lv 7 */  { count: 2, level: 4 },
+  /* Lv 8 */  { count: 2, level: 4 },
+  /* Lv 9 */  { count: 2, level: 5 },
+  /* Lv10 */  { count: 2, level: 5 },
+  /* Lv11 */  { count: 3, level: 5 },
+  /* Lv12 */  { count: 3, level: 5 },
+  /* Lv13 */  { count: 3, level: 5 },
+  /* Lv14 */  { count: 3, level: 5 },
+  /* Lv15 */  { count: 3, level: 5 },
+  /* Lv16 */  { count: 3, level: 5 },
+  /* Lv17 */  { count: 4, level: 5 },
+  /* Lv18 */  { count: 4, level: 5 },
+  /* Lv19 */  { count: 4, level: 5 },
+  /* Lv20 */  { count: 4, level: 5 },
+];
+
+// Cantrip count by class at various levels
+const CANTRIP_PROGRESSION: Record<string, number[]> = {
+  // index = level - 1
+  bard:     [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+  cleric:   [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+  druid:    [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+  sorcerer: [4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+  warlock:  [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+  wizard:   [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+};
 
 const CLASS_SPELLCASTING: Record<string, {
   ability: AbilityName;
@@ -763,8 +823,9 @@ const CLASS_LEVEL1_SPELLS: Record<string, string[]> = {
     'Shield', 'Silent Image', 'Sleep', 'Thunderwave', 'Unseen Servant'],
 };
 
-function generateSpellcasting(classIndex: string, abilities: AbilityScores): SpellcastingInfo {
+function generateSpellcasting(classIndex: string, abilities: AbilityScores, level: number, profBonus: number): SpellcastingInfo {
   const spellConfig = CLASS_SPELLCASTING[classIndex];
+  const emptySlots = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
   if (!spellConfig) {
     return {
@@ -774,24 +835,37 @@ function generateSpellcasting(classIndex: string, abilities: AbilityScores): Spe
       spellAttackBonus: 0,
       cantrips: [],
       level1Spells: [],
-      level1Slots: 0,
+      spellSlots: emptySlots,
     };
   }
 
   const abilityMod = abilityModifier(abilities[spellConfig.ability]);
-  const profBonus = 2; // Level 1
+
+  // Cantrip count scales with level
+  const cantripProgression = CANTRIP_PROGRESSION[classIndex];
+  const cantripCount = cantripProgression ? cantripProgression[level - 1] : spellConfig.cantripCount;
 
   // Pick cantrips
   const availableCantrips = CLASS_CANTRIPS[classIndex] ?? [];
-  const cantrips = pickRandomN(availableCantrips, spellConfig.cantripCount);
+  const cantrips = pickRandomN(availableCantrips, Math.min(cantripCount, availableCantrips.length));
 
   // Pick level 1 spells
   const availableSpells = CLASS_LEVEL1_SPELLS[classIndex] ?? [];
-  // For prepared casters (cleric, druid), they prepare WIS mod + level spells
   const spellCount = spellConfig.spellsKnown > 0
     ? spellConfig.spellsKnown
-    : Math.max(1, abilityMod + 1);  // Prepared: ability mod + level (1)
-  const level1Spells = pickRandomN(availableSpells, spellCount);
+    : Math.max(1, abilityMod + level);  // Prepared: ability mod + level
+  const level1Spells = pickRandomN(availableSpells, Math.min(spellCount, availableSpells.length));
+
+  // Spell slots by level
+  let spellSlots: number[];
+  if (classIndex === 'warlock') {
+    // Pact magic: all slots are same level
+    const pact = WARLOCK_SLOTS[level - 1];
+    spellSlots = emptySlots.map((_, i) => i === pact.level - 1 ? pact.count : 0);
+  } else {
+    // Full caster slot progression
+    spellSlots = FULL_CASTER_SLOTS[level - 1] ?? FULL_CASTER_SLOTS[0];
+  }
 
   return {
     isSpellcaster: true,
@@ -800,34 +874,55 @@ function generateSpellcasting(classIndex: string, abilities: AbilityScores): Spe
     spellAttackBonus: profBonus + abilityMod,
     cantrips,
     level1Spells,
-    level1Slots: spellConfig.slots,
+    spellSlots,
   };
 }
 
-/** Generate a complete Level 1 character */
-export function generateCharacter(raceIndex?: string, classIndex?: string): CharacterData {
+/** Calculate proficiency bonus from level */
+function profBonusForLevel(level: number): number {
+  return Math.ceil(level / 4) + 1;
+}
+
+/** Calculate HP at a given level using average hit die rolls */
+function calculateHP(hitDie: number, conMod: number, level: number): number {
+  // Level 1: max hit die + CON mod. Each subsequent level: avg(hitDie) + CON mod
+  const avgRoll = Math.floor(hitDie / 2) + 1;
+  return hitDie + conMod + (level - 1) * (avgRoll + conMod);
+}
+
+/** Generate a complete character */
+export function generateCharacter(args?: CharacterArgs): CharacterData {
+  const raceIndex = args?.race;
+  const classIndex = args?.class;
+  const description = args?.description;
+
   const race = raceIndex && SRD_RACES.includes(raceIndex as typeof SRD_RACES[number])
     ? raceIndex
     : pickRandom(SRD_RACES);
   const cls = classIndex && SRD_CLASSES.includes(classIndex as typeof SRD_CLASSES[number])
     ? classIndex
     : pickRandom(SRD_CLASSES);
+  const level = args?.level ?? 1;
+  const profBonus = profBonusForLevel(level);
 
   const baseScores = generateAbilityScores(cls);
   const abilities = applyRacialBonuses(baseScores, race);
 
   const hitDie = CLASS_HIT_DIE[cls] ?? 8;
   const conMod = abilityModifier(abilities.con);
-  const hp = hitDie + conMod;
+  const hp = calculateHP(hitDie, conMod, level);
 
-  const background = pickRandom(BACKGROUNDS);
-  const alignment = pickRandom(ALIGNMENTS);
+  const background = args?.background
+    && BACKGROUNDS.includes(args.background as typeof BACKGROUNDS[number])
+    ? args.background as typeof BACKGROUNDS[number]
+    : pickRandom(BACKGROUNDS);
+  const alignment = args?.alignment ?? pickRandom(ALIGNMENTS);
 
   const saveProficiencies = CLASS_SAVE_PROFICIENCIES[cls] ?? ['str', 'con'];
   const skillOptions = CLASS_SKILL_OPTIONS[cls] ?? { choose: 2, from: ALL_SKILLS };
   const skillProficiencies = pickRandomN(skillOptions.from, skillOptions.choose);
 
-  const name = pickRandom(FIRST_NAMES[race] ?? FIRST_NAMES.human);
+  const name = args?.name ?? pickRandom(FIRST_NAMES[race] ?? FIRST_NAMES.human);
   const weapons = CLASS_WEAPONS[cls] ?? [];
   const equipment = CLASS_EQUIPMENT[cls] ?? '';
 
@@ -839,11 +934,16 @@ export function generateCharacter(raceIndex?: string, classIndex?: string): Char
 
   // Appearance generation
   const appearance = generateAppearance(race);
-  const backstory = generateBackstory(background, RACE_NAMES[race] ?? race, CLASS_NAMES[cls] ?? cls);
-  const treasure = generateStartingTreasure(background);
+  const baseBackstory = generateBackstory(background, RACE_NAMES[race] ?? race, CLASS_NAMES[cls] ?? cls);
+  const backstory = description
+    ? `${baseBackstory}\n\n${description.charAt(0).toUpperCase() + description.slice(1)}.`
+    : baseBackstory;
+  const treasure = description
+    ? `${generateStartingTreasure(background)}\n${description}`
+    : generateStartingTreasure(background);
 
   // Spellcasting
-  const spellInfo = generateSpellcasting(cls, abilities);
+  const spellInfo = generateSpellcasting(cls, abilities, level, profBonus);
 
   return {
     name,
@@ -851,15 +951,15 @@ export function generateCharacter(raceIndex?: string, classIndex?: string): Char
     raceIndex: race,
     class: CLASS_NAMES[cls] ?? cls,
     classIndex: cls,
-    level: 1,
+    level,
     background,
     alignment,
     abilities,
     hp: Math.max(hp, 1),
     ac: calculateAC(cls, abilities),
     speed: RACE_SPEED[race] ?? 30,
-    hitDie: `1d${hitDie}`,
-    profBonus: 2,
+    hitDie: `${level}d${hitDie}`,
+    profBonus,
     saveProficiencies,
     skillProficiencies,
     equipment,
@@ -1023,7 +1123,7 @@ export async function generateCharacterPDF(char: CharacterData): Promise<PDFResu
 
   // ── Header fields ───────────────────────────────────────────
   setText('CharacterName', char.name);
-  setText('ClassLevel', `${char.class} 1`);
+  setText('ClassLevel', `${char.class} ${char.level}`);
   setText('Background', char.background);
   setText('PlayerName', 'Garbanzo Bot');
   setText('Race ', char.race);  // Note trailing space in field name
@@ -1048,13 +1148,13 @@ export async function generateCharacterPDF(char: CharacterData): Promise<PDFResu
   }
 
   // ── Combat stats ────────────────────────────────────────────
-  setText('ProfBonus', '+2');
+  setText('ProfBonus', formatModifier(char.profBonus));
   setText('AC', String(char.ac));
   setText('Initiative', formatModifier(abilityModifier(char.abilities.dex)));
   setText('Speed', String(char.speed));
   setText('HPMax', String(char.hp));
   setText('HPCurrent', String(char.hp));
-  setText('HDTotal', '1');
+  setText('HDTotal', String(char.level));
   setText('HD', `d${CLASS_HIT_DIE[char.classIndex] ?? 8}`);
 
   // ── Saving throws ───────────────────────────────────────────
@@ -1167,9 +1267,14 @@ export async function generateCharacterPDF(char: CharacterData): Promise<PDFResu
       if (level1PrepBoxes[i]) setCheck(level1PrepBoxes[i]);  // Mark as prepared
     }
 
-    // Level 1 spell slots
-    setText('SlotsTotal 19', String(char.level1Slots));
-    setText('SlotsRemaining 19', String(char.level1Slots));
+    // Spell slots — SlotsTotal/Remaining 19-27 for levels 1-9
+    const slotFieldIds = [19, 20, 21, 22, 23, 24, 25, 26, 27];
+    for (let i = 0; i < 9; i++) {
+      if (char.spellSlots[i] > 0) {
+        setText(`SlotsTotal ${slotFieldIds[i]}`, String(char.spellSlots[i]));
+        setText(`SlotsRemaining ${slotFieldIds[i]}`, String(char.spellSlots[i]));
+      }
+    }
   }
 
   // ── Post-fill validation + retry ──────────────────────────────
@@ -1264,17 +1369,87 @@ function resolveArg(arg: string): { type: 'race'; index: string } | { type: 'cla
   return null;
 }
 
-/** Parse user input into race/class preferences */
-export function parseCharacterArgs(input: string): { race?: string; class?: string } {
-  const args = input.trim().split(/\s+/).filter(Boolean);
-  const result: { race?: string; class?: string } = {};
+export interface CharacterArgs {
+  race?: string;
+  class?: string;
+  name?: string;
+  level?: number;
+  alignment?: string;
+  background?: string;
+  description?: string;
+}
+
+// Alignment strings for detection (lowercase)
+const ALIGNMENT_STRINGS: Record<string, string> = {
+  'lawful good': 'Lawful Good', 'neutral good': 'Neutral Good', 'chaotic good': 'Chaotic Good',
+  'lawful neutral': 'Lawful Neutral', 'true neutral': 'Neutral', 'chaotic neutral': 'Chaotic Neutral',
+  'lawful evil': 'Lawful Evil', 'neutral evil': 'Neutral Evil', 'chaotic evil': 'Chaotic Evil',
+};
+
+// Background strings for detection (lowercase → display)
+const BACKGROUND_STRINGS: Record<string, string> = {
+  acolyte: 'Acolyte', criminal: 'Criminal', 'folk hero': 'Folk Hero', noble: 'Noble',
+  sage: 'Sage', soldier: 'Soldier', charlatan: 'Charlatan', entertainer: 'Entertainer',
+  'guild artisan': 'Guild Artisan', hermit: 'Hermit', outlander: 'Outlander', sailor: 'Sailor',
+};
+
+/** Parse user input into race/class/name/level/alignment/background + remaining description */
+export function parseCharacterArgs(input: string): CharacterArgs {
+  let remaining = input.trim();
+  const result: CharacterArgs = {};
+
+  // Extract "named X" / "name X" / "called X" — take the next word
+  const nameMatch = remaining.match(/\b(?:named?|called)\s+([a-z''-]+)/i);
+  if (nameMatch) {
+    result.name = nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1);
+    remaining = remaining.replace(nameMatch[0], ' ');
+  }
+
+  // Extract "level N" / "lvl N" / "lv N"
+  const levelMatch = remaining.match(/\b(?:level|lvl|lv)\s*(\d+)/i);
+  if (levelMatch) {
+    const lvl = Math.max(1, Math.min(20, parseInt(levelMatch[1], 10)));
+    result.level = lvl;
+    remaining = remaining.replace(levelMatch[0], ' ');
+  }
+
+  // Extract alignment (two-word combos checked first, then standalone "neutral")
+  const lowerRemaining = remaining.toLowerCase();
+  for (const [key, display] of Object.entries(ALIGNMENT_STRINGS)) {
+    if (lowerRemaining.includes(key)) {
+      result.alignment = display;
+      remaining = remaining.replace(new RegExp(key.replace(/\s+/g, '\\s+'), 'i'), ' ');
+      break;
+    }
+  }
+
+  // Extract background (two-word backgrounds first, then single-word)
+  const twoWordBackgrounds = Object.keys(BACKGROUND_STRINGS).filter((k) => k.includes(' '));
+  const oneWordBackgrounds = Object.keys(BACKGROUND_STRINGS).filter((k) => !k.includes(' '));
+  for (const key of [...twoWordBackgrounds, ...oneWordBackgrounds]) {
+    const bgPattern = new RegExp(`\\b${key.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    if (bgPattern.test(remaining)) {
+      // Don't match "noble" if it's part of race/class (it isn't, but be safe)
+      result.background = BACKGROUND_STRINGS[key];
+      remaining = remaining.replace(bgPattern, ' ');
+      break;
+    }
+  }
+
+  // Now parse remaining words for race/class
+  const args = remaining.split(/\s+/).filter(Boolean);
+  const descriptionWords: string[] = [];
 
   for (const arg of args) {
-    if (arg.toLowerCase() === 'random') continue; // Skip "random" keyword
+    if (arg.toLowerCase() === 'random') continue;
     const resolved = resolveArg(arg);
     if (resolved?.type === 'race' && !result.race) result.race = resolved.index;
     else if (resolved?.type === 'class' && !result.class) result.class = resolved.index;
+    else descriptionWords.push(arg);
   }
+
+  const description = descriptionWords.join(' ').trim() || undefined;
+  if (description) result.description = description;
 
   return result;
 }
@@ -1322,8 +1497,8 @@ export async function handleCharacter(query: string): Promise<CharacterResult | 
   if (trimmed === 'help' || trimmed === '?') return getCharacterHelp();
 
   try {
-    const { race, class: cls } = parseCharacterArgs(trimmed);
-    const char = generateCharacter(race, cls);
+    const args = parseCharacterArgs(trimmed);
+    const char = generateCharacter(args);
 
     logger.info({
       name: char.name,
@@ -1333,7 +1508,7 @@ export async function handleCharacter(query: string): Promise<CharacterResult | 
     }, 'Generating character sheet');
 
     const pdfResult = await generateCharacterPDF(char);
-    const fileName = `${char.name}_${char.race}_${char.class}_Lvl1.pdf`;
+    const fileName = `${char.name}_${char.race}_${char.class}_Lvl${char.level}.pdf`;
 
     return {
       summary: formatCharacterSummary(char),
@@ -1352,12 +1527,16 @@ function getCharacterHelp(): string {
     '🎲 *D&D 5e Character Generator*',
     '',
     '  !character — fully random Level 1 character',
-    '  !character elf wizard — specify race and class',
-    '  !character dwarf — random class, specific race',
-    '  !character rogue — random race, specific class',
+    '  !character elf wizard — specify race and/or class',
+    '  !character rogue level 5 — set level (1-20)',
+    '  !character named Bilbo halfling rogue — set name',
+    '  !character dwarf fighter chaotic good — set alignment',
+    '  !character human sage wizard — set background',
+    '  !character halfling rogue with a stolen fortune — add flavor text',
     '',
     '*Races:* Dragonborn, Dwarf, Elf, Gnome, Half-Elf, Half-Orc, Halfling, Human, Tiefling',
     '*Classes:* Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard',
+    '*Backgrounds:* Acolyte, Charlatan, Criminal, Entertainer, Folk Hero, Guild Artisan, Hermit, Noble, Outlander, Sage, Sailor, Soldier',
     '',
     '_Generates a filled official 5e character sheet PDF._',
   ].join('\n');
