@@ -9,6 +9,9 @@ import { config } from '../utils/config.js';
 import { isGroupJid, getSenderJid } from '../utils/jid.js';
 import { isGroupEnabled, requiresMention, isMentioned, stripMention, getGroupName } from './groups.js';
 import { getAIResponse } from '../ai/router.js';
+import { matchFeature } from '../features/router.js';
+import { handleWeather } from '../features/weather.js';
+import { handleTransit } from '../features/transit.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -47,6 +50,9 @@ function unwrapMessage(msg: WAMessage): WAMessageContent | undefined {
   return normalizeMessageContent(msg.message);
 }
 
+/** Maximum age (in seconds) for a message to be processed. Older messages are silently ignored. */
+const MAX_MESSAGE_AGE_SECONDS = 5 * 60; // 5 minutes
+
 /**
  * Route a single incoming message.
  */
@@ -56,6 +62,9 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
   // Ignore status broadcasts
   if (msg.key.remoteJid === 'status@broadcast') return;
+
+  // Ignore stale messages (e.g. delivered after bot was offline for a while)
+  if (isStale(msg)) return;
 
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
@@ -101,7 +110,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
     logger.info({ group: groupName, sender: senderJid, query }, 'Group mention');
 
-    const response = await getAIResponse(query, {
+    const response = await getResponse(query, {
       groupName,
       groupJid: remoteJid,
       senderJid,
@@ -119,7 +128,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   if (senderJid === config.OWNER_JID) {
     logger.info({ sender: senderJid, text }, 'Owner DM');
 
-    const response = await getAIResponse(text, {
+    const response = await getResponse(text, {
       groupName: 'DM',
       groupJid: remoteJid,
       senderJid,
@@ -129,6 +138,31 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       await sock.sendMessage(remoteJid, { text: response });
     }
   }
+}
+
+/**
+ * Try feature-specific handlers first, then fall back to general AI.
+ * Features are matched by keyword; if no feature matches, Claude handles it.
+ */
+async function getResponse(
+  query: string,
+  ctx: import('../ai/persona.js').MessageContext,
+): Promise<string | null> {
+  const feature = matchFeature(query);
+
+  if (feature) {
+    logger.info({ feature: feature.feature }, 'Routing to feature handler');
+
+    switch (feature.feature) {
+      case 'weather':
+        return await handleWeather(feature.query);
+      case 'transit':
+        return await handleTransit(feature.query);
+    }
+  }
+
+  // No feature matched — general AI response
+  return await getAIResponse(query, ctx);
 }
 
 /** Extract text content from unwrapped message content */
@@ -164,4 +198,23 @@ function extractMentionedJids(content: WAMessageContent | undefined): string[] |
   const jids = ctx?.mentionedJid;
   if (!jids || jids.length === 0) return undefined;
   return jids;
+}
+
+/**
+ * Check if a message is too old to process.
+ * Prevents the bot from replying to stale mentions delivered after
+ * an outage (e.g., "what's the weather?" asked 3 hours ago).
+ */
+function isStale(msg: WAMessage): boolean {
+  const ts = msg.messageTimestamp;
+  if (!ts) return false; // No timestamp — treat as fresh
+
+  const epochSeconds = typeof ts === 'number' ? ts : Number(ts);
+  const ageSeconds = Math.floor(Date.now() / 1000) - epochSeconds;
+
+  if (ageSeconds > MAX_MESSAGE_AGE_SECONDS) {
+    logger.debug({ ageSeconds, msgId: msg.key.id }, 'Ignoring stale message');
+    return true;
+  }
+  return false;
 }
