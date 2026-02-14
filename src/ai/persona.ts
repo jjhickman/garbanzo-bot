@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
+import { INTRO_SYSTEM_ADDENDUM, INTRODUCTIONS_JID } from '../features/introductions.js';
 
 // Load persona at startup
 const personaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
@@ -26,6 +27,8 @@ export interface MessageContext {
  * Keeps persona separate from routing/infrastructure concerns.
  */
 export function buildSystemPrompt(ctx: MessageContext): string {
+  const isIntroGroup = INTRODUCTIONS_JID !== null && ctx.groupJid === INTRODUCTIONS_JID;
+
   return [
     personaDoc,
     '',
@@ -38,6 +41,7 @@ export function buildSystemPrompt(ctx: MessageContext): string {
     '',
     'Keep responses concise and use WhatsApp formatting (*bold*, _italic_, ~strike~).',
     'If you are unsure about something, say so honestly.',
+    isIntroGroup ? INTRO_SYSTEM_ADDENDUM : '',
   ]
     .filter(Boolean)
     .join('\n');
