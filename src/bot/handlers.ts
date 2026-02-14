@@ -16,7 +16,7 @@ import { buildWelcomeMessage } from '../features/welcome.js';
 import { checkMessage, formatModerationAlert } from '../features/moderation.js';
 import { handleNews } from '../features/news.js';
 import { getHelpMessage } from '../features/help.js';
-import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions.js';
+import { handleIntroduction, INTRODUCTIONS_JID, triggerIntroCatchUp } from '../features/introductions.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -24,11 +24,13 @@ import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions
  */
 export function registerHandlers(sock: WASocket): void {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // Only process real-time messages, not history sync
-    if (type !== 'notify') return;
-
     for (const msg of messages) {
       try {
+        // Process all message types for the Introductions group (catch-up path),
+        // but only real-time ('notify') messages for everything else.
+        const isIntroGroup = msg.key.remoteJid === INTRODUCTIONS_JID;
+        if (type !== 'notify' && !isIntroGroup) continue;
+
         await handleMessage(sock, msg);
       } catch (err) {
         logger.error({ err, msgId: msg.key.id }, 'Error handling message');
@@ -79,7 +81,9 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   if (msg.key.remoteJid === 'status@broadcast') return;
 
   // Ignore stale messages (e.g. delivered after bot was offline for a while)
-  if (isStale(msg)) return;
+  // Exception: Introductions group — intros are caught up via dedup tracker
+  const isIntroGroupMsg = msg.key.remoteJid === INTRODUCTIONS_JID;
+  if (isStale(msg) && !isIntroGroupMsg) return;
 
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
@@ -170,6 +174,13 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   // Only respond to owner DMs for now (Phase 1 safety)
   if (senderJid === config.OWNER_JID) {
     logger.info({ sender: senderJid, text }, 'Owner DM');
+
+    // Owner commands
+    if (text.trim().toLowerCase() === '!catchup intros') {
+      const result = await triggerIntroCatchUp(sock);
+      await sock.sendMessage(remoteJid, { text: result });
+      return;
+    }
 
     const response = await getResponse(text, {
       groupName: 'DM',

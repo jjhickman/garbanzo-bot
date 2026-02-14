@@ -250,6 +250,23 @@ export function registerIntroCatchUp(sock: WASocket): void {
     await processMissedIntros(sock, sortOldestFirst(introMessages));
   });
 
+  // Path 3: Actively request message history from the Introductions group.
+  // Baileys doesn't automatically sync history for established sessions,
+  // so we explicitly request it. Results arrive via 'messaging-history.set'.
+  const HISTORY_REQUEST_DELAY_MS = 5_000; // wait for connection to stabilize
+  setTimeout(async () => {
+    try {
+      logger.info({ group: INTRODUCTIONS_JID }, 'Requesting Introductions group message history');
+      await sock.fetchMessageHistory(
+        50,
+        { remoteJid: INTRODUCTIONS_JID!, fromMe: false, id: '' },
+        Math.floor(Date.now() / 1000),
+      );
+    } catch (err) {
+      logger.warn({ err }, 'Failed to request message history — catch-up will rely on passive sync');
+    }
+  }, HISTORY_REQUEST_DELAY_MS);
+
   logger.info({ catchupDays: CATCHUP_DAYS }, 'Introduction catch-up listeners registered');
 }
 
@@ -288,6 +305,31 @@ async function processMissedIntros(
 
   tracker.lastCatchup = Date.now();
   saveTracker(tracker);
+}
+
+// ── Owner command: manual catch-up trigger ──────────────────────────
+
+/**
+ * Manually trigger an introduction catch-up. Called via owner DM
+ * command "!catchup intros". Requests message history and reports back.
+ */
+export async function triggerIntroCatchUp(sock: WASocket): Promise<string> {
+  if (!INTRODUCTIONS_JID) {
+    return 'Introductions group not found in config.';
+  }
+
+  try {
+    logger.info('Owner triggered manual intro catch-up');
+    await sock.fetchMessageHistory(
+      50,
+      { remoteJid: INTRODUCTIONS_JID, fromMe: false, id: '' },
+      Math.floor(Date.now() / 1000),
+    );
+    return '🫘 Requested message history for the Introductions group. Any missed intros will be processed as they arrive (may take a few seconds).';
+  } catch (err) {
+    logger.error({ err }, 'Manual intro catch-up failed');
+    return '❌ Failed to request message history. Check the logs.';
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
