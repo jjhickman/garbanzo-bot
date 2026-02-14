@@ -104,7 +104,7 @@
 3. ~~**Venue search** (`src/features/venues.ts`) — Google Places API (existing key, no signup needed)~~ ✅ Live — `!venue` search + details, Boston default, ratings/hours/price level
 4. ~~**Polls** (`src/features/polls.ts`) — native WhatsApp polls via Baileys~~ ✅ Live — `!poll Question / A / B / C`, dedup tracker, 1-12 options
 5. ~~**Fun features** (`src/features/fun.ts`) — trivia (OpenTDB), fun facts (Useless Facts API), today in history (Muffin Labs), curated icebreakers~~ ✅ Live — `!trivia`, `!fact`, `!today`, `!icebreaker` (40 Boston-themed questions)
-6. [ ] **Character creation** (`src/features/character.ts`) — D&D 5e character sheet PDF generation via `pdf-lib`, fillable PDF template, stat calculation, Baileys document upload
+6. ~~**Character creation** (`src/features/character.ts`) — D&D 5e character sheet PDF generation via `pdf-lib`, official WotC fillable template, stat calculation, Baileys document upload~~ ✅ Live — `!character`, `!char [race] [class]`, 4d6-drop-lowest stats, class-priority assignment, racial bonuses, filled official PDF sheet
 7. [ ] **Release notes** — `!release` owner command, sends formatted "what's new" message to groups on major deployments
 
 ### For each feature:

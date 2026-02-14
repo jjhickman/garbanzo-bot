@@ -23,6 +23,7 @@ import { handleBooks } from '../features/books.js';
 import { handleVenues } from '../features/venues.js';
 import { handlePoll, isDuplicatePoll, recordPoll } from '../features/polls.js';
 import { handleFun } from '../features/fun.js';
+import { handleCharacter } from '../features/character.js';
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordBotResponse, recordModerationFlag, recordOwnerDM } from '../middleware/stats.js';
 import { previewDigest } from '../features/digest.js';
@@ -249,6 +250,25 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       return;
     }
 
+    // Check for character command — sends PDF document + text summary
+    if (featureCheck?.feature === 'character') {
+      const charResult = await handleCharacter(featureCheck.query);
+      if (typeof charResult === 'string') {
+        await sock.sendMessage(remoteJid, { text: charResult }, { quoted: msg });
+      } else {
+        // Send text summary first, then PDF document
+        await sock.sendMessage(remoteJid, { text: charResult.summary }, { quoted: msg });
+        await sock.sendMessage(remoteJid, {
+          document: Buffer.from(charResult.pdfBytes),
+          mimetype: 'application/pdf',
+          fileName: charResult.fileName,
+        });
+        recordBotResponse(remoteJid);
+        recordResponse(senderJid, remoteJid);
+      }
+      return;
+    }
+
     const response = await getResponse(query, {
       groupName,
       groupJid: remoteJid,
@@ -337,6 +357,11 @@ async function getResponse(
         return typeof handlePoll(feature.query) === 'string' ? handlePoll(feature.query) as string : null;
       case 'fun':
         return await handleFun(feature.query);
+      case 'character': {
+        // In getResponse (DM path), return text summary only — no PDF upload here
+        const charResult = await handleCharacter(feature.query);
+        return typeof charResult === 'string' ? charResult : charResult.summary;
+      }
     }
   }
 

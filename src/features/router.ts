@@ -13,7 +13,7 @@ import { logger } from '../middleware/logger.js';
  */
 
 export interface FeatureMatch {
-  feature: 'weather' | 'transit' | 'news' | 'help' | 'events' | 'dnd' | 'roll' | 'books' | 'venues' | 'poll' | 'fun';
+  feature: 'weather' | 'transit' | 'news' | 'help' | 'events' | 'dnd' | 'roll' | 'books' | 'venues' | 'poll' | 'fun' | 'character';
   /** The query with command prefix stripped (for bang commands) or original text (natural language) */
   query: string;
 }
@@ -114,6 +114,14 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
     ],
   },
   {
+    feature: 'character',
+    patterns: [
+      /\b(create|generate|make|build)\s+(a\s+)?(character|char)\b/i,
+      /\bcharacter\s+(sheet|create|gen|build|random)\b/i,
+      /\bnew\s+character\b/i,
+    ],
+  },
+  {
     feature: 'events',
     patterns: [
       // "plan a/an X", "plan dinner", "plan a hike"
@@ -155,6 +163,9 @@ const BANG_COMMANDS: Record<string, FeatureMatch['feature']> = {
   '!place': 'venues',
   '!poll': 'poll',
   '!vote': 'poll',
+  '!character': 'character',
+  '!char': 'character',
+  '!charsheet': 'character',
   '!trivia': 'fun',
   '!fact': 'fun',
   '!today': 'fun',
