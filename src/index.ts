@@ -1,6 +1,8 @@
 import { startConnection } from './bot/connection.js';
 import { registerHandlers } from './bot/handlers.js';
 import { registerIntroCatchUp } from './features/introductions.js';
+import { scheduleDigest } from './features/digest.js';
+import { closeDb } from './utils/db.js';
 import { logger } from './middleware/logger.js';
 import { config } from './utils/config.js';
 
@@ -15,6 +17,7 @@ async function main(): Promise<void> {
   await startConnection((sock) => {
     registerHandlers(sock);
     registerIntroCatchUp(sock);
+    scheduleDigest(sock);
     logger.info('🫘 Garbanzo Bean is online and listening');
   });
 }
@@ -27,10 +30,12 @@ main().catch((err) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   logger.info('Received SIGINT — shutting down');
+  closeDb();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   logger.info('Received SIGTERM — shutting down');
+  closeDb();
   process.exit(0);
 });

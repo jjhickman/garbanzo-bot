@@ -3,6 +3,7 @@ import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { buildSystemPrompt, buildOllamaPrompt, type MessageContext } from './persona.js';
 import { callOllama, isOllamaAvailable } from './ollama.js';
+import { recordAIRoute } from '../middleware/stats.js';
 
 /**
  * Route a user query to the appropriate AI model and return the response.
@@ -36,6 +37,7 @@ export async function getAIResponse(
     if (useOllama) {
       const ollamaPrompt = buildOllamaPrompt(ctx);
       logger.info({ query: truncate(query, 80), model: 'ollama/qwen3:8b', complexity }, 'Routing to Ollama');
+      recordAIRoute(ctx.groupJid, 'ollama');
       try {
         const response = await callOllama(ollamaPrompt, query);
         logger.info({ model: 'ollama/qwen3:8b', responseLen: response.length }, 'Ollama response received');
@@ -49,6 +51,7 @@ export async function getAIResponse(
     // Claude path (primary for complex, fallback for Ollama failures)
     const systemPrompt = buildSystemPrompt(ctx);
     logger.info({ query: truncate(query, 80), model: 'claude', complexity }, 'Routing to Claude');
+    recordAIRoute(ctx.groupJid, 'claude');
     const response = await callClaude(systemPrompt, query);
     logger.info({ model: 'claude', responseLen: response.length }, 'Claude response received');
     return truncate(response, 4000);
@@ -92,6 +95,11 @@ function classifyComplexity(query: string, ctx: MessageContext): Complexity {
 
   const trimmed = query.trim();
   const lower = trimmed.toLowerCase();
+
+  // Context-dependent queries need Claude (8B models hallucinate when reading context)
+  if (/\b(i (just )?said|you said|we said|just (said|mentioned|asked|talked)|earlier|before|above|previous|recap|summarize|what did)\b/i.test(lower)) {
+    return 'complex';
+  }
 
   // Very short messages are likely greetings/casual → simple
   if (trimmed.length < 20) return 'simple';
