@@ -71,7 +71,7 @@
   "mcp": {
     "sqlite": {
       "command": "npx",
-      "args": ["-y", "mcp-server-sqlite", "--db-path", "<PROJECT_DIR>/data/garbanzo.db"]
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "<PROJECT_DIR>/data/garbanzo.db"]
     },
     "brave-search": {
       "command": "npx",
@@ -82,7 +82,7 @@
     },
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "mcp-server-filesystem", "<PROJECT_DIR>"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "<PROJECT_DIR>"]
     },
     "docker": {
       "command": "npx",

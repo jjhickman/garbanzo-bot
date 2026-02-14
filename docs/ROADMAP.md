@@ -189,19 +189,20 @@
 
 **Goal:** Pay down technical debt before expanding to new platforms. The codebase grew fast (10,000+ lines across 6 phases in 2 days). Before adding more complexity, clean up what we have so it stays maintainable.
 
-### 7.1 — Split oversized files (convention: max ~300 lines)
+### 7.1 — Split oversized files (convention: max ~300 lines) ✅
 
-| File | Lines | Plan |
-|------|------:|------|
-| `character.ts` | 1543 | Extract SRD data tables (races, classes, spells, equipment) into `character-data.ts` (~800 lines of static data). Extract PDF filling logic into `character-pdf.ts`. Core file keeps parsing + orchestration. |
-| `handlers.ts` | 736 | Extract owner DM command routing into `src/bot/owner-commands.ts`. Extract group message routing into `src/bot/group-handler.ts`. Keep `handlers.ts` as the top-level dispatcher + shared helpers. |
-| `db.ts` | 702 | Split schema/migrations into `src/utils/db-schema.ts`. Extract profile queries into `src/utils/db-profiles.ts`. Extract maintenance (vacuum, backup, prune) into `src/utils/db-maintenance.ts`. |
-| `transit.ts` | 476 | Extract station/route alias maps into `transit-data.ts` (static lookup data). |
-| `introductions.ts` | 429 | Extract the signal-based classifier into `intro-classifier.ts`. Keep intro handler + catch-up in main file. |
-| `moderation.ts` | 367 | Extract regex pattern definitions into `moderation-patterns.ts`. |
-| `router.ts` (ai) | 313 | Extract `callClaude` + `buildUserContent` into `src/ai/claude.ts` (which was in the original architecture but never created). |
+All oversized files have been split. `npm run check` passes after every split — 420 tests, 0 errors.
 
-**Approach:** One file at a time. After each split, run `npm run check` and verify all 420 tests pass. No behavior changes — pure structural refactoring.
+| File | Was | Now | Extracted To |
+|------|----:|----:|-------------|
+| `character.ts` | 1543 | 5 (barrel) | `character/` directory: `index.ts` (358), `srd-data.ts` (219), `abilities.ts` (96), `class-race-data.ts` (338), `spellcasting.ts` (225), `pdf.ts` (293) |
+| `handlers.ts` | 736 | 318 | `group-handler.ts` (311), `owner-commands.ts` (98), `response-router.ts` (74), `reactions.ts` (64) |
+| `db.ts` | 702 | 283 (barrel) | `db-schema.ts` (112), `db-profiles.ts` (114), `db-maintenance.ts` (145) |
+| `transit.ts` | 476 | 289 | `transit-data.ts` (155) — types, station/route aliases, emoji maps |
+| `introductions.ts` | 429 | 271 | `intro-classifier.ts` (133) — signal-based intro detection + INTRO_SYSTEM_ADDENDUM |
+| `moderation.ts` | 367 | 253 | `moderation-patterns.ts` (117) — regex rules, category maps, score thresholds |
+| `dnd.ts` | 362 | 151 | `dnd-lookups.ts` (209) — SRD API fetch, spell/monster/class/item lookups |
+| `router.ts` (ai) | 313 | 172 | `claude.ts` (128) — callClaude, buildUserContent, MessageContent type |
 
 ### 7.2 — Reduce unused exports
 
@@ -210,13 +211,13 @@ Audit identified ~21 exported functions/types that are never imported elsewhere.
 - If it was an accident of development → un-export (make private)
 - Remove dead code entirely if the function is never called at all
 
-### 7.3 — Consolidate AI client
+### 7.3 — Consolidate AI client ✅
 
-Currently, the Claude API call logic lives in `router.ts` as a private function. It should be:
-1. [ ] Create `src/ai/claude.ts` — exported `callClaude(systemPrompt, userMessage, visionImages?)` function
-2. [ ] Move OpenRouter vs Anthropic endpoint logic there
-3. [ ] Move `buildUserContent` (vision support) there
-4. [ ] `router.ts` imports and delegates — stays focused on routing decisions (Ollama vs Claude, complexity classification, cost tracking)
+Completed as part of 7.1 file splits:
+1. [x] Created `src/ai/claude.ts` — exported `callClaude(systemPrompt, userMessage, visionImages?)` function
+2. [x] Moved OpenRouter vs Anthropic endpoint logic there
+3. [x] Moved `buildUserContent` (vision support) there
+4. [x] `router.ts` imports and delegates — stays focused on routing decisions (Ollama vs Claude, complexity classification, cost tracking)
 
 ### 7.4 — Type safety improvements
 
@@ -260,7 +261,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 7. [ ] **Log monitoring/alerting** — evaluate lightweight solutions (e.g., Logwatch, simple Pino log grep script) to surface error spikes or unusual patterns without a full observability stack.
 
 ### Gate
-- [ ] No file in `src/` exceeds 350 lines
+- [x] No file in `src/` exceeds 350 lines (largest: `character/class-race-data.ts` at 338)
 - [ ] All 420+ tests still pass after refactoring
 - [ ] `npm run check` clean (0 errors, warnings stable or reduced)
 - [ ] Every exported function has a JSDoc comment

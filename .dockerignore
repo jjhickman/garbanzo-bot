@@ -1,0 +1,54 @@
+# .dockerignore — Garbanzo Bot
+# Keeps the Docker build context small and prevents secrets from leaking into images.
+
+# Version control
+.git
+.gitignore
+
+# Dependencies (installed fresh in the image)
+node_modules
+
+# Build artifacts (built fresh in the image)
+dist
+
+# Runtime data (mounted as volumes, not baked into image)
+data
+baileys_auth
+
+# Secrets (NEVER bake into an image)
+.env
+.env.*
+opencode.json
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docker files (not needed inside the image)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation (not needed at runtime, except PERSONA.md which is loaded by the bot)
+docs
+!docs/PERSONA.md
+*.md
+LICENSE
+CONTRIBUTING.md
+CHANGELOG.md
+AGENTS.md
+
+# Test files (not needed in production)
+tests
+vitest.config.*
+eslint.config.*
+.gitleaks.toml
+
+# Scripts (setup/dev tooling, not needed in container)
+scripts
+
+# OS files
+.DS_Store
+Thumbs.db

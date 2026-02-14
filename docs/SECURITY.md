@@ -112,7 +112,7 @@ Prompt injection detection is deliberately non-blocking — flagged messages are
 
 All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is sent to external services except message text sent to AI APIs (Claude/Ollama) for response generation.
 
-**Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically.
+**Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically. Backups are currently **unencrypted** local files — suitable for crash recovery but not for off-site storage. Future work: encrypt with `age`/GPG before syncing to NAS (see Phase 7.8 in ROADMAP.md).
 
 ---
 
