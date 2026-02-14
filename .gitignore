@@ -1,8 +1,8 @@
 node_modules/
 dist/
 .env
+opencode.json
 baileys_auth/
+data/
 *.log
-data/*.db
-data/*.sqlite
 .DS_Store

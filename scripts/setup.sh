@@ -31,6 +31,23 @@ if [[ ! -f .env ]]; then
   echo "   Required: ANTHROPIC_API_KEY or OPENROUTER_API_KEY"
 fi
 
+# Install pre-commit hook (gitleaks secret scanning)
+echo ""
+echo "🔒 Installing pre-commit hook (secret scanning)..."
+if [[ -d .git ]]; then
+  cp scripts/pre-commit .git/hooks/pre-commit
+  chmod +x .git/hooks/pre-commit
+  echo "✅ Pre-commit hook installed"
+  if command -v gitleaks &>/dev/null; then
+    echo "✅ gitleaks $(gitleaks version) detected"
+  else
+    echo "⚠️  gitleaks not installed — pre-commit hook will skip scanning"
+    echo "   Install with: brew install gitleaks"
+  fi
+else
+  echo "⚠️  Not a git repo — skipping hook installation"
+fi
+
 # Type check
 echo ""
 echo "🔍 Running type check..."

@@ -1,0 +1,79 @@
+/**
+ * Release notes — owner command to broadcast "what's new" to groups.
+ *
+ * Usage (owner DM only):
+ *   !release <message>         — send release notes to all enabled groups
+ *   !release general <message> — send to a specific group only
+ *
+ * The message is wrapped in a formatted header so members know it's
+ * an official update from the bot operator.
+ */
+
+import type { WASocket } from '@whiskeysockets/baileys';
+import { logger } from '../middleware/logger.js';
+import { GROUP_IDS } from '../bot/groups.js';
+
+/**
+ * Parse and send release notes.
+ * Returns a confirmation message for the owner DM.
+ */
+export async function handleRelease(
+  args: string,
+  sock: WASocket,
+): Promise<string> {
+  if (!args.trim()) {
+    return [
+      '📋 *Release Notes*',
+      '',
+      'Usage:',
+      '  !release <message> — broadcast to all groups',
+      '  !release <group> <message> — send to one group',
+      '',
+      'Groups: ' + Object.values(GROUP_IDS).map((g) => g.name.toLowerCase()).join(', '),
+    ].join('\n');
+  }
+
+  // Check if first word matches a group name
+  const firstWord = args.trim().split(/\s+/)[0].toLowerCase();
+  const targetGroup = Object.entries(GROUP_IDS).find(
+    ([, g]) => g.name.toLowerCase() === firstWord && g.enabled,
+  );
+
+  let targetJids: string[];
+  let message: string;
+
+  if (targetGroup) {
+    targetJids = [targetGroup[0]];
+    message = args.trim().slice(firstWord.length).trim();
+    if (!message) {
+      return '❌ No message provided after group name.';
+    }
+  } else {
+    targetJids = Object.entries(GROUP_IDS)
+      .filter(([, g]) => g.enabled)
+      .map(([jid]) => jid);
+    message = args.trim();
+  }
+
+  const formatted = [
+    '📋 *What\'s New with Garbanzo* 🫘',
+    '',
+    message,
+  ].join('\n');
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const jid of targetJids) {
+    try {
+      await sock.sendMessage(jid, { text: formatted });
+      sent++;
+    } catch (err) {
+      logger.error({ err, jid }, 'Failed to send release notes');
+      failed++;
+    }
+  }
+
+  const groupNames = targetJids.map((jid) => GROUP_IDS[jid]?.name ?? jid);
+  return `✅ Release notes sent to ${sent} group${sent !== 1 ? 's' : ''}${failed > 0 ? ` (${failed} failed)` : ''}: ${groupNames.join(', ')}`;
+}

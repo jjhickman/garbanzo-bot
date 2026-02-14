@@ -2,6 +2,8 @@ import { bold } from '../utils/formatting.js';
 
 /**
  * Help command — shows users what Garbanzo can do.
+ *
+ * Separate help for regular members and owner-only commands.
  */
 
 export function getHelpMessage(): string {
@@ -60,11 +62,66 @@ export function getHelpMessage(): string {
     '  !today — this day in history',
     '  !icebreaker — conversation starter',
     '',
+    `${bold('Your Profile')}`,
+    '  !profile — view your profile',
+    '  !profile interests hiking, cooking — set interests',
+    '  !profile name Alex — set display name',
+    '  !profile delete — remove your data',
+    '',
+    `${bold('Conversation')}`,
+    '  !summary — summarize recent chat (last 50 msgs)',
+    '  !summary 100 — summarize last 100 messages',
+    '  !catchup / !missed — same as !summary',
+    '  !recommend / !recs — event ideas based on your interests',
+    '',
+    `${bold('Voice & Media')}`,
+    '  !voice — speak the replied-to message aloud',
+    '  !voice british — use a specific voice',
+    '  !voice list — show all available voices',
+    '  Send an image/video/sticker and @mention me — I\'ll describe it',
+    '  Send a voice note — I\'ll transcribe and respond',
+    '  Share a YouTube link — I\'ll transcribe and summarize',
+    '',
+    `${bold('Feedback')}`,
+    '  !suggest <idea> — submit a feature suggestion',
+    '  !bug <description> — report a bug',
+    '  !upvote <id> — upvote an existing suggestion/report',
+    '',
     `${bold('Anything Else')}`,
     '  Just ask! I can answer questions, give Boston',
     '  recs, or chat about whatever.',
     '',
     '_You can also use natural language — "what\'s the weather?" works too._',
+    '_Send me images, voice notes, or links — I understand multimedia._',
     '_@mention me in any group to get started._',
+  ].join('\n');
+}
+
+/**
+ * Owner-only help — shown in DM when owner sends !help admin or !admin.
+ */
+export function getOwnerHelpMessage(): string {
+  return [
+    `${bold('Owner Commands')} 🔧`,
+    '',
+    `${bold('Memory')}`,
+    '  !memory — list all stored community facts',
+    '  !memory add <category> <fact> — store a fact',
+    '  !memory delete <id> — remove a fact',
+    '  !memory search <keyword> — search facts',
+    '',
+    `${bold('Feedback Review')}`,
+    '  !feedback — view all pending suggestions/bugs',
+    '  !feedback digest — summary of recent feedback',
+    '',
+    `${bold('Moderation')}`,
+    '  !strikes — view strike counts',
+    '  !catchup intros — recent introductions summary',
+    '',
+    `${bold('Releases')}`,
+    '  !release <notes> — broadcast release notes to all groups',
+    '  !release <group> <notes> — broadcast to specific group',
+    '',
+    '_These commands only work in DM with the bot._',
   ].join('\n');
 }

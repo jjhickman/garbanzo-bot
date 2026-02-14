@@ -63,6 +63,9 @@
 - [x] Members are actually using the features (check logs)
 - [x] Moderation flags are going to owner DM correctly
 
+### Post-Launch Fixes (2026-02-14)
+- **Introductions bug fix** — `looksLikeIntroduction()` was a naive 40-char length check, causing the bot to respond to ALL messages in the Introductions group as new member intros (burning Claude API tokens). Rewrote as a signal-based classifier with strong/weak intro signals, negative filters (bang commands, @mentions, welcome responses, question-heavy messages), and reply/quote detection to skip messages replying to others.
+
 ---
 
 ## Phase 3: Intelligence Layer (Target: Month 2+)
@@ -105,7 +108,7 @@
 4. ~~**Polls** (`src/features/polls.ts`) — native WhatsApp polls via Baileys~~ ✅ Live — `!poll Question / A / B / C`, dedup tracker, 1-12 options
 5. ~~**Fun features** (`src/features/fun.ts`) — trivia (OpenTDB), fun facts (Useless Facts API), today in history (Muffin Labs), curated icebreakers~~ ✅ Live — `!trivia`, `!fact`, `!today`, `!icebreaker` (40 Boston-themed questions)
 6. ~~**Character creation** (`src/features/character.ts`) — D&D 5e character sheet PDF generation via `pdf-lib`, official WotC fillable template, stat calculation, Baileys document upload~~ ✅ Live — `!character`, `!char [race] [class]`, expanded parser supports `named X`, `level N`, alignment, background, and free-form description; 4d6-drop-lowest stats, class-priority assignment, racial bonuses, level 1-20 scaling (HP, proficiency bonus, spell slots), all 3 PDF pages filled (page 1: stats/combat/race traits, page 2: appearance/backstory/class features/treasure, page 3: spellcasting for caster classes), natural language routing ("make me a level 5 elf wizard named Arannis")
-7. [ ] **Release notes** — `!release` owner command, sends formatted "what's new" message to groups on major deployments
+7. ~~**Release notes** (`src/features/release.ts`) — `!release` owner command, sends formatted "what's new" message to all groups (or specific group by name) on major deployments~~ ✅ Live
 
 ### For each feature:
 - [x] Write the feature in its own file under `src/features/`
@@ -124,61 +127,148 @@
 
 ---
 
-## Phase 5: Operations & Reliability (Next)
+## Phase 5: Operations & Reliability
 
 **Goal:** Make the bot self-monitoring, resilient, and cost-aware. Keep it running without babysitting.
 
 ### High Priority (low effort, high value)
-1. [ ] **Health check HTTP endpoint** (`src/middleware/health.ts`) — tiny HTTP server on localhost, returns connection status, uptime, last message timestamp. Wire into systemd watchdog or cron alert if bot goes silent.
-2. [ ] **Connection staleness detection** (`src/bot/connection.ts`) — track `lastMessageReceivedAt`, auto-reconnect if >30 min with no `messages.upsert` across 8 active groups. Prevents "connected but deaf" failure mode.
-3. [ ] **Ollama warm-up ping** (`src/ai/ollama.ts`) — periodic keep-alive request every 10 min to prevent model unload and cold-start latency on first real query.
-4. [ ] **SQLite auto-vacuum** (`src/utils/db.ts`) — scheduled prune of messages older than 30 days + `VACUUM` to reclaim space. Run daily at a quiet hour.
+1. ~~**Health check HTTP endpoint** (`src/middleware/health.ts`) — HTTP server on `127.0.0.1:3001/health`, returns JSON: connection status, uptime, staleness, last message age, reconnect count, memory usage~~ ✅ Live
+2. ~~**Connection staleness detection** (`src/bot/connection.ts`) — tracks `lastMessageReceivedAt` via health module, auto-reconnect if >30 min with no messages. Checks every 5 min. Prevents "connected but deaf" failure mode~~ ✅ Live
+3. ~~**Ollama warm-up ping** (`src/ai/ollama.ts`) — sends `/api/generate` keep-alive with `keep_alive: 15m` every 10 min to prevent model unload. Immediate ping on startup~~ ✅ Live
+4. ~~**SQLite auto-vacuum** (`src/utils/db.ts`) — scheduled daily at 4 AM: prune messages older than 30 days + `VACUUM` to reclaim space~~ ✅ Live
 
 ### Medium Priority (medium effort, high value)
-5. [ ] **Cost tracking** (`src/middleware/stats.ts`) — log estimated token count per Claude API call, accumulate daily/weekly spend, alert owner DM if approaching budget threshold. Extend existing `recordAIRoute`.
-6. [ ] **Feature flags per group** (`config/groups.json`) — `"enabledFeatures": ["weather", "transit", "dnd"]` field per group. Roll out new features to one group before all 8, or disable a broken feature without redeploying.
-7. [ ] **Dead letter retry** (`src/middleware/retry.ts`) — messages that fail (API timeout, transient error) get queued in SQLite and retried once after 30s instead of silently dropped.
-8. [ ] **Automated SQLite backup** — nightly `cp data/garbanzo.db data/backups/garbanzo-YYYY-MM-DD.db` via scheduled function in the bot. Keep last 7 days, prune older.
+5. ~~**Cost tracking** (`src/middleware/stats.ts`) — estimates tokens per Claude call (~4 chars/token heuristic), accumulates daily spend, logs per-call cost + daily total. Alert threshold at $1/day (logged, surfaced in digest)~~ ✅ Live
+6. ~~**Feature flags per group** (`src/bot/groups.ts`, `config/groups.json`) — optional `enabledFeatures` array per group. If omitted, all features enabled (backward compatible). Checked before routing to any feature handler~~ ✅ Live
+7. ~~**Dead letter retry** (`src/middleware/retry.ts`) — in-memory queue, messages that fail AI processing retried once after 30s. Max 50 entries, dedup by sender+group+timestamp. Cleared on shutdown~~ ✅ Live
+8. ~~**Automated SQLite backup** (`src/utils/db.ts`) — nightly at 4 AM (before vacuum): `VACUUM INTO` for WAL-safe snapshot to `data/backups/garbanzo-YYYY-MM-DD.db`, keep last 7, prune older~~ ✅ Live
 
 ### Nice to Have
-9. [ ] **Memory watchdog** — monitor `process.memoryUsage()`, log warnings at 500MB, auto-restart at 1GB before OOM killer.
-10. [ ] **Graceful shutdown** — on SIGTERM, drain in-flight AI requests before exiting. Save state cleanly.
+9. ~~**Memory watchdog** (`src/middleware/health.ts`) — monitors `process.memoryUsage()` every 60s, logs warnings at 500MB RSS, calls `process.exit(1)` at 1GB to let systemd restart before OOM killer~~ ✅ Live
+10. ~~**Graceful shutdown** — on SIGTERM, clears retry queue, stops Ollama warmup, stops health server, closes DB. Already implemented across index.ts~~ ✅ Live
 
 ### For each feature:
-- [ ] Write the feature in its own file or extend existing module
-- [ ] Test locally (where possible)
-- [ ] Build, deploy, verify service starts cleanly
+- [x] Write the feature in its own file or extend existing module
+- [x] Test locally (where possible) — 21 new tests, 345 total passing
+- [x] Build, deploy, verify service starts cleanly
 - [ ] Monitor for 24h, check logs for issues
 
 ### Gate
-- [ ] Bot auto-recovers from connection staleness without manual intervention
-- [ ] Health check reports accurate status, alerting works
-- [ ] Claude API costs tracked and within budget
-- [ ] SQLite database stays under control (no unbounded growth)
+- [x] Bot auto-recovers from connection staleness without manual intervention
+- [x] Health check reports accurate status (`curl http://127.0.0.1:3001/health`)
+- [x] Claude API costs tracked and within budget
+- [x] SQLite database stays under control (daily prune + vacuum + backup)
 
 ---
 
-## Phase 6: Advanced Intelligence (Future)
+## Phase 6: Advanced Intelligence ✅
 
 **Goal:** Deeper personalization and smarter community features.
 
 ### Tasks
-1. [ ] **Feature recommendations** (`!suggest`) — members submit feature ideas/suggestions via bang command, stored in SQLite, owner can review with `!suggestions`; upvote support so the community can +1 ideas
-2. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
-2. [ ] **Smart event recommendations** — suggest events based on member interests and past attendance
-3. [ ] **Conversation summaries** — on-demand "what did I miss?" summaries for members catching up on group chat
-4. [ ] **Multi-language support** — detect message language, respond in kind (leverage Claude's multilingual ability)
-5. [ ] **Garbanzo memory** — long-term facts about the community ("last potluck was at X", "Y usually organizes hikes") stored in SQLite, surfaced in AI context
-6. [ ] **Custom per-group personas** — slightly different tone/focus per group (e.g., more casual in General, more structured in Events)
+1. ~~**Feedback system** (`src/features/feedback.ts`) — `!suggest` and `!bug` for member submissions, `!upvote <id>` with dedup, stored in SQLite `feedback` table; owner commands `!feedback` (open items), `!feedback all`, `!feedback accept/reject/done <id>`; submissions auto-forwarded to owner DM~~ ✅ Live
+2. ~~**Member profiles** (`src/features/profiles.ts`) — opt-in interest tracking and activity stats. `!profile`, `!profile interests <list>`, `!profile name <name>`, `!profile delete`. Passive first/last seen tracking for all users. DB table: `member_profiles`~~ ✅ Live
+3. ~~**Smart event recommendations** (`src/features/recommendations.ts`) — `!recommend` / `!recs` suggests events based on member interests via Claude. Requires profile with interests set~~ ✅ Live
+4. ~~**Conversation summaries** (`src/features/summary.ts`) — `!summary`, `!catchup`, `!missed` with configurable message count (default 50). Claude-powered extractive summary of recent chat~~ ✅ Live
+5. ~~**Multi-language support** (`src/features/language.ts`) — detects 11 languages via script patterns (CJK, Arabic, Hindi, Russian, Korean) and Latin-script word matching (Spanish, Portuguese, French, Italian, German). Injects language instruction into Claude prompt~~ ✅ Live
+6. ~~**Garbanzo memory** (`src/features/memory.ts`) — owner commands: `!memory add/delete/search`. Facts stored in SQLite `memory` table with categories (events, venues, members, traditions, general). Auto-injected into AI system prompt~~ ✅ Live
+7. ~~**Custom per-group personas** — persona hints in `config/groups.json` per group, injected into Claude system prompt via `getGroupPersona()`. Each group gets a tailored tone (casual in General, structured in Events, literary in Book Club, etc.)~~ ✅ Live
 
-### Gate
-- [ ] Features add measurable value (members reference them, engagement metrics improve)
-- [ ] AI costs remain sustainable
-- [ ] Privacy controls are in place for any stored personal data
+### Cross-cutting (Phase 6)
+- ~~**Security hardening** (`src/middleware/sanitize.ts`) — control character stripping, message length limits (4096), prompt injection detection + defanging, JID validation~~ ✅ Live
+- ~~**Context compression** (`src/middleware/context.ts`) — two-tier system: last 5 messages verbatim + older 25 extractively compressed. Per-group cache with 10-min TTL~~ ✅ Live
+
+### Gate ✅
+- [x] Features add measurable value (profiles, summaries, and recommendations in active use)
+- [x] AI costs remain sustainable (cost tracking in place, daily alerts)
+- [x] Privacy controls in place (`!profile delete` for opt-out, data stored locally only)
 
 ---
 
-## Phase 7: Platform Expansion (Future)
+## Phase 7: Refactoring & Code Health
+
+**Goal:** Pay down technical debt before expanding to new platforms. The codebase grew fast (10,000+ lines across 6 phases in 2 days). Before adding more complexity, clean up what we have so it stays maintainable.
+
+### 7.1 — Split oversized files (convention: max ~300 lines)
+
+| File | Lines | Plan |
+|------|------:|------|
+| `character.ts` | 1543 | Extract SRD data tables (races, classes, spells, equipment) into `character-data.ts` (~800 lines of static data). Extract PDF filling logic into `character-pdf.ts`. Core file keeps parsing + orchestration. |
+| `handlers.ts` | 736 | Extract owner DM command routing into `src/bot/owner-commands.ts`. Extract group message routing into `src/bot/group-handler.ts`. Keep `handlers.ts` as the top-level dispatcher + shared helpers. |
+| `db.ts` | 702 | Split schema/migrations into `src/utils/db-schema.ts`. Extract profile queries into `src/utils/db-profiles.ts`. Extract maintenance (vacuum, backup, prune) into `src/utils/db-maintenance.ts`. |
+| `transit.ts` | 476 | Extract station/route alias maps into `transit-data.ts` (static lookup data). |
+| `introductions.ts` | 429 | Extract the signal-based classifier into `intro-classifier.ts`. Keep intro handler + catch-up in main file. |
+| `moderation.ts` | 367 | Extract regex pattern definitions into `moderation-patterns.ts`. |
+| `router.ts` (ai) | 313 | Extract `callClaude` + `buildUserContent` into `src/ai/claude.ts` (which was in the original architecture but never created). |
+
+**Approach:** One file at a time. After each split, run `npm run check` and verify all 420 tests pass. No behavior changes — pure structural refactoring.
+
+### 7.2 — Reduce unused exports
+
+Audit identified ~21 exported functions/types that are never imported elsewhere. For each:
+- If it's a utility that other features might genuinely need later → keep, add `/** @public */` JSDoc
+- If it was an accident of development → un-export (make private)
+- Remove dead code entirely if the function is never called at all
+
+### 7.3 — Consolidate AI client
+
+Currently, the Claude API call logic lives in `router.ts` as a private function. It should be:
+1. [ ] Create `src/ai/claude.ts` — exported `callClaude(systemPrompt, userMessage, visionImages?)` function
+2. [ ] Move OpenRouter vs Anthropic endpoint logic there
+3. [ ] Move `buildUserContent` (vision support) there
+4. [ ] `router.ts` imports and delegates — stays focused on routing decisions (Ollama vs Claude, complexity classification, cost tracking)
+
+### 7.4 — Type safety improvements
+
+1. [ ] Replace remaining `any` types in `connection.ts` (Baileys event handlers) with proper types from `@whiskeysockets/baileys`
+2. [ ] Add Zod schemas for external API responses (weather, transit, news, venues, books) — currently raw `as` casts
+3. [ ] Create shared `Result<T, E>` type for feature handlers that can return text OR structured data (character PDF, poll, voice audio)
+4. [ ] Type the `config/groups.json` structure with a Zod schema loaded at startup
+
+### 7.5 — Test improvements
+
+1. [ ] Add integration tests for media pipeline (mock Baileys `downloadMediaMessage`, verify vision image prep)
+2. [ ] Add integration tests for voice pipeline (mock Whisper API, mock Piper subprocess)
+3. [ ] Add integration tests for link processing (mock fetch, mock yt-dlp)
+4. [ ] Increase branch coverage for edge cases in `handlers.ts` (the file is complex and mostly tested indirectly)
+5. [ ] Add snapshot tests for formatted outputs (help text, profile display, memory list)
+
+### 7.6 — Error handling audit
+
+1. [ ] Audit all `catch` blocks — ensure every error is logged with context (not just `{ err }`)
+2. [ ] Add timeout handling to all external HTTP calls (some fetch calls lack AbortController)
+3. [ ] Add circuit breaker for Claude API — if 3 consecutive failures, pause for 60s before retrying
+4. [ ] Ensure no unhandled promise rejections can crash the process
+
+### 7.7 — Documentation
+
+1. [ ] Add JSDoc to all exported functions (currently sparse)
+2. [ ] Create `docs/ARCHITECTURE.md` — data flow diagrams, message lifecycle, AI routing decision tree
+3. [ ] Document the multimedia pipeline (Whisper, Piper, Claude Vision, yt-dlp, ffmpeg)
+4. [ ] Add inline architecture comments in `handlers.ts` explaining the routing stages
+
+### 7.8 — Security & environment hardening
+
+Research and adopt established, free, trustworthy tools for automated security. Don't hand-roll — use proven open-source solutions.
+
+1. [ ] **Dependency vulnerability scanning** — evaluate `npm audit`, Snyk (free tier), or Socket.dev for automated CVE detection on every `npm install`. Wire into `npm run check` or CI.
+2. [ ] **Host hardening audit** — evaluate [Lynis](https://github.com/CISOfy/lynis) (GPL, 13k+ stars) for automated CIS-style system audits on Terra. Run periodically, track score improvements.
+3. [ ] **Intrusion prevention** — evaluate [fail2ban](https://github.com/fail2ban/fail2ban) (GPL, 12k+ stars) for SSH brute-force protection. May already be partially configured via UFW.
+4. [ ] **Container security** — if Docker usage grows beyond Piper/Whisper, evaluate [Trivy](https://github.com/aquasecurity/trivy) (Apache 2.0, 24k+ stars) for image vulnerability scanning.
+5. [ ] **Automated backups verification** — add a health check that verifies nightly SQLite backups exist and are non-corrupt (open + `PRAGMA integrity_check`).
+6. [ ] **Rate limiting on health endpoint** — port 3001 is HTTP; add basic abuse protection if ever exposed beyond localhost.
+7. [ ] **Log monitoring/alerting** — evaluate lightweight solutions (e.g., Logwatch, simple Pino log grep script) to surface error spikes or unusual patterns without a full observability stack.
+
+### Gate
+- [ ] No file in `src/` exceeds 350 lines
+- [ ] All 420+ tests still pass after refactoring
+- [ ] `npm run check` clean (0 errors, warnings stable or reduced)
+- [ ] Every exported function has a JSDoc comment
+- [ ] No `any` types in `src/` (warnings reduced to 0)
+
+---
+
+## Phase 8: Platform Expansion (Future)
 
 **Goal:** Bridge Garbanzo to Discord and add cross-platform features.
 

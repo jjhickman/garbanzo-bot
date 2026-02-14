@@ -28,7 +28,7 @@ const envSchema = z.object({
 
   // Infrastructure
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  OWNER_JID: z.string().default('17819754407@s.whatsapp.net'),
+  OWNER_JID: z.string().min(1, 'OWNER_JID is required — set in .env'),
 });
 
 const parsed = envSchema.safeParse(process.env);

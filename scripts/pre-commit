@@ -1,0 +1,37 @@
+#!/bin/bash
+# Garbanzo Bot — Pre-commit hook
+# Runs gitleaks on staged files to block commits with hardcoded secrets.
+# Installed by: scripts/setup.sh or manually: cp scripts/pre-commit .git/hooks/
+
+set -euo pipefail
+
+# Check if gitleaks is installed
+if ! command -v gitleaks &>/dev/null; then
+  echo "⚠️  gitleaks not installed — skipping secret scan"
+  echo "   Install with: brew install gitleaks"
+  exit 0
+fi
+
+# Run gitleaks on staged changes only
+echo "🔍 Scanning staged files for secrets..."
+gitleaks git --staged \
+  --config "$(git rev-parse --show-toplevel)/.gitleaks.toml" \
+  --exit-code 1 \
+  --redact \
+  --no-banner \
+  --verbose
+
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -ne 0 ]]; then
+  echo ""
+  echo "❌ Commit blocked — secrets detected in staged files."
+  echo ""
+  echo "To fix:"
+  echo "  1. Move secrets to .env (gitignored)"
+  echo "  2. Reference via process.env.VAR_NAME"
+  echo "  3. For false positives, add 'gitleaks:allow' inline comment"
+  echo ""
+  echo "To bypass (NOT recommended): git commit --no-verify"
+  exit 1
+fi

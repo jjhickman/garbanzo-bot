@@ -16,6 +16,46 @@ The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy com
 - **Testing:** Vitest
 - **Build:** `tsc` → `dist/`, dev via `tsx watch`
 
+## Development Principles
+
+### Use existing tools first — don't hand-roll what exists
+
+Before implementing any feature, task, or utility, **research whether a reliable, free, and trustworthy existing tool, library, or API already solves the problem.** Only write custom code when no suitable option exists or when the existing options are unreliable, unmaintained, or introduce unacceptable dependencies.
+
+**Process for every new feature or task:**
+
+1. **Research first** — Search for established open-source tools, npm packages, system utilities, or free APIs that address the need. Evaluate by: GitHub stars/maintenance activity, license (prefer MIT/Apache/BSD), dependency footprint, community trust.
+2. **Evaluate fit** — Does the tool cover 80%+ of the requirement? Is it actively maintained (commits in the last 6 months)? Does it have a reasonable dependency tree? Is it free for our use case?
+3. **Propose before building** — Present the option to the developer with a brief rationale (what it does, why it's better than hand-rolling, any tradeoffs). Get approval before adding dependencies.
+4. **Fall back to custom only when justified** — If no suitable tool exists, the options are abandoned/unmaintained, the dependency cost is too high, or the requirement is truly project-specific, then write custom code.
+
+**Examples of this principle in action:**
+- Secret scanning → **gitleaks** (MIT, 17k+ stars, 150+ detectors) instead of custom regex script
+- WhatsApp API → **Baileys** instead of raw WebSocket implementation
+- Schema validation → **Zod** instead of hand-written validators
+- Logging → **Pino** instead of custom logger
+- Speech-to-text → **Whisper API** (local Speaches server) instead of custom audio processing
+- Text-to-speech → **Piper** (native binary) instead of custom synthesis
+- YouTube download → **yt-dlp** instead of custom scraper
+
+**This principle applies equally to AI agents working on this codebase.** When an agent is tasked with implementing something, it should research existing solutions before writing code. The agent should present options and let the developer choose.
+
+### Security: Credential Audit
+
+All code changes are scanned for hardcoded secrets before they can be committed or pushed. This is enforced at three levels:
+
+1. **Pre-commit hook** — `gitleaks protect --staged` runs automatically on every `git commit`. Blocks commits containing API keys, tokens, private keys, or other secrets.
+2. **`npm run check`** — The full pre-commit check pipeline (`audit:secrets` → `typecheck` → `lint` → `test`) includes a gitleaks scan of the working directory. Run this before every commit.
+3. **`npm run audit:secrets`** — Standalone secret scan. Use `--verbose` for detailed findings, `--staged` for only staged files.
+
+**Configuration:** `.gitleaks.toml` at project root. Built-in rules detect 150+ secret types. Custom rules added for WhatsApp JIDs. Allowlists configured for files that legitimately reference patterns (docs, examples, config).
+
+**If gitleaks flags a finding:**
+- Move the secret to `.env` (gitignored)
+- Reference via `process.env.VAR_NAME` in code
+- For test files, use fake values (`test_key_xxx`, `5550001234`)
+- For genuine false positives, add an inline `gitleaks:allow` comment or update `.gitleaks.toml` allowlist
+
 ## Commands
 
 ```bash
@@ -34,13 +74,16 @@ npm run lint
 # Run tests
 npm run test
 
+# Scan for hardcoded secrets
+npm run audit:secrets
+
 # Build for production
 npm run build
 
 # Start production
 npm run start
 
-# Full pre-commit check
+# Full pre-commit check (secrets + typecheck + lint + test)
 npm run check
 ```
 
@@ -86,7 +129,9 @@ garbanzo-bot/
 ├── baileys_auth/             # Baileys auth state (gitignored)
 ├── .env                      # Secrets (gitignored)
 ├── .env.example              # Template for .env
-├── opencode.json             # OpenCode AI agent config
+├── .gitleaks.toml             # Secret scanning config (gitleaks)
+├── opencode.json              # OpenCode AI agent config (gitignored — has secrets)
+├── opencode.json.example      # Template for opencode.json
 ├── package.json
 ├── tsconfig.json
 └── AGENTS.md                 # This file
@@ -158,12 +203,15 @@ npm run test:watch
 ## Three-Tier Boundaries
 
 ### ✅ Always Do
+- Run `npm run check` before committing (runs secrets audit → typecheck → lint → test)
 - Run `npm run typecheck` after editing TypeScript files
+- Run `npm run audit:secrets` after adding any config values, API keys, or identifiers
+- Research existing tools/libraries/APIs before implementing any new feature or utility
 - Validate all environment variables with Zod at startup
 - Log errors with structured context (Pino)
 - Handle Baileys reconnection gracefully (check `DisconnectReason`)
 - Keep the bot process alive — never let a single message crash the service
-- Use `.env` for all secrets — never hardcode API keys
+- Use `.env` for all secrets — never hardcode API keys, tokens, or phone numbers
 - Save Baileys auth credentials on every `creds.update` event
 
 ### ⚠️ Ask First

@@ -12,6 +12,7 @@ import { resolve } from 'path';
 import qrcode from 'qrcode-terminal';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
+import { markConnected, markDisconnected, isConnectionStale } from '../middleware/health.js';
 
 const AUTH_DIR = resolve(PROJECT_ROOT, 'baileys_auth');
 const baileysLogger = logger.child({ module: 'baileys' });
@@ -20,6 +21,13 @@ const baileysLogger = logger.child({ module: 'baileys' });
 baileysLogger.level = 'warn';
 
 export type MessageHandler = (sock: WASocket) => void;
+
+// Re-export for handlers to use
+export { markMessageReceived } from '../middleware/health.js';
+
+/** Staleness check interval (5 minutes) */
+const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+let staleCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Create and manage the Baileys WhatsApp connection.
@@ -55,11 +63,23 @@ export async function startConnection(
 
     if (connection === 'open') {
       logger.info({ botJid: sock.user?.id }, '✅ Connected to WhatsApp');
+      markConnected();
 
       // Set the bot's display name so it shows as "Garbanzo Bean" in groups
       sock.updateProfileName('Garbanzo Bean').catch((err) => {
         logger.warn({ err }, 'Failed to set profile name — may need to set manually in WhatsApp');
       });
+
+      // Start staleness monitor — force reconnect if connected but deaf
+      if (staleCheckTimer) clearInterval(staleCheckTimer);
+      staleCheckTimer = setInterval(() => {
+        if (isConnectionStale()) {
+          logger.warn('Connection stale (no messages for 30+ min) — forcing reconnect');
+          if (staleCheckTimer) clearInterval(staleCheckTimer);
+          staleCheckTimer = null;
+          sock.end(new Error('Stale connection — no messages received'));
+        }
+      }, STALE_CHECK_INTERVAL_MS);
 
       onReady(sock);
     }
@@ -68,6 +88,7 @@ export async function startConnection(
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
+      markDisconnected();
       logger.warn(
         { statusCode, shouldReconnect },
         'Connection closed',

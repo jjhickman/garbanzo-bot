@@ -84,6 +84,83 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
 
 ---
 
+## Input Sanitization & Prompt Injection Protection
+
+**Added:** 2026-02-14 — `src/middleware/sanitize.ts`
+
+All incoming messages pass through a sanitization pipeline before processing:
+
+| Layer | Protection | Action |
+|-------|-----------|--------|
+| Control character stripping | Null bytes, zero-width chars, RTL overrides | Silently stripped |
+| Message length limit | 4096 characters max | Message rejected with friendly error |
+| Prompt injection detection | 10+ patterns (e.g., "ignore previous instructions", "pretend to be", "system prompt") | Detected and defanged (quoted), logged as warning, NOT rejected (avoids false positives) |
+| JID validation | Ensures sender/group IDs match WhatsApp format | Invalid JIDs rejected |
+
+Prompt injection detection is deliberately non-blocking — flagged messages are still processed but with the injection text quoted/defanged to reduce effectiveness. This avoids false positives while still protecting against most social engineering attacks on the AI.
+
+## Data Privacy Notes
+
+| Table | PII Stored | Purpose | Retention |
+|-------|-----------|---------|-----------|
+| `messages` | Sender JID, message text | Conversation context for AI | Auto-pruned: 30-day TTL + daily vacuum |
+| `moderation_log` | Sender JID, flagged text | Strike tracking | Indefinite |
+| `feedback` | Sender JID, suggestion/bug text, voter JIDs (JSON array) | Feature requests & bug reports | Indefinite |
+| `daily_stats` | None (aggregate counts only) | Usage metrics | Indefinite |
+| `memory` | None (community facts only, no PII) | Long-term bot knowledge | Owner-managed (manual delete) |
+| `member_profiles` | JID, display name, interests, groups active | Personalized recommendations | Opt-in; user can delete via `!profile delete` |
+
+All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is sent to external services except message text sent to AI APIs (Claude/Ollama) for response generation.
+
+**Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically.
+
+---
+
+## Automated Secret Scanning
+
+**Added:** 2026-02-14 — powered by [gitleaks](https://github.com/gitleaks/gitleaks) (MIT, v8.30+)
+
+Hardcoded secrets are detected and blocked at three enforcement points:
+
+| Layer | Command | When it runs |
+|-------|---------|-------------|
+| Pre-commit hook | `gitleaks git --staged` | Every `git commit` (automatic) |
+| npm check pipeline | `npm run audit:secrets` | Part of `npm run check` (manual, pre-push) |
+| Standalone scan | `./scripts/audit-secrets.sh` | On-demand |
+
+### What it detects (150+ built-in rules + custom)
+
+- API keys: Anthropic (`sk-ant-`), OpenAI (`sk-`), Google (`AIzaSy`), Brave (`BSA`), OpenRouter (`sk-or-`), AWS (`AKIA`), Stripe, Slack, SendGrid, npm, etc.
+- GitHub tokens: PATs (`github_pat_`), OAuth (`gho_`), server (`ghs_`), app (`ghp_`)
+- Private keys: RSA, EC, DSA, OpenSSH, PGP
+- Database connection strings with embedded passwords
+- **Custom:** WhatsApp JIDs with real phone numbers (project-specific)
+
+### Configuration
+
+- **Config file:** `.gitleaks.toml` (project root)
+- **Path allowlist:** `baileys_auth/`, `node_modules/`, `dist/`, `data/`, `.env`, `package-lock.json` — excluded from all scans
+- **Per-file allowlists:** `config/groups.json`, `.env.example`, `docs/` — allowed to contain WhatsApp JIDs
+- **Inline suppression:** Add `gitleaks:allow` as a comment on any line to suppress a false positive
+
+### Setup
+
+The pre-commit hook is installed automatically by `scripts/setup.sh`. For manual installation:
+
+```bash
+cp scripts/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+### If a secret is accidentally committed
+
+1. Remove the secret from the file immediately
+2. Rotate the compromised credential at its provider
+3. Add the new credential to `.env` only
+4. If already pushed, consider using `git filter-repo` or BFG Repo-Cleaner to remove from history
+
+---
+
 ## Remediation Log
 
 ### Applied 2026-02-13
@@ -113,5 +190,5 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
 
    After rotating, add new keys to `~/garbanzo-bot/.env` **only**. Never put keys in JSON configs.
 
-2. **[ ] Create dedicated systemd service** for the new bot (Phase 1 task — see ROADMAP.md)
+2. **[x] Create dedicated systemd service** for the new bot — `garbanzo-bot.service` installed and running as systemd user service (completed 2026-02-13, Phase 1)
 3. **[ ] Consider SSH key-only auth** — disable password auth in `/etc/ssh/sshd_config`
