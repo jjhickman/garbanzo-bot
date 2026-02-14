@@ -1,0 +1,20 @@
+[Unit]
+Description=Garbanzo Bean WhatsApp Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/josh/garbanzo-bot
+ExecStart=/home/linuxbrew/.linuxbrew/bin/node dist/index.js
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Logging (stdout/stderr → journalctl)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=garbanzo-bot
+
+[Install]
+WantedBy=default.target

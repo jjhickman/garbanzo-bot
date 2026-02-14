@@ -1,4 +1,9 @@
-import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
+import {
+  type WASocket,
+  type WAMessage,
+  type WAMessageContent,
+  normalizeMessageContent,
+} from '@whiskeysockets/baileys';
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { isGroupJid, getSenderJid } from '../utils/jid.js';
@@ -35,6 +40,14 @@ export function registerHandlers(sock: WASocket): void {
 }
 
 /**
+ * Unwrap the message content, handling ephemeral/viewOnce/protocol wrappers
+ * that WhatsApp applies in groups with disappearing messages etc.
+ */
+function unwrapMessage(msg: WAMessage): WAMessageContent | undefined {
+  return normalizeMessageContent(msg.message);
+}
+
+/**
  * Route a single incoming message.
  */
 async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
@@ -47,7 +60,18 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
 
-  const text = extractText(msg);
+  const content = unwrapMessage(msg);
+  const text = extractText(content);
+
+  logger.debug({
+    remoteJid,
+    hasMessage: !!msg.message,
+    hasContent: !!content,
+    hasText: !!text,
+    messageKeys: msg.message ? Object.keys(msg.message) : [],
+    contentKeys: content ? Object.keys(content) : [],
+  }, 'Message received');
+
   if (!text) return;
 
   const senderJid = getSenderJid(remoteJid, msg.key.participant);
@@ -57,9 +81,22 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
     if (!isGroupEnabled(remoteJid)) return;
 
     // Only respond if @mentioned (when group requires it)
-    if (requiresMention(remoteJid) && !isMentioned(text)) return;
+    const mentionedJids = extractMentionedJids(content);
+    const botJid = sock.user?.id;
+    const botLid = sock.user?.lid;
 
-    const query = stripMention(text);
+    logger.debug({
+      text,
+      mentionedJids,
+      botJid,
+      botLid,
+      requiresMention: requiresMention(remoteJid),
+      isMentioned: isMentioned(text, mentionedJids, botJid, botLid),
+    }, 'Mention check');
+
+    if (requiresMention(remoteJid) && !isMentioned(text, mentionedJids, botJid, botLid)) return;
+
+    const query = stripMention(text, botJid, botLid);
     const groupName = getGroupName(remoteJid);
 
     logger.info({ group: groupName, sender: senderJid, query }, 'Group mention');
@@ -68,7 +105,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       groupName,
       groupJid: remoteJid,
       senderJid,
-      quotedText: extractQuotedText(msg),
+      quotedText: extractQuotedText(content),
     });
 
     if (response) {
@@ -94,23 +131,37 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   }
 }
 
-/** Extract text content from various message types */
-function extractText(msg: WAMessage): string | null {
-  const m = msg.message;
-  if (!m) return null;
+/** Extract text content from unwrapped message content */
+function extractText(content: WAMessageContent | undefined): string | null {
+  if (!content) return null;
 
   return (
-    m.conversation ??
-    m.extendedTextMessage?.text ??
-    m.imageMessage?.caption ??
-    m.videoMessage?.caption ??
-    m.documentMessage?.caption ??
+    content.conversation ??
+    content.extendedTextMessage?.text ??
+    content.imageMessage?.caption ??
+    content.videoMessage?.caption ??
+    content.documentMessage?.caption ??
     null
   );
 }
 
 /** Extract quoted/replied-to text if present */
-function extractQuotedText(msg: WAMessage): string | undefined {
-  return msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-    ?.conversation ?? undefined;
+function extractQuotedText(content: WAMessageContent | undefined): string | undefined {
+  const quoted = content?.extendedTextMessage?.contextInfo?.quotedMessage;
+  if (!quoted) return undefined;
+  // The quoted message itself may need unwrapping
+  const unwrapped = normalizeMessageContent(quoted);
+  return extractText(unwrapped) ?? undefined;
+}
+
+/** Extract JIDs mentioned via WhatsApp's native @mention system */
+function extractMentionedJids(content: WAMessageContent | undefined): string[] | undefined {
+  if (!content) return undefined;
+  const ctx = content.extendedTextMessage?.contextInfo
+    ?? content.imageMessage?.contextInfo
+    ?? content.videoMessage?.contextInfo
+    ?? content.documentMessage?.contextInfo;
+  const jids = ctx?.mentionedJid;
+  if (!jids || jids.length === 0) return undefined;
+  return jids;
 }

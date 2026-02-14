@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
-import { config, PROJECT_ROOT } from '../utils/config.js';
+import { PROJECT_ROOT } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 
 // Load persona at startup

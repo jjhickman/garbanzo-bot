@@ -8,6 +8,8 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { resolve } from 'path';
+// @ts-expect-error — qrcode-terminal has no type declarations
+import qrcode from 'qrcode-terminal';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 
@@ -38,7 +40,6 @@ export async function startConnection(
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, baileysLogger as any),
     },
-    printQRInTerminal: true,
     generateHighQualityLinkPreview: false,
     markOnlineOnConnect: false,
   });
@@ -49,10 +50,17 @@ export async function startConnection(
 
     if (qr) {
       logger.info('QR code generated — scan with WhatsApp to connect');
+      qrcode.generate(qr, { small: true });
     }
 
     if (connection === 'open') {
-      logger.info('✅ Connected to WhatsApp');
+      logger.info({ botJid: sock.user?.id }, '✅ Connected to WhatsApp');
+
+      // Set the bot's display name so it shows as "Garbanzo Bean" in groups
+      sock.updateProfileName('Garbanzo Bean').catch((err) => {
+        logger.warn({ err }, 'Failed to set profile name — may need to set manually in WhatsApp');
+      });
+
       onReady(sock);
     }
 
