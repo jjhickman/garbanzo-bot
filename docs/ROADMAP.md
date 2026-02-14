@@ -59,7 +59,7 @@
 ### Gate ✅
 - [x] All enabled features work end-to-end with real users
 - [x] No feature crashes the bot process
-- [ ] API costs are within budget (track daily)
+- [x] API costs are within budget (track daily)
 - [x] Members are actually using the features (check logs)
 - [x] Moderation flags are going to owner DM correctly
 
@@ -70,7 +70,7 @@
 **Goal:** Make the bot smarter and cheaper with local models and better context.
 
 ### Tasks
-- [ ] **Ollama routing** — simple queries (greetings, FAQs, short answers) → local qwen3:8b, complex queries → Claude
+- [x] **Ollama routing** — simple queries (greetings, FAQs, short answers) → local qwen3:8b, complex queries → Claude ✅ Live — complexity classifier, distilled persona for 8B, auto-fallback to Claude on failure
 - [ ] **Conversation context** — include last 5 messages in group as context for AI responses
 - [ ] **Daily digest** — summarize group activity, send to owner DM at 9 PM
 - [ ] **Rate limiting** — per-user and per-group limits to prevent abuse
