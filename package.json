@@ -26,6 +26,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.16",
+    "better-sqlite3": "^12.6.2",
     "dotenv": "^16.4.7",
     "openai": "^6.22.0",
     "pino": "^9.6.0",
@@ -34,6 +35,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.13.4",
     "eslint": "^9.20.0",
     "tsx": "^4.19.3",

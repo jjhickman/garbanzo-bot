@@ -13,11 +13,16 @@ import { matchFeature } from '../features/router.js';
 import { handleWeather } from '../features/weather.js';
 import { handleTransit } from '../features/transit.js';
 import { buildWelcomeMessage } from '../features/welcome.js';
-import { checkMessage, formatModerationAlert } from '../features/moderation.js';
+import { checkMessage, formatModerationAlert, applyStrikeAndMute, isSoftMuted, formatStrikesReport } from '../features/moderation.js';
 import { handleNews } from '../features/news.js';
 import { getHelpMessage } from '../features/help.js';
 import { handleIntroduction, INTRODUCTIONS_JID, triggerIntroCatchUp } from '../features/introductions.js';
 import { handleEvent, handleEventPassive, EVENTS_JID } from '../features/events.js';
+import { recordMessage } from '../middleware/context.js';
+import { recordGroupMessage, recordBotResponse, recordModerationFlag, recordOwnerDM } from '../middleware/stats.js';
+import { previewDigest } from '../features/digest.js';
+import { checkRateLimit, recordResponse } from '../middleware/rate-limit.js';
+import { logModeration } from '../utils/db.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -105,10 +110,26 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
   const senderJid = getSenderJid(remoteJid, msg.key.participant);
 
+  // ── Record message for conversation context + stats ──
+  recordMessage(remoteJid, senderJid, text);
+  if (isGroupJid(remoteJid)) {
+    recordGroupMessage(remoteJid, senderJid);
+  }
+
   // ── Moderation (runs on ALL group messages, not just mentions) ──
   if (isGroupJid(remoteJid) && isGroupEnabled(remoteJid)) {
     const flag = await checkMessage(text);
     if (flag) {
+      recordModerationFlag(remoteJid);
+      logModeration({
+        chatJid: remoteJid,
+        sender: senderJid,
+        text: text.slice(0, 500),
+        reason: flag.reason,
+        severity: flag.severity,
+        source: flag.source,
+        timestamp: Math.floor(Date.now() / 1000),
+      });
       logger.warn({ group: remoteJid, sender: senderJid, reason: flag.reason, severity: flag.severity, source: flag.source }, 'Moderation flag');
       const alert = formatModerationAlert(flag, text, senderJid, remoteJid);
       try {
@@ -117,6 +138,17 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
         logger.info({ msgId: result?.key?.id, to: result?.key?.remoteJid }, 'Moderation alert sent');
       } catch (err) {
         logger.error({ err }, 'Failed to send moderation alert to owner');
+      }
+
+      // Apply strike and soft-mute if threshold reached
+      const { muted, dmMessage } = applyStrikeAndMute(senderJid);
+      if (muted && dmMessage) {
+        try {
+          await sock.sendMessage(senderJid, { text: dmMessage });
+          logger.info({ senderJid }, 'Soft-mute DM sent to user');
+        } catch (err) {
+          logger.error({ err, senderJid }, 'Failed to send soft-mute DM');
+        }
       }
     }
   }
@@ -175,10 +207,23 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
     if (requiresMention(remoteJid) && !isMentioned(text, mentionedJids, botJid, botLid)) return;
 
+    // Soft-muted users get silently ignored
+    if (isSoftMuted(senderJid)) {
+      logger.debug({ senderJid, group: remoteJid }, 'Ignoring soft-muted user');
+      return;
+    }
+
     const query = stripMention(text, botJid, botLid);
     const groupName = getGroupName(remoteJid);
 
     logger.info({ group: groupName, sender: senderJid, query }, 'Group mention');
+
+    // Rate limit check
+    const rateLimited = checkRateLimit(senderJid, remoteJid);
+    if (rateLimited) {
+      await sock.sendMessage(remoteJid, { text: rateLimited }, { quoted: msg });
+      return;
+    }
 
     const response = await getResponse(query, {
       groupName,
@@ -188,6 +233,8 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
     });
 
     if (response) {
+      recordBotResponse(remoteJid);
+      recordResponse(senderJid, remoteJid);
       await sock.sendMessage(remoteJid, { text: response }, { quoted: msg });
     }
     return;
@@ -197,11 +244,24 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   // Only respond to owner DMs for now (Phase 1 safety)
   if (senderJid === config.OWNER_JID) {
     logger.info({ sender: senderJid, text }, 'Owner DM');
+    recordOwnerDM();
 
     // Owner commands
     if (text.trim().toLowerCase() === '!catchup intros') {
       const result = await triggerIntroCatchUp(sock);
       await sock.sendMessage(remoteJid, { text: result });
+      return;
+    }
+
+    if (text.trim().toLowerCase() === '!digest') {
+      const digest = previewDigest();
+      await sock.sendMessage(remoteJid, { text: digest });
+      return;
+    }
+
+    if (text.trim().toLowerCase() === '!strikes') {
+      const report = formatStrikesReport();
+      await sock.sendMessage(remoteJid, { text: report });
       return;
     }
 

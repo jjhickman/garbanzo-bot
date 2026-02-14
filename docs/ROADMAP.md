@@ -50,11 +50,11 @@
 8. ~~**Event Detection** (`src/features/events.ts`) — detect event proposals, enrich with weather/transit/AI logistics~~ ✅ Live — passive in Events group, @mention in others, composes weather + transit + Claude summary
 
 ### For each feature:
-- [ ] Write the feature in its own file under `src/features/`
-- [ ] Add command detection to the handler (e.g., "weather in Boston" → weather feature)
-- [ ] Test with real messages in a single group
-- [ ] Verify graceful degradation if API key is missing/invalid
-- [ ] Run for 2+ days before adding next feature
+- [x] Write the feature in its own file under `src/features/`
+- [x] Add command detection to the handler (e.g., "weather in Boston" → weather feature)
+- [x] Test with real messages in a single group
+- [x] Verify graceful degradation if API key is missing/invalid
+- [x] Run for 2+ days before adding next feature
 
 ### Gate ✅
 - [x] All enabled features work end-to-end with real users
@@ -70,12 +70,21 @@
 **Goal:** Make the bot smarter and cheaper with local models and better context.
 
 ### Tasks
-- [x] **Ollama routing** — simple queries (greetings, FAQs, short answers) → local qwen3:8b, complex queries → Claude ✅ Live — complexity classifier, distilled persona for 8B, auto-fallback to Claude on failure
-- [ ] **Conversation context** — include last 5 messages in group as context for AI responses
-- [ ] **Daily digest** — summarize group activity, send to owner DM at 9 PM
-- [ ] **Rate limiting** — per-user and per-group limits to prevent abuse
-- [ ] **Feature command routing** — structured command parsing ("!weather Boston" vs natural language)
-- [ ] **Persistent memory** — SQLite for user preferences, group stats, moderation history
+1. ~~**Ollama routing** (`src/ai/ollama.ts`, `src/ai/router.ts`) — simple queries → local qwen3:8b, complex → Claude~~ ✅ Live — complexity classifier, distilled persona for 8B, auto-fallback to Claude on failure
+2. ~~**Conversation context** (`src/middleware/context.ts`) — last 15 messages per group as AI context~~ ✅ Live — SQLite-backed, survives restarts, context-dependent queries route to Claude
+3. ~~**Daily digest** (`src/features/digest.ts`, `src/middleware/stats.ts`) — summarize group activity to owner DM at 9 PM~~ ✅ Live — auto-scheduled, `!digest` preview command, tracks messages/users/AI routing/moderation per group
+4. ~~**Rate limiting** (`src/middleware/rate-limit.ts`) — per-user (10/5min) and per-group (30/5min) sliding window~~ ✅ Live — owner exempt, friendly rejection messages
+5. ~~**Feature command routing** (`src/features/router.ts`) — bang commands (`!weather`, `!transit`, `!news`, `!events`, `!help`) alongside natural language~~ ✅ Live
+6. ~~**Persistent memory** (`src/utils/db.ts`) — SQLite (`data/garbanzo.db`) for messages, moderation logs, daily stats~~ ✅ Live — replaces JSON context file, WAL mode, auto-prune at 100 msgs/chat
+7. ~~**Strike tracking + soft-mute** (`src/features/moderation.ts`) — per-user strike counts from moderation logs, auto soft-mute at 3+ strikes (30 min), DM explanation, `!strikes` owner command~~ ✅ Live
+
+### For each feature:
+- [x] Write the feature in its own file under `src/`
+- [x] Wire into handlers or index.ts as appropriate
+- [x] Run typecheck and test suite
+- [x] Test with real messages in a group
+- [x] Build and deploy, verify service starts cleanly
+- [x] Update ROADMAP.md with status
 
 ### Gate ✅
 - [ ] Ollama handles 50%+ of queries (confirmed via logs)
@@ -89,13 +98,28 @@
 
 **Goal:** The fun stuff — only after the foundation is rock solid.
 
-### Candidates (prioritize based on actual user requests)
+### Tasks (prioritize based on actual user requests)
 - [ ] D&D 5e dice rolling and lookups
 - [ ] Book club management (polls, reminders)
 - [ ] Event planning with venue search
 - [ ] Polls and voting
 - [ ] Fun features (icebreakers, trivia, Boston fun facts)
 - [ ] Discord bridge (if community expands there)
+
+### For each feature:
+- [ ] Write the feature in its own file under `src/features/`
+- [ ] Add command detection (bang command + natural language) to `src/features/router.ts`
+- [ ] Test with real messages in a single group
+- [ ] Verify graceful degradation if API key is missing/invalid
+- [ ] Run typecheck and test suite
+- [ ] Build, deploy, verify service starts cleanly
+- [ ] Update ROADMAP.md with status
+- [ ] Run for 2+ days before adding next feature
+
+### Gate
+- [ ] Features are being used by real members (check logs/digest)
+- [ ] No feature crashes the bot process
+- [ ] Bot performance remains stable under load
 
 ---
 

@@ -4,6 +4,7 @@ import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { INTRO_SYSTEM_ADDENDUM, INTRODUCTIONS_JID } from '../features/introductions.js';
+import { formatContext } from '../middleware/context.js';
 
 // Load persona at startup
 const personaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
@@ -28,6 +29,7 @@ export interface MessageContext {
  */
 export function buildSystemPrompt(ctx: MessageContext): string {
   const isIntroGroup = INTRODUCTIONS_JID !== null && ctx.groupJid === INTRODUCTIONS_JID;
+  const context = formatContext(ctx.groupJid);
 
   return [
     personaDoc,
@@ -38,6 +40,7 @@ export function buildSystemPrompt(ctx: MessageContext): string {
     ctx.quotedText
       ? `The user is replying to this message: "${truncate(ctx.quotedText, 500)}"`
       : '',
+    context ? `\n${context}` : '',
     '',
     'Keep responses concise and use WhatsApp formatting (*bold*, _italic_, ~strike~).',
     'If you are unsure about something, say so honestly.',
@@ -55,6 +58,8 @@ export function buildSystemPrompt(ctx: MessageContext): string {
  * Only used for simple queries routed to Ollama.
  */
 export function buildOllamaPrompt(ctx: MessageContext): string {
+  const context = formatContext(ctx.groupJid);
+
   return [
     'You are Garbanzo Bean 🫘, a WhatsApp community bot for a 120-member Boston-area meetup group (ages 25-45).',
     '',
@@ -73,5 +78,6 @@ export function buildOllamaPrompt(ctx: MessageContext): string {
     '- Do not ask follow-up questions — just answer directly.',
     '',
     `You are in the "${ctx.groupName}" group chat.`,
-  ].join('\n');
+    context ? `\n${context}` : '',
+  ].filter(Boolean).join('\n');
 }

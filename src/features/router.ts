@@ -4,13 +4,17 @@ import { logger } from '../middleware/logger.js';
  * Feature routing — detect which feature (if any) should handle a query
  * before falling through to the general AI response.
  *
- * Returns a FeatureMatch if a keyword pattern matches, or null to fall
- * through to Claude.
+ * Supports two styles:
+ * 1. Bang commands: "!weather Boston", "!transit red line", "!news tech"
+ * 2. Natural language: "what's the weather?", "red line status", etc.
+ *
+ * Bang commands are checked first (faster, unambiguous).
+ * Returns a FeatureMatch if matched, or null to fall through to Claude.
  */
 
 export interface FeatureMatch {
   feature: 'weather' | 'transit' | 'news' | 'help' | 'events';
-  /** The original query with feature keywords left intact (features parse their own args) */
+  /** The query with command prefix stripped (for bang commands) or original text (natural language) */
   query: string;
 }
 
@@ -90,14 +94,42 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
   },
 ];
 
+// ── Bang command mapping ────────────────────────────────────────────
+
+const BANG_COMMANDS: Record<string, FeatureMatch['feature']> = {
+  '!help': 'help',
+  '!weather': 'weather',
+  '!forecast': 'weather',
+  '!transit': 'transit',
+  '!mbta': 'transit',
+  '!train': 'transit',
+  '!bus': 'transit',
+  '!news': 'news',
+  '!events': 'events',
+  '!plan': 'events',
+};
+
 /**
- * Match a query against feature keyword patterns.
+ * Match a query against bang commands first, then natural language patterns.
  * Returns the first matching feature, or null for general AI handling.
  */
 export function matchFeature(query: string): FeatureMatch | null {
+  const trimmed = query.trim();
+
+  // Bang command — fast exact prefix match
+  const firstWord = trimmed.split(/\s+/)[0].toLowerCase();
+  const bangFeature = BANG_COMMANDS[firstWord];
+  if (bangFeature) {
+    // Strip the command prefix, pass the rest as the query
+    const args = trimmed.slice(firstWord.length).trim() || trimmed;
+    logger.debug({ feature: bangFeature, query: args, style: 'bang' }, 'Feature matched');
+    return { feature: bangFeature, query: args };
+  }
+
+  // Natural language patterns
   for (const { feature, patterns } of FEATURE_PATTERNS) {
     if (patterns.some((p) => p.test(query))) {
-      logger.debug({ feature, query }, 'Feature matched');
+      logger.debug({ feature, query, style: 'natural' }, 'Feature matched');
       return { feature, query };
     }
   }
