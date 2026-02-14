@@ -45,8 +45,9 @@
 3. ~~**Content Moderation** (`src/features/moderation.ts`) — flag violations to owner DM, NOT auto-action~~ ✅ Live — two-layer: regex patterns + OpenAI Moderation API, alerts to owner DM with [Pattern]/[AI] labels
 4. ~~**New Member Welcome** — detect `group-participants.update` with `action: 'add'`, send welcome message~~ ✅ Live — per-group tailored welcome on member join
 5. ~~**News Search** (`src/features/news.ts`) — NewsAPI, already have key~~ ✅ Live
-6. ~~**Introduction Responses** (`src/features/introductions.ts`) — auto-respond to new member intros in Introductions group~~ ✅ Live — AI-powered personal welcomes, no @mention needed, 7-day catch-up on startup
-7. **Event Detection** — detect event proposals in chat, offer to enrich with venue/weather/transit info
+6. ~~**Introduction Responses** (`src/features/introductions.ts`) — auto-respond to new member intros in Introductions group~~ ✅ Live — AI-powered personal welcomes, no @mention needed, 14-day catch-up window, `!catchup intros` owner command
+7. ~~**Emoji Reactions** — react with 🫘 to short acknowledgment replies ("good bot", "thanks", etc.) instead of generating a full AI response~~ ✅ Live
+8. **Event Detection** — detect event proposals in chat, offer to enrich with venue/weather/transit info
 
 ### For each feature:
 - [ ] Write the feature in its own file under `src/features/`
