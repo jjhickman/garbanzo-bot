@@ -72,6 +72,12 @@ describe('Content moderation', async () => {
     expect(flag?.reason).toBe('Threats / violence');
   });
 
+  it('flags threats with generic targets', () => {
+    expect(checkMessage('I will kill someone tomorrow')).not.toBeNull();
+    expect(checkMessage('gonna murder everybody here')).not.toBeNull();
+    expect(checkMessage('I will stab anyone who disagrees')).not.toBeNull();
+  });
+
   it('flags spam patterns', () => {
     const flag = checkMessage('Buy bitcoin now for guaranteed income!');
     expect(flag).not.toBeNull();
