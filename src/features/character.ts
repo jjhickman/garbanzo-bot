@@ -928,9 +928,10 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
   const form = doc.getForm();
 
   // Helper to safely set text fields
-  const setText = (fieldName: string, value: string) => {
+  const setText = (fieldName: string, value: string, fontSize?: number) => {
     try {
       const field = form.getTextField(fieldName);
+      if (fontSize) field.setFontSize(fontSize);
       field.setText(value);
     } catch (err) {
       logger.debug({ fieldName, err }, 'PDF field not found');
@@ -1040,9 +1041,9 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
   }
 
   // ── Equipment & features ────────────────────────────────────
-  setText('Equipment', char.equipment);
-  setText('Features and Traits', char.racialTraits);  // Page 1: race traits only (fits in box)
-  setText('ProficienciesLang', char.proficienciesAndLanguages);
+  setText('Equipment', char.equipment, 7);
+  setText('Features and Traits', char.racialTraits, 5.5);  // Page 1: narrow box (165x370px)
+  setText('ProficienciesLang', char.proficienciesAndLanguages, 7);
 
   // ── Personality ─────────────────────────────────────────────
   setText('PersonalityTraits ', char.personalityTrait);  // Trailing space
@@ -1058,9 +1059,9 @@ export async function generateCharacterPDF(char: CharacterData): Promise<Uint8Ar
   setText('Eyes', char.eyes);
   setText('Skin', char.skin);
   setText('Hair', char.hair);
-  setText('Backstory', char.backstory);
-  setText('Feat+Traits', char.classFeatures);  // Page 2: class features
-  setText('Treasure', char.treasure);
+  setText('Backstory', char.backstory, 8);
+  setText('Feat+Traits', char.classFeatures, 8);  // Page 2: class features
+  setText('Treasure', char.treasure, 8);
 
   // ── Page 3 — Spellcasting (if applicable) ───────────────────
   if (char.isSpellcaster) {
