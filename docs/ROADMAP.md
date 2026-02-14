@@ -124,7 +124,60 @@
 
 ---
 
-## Phase 5: Platform Expansion (Future)
+## Phase 5: Operations & Reliability (Next)
+
+**Goal:** Make the bot self-monitoring, resilient, and cost-aware. Keep it running without babysitting.
+
+### High Priority (low effort, high value)
+1. [ ] **Health check HTTP endpoint** (`src/middleware/health.ts`) — tiny HTTP server on localhost, returns connection status, uptime, last message timestamp. Wire into systemd watchdog or cron alert if bot goes silent.
+2. [ ] **Connection staleness detection** (`src/bot/connection.ts`) — track `lastMessageReceivedAt`, auto-reconnect if >30 min with no `messages.upsert` across 8 active groups. Prevents "connected but deaf" failure mode.
+3. [ ] **Ollama warm-up ping** (`src/ai/ollama.ts`) — periodic keep-alive request every 10 min to prevent model unload and cold-start latency on first real query.
+4. [ ] **SQLite auto-vacuum** (`src/utils/db.ts`) — scheduled prune of messages older than 30 days + `VACUUM` to reclaim space. Run daily at a quiet hour.
+
+### Medium Priority (medium effort, high value)
+5. [ ] **Cost tracking** (`src/middleware/stats.ts`) — log estimated token count per Claude API call, accumulate daily/weekly spend, alert owner DM if approaching budget threshold. Extend existing `recordAIRoute`.
+6. [ ] **Feature flags per group** (`config/groups.json`) — `"enabledFeatures": ["weather", "transit", "dnd"]` field per group. Roll out new features to one group before all 8, or disable a broken feature without redeploying.
+7. [ ] **Dead letter retry** (`src/middleware/retry.ts`) — messages that fail (API timeout, transient error) get queued in SQLite and retried once after 30s instead of silently dropped.
+8. [ ] **Automated SQLite backup** — nightly `cp data/garbanzo.db data/backups/garbanzo-YYYY-MM-DD.db` via scheduled function in the bot. Keep last 7 days, prune older.
+
+### Nice to Have
+9. [ ] **Memory watchdog** — monitor `process.memoryUsage()`, log warnings at 500MB, auto-restart at 1GB before OOM killer.
+10. [ ] **Graceful shutdown** — on SIGTERM, drain in-flight AI requests before exiting. Save state cleanly.
+
+### For each feature:
+- [ ] Write the feature in its own file or extend existing module
+- [ ] Test locally (where possible)
+- [ ] Build, deploy, verify service starts cleanly
+- [ ] Monitor for 24h, check logs for issues
+
+### Gate
+- [ ] Bot auto-recovers from connection staleness without manual intervention
+- [ ] Health check reports accurate status, alerting works
+- [ ] Claude API costs tracked and within budget
+- [ ] SQLite database stays under control (no unbounded growth)
+
+---
+
+## Phase 6: Advanced Intelligence (Future)
+
+**Goal:** Deeper personalization and smarter community features.
+
+### Tasks
+1. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
+2. [ ] **Smart event recommendations** — suggest events based on member interests and past attendance
+3. [ ] **Conversation summaries** — on-demand "what did I miss?" summaries for members catching up on group chat
+4. [ ] **Multi-language support** — detect message language, respond in kind (leverage Claude's multilingual ability)
+5. [ ] **Garbanzo memory** — long-term facts about the community ("last potluck was at X", "Y usually organizes hikes") stored in SQLite, surfaced in AI context
+6. [ ] **Custom per-group personas** — slightly different tone/focus per group (e.g., more casual in General, more structured in Events)
+
+### Gate
+- [ ] Features add measurable value (members reference them, engagement metrics improve)
+- [ ] AI costs remain sustainable
+- [ ] Privacy controls are in place for any stored personal data
+
+---
+
+## Phase 7: Platform Expansion (Future)
 
 **Goal:** Bridge Garbanzo to Discord and add cross-platform features.
 
@@ -147,25 +200,6 @@
 - [ ] Bridge relaying messages reliably between at least one WA ↔ Discord channel pair
 - [ ] No message duplication or loops in the bridge
 - [ ] Community members are actually using Discord (don't build it if nobody comes)
-
----
-
-## Phase 6: Advanced Intelligence (Future)
-
-**Goal:** Deeper personalization and smarter community features.
-
-### Tasks
-1. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
-2. [ ] **Smart event recommendations** — suggest events based on member interests and past attendance
-3. [ ] **Conversation summaries** — on-demand "what did I miss?" summaries for members catching up on group chat
-4. [ ] **Multi-language support** — detect message language, respond in kind (leverage Claude's multilingual ability)
-5. [ ] **Garbanzo memory** — long-term facts about the community ("last potluck was at X", "Y usually organizes hikes") stored in SQLite, surfaced in AI context
-6. [ ] **Custom per-group personas** — slightly different tone/focus per group (e.g., more casual in General, more structured in Events)
-
-### Gate
-- [ ] Features add measurable value (members reference them, engagement metrics improve)
-- [ ] AI costs remain sustainable
-- [ ] Privacy controls are in place for any stored personal data
 
 ---
 
