@@ -9,7 +9,7 @@ import { logger } from '../middleware/logger.js';
  */
 
 export interface FeatureMatch {
-  feature: 'weather' | 'transit';
+  feature: 'weather' | 'transit' | 'news' | 'help';
   /** The original query with feature keywords left intact (features parse their own args) */
   query: string;
 }
@@ -20,6 +20,18 @@ interface FeaturePattern {
 }
 
 const FEATURE_PATTERNS: FeaturePattern[] = [
+  {
+    feature: 'help',
+    patterns: [
+      /^\s*help\s*$/i,
+      /\bwhat can you do\b/i,
+      /\bwhat do you do\b/i,
+      /\bcommands?\b/i,
+      /\bfeatures?\b/i,
+      /\bhow do I use\b/i,
+      /\bwhat are you\b/i,
+    ],
+  },
   {
     feature: 'weather',
     patterns: [
@@ -52,6 +64,15 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
       /\bservice alert/i,
       /\bdelays?\b/i,
       /\bshuttle\b/i,
+    ],
+  },
+  {
+    feature: 'news',
+    patterns: [
+      /\bnews\b/i,
+      /\bheadlines?\b/i,
+      /\bwhat('s| is) happening\b/i,
+      /\bcurrent events\b/i,
     ],
   },
 ];
