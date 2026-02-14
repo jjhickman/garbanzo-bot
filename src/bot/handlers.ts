@@ -101,12 +101,14 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
   // ── Moderation (runs on ALL group messages, not just mentions) ──
   if (isGroupJid(remoteJid) && isGroupEnabled(remoteJid)) {
-    const flag = checkMessage(text);
+    const flag = await checkMessage(text);
     if (flag) {
-      logger.warn({ group: remoteJid, sender: senderJid, reason: flag.reason, severity: flag.severity }, 'Moderation flag');
+      logger.warn({ group: remoteJid, sender: senderJid, reason: flag.reason, severity: flag.severity, source: flag.source }, 'Moderation flag');
       const alert = formatModerationAlert(flag, text, senderJid, remoteJid);
       try {
-        await sock.sendMessage(config.OWNER_JID, { text: alert });
+        logger.info({ ownerJid: config.OWNER_JID }, 'Sending moderation alert to owner');
+        const result = await sock.sendMessage(config.OWNER_JID, { text: alert });
+        logger.info({ msgId: result?.key?.id, to: result?.key?.remoteJid }, 'Moderation alert sent');
       } catch (err) {
         logger.error({ err }, 'Failed to send moderation alert to owner');
       }

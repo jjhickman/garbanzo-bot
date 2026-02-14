@@ -23,7 +23,7 @@ const envSchema = z.object({
   GOOGLE_API_KEY: z.string().optional(),
   MBTA_API_KEY: z.string().optional(),
   NEWSAPI_KEY: z.string().optional(),
-  VETTLY_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
   BRAVE_SEARCH_API_KEY: z.string().optional(),
 
   // Infrastructure

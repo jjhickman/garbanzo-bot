@@ -18,7 +18,7 @@
 | `GOOGLE_API_KEY` (AIzaSy...) | .env + openclaw.json | Rotate |
 | `NEWSAPI_KEY` | .env + openclaw.json | Rotate |
 | `MBTA_API_KEY` | .env + openclaw.json | Rotate |
-| `VETTLY_API_KEY` | .env | Rotate |
+| `OPENAI_API_KEY` | .env | Rotate |
 | `BRAVE_SEARCH_API_KEY` | .env | Rotate |
 | `OPENCLAW_GATEWAY_TOKEN` | .env | ✅ Decommissioned — OpenClaw stopped |
 | `PUBSUB_VERIFICATION_TOKEN` | .env | Rotate |
@@ -106,7 +106,7 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
    | `GOOGLE_API_KEY` | [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials |
    | `NEWSAPI_KEY` | [newsapi.org/account](https://newsapi.org/account) |
    | `MBTA_API_KEY` | [api-v3.mbta.com/portal](https://api-v3.mbta.com/portal) |
-   | `VETTLY_API_KEY` | Vettly dashboard |
+    | `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
    | `BRAVE_SEARCH_API_KEY` | [api.search.brave.com/app/keys](https://api.search.brave.com/app/keys) |
    | `PUBSUB_VERIFICATION_TOKEN` | Regenerate — this was a self-generated token |
    | `CALENDAR_CHANNEL_TOKEN` | Regenerate — this was a self-generated token |

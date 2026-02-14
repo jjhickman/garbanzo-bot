@@ -53,48 +53,69 @@ describe('Feature router', async () => {
   });
 });
 
-describe('Content moderation', async () => {
-  const { checkMessage } = await import('../src/features/moderation.js');
+describe('Content moderation — regex layer', async () => {
+  const { checkMessageRegex } = await import('../src/features/moderation.js');
 
   it('flags hate speech', () => {
-    const flag = checkMessage('you are a f*ggot');  // asterisk to avoid literal slur in test
+    const flag = checkMessageRegex('you are a f*ggot');  // asterisk to avoid literal slur in test
     // This won't match because of the asterisk — test with the pattern directly
-    const flag2 = checkMessage('test message with faggot slur');
+    const flag2 = checkMessageRegex('test message with faggot slur');
     expect(flag2).not.toBeNull();
     expect(flag2?.severity).toBe('alert');
     expect(flag2?.reason).toBe('Hate speech / slurs');
   });
 
   it('flags threats', () => {
-    const flag = checkMessage("I'll kill you for that");
+    const flag = checkMessageRegex("I'll kill you for that");
     expect(flag).not.toBeNull();
     expect(flag?.severity).toBe('alert');
     expect(flag?.reason).toBe('Threats / violence');
   });
 
   it('flags threats with generic targets', () => {
-    expect(checkMessage('I will kill someone tomorrow')).not.toBeNull();
-    expect(checkMessage('gonna murder everybody here')).not.toBeNull();
-    expect(checkMessage('I will stab anyone who disagrees')).not.toBeNull();
+    expect(checkMessageRegex('I will kill someone tomorrow')).not.toBeNull();
+    expect(checkMessageRegex('gonna murder everybody here')).not.toBeNull();
+    expect(checkMessageRegex('I will stab anyone who disagrees')).not.toBeNull();
   });
 
   it('flags spam patterns', () => {
-    const flag = checkMessage('Buy bitcoin now for guaranteed income!');
+    const flag = checkMessageRegex('Buy bitcoin now for guaranteed income!');
     expect(flag).not.toBeNull();
     expect(flag?.severity).toBe('warning');
     expect(flag?.reason).toBe('Spam / self-promotion');
   });
 
   it('ignores normal messages', () => {
-    expect(checkMessage('Hey anyone want to grab dinner tonight?')).toBeNull();
-    expect(checkMessage('The weather is terrible today')).toBeNull();
-    expect(checkMessage('Damn that movie was good')).toBeNull();
+    expect(checkMessageRegex('Hey anyone want to grab dinner tonight?')).toBeNull();
+    expect(checkMessageRegex('The weather is terrible today')).toBeNull();
+    expect(checkMessageRegex('Damn that movie was good')).toBeNull();
   });
 
   it('allows casual profanity', () => {
-    expect(checkMessage('That restaurant was shit')).toBeNull();
-    expect(checkMessage('What the hell is going on')).toBeNull();
-    expect(checkMessage('Holy crap that was amazing')).toBeNull();
+    expect(checkMessageRegex('That restaurant was shit')).toBeNull();
+    expect(checkMessageRegex('What the hell is going on')).toBeNull();
+    expect(checkMessageRegex('Holy crap that was amazing')).toBeNull();
+  });
+});
+
+describe('Content moderation — combined (async)', async () => {
+  const { checkMessage } = await import('../src/features/moderation.js');
+
+  it('returns a promise', () => {
+    const result = checkMessage('hello');
+    expect(result).toBeInstanceOf(Promise);
+  });
+
+  it('regex flags are returned before OpenAI is called', async () => {
+    const flag = await checkMessage('test message with faggot slur');
+    expect(flag).not.toBeNull();
+    expect(flag?.source).toBe('regex');
+    expect(flag?.severity).toBe('alert');
+  });
+
+  it('resolves to null for normal messages (no OPENAI_API_KEY in test)', async () => {
+    const flag = await checkMessage('Hey anyone want to grab dinner tonight?');
+    expect(flag).toBeNull();
   });
 });
 
