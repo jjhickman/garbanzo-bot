@@ -12,6 +12,10 @@ import { getAIResponse } from '../ai/router.js';
 import { matchFeature } from '../features/router.js';
 import { handleWeather } from '../features/weather.js';
 import { handleTransit } from '../features/transit.js';
+import { buildWelcomeMessage } from '../features/welcome.js';
+import { checkMessage, formatModerationAlert } from '../features/moderation.js';
+import { handleNews } from '../features/news.js';
+import { getHelpMessage } from '../features/help.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -36,7 +40,17 @@ export function registerHandlers(sock: WASocket): void {
       { group: update.id, action: update.action, count: update.participants.length },
       'Group participant update',
     );
-    // TODO Phase 2: welcome new members when action === 'add'
+
+    if (update.action === 'add' && isGroupEnabled(update.id)) {
+      const welcome = buildWelcomeMessage(update.id, update.participants);
+      if (welcome) {
+        try {
+          await sock.sendMessage(update.id, { text: welcome });
+        } catch (err) {
+          logger.error({ err, group: update.id }, 'Failed to send welcome message');
+        }
+      }
+    }
   });
 
   logger.info('Message handlers registered');
@@ -84,6 +98,20 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   if (!text) return;
 
   const senderJid = getSenderJid(remoteJid, msg.key.participant);
+
+  // ── Moderation (runs on ALL group messages, not just mentions) ──
+  if (isGroupJid(remoteJid) && isGroupEnabled(remoteJid)) {
+    const flag = checkMessage(text);
+    if (flag) {
+      logger.warn({ group: remoteJid, sender: senderJid, reason: flag.reason, severity: flag.severity }, 'Moderation flag');
+      const alert = formatModerationAlert(flag, text, senderJid, remoteJid);
+      try {
+        await sock.sendMessage(config.OWNER_JID, { text: alert });
+      } catch (err) {
+        logger.error({ err }, 'Failed to send moderation alert to owner');
+      }
+    }
+  }
 
   // ── Group messages ──
   if (isGroupJid(remoteJid)) {
@@ -154,10 +182,14 @@ async function getResponse(
     logger.info({ feature: feature.feature }, 'Routing to feature handler');
 
     switch (feature.feature) {
+      case 'help':
+        return getHelpMessage();
       case 'weather':
         return await handleWeather(feature.query);
       case 'transit':
         return await handleTransit(feature.query);
+      case 'news':
+        return await handleNews(feature.query);
     }
   }
 
