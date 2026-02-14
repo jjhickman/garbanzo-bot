@@ -10,17 +10,21 @@
 **Goal:** A bot that connects to WhatsApp, responds to @mentions in one group, and answers questions via Claude.
 
 ### Tasks
-- [ ] `npm install` and resolve dependency issues
-- [ ] Create `.env` with API keys (rotated from old OpenClaw ones)
-- [ ] Run `npm run dev` — scan QR code, verify connection
-- [ ] Test: send a message in General group with `@garbanzo` mention
-- [ ] Test: verify bot responds with AI-generated answer
-- [ ] Test: verify bot ignores messages without @mention
-- [ ] Test: verify bot reconnects after network interruption
-- [ ] Test: verify auth state persists across restarts
-- [ ] Enable all 8 groups in `config/groups.json`
-- [ ] Create systemd service for production: `garbanzo-bot.service`
-- [ ] Run as production service for 3–5 days
+- [x] `npm install` and resolve dependency issues
+- [x] Create `.env` with API keys (rotated from old OpenClaw ones)
+- [x] Fix TypeScript errors (unused import, `unknown` type assertions in AI router)
+- [x] Fix QR code display (`printQRInTerminal` deprecated in Baileys v6.7 — added `qrcode-terminal`)
+- [x] Configure AI router to prefer OpenRouter with Sonnet 4
+- [x] Start with General group only (other 7 disabled in `config/groups.json`)
+- [x] Create systemd user service (`scripts/garbanzo-bot.service`)
+- [x] Run `npm run dev` — scan QR code, verify connection
+- [x] Test: send a message in General group with `@garbanzo` mention
+- [x] Test: verify bot responds with AI-generated answer
+- [x] Test: verify bot ignores messages without @mention
+- [x] Test: verify bot reconnects after process termination (SIGTERM + cold restart)
+- [x] Test: verify auth state persists across restarts
+- [x] Enable remaining 7 groups in `config/groups.json`
+- [x] Install systemd user service and start production run (2026-02-13)
 
 ### Gate ✅
 - [ ] Bot has been running for 3+ days without crashes

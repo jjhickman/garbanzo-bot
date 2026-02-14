@@ -34,8 +34,9 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string,
 ): Promise<string> {
-  const isOpenRouter = !config.ANTHROPIC_API_KEY && config.OPENROUTER_API_KEY;
-  const apiKey = config.ANTHROPIC_API_KEY ?? config.OPENROUTER_API_KEY;
+  // Prefer OpenRouter when available (better pricing + fallback routing)
+  const isOpenRouter = !!config.OPENROUTER_API_KEY;
+  const apiKey = isOpenRouter ? config.OPENROUTER_API_KEY : config.ANTHROPIC_API_KEY;
   const baseUrl = isOpenRouter
     ? 'https://openrouter.ai/api/v1'
     : 'https://api.anthropic.com';
@@ -85,11 +86,13 @@ async function callClaude(
     throw new Error(`AI API error ${response.status}: ${errorText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as Record<string, unknown>;
 
   // Extract text from response (different formats)
   if (isOpenRouter) {
-    return data.choices?.[0]?.message?.content ?? 'No response generated.';
+    const choices = data.choices as Array<{ message: { content: string } }> | undefined;
+    return choices?.[0]?.message?.content ?? 'No response generated.';
   }
-  return data.content?.[0]?.text ?? 'No response generated.';
+  const content = data.content as Array<{ text: string }> | undefined;
+  return content?.[0]?.text ?? 'No response generated.';
 }

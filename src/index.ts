@@ -6,7 +6,7 @@ import { config } from './utils/config.js';
 async function main(): Promise<void> {
   logger.info('🫘 Garbanzo Bot starting...');
   logger.info({
-    aiProvider: config.ANTHROPIC_API_KEY ? 'anthropic' : 'openrouter',
+    aiProvider: config.OPENROUTER_API_KEY ? 'openrouter' : 'anthropic',
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');

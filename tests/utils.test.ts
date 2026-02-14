@@ -47,3 +47,61 @@ describe('Formatting utilities', async () => {
     expect(truncate('hello', 100)).toBe('hello');
   });
 });
+
+describe('Mention detection', async () => {
+  const { isMentioned, stripMention } = await import('../src/bot/groups.js');
+
+  it('detects text-based @garbanzo mention', () => {
+    expect(isMentioned('hey @garbanzo what is the weather')).toBe(true);
+  });
+
+  it('detects text-based mention case-insensitively', () => {
+    expect(isMentioned('Hey @Garbanzo Bean tell me something')).toBe(true);
+  });
+
+  it('rejects messages without mention', () => {
+    expect(isMentioned('just a regular message')).toBe(false);
+  });
+
+  it('detects JID-based native WhatsApp mention', () => {
+    const mentionedJids = ['15551234567@s.whatsapp.net'];
+    const botJid = '15551234567:42@s.whatsapp.net'; // Baileys often adds :deviceId
+    expect(isMentioned('@15551234567 hello', mentionedJids, botJid)).toBe(true);
+  });
+
+  it('rejects JID mention when bot JID does not match', () => {
+    const mentionedJids = ['15559999999@s.whatsapp.net'];
+    const botJid = '15551234567@s.whatsapp.net';
+    expect(isMentioned('hello', mentionedJids, botJid)).toBe(false);
+  });
+
+  it('detects LID-based native WhatsApp mention', () => {
+    const mentionedJids = ['11395269660682@lid'];
+    const botJid = '18574988758:1@s.whatsapp.net';
+    const botLid = '11395269660682:1@lid';
+    expect(isMentioned('@11395269660682 hello', mentionedJids, botJid, botLid)).toBe(true);
+  });
+
+  it('detects LID mention even when botJid does not match', () => {
+    // Phone JID and LID are completely different identifiers
+    const mentionedJids = ['11395269660682@lid'];
+    const botJid = '18574988758:1@s.whatsapp.net';
+    const botLid = '11395269660682:1@lid';
+    expect(isMentioned('hello', mentionedJids, botJid, botLid)).toBe(true);
+  });
+
+  it('strips text-based mention from message', () => {
+    expect(stripMention('  @garbanzo what is the weather  ')).toBe('what is the weather');
+  });
+
+  it('strips native phone-number mention from message', () => {
+    const botJid = '15551234567:42@s.whatsapp.net';
+    expect(stripMention('@15551234567 what is the weather', botJid)).toBe('what is the weather');
+  });
+
+  it('strips LID-based mention from message', () => {
+    const botJid = '18574988758:1@s.whatsapp.net';
+    const botLid = '11395269660682:1@lid';
+    expect(stripMention('@11395269660682 trying another', botJid, botLid)).toBe('trying another');
+  });
+});
