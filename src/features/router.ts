@@ -9,7 +9,7 @@ import { logger } from '../middleware/logger.js';
  */
 
 export interface FeatureMatch {
-  feature: 'weather' | 'transit' | 'news' | 'help';
+  feature: 'weather' | 'transit' | 'news' | 'help' | 'events';
   /** The original query with feature keywords left intact (features parse their own args) */
   query: string;
 }
@@ -73,6 +73,19 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
       /\bheadlines?\b/i,
       /\bwhat('s| is) happening\b/i,
       /\bcurrent events\b/i,
+    ],
+  },
+  {
+    feature: 'events',
+    patterns: [
+      // "plan a/an X", "plan dinner", "plan a hike"
+      /\bplan\s+(?:a\s+)?(?:trivia|karaoke|dinner|brunch|lunch|drinks|happy\s+hour|hike|game\s+night|movie|concert|bar\s+crawl|bowling|escape\s+room|event|meetup|outing|gathering)\b/i,
+      // "event this/next/on"
+      /\bevent\s+(?:this|next|on|tomorrow|tonight)\b/i,
+      // "let's do X" — only when @mentioned
+      /\blet'?s\s+(?:do|have|plan|go\s+to)\s+.+(?:tonight|tomorrow|this|next|friday|saturday|sunday|monday|tuesday|wednesday|thursday)/i,
+      // "anyone down for X"
+      /\banyone\s+(?:down|interested|want|wanna)\s+(?:for|to)\b/i,
     ],
   },
 ];

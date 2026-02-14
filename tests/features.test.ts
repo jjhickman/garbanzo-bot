@@ -444,6 +444,148 @@ describe('Persona — intro-specific prompt injection', async () => {
   });
 });
 
+// ── Event detection tests ───────────────────────────────────────────
+
+describe('Event detection — detectEvent', async () => {
+  const { detectEvent } = await import('../src/features/events.js');
+
+  it('detects "let\'s do X on day" proposals', () => {
+    const event = detectEvent("let's do trivia on Friday");
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('trivia night');
+    expect(event?.date).toBe('Friday');
+  });
+
+  it('detects "should we go to X this Saturday"', () => {
+    const event = detectEvent('should we go to brunch this Saturday');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('brunch');
+    expect(event?.date).toBe('this Saturday');
+  });
+
+  it('detects "anyone interested in X?"', () => {
+    const event = detectEvent('anyone interested in a bar crawl next weekend?');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('bar crawl');
+  });
+
+  it('detects "anyone down for X?"', () => {
+    const event = detectEvent('anyone down for bowling this Friday?');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('bowling');
+  });
+
+  it('detects "who wants to go to X?"', () => {
+    const event = detectEvent('who wants to go to karaoke tomorrow night?');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('karaoke night');
+  });
+
+  it('detects direct activity + time patterns', () => {
+    expect(detectEvent('trivia tonight at the pub')).not.toBeNull();
+    expect(detectEvent('dinner at 7pm on Saturday')).not.toBeNull();
+    expect(detectEvent('happy hour this Friday at 5')).not.toBeNull();
+    expect(detectEvent('hike tomorrow morning in the Blue Hills')).not.toBeNull();
+  });
+
+  it('detects time + activity patterns', () => {
+    const event = detectEvent('this Saturday night we should do karaoke');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('karaoke night');
+  });
+
+  it('detects explicit "event" and "meetup" keywords', () => {
+    expect(detectEvent('event this Saturday at the park')).not.toBeNull();
+    expect(detectEvent('meetup tomorrow at the usual spot')).not.toBeNull();
+  });
+
+  it('extracts time correctly', () => {
+    const event = detectEvent("let's do dinner at 7pm this Friday");
+    expect(event).not.toBeNull();
+    expect(event?.time).toBe('7pm');
+  });
+
+  it('extracts time with colon', () => {
+    const event = detectEvent("let's do dinner at 7:30pm this Friday");
+    expect(event).not.toBeNull();
+    expect(event?.time).toBe('7:30pm');
+  });
+
+  it('extracts date correctly', () => {
+    const event = detectEvent('anyone interested in drinks tomorrow evening?');
+    expect(event).not.toBeNull();
+    expect(event?.date).toBe('tomorrow');
+  });
+
+  it('extracts "this/next + day" dates', () => {
+    const event = detectEvent("let's plan a hike next Saturday morning");
+    expect(event).not.toBeNull();
+    expect(event?.date).toBe('next Saturday');
+  });
+
+  it('extracts location from "at Venue"', () => {
+    const event = detectEvent("let's do trivia at Tavern on this Friday");
+    expect(event).not.toBeNull();
+    expect(event?.location).toBe('Tavern');
+  });
+
+  it('defaults activity to "event" when no specific type matched', () => {
+    const event = detectEvent('anyone interested in going out next Friday?');
+    expect(event).not.toBeNull();
+    expect(event?.activity).toBe('event');
+  });
+
+  it('ignores short messages', () => {
+    expect(detectEvent('trivia?')).toBeNull();
+    expect(detectEvent('dinner soon')).toBeNull();
+  });
+
+  it('ignores non-event messages', () => {
+    expect(detectEvent('The weather today is going to be awful for my commute')).toBeNull();
+    expect(detectEvent('Has anyone seen the new season of that show?')).toBeNull();
+    expect(detectEvent('I just had the best coffee at that new place on Newbury')).toBeNull();
+  });
+
+  it('preserves raw text in the result', () => {
+    const msg = "let's do trivia at Harpoon on Friday at 7pm";
+    const event = detectEvent(msg);
+    expect(event?.rawText).toBe(msg);
+  });
+});
+
+describe('Event detection — EVENTS_JID', async () => {
+  const { EVENTS_JID } = await import('../src/features/events.js');
+
+  it('resolves the Events group JID from config', () => {
+    expect(EVENTS_JID).toBe('120363423189270382@g.us');
+  });
+});
+
+describe('Event detection — feature router integration', async () => {
+  const { matchFeature } = await import('../src/features/router.js');
+
+  it('matches "plan a dinner" as events feature', () => {
+    expect(matchFeature('plan a dinner this Saturday')?.feature).toBe('events');
+  });
+
+  it('matches "event this Friday" as events feature', () => {
+    expect(matchFeature('event this Friday at the park')?.feature).toBe('events');
+  });
+
+  it('matches "let\'s do trivia" as events feature', () => {
+    expect(matchFeature("let's do trivia this Saturday")?.feature).toBe('events');
+  });
+
+  it('matches "anyone down for" as events feature', () => {
+    expect(matchFeature('anyone down for bowling?')?.feature).toBe('events');
+  });
+
+  it('does not match unrelated queries as events', () => {
+    expect(matchFeature('what is the weather today')?.feature).toBe('weather');
+    expect(matchFeature('tell me a joke')).toBeNull();
+  });
+});
+
 describe('Welcome messages', async () => {
   const { buildWelcomeMessage } = await import('../src/features/welcome.js');
 
