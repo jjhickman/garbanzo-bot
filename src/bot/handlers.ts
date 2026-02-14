@@ -16,6 +16,7 @@ import { buildWelcomeMessage } from '../features/welcome.js';
 import { checkMessage, formatModerationAlert } from '../features/moderation.js';
 import { handleNews } from '../features/news.js';
 import { getHelpMessage } from '../features/help.js';
+import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions.js';
 
 /**
  * Register all message event handlers on the socket.
@@ -111,6 +112,18 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
         logger.info({ msgId: result?.key?.id, to: result?.key?.remoteJid }, 'Moderation alert sent');
       } catch (err) {
         logger.error({ err }, 'Failed to send moderation alert to owner');
+      }
+    }
+  }
+
+  // ── Introductions (auto-respond, no @mention needed) ──
+  if (remoteJid === INTRODUCTIONS_JID) {
+    const messageId = msg.key.id;
+    if (messageId) {
+      const introResponse = await handleIntroduction(text, messageId, senderJid, remoteJid);
+      if (introResponse) {
+        await sock.sendMessage(remoteJid, { text: introResponse }, { quoted: msg });
+        return; // Intro handled — don't also process as a general message
       }
     }
   }

@@ -1,5 +1,6 @@
 import { startConnection } from './bot/connection.js';
 import { registerHandlers } from './bot/handlers.js';
+import { registerIntroCatchUp } from './features/introductions.js';
 import { logger } from './middleware/logger.js';
 import { config } from './utils/config.js';
 
@@ -13,6 +14,7 @@ async function main(): Promise<void> {
 
   await startConnection((sock) => {
     registerHandlers(sock);
+    registerIntroCatchUp(sock);
     logger.info('🫘 Garbanzo Bean is online and listening');
   });
 }

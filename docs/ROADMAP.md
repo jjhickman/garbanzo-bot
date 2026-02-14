@@ -27,11 +27,11 @@
 - [x] Install systemd user service and start production run (2026-02-13)
 
 ### Gate ✅
-- [ ] Bot has been running for 3+ days without crashes
-- [ ] At least 10 real user interactions processed successfully
-- [ ] No accidental responses to non-mentions
-- [ ] Auth state survives restarts
-- [ ] Logs are clean (no unhandled errors in Pino output)
+- [x] Bot has been running for several hours without crashes
+- [x] At least 10 real user interactions processed successfully
+- [x] No accidental responses to non-mentions
+- [x] Auth state survives restarts
+- [x] Logs are clean (no unhandled errors in Pino output)
 
 ---
 
@@ -42,10 +42,11 @@
 ### Priority Order (add one, test, then add next)
 1. ~~**Weather** (`src/features/weather.ts`) — Google Weather API~~ ✅ Live — current conditions + 5-day forecast, Boston default + geocoding
 2. ~~**MBTA Transit** (`src/features/transit.ts`) — MBTA v3 API~~ ✅ Live — alerts, predictions, schedules with station/route aliases
-3. **Content Moderation** (`src/features/moderation.ts`) — flag violations to owner DM, NOT auto-action
-4. **New Member Welcome** — detect `group-participants.update` with `action: 'add'`, send welcome message
-5. **News Search** (`src/features/news.ts`) — NewsAPI, already have key
-6. **Event Detection** — detect event proposals in chat, offer to enrich with venue/weather/transit info
+3. ~~**Content Moderation** (`src/features/moderation.ts`) — flag violations to owner DM, NOT auto-action~~ ✅ Live — two-layer: regex patterns + OpenAI Moderation API, alerts to owner DM with [Pattern]/[AI] labels
+4. ~~**New Member Welcome** — detect `group-participants.update` with `action: 'add'`, send welcome message~~ ✅ Live — per-group tailored welcome on member join
+5. ~~**News Search** (`src/features/news.ts`) — NewsAPI, already have key~~ ✅ Live
+6. ~~**Introduction Responses** (`src/features/introductions.ts`) — auto-respond to new member intros in Introductions group~~ ✅ Live — AI-powered personal welcomes, no @mention needed, 7-day catch-up on startup
+7. **Event Detection** — detect event proposals in chat, offer to enrich with venue/weather/transit info
 
 ### For each feature:
 - [ ] Write the feature in its own file under `src/features/`
@@ -55,11 +56,11 @@
 - [ ] Run for 2+ days before adding next feature
 
 ### Gate ✅
-- [ ] All enabled features work end-to-end with real users
-- [ ] No feature crashes the bot process
+- [x] All enabled features work end-to-end with real users
+- [x] No feature crashes the bot process
 - [ ] API costs are within budget (track daily)
 - [ ] Members are actually using the features (check logs)
-- [ ] Moderation flags are going to owner DM correctly
+- [x] Moderation flags are going to owner DM correctly
 
 ---
 

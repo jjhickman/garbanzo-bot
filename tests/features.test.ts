@@ -344,6 +344,106 @@ describe('Content moderation — alert formatting', async () => {
   });
 });
 
+// ── Introductions feature tests ─────────────────────────────────────
+
+describe('Introduction detection — looksLikeIntroduction', async () => {
+  const { looksLikeIntroduction } = await import('../src/features/introductions.js');
+
+  it('recognizes a typical introduction', () => {
+    expect(looksLikeIntroduction(
+      "Hey everyone! I'm Sarah, 28, just moved to Boston from Chicago. I'm into hiking, board games, and trying new restaurants. Excited to meet people!",
+    )).toBe(true);
+  });
+
+  it('recognizes a minimal but valid intro', () => {
+    expect(looksLikeIntroduction(
+      "Hi I'm Mike, 32, living in Somerville. Love music and cooking.",
+    )).toBe(true);
+  });
+
+  it('recognizes an intro with interests and hobbies', () => {
+    expect(looksLikeIntroduction(
+      "What's up! Name's Alex, from Dorchester. Big Celtics fan, play guitar on weekends, and always looking for good ramen spots.",
+    )).toBe(true);
+  });
+
+  it('recognizes a longer personal intro', () => {
+    expect(looksLikeIntroduction(
+      "Hey y'all! I'm Priya, 30, moved to Cambridge last year for grad school at MIT. Originally from Texas. I like rock climbing, reading sci-fi, and exploring the food scene here. Found this group through a friend and thought it'd be a great way to meet people outside of school. Looking forward to some events!",
+    )).toBe(true);
+  });
+
+  it('rejects short messages that are not intros', () => {
+    expect(looksLikeIntroduction('hi')).toBe(false);
+    expect(looksLikeIntroduction('thanks!')).toBe(false);
+    expect(looksLikeIntroduction('welcome!')).toBe(false);
+    expect(looksLikeIntroduction('lol nice')).toBe(false);
+    expect(looksLikeIntroduction('Hey what time is the meetup?')).toBe(false);
+  });
+
+  it('rejects bot commands', () => {
+    expect(looksLikeIntroduction(
+      '@garbanzo what is the weather today in Boston and should I bring an umbrella?',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      '@bot tell me about the next event this weekend and who is going',
+    )).toBe(false);
+  });
+
+  it('rejects messages just under the length threshold', () => {
+    // 39 chars — just under the 40-char minimum
+    expect(looksLikeIntroduction('Hi I am new here nice to meet everyone')).toBe(false);
+  });
+
+  it('accepts messages at the length threshold', () => {
+    // Exactly 40 chars
+    expect(looksLikeIntroduction('Hi I am new here, nice to meet everyone!')).toBe(true);
+  });
+});
+
+describe('Introduction detection — INTRODUCTIONS_JID', async () => {
+  const { INTRODUCTIONS_JID } = await import('../src/features/introductions.js');
+
+  it('resolves the Introductions group JID from config', () => {
+    expect(INTRODUCTIONS_JID).toBe('120363405986870419@g.us');
+  });
+});
+
+describe('Introduction detection — INTRO_SYSTEM_ADDENDUM', async () => {
+  const { INTRO_SYSTEM_ADDENDUM } = await import('../src/features/introductions.js');
+
+  it('contains key instructions for AI intro responses', () => {
+    expect(INTRO_SYSTEM_ADDENDUM).toContain('welcome them warmly');
+    expect(INTRO_SYSTEM_ADDENDUM).toContain('something specific they mentioned');
+    expect(INTRO_SYSTEM_ADDENDUM).toContain('2-4 sentences');
+    expect(INTRO_SYSTEM_ADDENDUM).toContain('Do NOT use a template');
+  });
+});
+
+describe('Persona — intro-specific prompt injection', async () => {
+  const { buildSystemPrompt } = await import('../src/ai/persona.js');
+
+  it('includes intro addendum for Introductions group', () => {
+    const prompt = buildSystemPrompt({
+      groupName: 'Introductions',
+      groupJid: '120363405986870419@g.us',
+      senderJid: '15551234567@s.whatsapp.net',
+    });
+    expect(prompt).toContain('welcome them warmly');
+    expect(prompt).toContain('SPECIAL CONTEXT');
+  });
+
+  it('does NOT include intro addendum for other groups', () => {
+    const prompt = buildSystemPrompt({
+      groupName: 'General',
+      groupJid: '120363423357339667@g.us',
+      senderJid: '15551234567@s.whatsapp.net',
+    });
+    expect(prompt).not.toContain('welcome them warmly');
+    expect(prompt).not.toContain('SPECIAL CONTEXT');
+  });
+});
+
 describe('Welcome messages', async () => {
   const { buildWelcomeMessage } = await import('../src/features/welcome.js');
 
