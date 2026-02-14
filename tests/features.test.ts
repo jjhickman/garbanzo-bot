@@ -37,7 +37,8 @@ describe('Feature router', async () => {
 
   it('returns null for general queries', () => {
     expect(matchFeature('what is the meaning of life')).toBeNull();
-    expect(matchFeature('recommend a restaurant in Cambridge')).toBeNull();
+    // "recommend a restaurant in Cambridge" now routes to venues feature
+    expect(matchFeature('recommend a restaurant in Cambridge')?.feature).toBe('venues');
     expect(matchFeature('tell me a joke')).toBeNull();
   });
 

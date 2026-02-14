@@ -63,7 +63,7 @@ export async function getAIResponse(
 
 // ── Query complexity classifier ─────────────────────────────────────
 
-type Complexity = 'simple' | 'complex';
+export type Complexity = 'simple' | 'complex';
 
 /**
  * Classify a query as simple or complex to decide routing.
@@ -82,7 +82,7 @@ type Complexity = 'simple' | 'complex';
  * - Long messages (100+ chars)
  * - Anything in the Introductions or Events group (persona matters more)
  */
-function classifyComplexity(query: string, ctx: MessageContext): Complexity {
+export function classifyComplexity(query: string, ctx: MessageContext): Complexity {
   // Always use Claude for groups where persona quality matters most
   if (ctx.groupName === 'Introductions' || ctx.groupName === 'Events') {
     return 'complex';

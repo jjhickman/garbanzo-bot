@@ -99,27 +99,73 @@
 **Goal:** The fun stuff — only after the foundation is rock solid.
 
 ### Tasks (prioritize based on actual user requests)
-- [ ] D&D 5e dice rolling and lookups
-- [ ] Book club management (polls, reminders)
-- [ ] Event planning with venue search
-- [ ] Polls and voting
-- [ ] Fun features (icebreakers, trivia, Boston fun facts)
-- [ ] Discord bridge (if community expands there)
+1. ~~**D&D 5e** (`src/features/dnd.ts`) — dice rolling (local) + SRD lookups via dnd5eapi.co (free, no key)~~ ✅ Live — `!roll`, `!dnd spell/monster/class/item`, fuzzy search, multi-dice support
+2. ~~**Book club** (`src/features/books.ts`) — search/details via Open Library API (free, no key)~~ ✅ Live — `!book` search, author lookup, ISBN details, work descriptions
+3. ~~**Venue search** (`src/features/venues.ts`) — Google Places API (existing key, no signup needed)~~ ✅ Live — `!venue` search + details, Boston default, ratings/hours/price level
+4. ~~**Polls** (`src/features/polls.ts`) — native WhatsApp polls via Baileys~~ ✅ Live — `!poll Question / A / B / C`, dedup tracker, 1-12 options
+5. ~~**Fun features** (`src/features/fun.ts`) — trivia (OpenTDB), fun facts (Useless Facts API), today in history (Muffin Labs), curated icebreakers~~ ✅ Live — `!trivia`, `!fact`, `!today`, `!icebreaker` (40 Boston-themed questions)
+6. [ ] **Character creation** (`src/features/character.ts`) — D&D 5e character sheet PDF generation via `pdf-lib`, fillable PDF template, stat calculation, Baileys document upload
+7. [ ] **Release notes** — `!release` owner command, sends formatted "what's new" message to groups on major deployments
 
 ### For each feature:
-- [ ] Write the feature in its own file under `src/features/`
-- [ ] Add command detection (bang command + natural language) to `src/features/router.ts`
-- [ ] Test with real messages in a single group
-- [ ] Verify graceful degradation if API key is missing/invalid
-- [ ] Run typecheck and test suite
-- [ ] Build, deploy, verify service starts cleanly
-- [ ] Update ROADMAP.md with status
+- [x] Write the feature in its own file under `src/features/`
+- [x] Add command detection (bang command + natural language) to `src/features/router.ts`
+- [x] Test with real messages in a single group
+- [x] Verify graceful degradation if API key is missing/invalid
+- [x] Run typecheck and test suite
+- [x] Build, deploy, verify service starts cleanly
+- [x] Update ROADMAP.md with status
 - [ ] Run for 2+ days before adding next feature
 
 ### Gate
 - [ ] Features are being used by real members (check logs/digest)
 - [ ] No feature crashes the bot process
 - [ ] Bot performance remains stable under load
+
+---
+
+## Phase 5: Platform Expansion (Future)
+
+**Goal:** Bridge Garbanzo to Discord and add cross-platform features.
+
+### Discord-Specific Features
+1. [ ] **Discord bot scaffold** — Discord.js v14, slash commands, guild setup, role-based permissions
+2. [ ] **WhatsApp ↔ Discord bridge** — relay messages between paired channels (e.g., WA General ↔ Discord #general), media forwarding, sender attribution
+3. [ ] **Discord rich embeds** — leverage Discord's embed system for weather, transit, venue, book results (richer than WhatsApp text)
+4. [ ] **Discord voice channel integration** — announce events, post join links for meetup voice chats
+5. [ ] **Discord role management** — auto-assign roles based on activity, meetup attendance, or introduction completion
+6. [ ] **Discord thread support** — spin off D&D sessions, book discussions, event planning into threads
+
+### Cross-Platform Features
+7. [ ] **Unified identity** — link WhatsApp JID ↔ Discord user ID so context/history follows users across platforms
+8. [ ] **Cross-platform polls** — aggregate votes from both platforms into a single result
+9. [ ] **Shared event calendar** — events created on either platform visible on both, with platform-native formatting
+10. [ ] **Admin dashboard** — lightweight web UI for owner: stats, moderation queue, feature toggles, cross-platform config
+
+### Gate
+- [ ] Discord bot running in a test server with core features (weather, transit, D&D, books)
+- [ ] Bridge relaying messages reliably between at least one WA ↔ Discord channel pair
+- [ ] No message duplication or loops in the bridge
+- [ ] Community members are actually using Discord (don't build it if nobody comes)
+
+---
+
+## Phase 6: Advanced Intelligence (Future)
+
+**Goal:** Deeper personalization and smarter community features.
+
+### Tasks
+1. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
+2. [ ] **Smart event recommendations** — suggest events based on member interests and past attendance
+3. [ ] **Conversation summaries** — on-demand "what did I miss?" summaries for members catching up on group chat
+4. [ ] **Multi-language support** — detect message language, respond in kind (leverage Claude's multilingual ability)
+5. [ ] **Garbanzo memory** — long-term facts about the community ("last potluck was at X", "Y usually organizes hikes") stored in SQLite, surfaced in AI context
+6. [ ] **Custom per-group personas** — slightly different tone/focus per group (e.g., more casual in General, more structured in Events)
+
+### Gate
+- [ ] Features add measurable value (members reference them, engagement metrics improve)
+- [ ] AI costs remain sustainable
+- [ ] Privacy controls are in place for any stored personal data
 
 ---
 
