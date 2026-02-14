@@ -400,4 +400,71 @@ describe('Character — feature router integration', async () => {
     expect(matchFeature('what is the weather')?.feature).not.toBe('character');
     expect(matchFeature('tell me a joke')).toBeNull();
   });
+
+  // ── Natural language with race/class names (no "character" keyword) ──
+
+  it('routes "make me an elf wizard" to character', () => {
+    expect(matchFeature('make me an elf wizard')?.feature).toBe('character');
+  });
+
+  it('routes "create a dwarf fighter" to character', () => {
+    expect(matchFeature('create a dwarf fighter')?.feature).toBe('character');
+  });
+
+  it('routes "roll me up a half-orc barbarian" to character', () => {
+    expect(matchFeature('roll me up a half-orc barbarian')?.feature).toBe('character');
+  });
+
+  it('routes "generate a tiefling warlock" to character', () => {
+    expect(matchFeature('generate a tiefling warlock')?.feature).toBe('character');
+  });
+
+  it('routes "build me a human paladin" to character', () => {
+    expect(matchFeature('build me a human paladin')?.feature).toBe('character');
+  });
+
+  it('routes "make a rogue" (class only) to character', () => {
+    expect(matchFeature('make a rogue')?.feature).toBe('character');
+  });
+
+  it('routes "create a gnome" (race only) to character', () => {
+    expect(matchFeature('create a gnome')?.feature).toBe('character');
+  });
+
+  it('routes "I want to play a halfling bard" to character', () => {
+    expect(matchFeature('I want to play a halfling bard')?.feature).toBe('character');
+  });
+
+  it('routes "I want to be an elf druid" to character', () => {
+    expect(matchFeature('I want to be an elf druid')?.feature).toBe('character');
+  });
+
+  it('routes "I wanna be a wizard" to character', () => {
+    expect(matchFeature('I wanna be a wizard')?.feature).toBe('character');
+  });
+
+  it('routes "make me a half-elf ranger" (hyphenated race) to character', () => {
+    expect(matchFeature('make me a half-elf ranger')?.feature).toBe('character');
+  });
+
+  it('routes "make me a halfelf sorcerer" (no hyphen) to character', () => {
+    expect(matchFeature('make me a halfelf sorcerer')?.feature).toBe('character');
+  });
+
+  it('routes "create me a cleric" to character', () => {
+    expect(matchFeature('create me a cleric')?.feature).toBe('character');
+  });
+
+  it('preserves the full query for arg parsing', () => {
+    const match = matchFeature('make me an elf wizard');
+    expect(match?.feature).toBe('character');
+    expect(match?.query).toContain('elf');
+    expect(match?.query).toContain('wizard');
+  });
+
+  it('does not falsely match casual mentions of races/classes', () => {
+    // These should NOT route to character — no creation intent verb
+    expect(matchFeature('I love playing wizard in video games')?.feature).not.toBe('character');
+    expect(matchFeature('my friend is an elf fan')?.feature).not.toBe('character');
+  });
 });

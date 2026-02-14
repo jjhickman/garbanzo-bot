@@ -116,9 +116,16 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
   {
     feature: 'character',
     patterns: [
-      /\b(create|generate|make|build)\s+(a\s+)?(character|char)\b/i,
+      // Explicit: "create a character", "make a char", "build a character sheet"
+      /\b(create|generate|make|build)\s+(me\s+)?(a\s+)?(character|char)\b/i,
       /\bcharacter\s+(sheet|create|gen|build|random)\b/i,
       /\bnew\s+character\b/i,
+      // Creation verb + race/class name (no "character" keyword needed):
+      // "make me an elf wizard", "create a dwarf fighter", "roll up a half-orc barbarian"
+      /\b(create|generate|make|build|roll)\s+(me\s+)?(up\s+)?(an?\s+)?(dragonborn|dwarf|dwarven|elf|elven|gnome|half[- ]?elf|half[- ]?orc|halfling|human|tiefling|barbarian|bard|cleric|druid|fighter|monk|paladin|ranger|rogue|sorcerer|warlock|wizard)\b/i,
+      // "I want to play a [race/class]", "I want to be a [race/class]", "I wanna be a wizard"
+      /\bwant\s+to\s+(play|be)\s+(an?\s+)?(dragonborn|dwarf|dwarven|elf|elven|gnome|half[- ]?elf|half[- ]?orc|halfling|human|tiefling|barbarian|bard|cleric|druid|fighter|monk|paladin|ranger|rogue|sorcerer|warlock|wizard)\b/i,
+      /\bwanna\s+(play|be)\s+(an?\s+)?(dragonborn|dwarf|dwarven|elf|elven|gnome|half[- ]?elf|half[- ]?orc|halfling|human|tiefling|barbarian|bard|cleric|druid|fighter|monk|paladin|ranger|rogue|sorcerer|warlock|wizard)\b/i,
     ],
   },
   {
