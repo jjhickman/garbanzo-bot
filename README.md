@@ -10,7 +10,7 @@ Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mention
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/jhickmanit/garbanzo-bot.git
+git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
 npm install
 
@@ -35,7 +35,7 @@ On first run, Baileys will display a QR code in the terminal. Scan it with Whats
 - Responds to `@garbanzo` mentions with Claude AI (Anthropic/OpenRouter)
 - Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
 - Conversation context from SQLite — remembers recent messages per group
-- Multi-language detection (11 languages) — responds in the user's language
+- Multi-language detection (14 languages) — responds in the user's language
 - Custom per-group persona — different tone per group (casual in General, structured in Events)
 - Context compression — recent messages verbatim, older messages extractively compressed
 
