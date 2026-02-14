@@ -163,7 +163,8 @@
 **Goal:** Deeper personalization and smarter community features.
 
 ### Tasks
-1. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
+1. [ ] **Feature recommendations** (`!suggest`) — members submit feature ideas/suggestions via bang command, stored in SQLite, owner can review with `!suggestions`; upvote support so the community can +1 ideas
+2. [ ] **Member profiles** — track interests, event attendance, preferred topics per user (opt-in)
 2. [ ] **Smart event recommendations** — suggest events based on member interests and past attendance
 3. [ ] **Conversation summaries** — on-demand "what did I miss?" summaries for members catching up on group chat
 4. [ ] **Multi-language support** — detect message language, respond in kind (leverage Claude's multilingual ability)
