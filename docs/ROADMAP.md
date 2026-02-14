@@ -40,8 +40,8 @@
 **Goal:** Add the features members actually asked for, one at a time.
 
 ### Priority Order (add one, test, then add next)
-1. **Weather** (`src/features/weather.ts`) — Google Weather API, already have working key
-2. **MBTA Transit** (`src/features/transit.ts`) — MBTA v3 API, already have working key
+1. ~~**Weather** (`src/features/weather.ts`) — Google Weather API~~ ✅ Live — current conditions + 5-day forecast, Boston default + geocoding
+2. ~~**MBTA Transit** (`src/features/transit.ts`) — MBTA v3 API~~ ✅ Live — alerts, predictions, schedules with station/route aliases
 3. **Content Moderation** (`src/features/moderation.ts`) — flag violations to owner DM, NOT auto-action
 4. **New Member Welcome** — detect `group-participants.update` with `action: 'add'`, send welcome message
 5. **News Search** (`src/features/news.ts`) — NewsAPI, already have key
