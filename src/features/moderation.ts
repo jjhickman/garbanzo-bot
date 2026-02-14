@@ -58,8 +58,9 @@ const RULES: ModerationRule[] = [
     name: 'Threats / violence',
     severity: 'alert',
     patterns: [
-      /\bi('?ll|will|gonna|going\s+to)\s+(kill|murder|shoot|stab|beat)\s+(you|him|her|them)\b/i,
+      /\bi('?ll|will|gonna|going\s+to)\s+(kill|murder|shoot|stab|beat)\s+\w+/i,
       /\byou('re|\s+are)\s+(dead|gonna\s+die)\b/i,
+      /\b(kill|murder|shoot|stab)\s+(you|him|her|them|someone|somebody|anybody|anyone|everybody|everyone)\b/i,
       /\bdox{1,2}(ing|ed)?\b/i,
       /\bswat{1,2}(ing|ed|t?ed)?\b/i,
     ],
