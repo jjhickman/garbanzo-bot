@@ -95,25 +95,45 @@ garbanzo-bot/
 │   ├── index.ts              # Entry point — starts bot
 │   ├── bot/
 │   │   ├── connection.ts     # Baileys socket setup, auth, reconnect
-│   │   ├── handlers.ts       # Message routing (mention? DM? group notification?)
+│   │   ├── handlers.ts       # Top-level message dispatcher
+│   │   ├── group-handler.ts  # Group message routing + mention handling
+│   │   ├── owner-commands.ts # Owner DM command routing
+│   │   ├── response-router.ts # Bang commands + natural language feature routing
+│   │   ├── reactions.ts      # Emoji reactions (🫘 for acknowledgments)
 │   │   └── groups.ts         # Group config, JID mapping, mention patterns
 │   ├── ai/
-│   │   ├── router.ts         # Model selection (Claude vs Ollama vs skip)
-│   │   ├── claude.ts         # Anthropic/OpenRouter API client
+│   │   ├── router.ts         # Model selection (Claude vs Ollama) + cost tracking
+│   │   ├── claude.ts         # Anthropic/OpenRouter API client + vision support
 │   │   ├── ollama.ts         # Local Ollama client
 │   │   └── persona.ts        # System prompt builder (loads PERSONA.md)
-│   ├── features/             # Each feature = one file, added incrementally
+│   ├── features/             # Each feature = one file (or directory), max ~300 lines
+│   │   ├── character/        # D&D 5e character sheet generator (6 files)
 │   │   ├── weather.ts        # Google Weather API
 │   │   ├── transit.ts        # MBTA schedule/alerts
+│   │   ├── transit-data.ts   # Station/route aliases, emoji maps, types
 │   │   ├── moderation.ts     # Content moderation (human-in-the-loop)
-│   │   └── ...               # Future: events, news, dnd, etc.
+│   │   ├── moderation-patterns.ts # Regex rules, category maps, thresholds
+│   │   ├── introductions.ts  # Auto-respond to new member intros
+│   │   ├── intro-classifier.ts # Signal-based intro detection logic
+│   │   ├── dnd.ts            # D&D dice roller + command handler
+│   │   ├── dnd-lookups.ts    # SRD API lookups (spell, monster, class, item)
+│   │   └── ...               # events, news, books, venues, polls, fun, etc.
 │   ├── middleware/
 │   │   ├── rate-limit.ts     # Per-user/per-group rate limiting
-│   │   └── logger.ts         # Structured logging middleware
+│   │   ├── logger.ts         # Structured logging (Pino)
+│   │   ├── context.ts        # Two-tier context compression + caching
+│   │   ├── stats.ts          # Token estimation, daily cost tracking
+│   │   ├── health.ts         # HTTP health endpoint + memory watchdog
+│   │   ├── retry.ts          # Dead letter retry queue
+│   │   └── sanitize.ts       # Input sanitization + prompt injection detection
 │   └── utils/
 │       ├── config.ts         # Env var loading + Zod validation
 │       ├── formatting.ts     # WhatsApp text formatting helpers
-│       └── jid.ts            # JID parsing/comparison utilities
+│       ├── jid.ts            # JID parsing/comparison utilities
+│       ├── db.ts             # SQLite barrel (re-exports schema, profiles, maintenance)
+│       ├── db-schema.ts      # Database init, table definitions
+│       ├── db-profiles.ts    # Member profile queries
+│       └── db-maintenance.ts # Backup, vacuum, prune, scheduled maintenance
 ├── config/
 │   └── groups.json           # Group ID → name mapping + per-group settings
 ├── docs/
@@ -125,13 +145,16 @@ garbanzo-bot/
 ├── scripts/
 │   └── setup.sh              # First-time setup helper
 ├── tests/
-│   └── *.test.ts             # Vitest test files
+│   └── *.test.ts             # Vitest test files (7 files, 420 tests)
+├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)
+├── docker-compose.yml        # Named volumes, env_file, health check
+├── .dockerignore             # Excludes .git, node_modules, tests, etc.
 ├── baileys_auth/             # Baileys auth state (gitignored)
 ├── .env                      # Secrets (gitignored)
 ├── .env.example              # Template for .env
-├── .gitleaks.toml             # Secret scanning config (gitleaks)
-├── opencode.json              # OpenCode AI agent config (gitignored — has secrets)
-├── opencode.json.example      # Template for opencode.json
+├── .gitleaks.toml            # Secret scanning config (gitleaks)
+├── opencode.json             # OpenCode AI agent config (gitignored — has secrets)
+├── opencode.json.example     # Template for opencode.json
 ├── package.json
 ├── tsconfig.json
 └── AGENTS.md                 # This file

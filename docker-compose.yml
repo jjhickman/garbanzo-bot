@@ -1,0 +1,61 @@
+# docker-compose.yml — Garbanzo Bot
+#
+# Quick start:
+#   1. cp .env.example .env && edit .env with your API keys
+#   2. docker compose up -d
+#   3. docker compose logs -f   (scan QR code on first run)
+#
+# The bot persists WhatsApp auth and SQLite data in named volumes,
+# so it survives container rebuilds and restarts.
+
+services:
+  garbanzo-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garbanzo-bot
+    restart: unless-stopped
+
+    # Load secrets from .env file (gitignored)
+    env_file:
+      - .env
+
+    # Override specific env vars if needed
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+
+    # Health check port (internal only by default)
+    ports:
+      - "127.0.0.1:3001:3001"
+
+    # Persistent data volumes
+    volumes:
+      # WhatsApp auth state — MUST persist across restarts
+      - baileys_auth:/app/baileys_auth
+      # SQLite database + backups
+      - garbanzo_data:/app/data
+      # Optional: mount local voice models (Piper TTS)
+      # Uncomment if you have Piper voice models on the host:
+      # - ./data/voices:/app/data/voices:ro
+      # Optional: mount custom groups config without rebuilding
+      # - ./config/groups.json:/app/config/groups.json:ro
+
+    # Memory limit — matches the bot's built-in watchdog (exits at 1GB)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+    # Logging — structured JSON from Pino
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  baileys_auth:
+    name: garbanzo-bot-auth
+  garbanzo_data:
+    name: garbanzo-bot-data

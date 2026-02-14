@@ -169,19 +169,32 @@ src/
   index.ts              # Entry point — starts bot, wires services
   bot/
     connection.ts       # Baileys socket, auth, reconnect, staleness detection
-    handlers.ts         # Message routing, sanitization, feature dispatch
+    handlers.ts         # Top-level message dispatcher
+    group-handler.ts    # Group message routing + mention handling
+    owner-commands.ts   # Owner DM command routing
+    response-router.ts  # Bang commands + natural language feature routing
+    reactions.ts        # Emoji reactions (🫘 for acknowledgments)
     groups.ts           # Group config, feature flags, per-group persona
   ai/
     router.ts           # Model selection (Claude vs Ollama) + cost tracking
-    claude.ts           # Anthropic/OpenRouter client
+    claude.ts           # Anthropic/OpenRouter API client + vision
     ollama.ts           # Local Ollama client + warm-up scheduler
-    persona.ts          # System prompt builder (PERSONA.md + memory + language + persona hints)
-  features/             # One file per feature
-    weather.ts, transit.ts, news.ts, events.ts, moderation.ts,
-    welcome.ts, introductions.ts, dnd.ts, character.ts, books.ts,
-    venues.ts, polls.ts, fun.ts, feedback.ts, profiles.ts,
-    summary.ts, recommendations.ts, language.ts, memory.ts,
-    release.ts, help.ts, router.ts, digest.ts
+    persona.ts          # System prompt builder (PERSONA.md + memory + language)
+  features/             # One file per feature, max ~300 lines
+    character/          # D&D 5e character sheet generator (6 files)
+    weather.ts          # Google Weather API
+    transit.ts          # MBTA schedule/alerts
+    transit-data.ts     # Station/route aliases, emoji maps, types
+    moderation.ts       # Content moderation (human-in-the-loop)
+    moderation-patterns.ts # Regex rules, category maps, thresholds
+    introductions.ts    # Auto-respond to new member intros
+    intro-classifier.ts # Signal-based intro detection logic
+    dnd.ts              # D&D dice roller + command handler
+    dnd-lookups.ts      # SRD API lookups (spell, monster, class, item)
+    events.ts, news.ts, books.ts, venues.ts, polls.ts, fun.ts,
+    welcome.ts, feedback.ts, profiles.ts, summary.ts,
+    recommendations.ts, language.ts, memory.ts, media.ts,
+    voice.ts, links.ts, release.ts, help.ts, router.ts, digest.ts
   middleware/
     rate-limit.ts       # Per-user/per-group sliding window
     logger.ts           # Pino structured logging
@@ -194,10 +207,13 @@ src/
     config.ts           # Zod-validated env vars
     formatting.ts       # WhatsApp text formatting
     jid.ts              # JID parsing/comparison
-    db.ts               # SQLite schema (6 tables), maintenance, backups
+    db.ts               # SQLite barrel (re-exports schema, profiles, maintenance)
+    db-schema.ts        # Database init, table definitions
+    db-profiles.ts      # Member profile queries
+    db-maintenance.ts   # Backup, vacuum, prune, scheduled maintenance
 config/groups.json      # Per-group settings
 docs/                   # Persona, roadmap, security, infrastructure
-tests/                  # Vitest (392 tests)
+tests/                  # Vitest (7 files, 420 tests)
 ```
 
 ## Stack
@@ -208,7 +224,7 @@ tests/                  # Vitest (392 tests)
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (392 tests)
+- **Testing:** Vitest (420 tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -218,7 +234,7 @@ npm run dev         # Hot-reload (tsx watch)
 npm run typecheck   # Type-check only
 npm run test        # Run all tests
 npm run lint        # ESLint
-npm run check       # Full pre-commit: typecheck + lint + test
+npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```
@@ -247,7 +263,7 @@ The health endpoint returns JSON with connection status, uptime, memory usage, a
 ## Docs
 
 - [PERSONA.md](docs/PERSONA.md) — Bot personality and voice guidelines
-- [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-6 complete)
+- [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-6 complete, Phase 7 in progress)
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
