@@ -18,6 +18,11 @@ import { handleNews } from '../features/news.js';
 import { getHelpMessage } from '../features/help.js';
 import { handleIntroduction, INTRODUCTIONS_JID, triggerIntroCatchUp } from '../features/introductions.js';
 import { handleEvent, handleEventPassive, EVENTS_JID } from '../features/events.js';
+import { handleDnd } from '../features/dnd.js';
+import { handleBooks } from '../features/books.js';
+import { handleVenues } from '../features/venues.js';
+import { handlePoll, isDuplicatePoll, recordPoll } from '../features/polls.js';
+import { handleFun } from '../features/fun.js';
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordBotResponse, recordModerationFlag, recordOwnerDM } from '../middleware/stats.js';
 import { previewDigest } from '../features/digest.js';
@@ -225,6 +230,25 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       return;
     }
 
+    // Check for poll command — sends native WhatsApp poll instead of text
+    const featureCheck = matchFeature(query);
+    if (featureCheck?.feature === 'poll') {
+      const pollResult = handlePoll(featureCheck.query);
+      if (typeof pollResult === 'string') {
+        // Error/help message
+        await sock.sendMessage(remoteJid, { text: pollResult }, { quoted: msg });
+      } else if (isDuplicatePoll(remoteJid, pollResult.name)) {
+        await sock.sendMessage(remoteJid, { text: '🗳️ A similar poll was already posted in the last hour.' }, { quoted: msg });
+      } else {
+        // Send native WhatsApp poll
+        await sock.sendMessage(remoteJid, { poll: pollResult });
+        recordPoll(remoteJid, pollResult.name);
+        recordBotResponse(remoteJid);
+        recordResponse(senderJid, remoteJid);
+      }
+      return;
+    }
+
     const response = await getResponse(query, {
       groupName,
       groupJid: remoteJid,
@@ -301,6 +325,18 @@ async function getResponse(
         return await handleNews(feature.query);
       case 'events':
         return await handleEvent(feature.query, ctx.senderJid, ctx.groupJid);
+      case 'roll':
+      case 'dnd':
+        return await handleDnd(feature.query);
+      case 'books':
+        return await handleBooks(feature.query);
+      case 'venues':
+        return await handleVenues(feature.query);
+      case 'poll':
+        // Polls return string errors only — actual polls handled above
+        return typeof handlePoll(feature.query) === 'string' ? handlePoll(feature.query) as string : null;
+      case 'fun':
+        return await handleFun(feature.query);
     }
   }
 

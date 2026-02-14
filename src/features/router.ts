@@ -13,7 +13,7 @@ import { logger } from '../middleware/logger.js';
  */
 
 export interface FeatureMatch {
-  feature: 'weather' | 'transit' | 'news' | 'help' | 'events';
+  feature: 'weather' | 'transit' | 'news' | 'help' | 'events' | 'dnd' | 'roll' | 'books' | 'venues' | 'poll' | 'fun';
   /** The query with command prefix stripped (for bang commands) or original text (natural language) */
   query: string;
 }
@@ -80,6 +80,40 @@ const FEATURE_PATTERNS: FeaturePattern[] = [
     ],
   },
   {
+    feature: 'venues',
+    patterns: [
+      /\bfind\s+(a\s+)?(bar|restaurant|venue|place|spot|bowling|escape\s+room|karaoke|park|cafe|coffee|gym)\b/i,
+      /\b(bars?|restaurants?|venues?|places?)\s+(in|near|around)\b/i,
+    ],
+  },
+  {
+    feature: 'books',
+    patterns: [
+      /\bbook\s+(club|rec|recommend)/i,
+      /\bwhat.+read(ing)?\b/i,
+      /\breading\s+list\b/i,
+      /\bbook\s+by\b/i,
+    ],
+  },
+  {
+    feature: 'roll',
+    patterns: [
+      // Dice notation: "roll 2d6", "roll me a d20", "2d6+3"
+      /\broll\s+\d*d\d/i,
+      /\broll\s+(me\s+)?a?\s*d\d/i,
+      /^\d*d\d+([+-]\d+)?$/i,
+    ],
+  },
+  {
+    feature: 'dnd',
+    patterns: [
+      /\bspell\s+\w/i,
+      /\bmonster\s+\w/i,
+      /\bstat\s*block\b/i,
+      /\blookup\s+(spell|monster|class|item)\b/i,
+    ],
+  },
+  {
     feature: 'events',
     patterns: [
       // "plan a/an X", "plan dinner", "plan a hike"
@@ -107,6 +141,26 @@ const BANG_COMMANDS: Record<string, FeatureMatch['feature']> = {
   '!news': 'news',
   '!events': 'events',
   '!plan': 'events',
+  '!roll': 'roll',
+  '!dice': 'roll',
+  '!dnd': 'dnd',
+  '!spell': 'dnd',
+  '!monster': 'dnd',
+  '!book': 'books',
+  '!books': 'books',
+  '!read': 'books',
+  '!venue': 'venues',
+  '!venues': 'venues',
+  '!find': 'venues',
+  '!place': 'venues',
+  '!poll': 'poll',
+  '!vote': 'poll',
+  '!trivia': 'fun',
+  '!fact': 'fun',
+  '!today': 'fun',
+  '!icebreaker': 'fun',
+  '!ice': 'fun',
+  '!fun': 'fun',
 };
 
 /**
@@ -120,8 +174,13 @@ export function matchFeature(query: string): FeatureMatch | null {
   const firstWord = trimmed.split(/\s+/)[0].toLowerCase();
   const bangFeature = BANG_COMMANDS[firstWord];
   if (bangFeature) {
-    // Strip the command prefix, pass the rest as the query
-    const args = trimmed.slice(firstWord.length).trim() || trimmed;
+    const rest = trimmed.slice(firstWord.length).trim();
+    // For fun commands, preserve the subcommand (e.g. !trivia science → "trivia science")
+    const bangWord = firstWord.slice(1); // strip "!"
+    const FUN_SUBCOMMANDS = ['trivia', 'fact', 'today', 'icebreaker', 'ice', 'fun'];
+    const args = bangFeature === 'fun' && FUN_SUBCOMMANDS.includes(bangWord)
+      ? `${bangWord}${rest ? ' ' + rest : ''}`
+      : rest || trimmed;
     logger.debug({ feature: bangFeature, query: args, style: 'bang' }, 'Feature matched');
     return { feature: bangFeature, query: args };
   }
