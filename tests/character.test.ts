@@ -223,11 +223,23 @@ describe('Character — generateCharacter', async () => {
     expect(char.saveProficiencies).toHaveLength(2);
     expect(char.skillProficiencies.length).toBeGreaterThanOrEqual(2);
     expect(char.equipment).toBeTruthy();
-    expect(char.features).toBeTruthy();
+    expect(char.racialTraits).toBeTruthy();
+    expect(char.classFeatures).toBeTruthy();
     expect(char.personalityTrait).toBeTruthy();
     expect(char.ideal).toBeTruthy();
     expect(char.bond).toBeTruthy();
     expect(char.flaw).toBeTruthy();
+    // Page 2 fields
+    expect(char.age).toBeTruthy();
+    expect(char.height).toBeTruthy();
+    expect(char.weight).toBeTruthy();
+    expect(char.eyes).toBeTruthy();
+    expect(char.skin).toBeTruthy();
+    expect(char.hair).toBeTruthy();
+    expect(char.backstory).toBeTruthy();
+    expect(char.treasure).toBeTruthy();
+    // Page 3 fields
+    expect(typeof char.isSpellcaster).toBe('boolean');
   });
 
   it('respects specified race', () => {
@@ -466,5 +478,187 @@ describe('Character — feature router integration', async () => {
     // These should NOT route to character — no creation intent verb
     expect(matchFeature('I love playing wizard in video games')?.feature).not.toBe('character');
     expect(matchFeature('my friend is an elf fan')?.feature).not.toBe('character');
+  });
+});
+
+// ── Page 2 — Appearance & Backstory ─────────────────────────────────
+
+describe('Character — appearance generation', async () => {
+  const { generateCharacter } = await import('../src/features/character.js');
+
+  it('generates age within race-appropriate range for elf', () => {
+    const char = generateCharacter('elf', 'wizard');
+    const age = parseInt(char.age, 10);
+    expect(age).toBeGreaterThanOrEqual(100);
+    expect(age).toBeLessThanOrEqual(750);
+  });
+
+  it('generates age within race-appropriate range for human', () => {
+    const char = generateCharacter('human', 'fighter');
+    const age = parseInt(char.age, 10);
+    expect(age).toBeGreaterThanOrEqual(18);
+    expect(age).toBeLessThanOrEqual(80);
+  });
+
+  it('generates age within race-appropriate range for dwarf', () => {
+    const char = generateCharacter('dwarf', 'cleric');
+    const age = parseInt(char.age, 10);
+    expect(age).toBeGreaterThanOrEqual(50);
+    expect(age).toBeLessThanOrEqual(350);
+  });
+
+  it('generates height in feet/inches format', () => {
+    const char = generateCharacter('human', 'fighter');
+    expect(char.height).toMatch(/^\d+'\d+"$/);
+  });
+
+  it('generates weight with lbs suffix', () => {
+    const char = generateCharacter('human', 'fighter');
+    expect(char.weight).toMatch(/^\d+ lbs$/);
+  });
+
+  it('generates non-empty eye, skin, and hair colors', () => {
+    const char = generateCharacter('elf', 'ranger');
+    expect(char.eyes.length).toBeGreaterThan(0);
+    expect(char.skin.length).toBeGreaterThan(0);
+    expect(char.hair.length).toBeGreaterThan(0);
+  });
+
+  it('generates a backstory string', () => {
+    const char = generateCharacter('human', 'fighter');
+    expect(char.backstory.length).toBeGreaterThan(20);
+  });
+
+  it('generates treasure with gp', () => {
+    const char = generateCharacter('human', 'fighter');
+    expect(char.treasure).toMatch(/\d+ gp/);
+  });
+
+  it('halfling has appropriate short height', () => {
+    const char = generateCharacter('halfling', 'rogue');
+    // Halflings are 2'9" to 3'3" — height should start with 2' or 3'
+    expect(char.height).toMatch(/^[23]'\d+"$/);
+  });
+});
+
+// ── Page 3 — Spellcasting ───────────────────────────────────────────
+
+describe('Character — spellcasting', async () => {
+  const { generateCharacter } = await import('../src/features/character.js');
+
+  it('wizard is a spellcaster', () => {
+    const char = generateCharacter('elf', 'wizard');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('INT');
+    expect(char.spellSaveDC).toBeGreaterThanOrEqual(10); // 8 + 2 + mod (min 0)
+    expect(char.cantrips.length).toBe(3);
+    expect(char.level1Spells.length).toBe(6); // Wizard spellbook
+    expect(char.level1Slots).toBe(2);
+  });
+
+  it('bard is a spellcaster with CHA', () => {
+    const char = generateCharacter('half-elf', 'bard');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('CHA');
+    expect(char.cantrips.length).toBe(2);
+    expect(char.level1Spells.length).toBe(4);
+    expect(char.level1Slots).toBe(2);
+  });
+
+  it('cleric is a spellcaster with WIS', () => {
+    const char = generateCharacter('dwarf', 'cleric');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('WIS');
+    expect(char.cantrips.length).toBe(3);
+    expect(char.level1Spells.length).toBeGreaterThanOrEqual(1); // WIS mod + 1
+    expect(char.level1Slots).toBe(2);
+  });
+
+  it('sorcerer is a spellcaster with CHA', () => {
+    const char = generateCharacter('tiefling', 'sorcerer');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('CHA');
+    expect(char.cantrips.length).toBe(4);
+    expect(char.level1Spells.length).toBe(2);
+    expect(char.level1Slots).toBe(2);
+  });
+
+  it('warlock is a spellcaster with CHA', () => {
+    const char = generateCharacter('tiefling', 'warlock');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('CHA');
+    expect(char.cantrips.length).toBe(2);
+    expect(char.level1Spells.length).toBe(2);
+    expect(char.level1Slots).toBe(1); // Warlock only gets 1 at level 1
+  });
+
+  it('druid is a spellcaster with WIS', () => {
+    const char = generateCharacter('human', 'druid');
+    expect(char.isSpellcaster).toBe(true);
+    expect(char.spellcastingAbility).toBe('WIS');
+    expect(char.cantrips.length).toBe(2);
+    expect(char.level1Spells.length).toBeGreaterThanOrEqual(1);
+    expect(char.level1Slots).toBe(2);
+  });
+
+  it('barbarian is NOT a spellcaster', () => {
+    const char = generateCharacter('half-orc', 'barbarian');
+    expect(char.isSpellcaster).toBe(false);
+    expect(char.cantrips).toHaveLength(0);
+    expect(char.level1Spells).toHaveLength(0);
+    expect(char.level1Slots).toBe(0);
+  });
+
+  it('fighter is NOT a spellcaster', () => {
+    const char = generateCharacter('human', 'fighter');
+    expect(char.isSpellcaster).toBe(false);
+    expect(char.cantrips).toHaveLength(0);
+    expect(char.level1Spells).toHaveLength(0);
+  });
+
+  it('rogue is NOT a spellcaster', () => {
+    const char = generateCharacter('halfling', 'rogue');
+    expect(char.isSpellcaster).toBe(false);
+  });
+
+  it('monk is NOT a spellcaster', () => {
+    const char = generateCharacter('human', 'monk');
+    expect(char.isSpellcaster).toBe(false);
+  });
+
+  it('paladin is NOT a spellcaster at level 1', () => {
+    const char = generateCharacter('human', 'paladin');
+    expect(char.isSpellcaster).toBe(false);
+  });
+
+  it('ranger is NOT a spellcaster at level 1', () => {
+    const char = generateCharacter('elf', 'ranger');
+    expect(char.isSpellcaster).toBe(false);
+  });
+
+  it('spell save DC = 8 + profBonus + ability mod', () => {
+    const char = generateCharacter('elf', 'wizard');
+    if (char.isSpellcaster) {
+      // For wizard: ability is INT
+      const intMod = Math.floor((char.abilities.int - 10) / 2);
+      expect(char.spellSaveDC).toBe(8 + 2 + intMod);
+      expect(char.spellAttackBonus).toBe(2 + intMod);
+    }
+  });
+
+  it('cantrips are unique (no duplicates)', () => {
+    for (let i = 0; i < 20; i++) {
+      const char = generateCharacter('elf', 'wizard');
+      const unique = new Set(char.cantrips);
+      expect(unique.size).toBe(char.cantrips.length);
+    }
+  });
+
+  it('level 1 spells are unique (no duplicates)', () => {
+    for (let i = 0; i < 20; i++) {
+      const char = generateCharacter('elf', 'wizard');
+      const unique = new Set(char.level1Spells);
+      expect(unique.size).toBe(char.level1Spells.length);
+    }
   });
 });
