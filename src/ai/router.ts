@@ -3,7 +3,8 @@ import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { buildSystemPrompt, buildOllamaPrompt, type MessageContext } from './persona.js';
 import { callOllama, isOllamaAvailable } from './ollama.js';
-import { recordAIRoute } from '../middleware/stats.js';
+import { recordAIRoute, recordAICost, recordAIError, estimateClaudeCost, getDailyCost, DAILY_COST_ALERT_THRESHOLD } from '../middleware/stats.js';
+import type { VisionImage } from '../features/media.js';
 
 /**
  * Route a user query to the appropriate AI model and return the response.
@@ -17,6 +18,19 @@ import { recordAIRoute } from '../middleware/stats.js';
 /** Cached Ollama availability check — refreshed on failure */
 let ollamaReachable: boolean | null = null;
 
+/** Prevent spamming cost alerts — reset on rollover via stats module */
+let costAlertSentToday = false;
+
+// Reset cost alert flag at midnight (checked lazily on next call)
+let lastAlertDate = new Date().toDateString();
+function maybeResetCostAlert(): void {
+  const today = new Date().toDateString();
+  if (today !== lastAlertDate) {
+    costAlertSentToday = false;
+    lastAlertDate = today;
+  }
+}
+
 async function checkOllama(): Promise<boolean> {
   if (ollamaReachable !== null) return ollamaReachable;
   ollamaReachable = await isOllamaAvailable();
@@ -27,11 +41,15 @@ async function checkOllama(): Promise<boolean> {
 export async function getAIResponse(
   query: string,
   ctx: MessageContext,
+  visionImages?: VisionImage[],
 ): Promise<string | null> {
-  if (!query.trim()) return null;
+  if (!query.trim() && (!visionImages || visionImages.length === 0)) return null;
 
+  maybeResetCostAlert();
   const complexity = classifyComplexity(query, ctx);
-  const useOllama = complexity === 'simple' && await checkOllama();
+  // Always use Claude for vision (Ollama can't do multimodal well)
+  const hasVision = visionImages && visionImages.length > 0;
+  const useOllama = !hasVision && complexity === 'simple' && await checkOllama();
 
   try {
     if (useOllama) {
@@ -39,24 +57,49 @@ export async function getAIResponse(
       logger.info({ query: truncate(query, 80), model: 'ollama/qwen3:8b', complexity }, 'Routing to Ollama');
       recordAIRoute(ctx.groupJid, 'ollama');
       try {
+        const t0 = Date.now();
         const response = await callOllama(ollamaPrompt, query);
-        logger.info({ model: 'ollama/qwen3:8b', responseLen: response.length }, 'Ollama response received');
+        const latencyMs = Date.now() - t0;
+        logger.info({ model: 'ollama/qwen3:8b', responseLen: response.length, latencyMs }, 'Ollama response received');
+        recordAICost({ model: 'ollama', inputTokens: 0, outputTokens: 0, estimatedCost: 0, latencyMs });
         return truncate(response, 4000);
       } catch (err) {
         logger.warn({ err }, 'Ollama failed — falling back to Claude');
+        recordAIError(ctx.groupJid);
         ollamaReachable = null; // Re-check availability next time
       }
     }
 
     // Claude path (primary for complex, fallback for Ollama failures)
-    const systemPrompt = buildSystemPrompt(ctx);
-    logger.info({ query: truncate(query, 80), model: 'claude', complexity }, 'Routing to Claude');
+    const systemPrompt = buildSystemPrompt(ctx, query);
+    logger.info({ query: truncate(query, 80), model: 'claude', complexity, hasVision }, 'Routing to Claude');
     recordAIRoute(ctx.groupJid, 'claude');
-    const response = await callClaude(systemPrompt, query);
-    logger.info({ model: 'claude', responseLen: response.length }, 'Claude response received');
+    const t0 = Date.now();
+    const response = await callClaude(systemPrompt, query, visionImages);
+    const latencyMs = Date.now() - t0;
+    const costEntry = estimateClaudeCost(systemPrompt, query, response);
+    costEntry.latencyMs = latencyMs;
+    recordAICost(costEntry);
+    logger.info({
+      model: 'claude',
+      responseLen: response.length,
+      latencyMs,
+      estCost: `$${costEntry.estimatedCost.toFixed(4)}`,
+      dailyTotal: `$${getDailyCost().toFixed(4)}`,
+    }, 'Claude response received');
+
+    // Alert owner if daily cost is approaching threshold
+    if (getDailyCost() >= DAILY_COST_ALERT_THRESHOLD && !costAlertSentToday) {
+      costAlertSentToday = true;
+      logger.warn({ dailyCost: getDailyCost(), threshold: DAILY_COST_ALERT_THRESHOLD }, 'Daily cost alert threshold reached');
+      // The alert is logged; digest will surface it. Direct DM alerting
+      // is wired through the daily digest, not here (avoid circular deps).
+    }
+
     return truncate(response, 4000);
   } catch (err) {
     logger.error({ err, query }, 'AI response failed');
+    recordAIError(ctx.groupJid);
     return '🫘 Sorry, I hit a snag processing that. Try again in a moment.';
   }
 }
@@ -145,10 +188,12 @@ export function classifyComplexity(query: string, ctx: MessageContext): Complexi
 /**
  * Call Claude via Anthropic Messages API.
  * Works with both direct Anthropic and OpenRouter (same API format).
+ * Supports vision (image inputs) when visionImages are provided.
  */
 async function callClaude(
   systemPrompt: string,
   userMessage: string,
+  visionImages?: VisionImage[],
 ): Promise<string> {
   // Prefer OpenRouter when available (better pricing + fallback routing)
   const isOpenRouter = !!config.OPENROUTER_API_KEY;
@@ -173,12 +218,15 @@ async function callClaude(
     ? `${baseUrl}/chat/completions`
     : `${baseUrl}/v1/messages`;
 
+  // Build user content — text-only or multimodal with images
+  const userContent = buildUserContent(userMessage, visionImages, isOpenRouter);
+
   const body = isOpenRouter
     ? {
         model: 'anthropic/claude-sonnet-4-5',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
+          { role: 'user', content: userContent },
         ],
         max_tokens: 1024,
       }
@@ -186,10 +234,15 @@ async function callClaude(
         model: 'claude-sonnet-4-5-20250514',
         max_tokens: 1024,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{ role: 'user', content: userContent }],
       };
 
-  logger.debug({ endpoint, model: isOpenRouter ? 'openrouter' : 'anthropic' }, 'Calling Claude');
+  logger.debug({
+    endpoint,
+    model: isOpenRouter ? 'openrouter' : 'anthropic',
+    hasVision: !!visionImages?.length,
+    imageCount: visionImages?.length ?? 0,
+  }, 'Calling Claude');
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -211,4 +264,50 @@ async function callClaude(
   }
   const content = data.content as Array<{ text: string }> | undefined;
   return content?.[0]?.text ?? 'No response generated.';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MessageContent = string | Array<Record<string, any>>;
+
+/**
+ * Build user message content for Claude API.
+ * Plain string for text-only, array of content blocks for multimodal.
+ */
+function buildUserContent(
+  text: string,
+  images: VisionImage[] | undefined,
+  isOpenRouter: boolean,
+): MessageContent {
+  if (!images || images.length === 0) return text;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blocks: Array<Record<string, any>> = [];
+
+  for (const img of images) {
+    if (isOpenRouter) {
+      // OpenAI-compatible format: image_url with data URI
+      blocks.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${img.mediaType};base64,${img.base64}`,
+        },
+      });
+    } else {
+      // Anthropic native format: image with base64 source
+      blocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType,
+          data: img.base64,
+        },
+      });
+    }
+  }
+
+  // Add text prompt after images
+  const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
+  blocks.push({ type: 'text', text: textPrompt });
+
+  return blocks;
 }

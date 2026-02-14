@@ -14,6 +14,16 @@ export interface GroupStats {
   ollamaRouted: number;
   claudeRouted: number;
   moderationFlags: number;
+  aiErrors: number;
+}
+
+/** Per-call cost entry for tracking spend */
+export interface CostEntry {
+  model: 'claude' | 'ollama';
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number; // USD
+  latencyMs: number;
 }
 
 export interface DailyStats {
@@ -23,6 +33,10 @@ export interface DailyStats {
   groups: Map<string, GroupStats>;
   /** Total DM messages from owner */
   ownerDMs: number;
+  /** AI cost tracking for the day */
+  costs: CostEntry[];
+  /** Running total estimated spend (USD) */
+  totalCost: number;
 }
 
 let current: DailyStats = freshStats();
@@ -32,6 +46,8 @@ function freshStats(): DailyStats {
     date: todayISO(),
     groups: new Map(),
     ownerDMs: 0,
+    costs: [],
+    totalCost: 0,
   };
 }
 
@@ -51,6 +67,7 @@ function getGroupStats(groupJid: string): GroupStats {
       ollamaRouted: 0,
       claudeRouted: 0,
       moderationFlags: 0,
+      aiErrors: 0,
     };
     current.groups.set(groupJid, stats);
   }
@@ -99,6 +116,63 @@ export function recordOwnerDM(): void {
   maybeRollover();
   current.ownerDMs++;
 }
+
+export function recordAIError(groupJid: string): void {
+  maybeRollover();
+  getGroupStats(groupJid).aiErrors++;
+}
+
+// ── Cost tracking ───────────────────────────────────────────────────
+
+/**
+ * Approximate token count from text.
+ * Uses the ~4 chars per token heuristic for English text.
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/** Claude Sonnet 4 pricing (OpenRouter) — USD per million tokens */
+const CLAUDE_PRICING = {
+  input: 3.0 / 1_000_000,
+  output: 15.0 / 1_000_000,
+};
+
+/**
+ * Record an AI call's cost. Call after each Claude response.
+ * Ollama calls are free but tracked for latency stats.
+ */
+export function recordAICost(entry: CostEntry): void {
+  maybeRollover();
+  current.costs.push(entry);
+  current.totalCost += entry.estimatedCost;
+}
+
+/** Estimate cost of a Claude call from prompt + response text */
+export function estimateClaudeCost(
+  systemPrompt: string,
+  userMessage: string,
+  response: string,
+): CostEntry {
+  const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userMessage);
+  const outputTokens = estimateTokens(response);
+  return {
+    model: 'claude',
+    inputTokens,
+    outputTokens,
+    estimatedCost: (inputTokens * CLAUDE_PRICING.input) + (outputTokens * CLAUDE_PRICING.output),
+    latencyMs: 0, // caller fills this in
+  };
+}
+
+/** Get today's estimated spend */
+export function getDailyCost(): number {
+  maybeRollover();
+  return current.totalCost;
+}
+
+/** Daily cost alert threshold (USD) */
+export const DAILY_COST_ALERT_THRESHOLD = 1.00;
 
 // ── Public query functions ──────────────────────────────────────────
 

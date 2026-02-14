@@ -391,14 +391,75 @@ describe('Introduction detection — looksLikeIntroduction', async () => {
     )).toBe(false);
   });
 
+  it('rejects bang commands', () => {
+    expect(looksLikeIntroduction(
+      '!weather in Boston today and tomorrow and the day after',
+    )).toBe(false);
+  });
+
+  it('rejects casual conversation (the actual bug)', () => {
+    // These were triggering false positives in the Introductions group
+    expect(looksLikeIntroduction(
+      'This bot is crazy…it sounds like a person 😟🤨',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      'It is too fast at responding to be a person tho 🤖',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      "Huh don't remember adding that feature to respond to just anything…",
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      'do you have the feature suggestion feature yet?',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      'we might want to consider creeping out Rana less',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      'I am so proud of how this turned out honestly',
+    )).toBe(false);
+  });
+
+  it('rejects messages with @mentions that lack intro signals', () => {
+    expect(looksLikeIntroduction(
+      '@11395269660682 do you have the feature suggestion feature yet?',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      '@11395269660682 well in the future I want you to take feature requests and bug reports from members',
+    )).toBe(false);
+  });
+
+  it('rejects question-heavy messages', () => {
+    expect(looksLikeIntroduction(
+      'What time is the meetup? Where is it? Should I bring anything?',
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      'Has anyone been to that new ramen place? Is it any good? How long is the wait usually?',
+    )).toBe(false);
+  });
+
+  it('rejects welcome responses to other members intros', () => {
+    expect(looksLikeIntroduction(
+      "Welcome! So glad to have you here, you're going to love this community!",
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      "Welcome to the group! We do hikes and board games most weekends.",
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      "Glad you're here! You'll love the events we do around Boston.",
+    )).toBe(false);
+    expect(looksLikeIntroduction(
+      "Great to have you! If you like board games you should check out the Hobbies group too.",
+    )).toBe(false);
+  });
+
   it('rejects messages just under the length threshold', () => {
     // 39 chars — just under the 40-char minimum
     expect(looksLikeIntroduction('Hi I am new here nice to meet everyone')).toBe(false);
   });
 
-  it('accepts messages at the length threshold', () => {
-    // Exactly 40 chars
-    expect(looksLikeIntroduction('Hi I am new here, nice to meet everyone!')).toBe(true);
+  it('accepts messages at the length threshold with intro signals', () => {
+    // 40+ chars with strong intro signals (greeting + new here + nice to meet)
+    expect(looksLikeIntroduction("Hi! I'm new here, nice to meet everyone!")).toBe(true);
   });
 });
 
@@ -620,5 +681,173 @@ describe('Welcome messages', async () => {
     );
     expect(intro).toContain('Introductions');
     expect(intro).toContain('Tell us a bit about yourself');
+  });
+});
+
+// ── Feedback feature tests ──────────────────────────────────────────
+
+describe('Feedback — handleFeedbackSubmit', async () => {
+  const { handleFeedbackSubmit } = await import('../src/features/feedback.js');
+
+  it('submits a valid suggestion and returns response + owner alert', () => {
+    const result = handleFeedbackSubmit(
+      'suggestion',
+      'Add a music recommendation feature based on group listening habits',
+      '15551234567@s.whatsapp.net',
+      '120363421084703266@g.us',
+    );
+    expect(result.response).toContain('Feature suggestion received');
+    expect(result.response).toContain('#');
+    expect(result.response).toContain('!upvote');
+    expect(result.ownerAlert).not.toBeNull();
+    expect(result.ownerAlert).toContain('New feature suggestion');
+    expect(result.ownerAlert).toContain('music recommendation');
+    expect(result.ownerAlert).toContain('Hobbies');
+  });
+
+  it('submits a valid bug report', () => {
+    const result = handleFeedbackSubmit(
+      'bug',
+      'Bot responded to a normal message in Introductions that was not an introduction',
+      '15559876543@s.whatsapp.net',
+      '120363405986870419@g.us',
+    );
+    expect(result.response).toContain('Bug report received');
+    expect(result.ownerAlert).toContain('New bug report');
+    expect(result.ownerAlert).toContain('Introductions');
+  });
+
+  it('rejects empty description', () => {
+    const result = handleFeedbackSubmit(
+      'suggestion',
+      '',
+      '15551234567@s.whatsapp.net',
+      '120363421084703266@g.us',
+    );
+    expect(result.response).toContain('Please include a description');
+    expect(result.response).toContain('Example');
+    expect(result.ownerAlert).toBeNull();
+  });
+
+  it('rejects too-short description', () => {
+    const result = handleFeedbackSubmit(
+      'bug',
+      'broken',
+      '15551234567@s.whatsapp.net',
+      null,
+    );
+    expect(result.response).toContain('more detail');
+    expect(result.ownerAlert).toBeNull();
+  });
+
+  it('works from DM (null groupJid)', () => {
+    const result = handleFeedbackSubmit(
+      'suggestion',
+      'Let me configure my notification preferences for different groups',
+      '15551234567@s.whatsapp.net',
+      null,
+    );
+    expect(result.response).toContain('Feature suggestion received');
+    expect(result.ownerAlert).toContain('DM');
+  });
+});
+
+describe('Feedback — handleUpvote', async () => {
+  const { handleUpvote } = await import('../src/features/feedback.js');
+  const { submitFeedback, getOpenFeedback: _getOpenFeedback } = await import('../src/utils/db.js');
+
+  it('upvotes an existing open item', () => {
+    const entry = submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Test suggestion for upvoting');
+    const result = handleUpvote(String(entry.id), '15550000002@s.whatsapp.net');
+    expect(result).toContain('Upvoted');
+    expect(result).toContain(`#${entry.id}`);
+  });
+
+  it('prevents duplicate upvotes from same user', () => {
+    const entry = submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Another test suggestion for dedup');
+    handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
+    const result = handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
+    expect(result).toContain('already upvoted');
+  });
+
+  it('rejects invalid ID', () => {
+    const result = handleUpvote('abc', '15551234567@s.whatsapp.net');
+    expect(result).toContain('Usage');
+  });
+
+  it('rejects nonexistent ID', () => {
+    const result = handleUpvote('99999', '15551234567@s.whatsapp.net');
+    expect(result).toContain('No feedback item found');
+  });
+});
+
+describe('Feedback — handleFeedbackOwner', async () => {
+  const { handleFeedbackOwner } = await import('../src/features/feedback.js');
+  const { submitFeedback, setFeedbackStatus: _setFeedbackStatus } = await import('../src/utils/db.js');
+
+  it('lists open items with no args', () => {
+    // Items submitted in earlier tests should still be open
+    const result = handleFeedbackOwner('');
+    expect(result).toContain('Open feedback');
+  });
+
+  it('lists all items with "all" arg', () => {
+    const result = handleFeedbackOwner('all');
+    expect(result).toMatch(/feedback/i);
+  });
+
+  it('accepts an item', () => {
+    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Accept test suggestion item');
+    const result = handleFeedbackOwner(`accept ${entry.id}`);
+    expect(result).toContain('accepted');
+    expect(result).toContain(`#${entry.id}`);
+  });
+
+  it('rejects an item', () => {
+    const entry = submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Reject test bug report item');
+    const result = handleFeedbackOwner(`reject ${entry.id}`);
+    expect(result).toContain('rejected');
+  });
+
+  it('marks an item done', () => {
+    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Done test suggestion item here');
+    const result = handleFeedbackOwner(`done ${entry.id}`);
+    expect(result).toContain('done');
+  });
+
+  it('shows help for unknown subcommand', () => {
+    const result = handleFeedbackOwner('foobar');
+    expect(result).toContain('Feedback commands');
+    expect(result).toContain('accept');
+    expect(result).toContain('reject');
+  });
+
+  it('handles nonexistent ID gracefully', () => {
+    const result = handleFeedbackOwner('accept 99999');
+    expect(result).toContain('No feedback item found');
+  });
+});
+
+describe('Feedback — router integration', async () => {
+  const { matchFeature } = await import('../src/features/router.js');
+
+  it('routes !suggest to feedback', () => {
+    const match = matchFeature('!suggest Add dark mode');
+    expect(match?.feature).toBe('feedback');
+  });
+
+  it('routes !bug to feedback', () => {
+    const match = matchFeature('!bug Bot crashes on empty poll');
+    expect(match?.feature).toBe('feedback');
+  });
+
+  it('routes !upvote to feedback', () => {
+    const match = matchFeature('!upvote 5');
+    expect(match?.feature).toBe('feedback');
+  });
+
+  it('routes !feedback to feedback', () => {
+    const match = matchFeature('!feedback');
+    expect(match?.feature).toBe('feedback');
   });
 });

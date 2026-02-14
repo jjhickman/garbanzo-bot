@@ -13,7 +13,7 @@ import { logger } from '../middleware/logger.js';
  */
 
 export interface FeatureMatch {
-  feature: 'weather' | 'transit' | 'news' | 'help' | 'events' | 'dnd' | 'roll' | 'books' | 'venues' | 'poll' | 'fun' | 'character';
+  feature: 'weather' | 'transit' | 'news' | 'help' | 'events' | 'dnd' | 'roll' | 'books' | 'venues' | 'poll' | 'fun' | 'character' | 'feedback' | 'profile' | 'summary' | 'recommend' | 'voice';
   /** The query with command prefix stripped (for bang commands) or original text (natural language) */
   query: string;
 }
@@ -179,6 +179,22 @@ const BANG_COMMANDS: Record<string, FeatureMatch['feature']> = {
   '!icebreaker': 'fun',
   '!ice': 'fun',
   '!fun': 'fun',
+  '!suggest': 'feedback',
+  '!suggestion': 'feedback',
+  '!bug': 'feedback',
+  '!feedback': 'feedback',
+  '!upvote': 'feedback',
+  '!profile': 'profile',
+  '!me': 'profile',
+  '!summary': 'summary',
+  '!catchup': 'summary',
+  '!missed': 'summary',
+  '!recommend': 'recommend',
+  '!recs': 'recommend',
+  '!suggestions': 'recommend',
+  '!voice': 'voice',
+  '!speak': 'voice',
+  '!tts': 'voice',
 };
 
 /**

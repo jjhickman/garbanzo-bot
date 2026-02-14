@@ -79,3 +79,62 @@ export async function isOllamaAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+// ── Warm-up ping ────────────────────────────────────────────────────
+
+/** Interval between keep-alive pings (10 minutes) */
+const WARMUP_INTERVAL_MS = 10 * 60 * 1000;
+let warmupTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Send a keep-alive request to Ollama to prevent model unloading.
+ * Uses the /api/generate endpoint with keep_alive to reset the idle timer
+ * without generating any tokens.
+ */
+async function pingOllama(): Promise<void> {
+  try {
+    const response = await fetch(`${config.OLLAMA_BASE_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        prompt: '',
+        keep_alive: '15m',
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (response.ok) {
+      // Consume response body to prevent connection leak
+      await response.text();
+      logger.debug({ model: DEFAULT_MODEL }, 'Ollama warm-up ping OK');
+    } else {
+      logger.warn({ status: response.status }, 'Ollama warm-up ping failed');
+    }
+  } catch (err) {
+    logger.debug({ err }, 'Ollama warm-up ping error (server may be down)');
+  }
+}
+
+/**
+ * Start periodic warm-up pings. Call once at startup.
+ * Sends an immediate ping, then repeats every 10 minutes.
+ */
+export function startOllamaWarmup(): void {
+  // Immediate ping to pre-load the model
+  pingOllama().catch(() => {});
+
+  warmupTimer = setInterval(() => {
+    pingOllama().catch(() => {});
+  }, WARMUP_INTERVAL_MS);
+
+  logger.info({ intervalMin: WARMUP_INTERVAL_MS / 60_000, model: DEFAULT_MODEL }, 'Ollama warm-up scheduled');
+}
+
+/** Stop the warm-up timer (for graceful shutdown) */
+export function stopOllamaWarmup(): void {
+  if (warmupTimer) {
+    clearInterval(warmupTimer);
+    warmupTimer = null;
+  }
+}

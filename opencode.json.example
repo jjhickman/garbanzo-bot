@@ -22,20 +22,12 @@
         "deepseek/deepseek-chat-v3-0324"
       ]
     },
-    "ollama-terra": {
+    "ollama-local": {
       "options": {
         "baseURL": "http://127.0.0.1:11434/v1"
       },
       "models": {
         "qwen3:8b": {},
-        "qwen3:30b-a3b": {}
-      }
-    },
-    "ollama-macbook": {
-      "options": {
-        "baseURL": "http://100.103.40.102:11434/v1"
-      },
-      "models": {
         "qwen3:30b-a3b": {}
       }
     }
@@ -74,5 +66,38 @@
     "auto": true,
     "prune": true,
     "reserved": 8192
+  },
+
+  "mcp": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-sqlite", "--db-path", "<PROJECT_DIR>/data/garbanzo.db"]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@brave/brave-search-mcp-server"],
+      "env": {
+        "BRAVE_API_KEY": "<your-brave-search-api-key>"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-filesystem", "<PROJECT_DIR>"]
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-docker"]
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@hisma/server-puppeteer"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-github-pat>"
+      }
+    }
   }
 }

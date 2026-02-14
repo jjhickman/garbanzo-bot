@@ -16,6 +16,7 @@
 
 | Service | Port | Binding | Notes |
 |---------|------|---------|-------|
+| **Garbanzo Bot** | 3001 | localhost | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count |
 | Ollama | 11434 | localhost | 98.8 tok/s, qwen3:8b default |
 | ChromaDB | 8000 | localhost | RAG embeddings |
 | Whisper STT | 8090 | localhost | Speech-to-text (Docker) |

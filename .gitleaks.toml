@@ -1,0 +1,78 @@
+# Gitleaks configuration for Garbanzo Bot
+# https://github.com/gitleaks/gitleaks
+#
+# This file configures secret scanning. It extends the built-in rules
+# (150+ detectors for API keys, tokens, private keys, etc.) with
+# project-specific rules and allowlists.
+#
+# Run: npm run audit:secrets
+# Pre-commit: automatically runs via .git/hooks/pre-commit
+
+title = "Garbanzo Bot secret scanning config"
+
+# ─── Path Allowlists ──────────────────────────────────────────────────
+# These paths are excluded from ALL rules. They are either gitignored
+# (so they'll never be committed) or contain expected patterns.
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''baileys_auth/''',
+    '''node_modules/''',
+    '''dist/''',
+    '''data/''',
+    '''\.env$''',
+    '''package-lock\.json''',
+    '''\.gitleaks\.toml''',
+  ]
+
+# ─── Per-file allowlists for expected patterns ─────────────────────────
+# docs/SECURITY.md documents old key prefixes — not actual secrets
+# .env.example has placeholder values — not actual secrets
+# scripts/audit-secrets.sh contains regex patterns — not actual secrets
+
+[[rules]]
+  id = "security-doc-allowlist"
+  description = "Allow SECURITY.md to reference key prefixes in documentation"
+  path = '''docs/SECURITY\.md'''
+  regex = '''.*'''
+  [rules.allowlist]
+    description = "Security docs are allowed to reference key patterns"
+    paths = ['''docs/SECURITY\.md''']
+
+# ─── Custom Rules ─────────────────────────────────────────────────────
+# Project-specific patterns that the built-in rules don't cover.
+
+[[rules]]
+  id = "whatsapp-jid-personal"
+  description = "Hardcoded WhatsApp personal JID — use OWNER_JID env var"
+  regex = '''\d{10,15}@s\.whatsapp\.net'''
+  tags = ["whatsapp", "pii"]
+  [rules.allowlist]
+    description = "Allow JIDs in config, docs, examples, and test files"
+    paths = [
+      '''config/groups\.json''',
+      '''\.env\.example''',
+      '''docs/''',
+      '''AGENTS\.md''',
+      '''tests/''',
+    ]
+
+[[rules]]
+  id = "whatsapp-jid-group"
+  description = "Hardcoded WhatsApp group JID — use config/groups.json"
+  regex = '''\d{10,18}-\d{10,18}@g\.us'''
+  tags = ["whatsapp", "pii"]
+  [rules.allowlist]
+    description = "Allow group JIDs in config, docs, examples, and test files"
+    paths = [
+      '''config/groups\.json''',
+      '''\.env\.example''',
+      '''docs/''',
+      '''AGENTS\.md''',
+      '''tests/''',
+    ]
+
+# ─── Entropy-based generic secret detection ────────────────────────────
+# The built-in generic-api-key rule handles most cases. We tighten the
+# entropy threshold to reduce false positives on base64 constants.

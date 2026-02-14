@@ -4,7 +4,10 @@ import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { INTRO_SYSTEM_ADDENDUM, INTRODUCTIONS_JID } from '../features/introductions.js';
+import { getGroupPersona } from '../bot/groups.js';
 import { formatContext } from '../middleware/context.js';
+import { buildLanguageInstruction } from '../features/language.js';
+import { formatMemoriesForPrompt } from '../utils/db.js';
 
 // Load persona at startup
 const personaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
@@ -26,10 +29,14 @@ export interface MessageContext {
 /**
  * Build the full system prompt for Claude.
  * Includes the complete PERSONA.md and all context.
+ * Optionally accepts the user's message text for language detection.
  */
-export function buildSystemPrompt(ctx: MessageContext): string {
+export function buildSystemPrompt(ctx: MessageContext, userMessage?: string): string {
   const isIntroGroup = INTRODUCTIONS_JID !== null && ctx.groupJid === INTRODUCTIONS_JID;
   const context = formatContext(ctx.groupJid);
+  const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
+  const memories = formatMemoriesForPrompt();
+  const groupPersona = getGroupPersona(ctx.groupJid);
 
   return [
     personaDoc,
@@ -37,14 +44,17 @@ export function buildSystemPrompt(ctx: MessageContext): string {
     '---',
     '',
     `You are currently in the "${ctx.groupName}" group chat.`,
+    groupPersona ? `\nTone for this group: ${groupPersona}` : '',
     ctx.quotedText
       ? `The user is replying to this message: "${truncate(ctx.quotedText, 500)}"`
       : '',
     context ? `\n${context}` : '',
+    memories ? `\n${memories}` : '',
     '',
     'Keep responses concise and use WhatsApp formatting (*bold*, _italic_, ~strike~).',
     'If you are unsure about something, say so honestly.',
     isIntroGroup ? INTRO_SYSTEM_ADDENDUM : '',
+    langInstruction,
   ]
     .filter(Boolean)
     .join('\n');

@@ -3,42 +3,50 @@
     "120363423357339667@g.us": {
       "name": "General",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Casual and conversational. This is the main hangout — anything goes."
     },
     "120363423189270382@g.us": {
       "name": "Events",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Structured and helpful. Focus on logistics — dates, times, venues, transit. Be a good event planner."
     },
     "120363423376896818@g.us": {
       "name": "Entertainment",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Enthusiastic about media. Discuss TV, movies, music, games with informed opinions. No spoilers without warning."
     },
     "120363421084703266@g.us": {
       "name": "Hobbies",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Encouraging and practical. Help people get into new hobbies, share tips, suggest resources."
     },
     "120363423476654822@g.us": {
       "name": "Book Club",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Thoughtful and literary. Discuss books with depth. No spoilers without warning. Suggest reads based on what members like."
     },
     "120363407643871544@g.us": {
       "name": "Shitposting",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Loose and funny. Match the chaotic energy. Memes welcome. Still no hate speech."
     },
     "120363405986870419@g.us": {
       "name": "Introductions",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Warm and welcoming. Make new members feel at home. Reference their interests, suggest groups to join."
     },
     "120363427236939160@g.us": {
       "name": "Guild of Musicians",
       "enabled": true,
-      "requireMention": true
+      "requireMention": true,
+      "persona": "Music-focused. Talk gear, theory, jam logistics, local venues. Speak the language of musicians."
     }
   },
   "mentionPatterns": [

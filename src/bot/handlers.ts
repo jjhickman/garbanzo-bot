@@ -7,7 +7,7 @@ import {
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { isGroupJid, getSenderJid } from '../utils/jid.js';
-import { isGroupEnabled, requiresMention, isMentioned, stripMention, getGroupName } from './groups.js';
+import { isGroupEnabled, requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from './groups.js';
 import { getAIResponse } from '../ai/router.js';
 import { matchFeature } from '../features/router.js';
 import { handleWeather } from '../features/weather.js';
@@ -15,7 +15,7 @@ import { handleTransit } from '../features/transit.js';
 import { buildWelcomeMessage } from '../features/welcome.js';
 import { checkMessage, formatModerationAlert, applyStrikeAndMute, isSoftMuted, formatStrikesReport } from '../features/moderation.js';
 import { handleNews } from '../features/news.js';
-import { getHelpMessage } from '../features/help.js';
+import { getHelpMessage, getOwnerHelpMessage } from '../features/help.js';
 import { handleIntroduction, INTRODUCTIONS_JID, triggerIntroCatchUp } from '../features/introductions.js';
 import { handleEvent, handleEventPassive, EVENTS_JID } from '../features/events.js';
 import { handleDnd } from '../features/dnd.js';
@@ -24,17 +24,43 @@ import { handleVenues } from '../features/venues.js';
 import { handlePoll, isDuplicatePoll, recordPoll } from '../features/polls.js';
 import { handleFun } from '../features/fun.js';
 import { handleCharacter } from '../features/character.js';
+import { handleFeedbackSubmit, handleUpvote, handleFeedbackOwner } from '../features/feedback.js';
+import { handleRelease } from '../features/release.js';
+import { handleProfile } from '../features/profiles.js';
+import { handleSummary } from '../features/summary.js';
+import { handleRecommendations } from '../features/recommendations.js';
+import { handleMemory } from '../features/memory.js';
+import { sanitizeMessage } from '../middleware/sanitize.js';
+import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js';
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordBotResponse, recordModerationFlag, recordOwnerDM } from '../middleware/stats.js';
 import { previewDigest } from '../features/digest.js';
 import { checkRateLimit, recordResponse } from '../middleware/rate-limit.js';
-import { logModeration } from '../utils/db.js';
+import { markMessageReceived } from '../middleware/health.js';
+import { queueRetry, setRetryHandler, type RetryEntry } from '../middleware/retry.js';
+import { extractMedia, hasVisualMedia, isVoiceMessage, downloadVoiceAudio, prepareForVision, type VisionImage } from '../features/media.js';
+import { transcribeAudio, textToSpeech, handleVoiceCommand, formatVoiceList, isTTSAvailable } from '../features/voice.js';
+import { extractUrls, processUrl } from '../features/links.js';
 
 /**
  * Register all message event handlers on the socket.
  * This is the main message routing logic.
  */
 export function registerHandlers(sock: WASocket): void {
+  // Register retry handler — retries send the AI response directly
+  setRetryHandler(async (entry: RetryEntry) => {
+    const groupName = getGroupName(entry.groupJid);
+    const response = await getResponse(entry.query, {
+      groupName,
+      groupJid: entry.groupJid,
+      senderJid: entry.senderJid,
+    });
+    if (response) {
+      await sock.sendMessage(entry.groupJid, { text: response });
+      recordBotResponse(entry.groupJid);
+    }
+  });
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     for (const msg of messages) {
       try {
@@ -86,6 +112,9 @@ const MAX_MESSAGE_AGE_SECONDS = 5 * 60; // 5 minutes
  * Route a single incoming message.
  */
 async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
+  // Track message freshness for staleness detection
+  markMessageReceived();
+
   // Ignore messages sent by the bot itself
   if (msg.key.fromMe) return;
 
@@ -101,25 +130,57 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   if (!remoteJid) return;
 
   const content = unwrapMessage(msg);
-  const text = extractText(content);
+  let rawText = extractText(content);
 
   logger.debug({
     remoteJid,
     hasMessage: !!msg.message,
     hasContent: !!content,
-    hasText: !!text,
+    hasText: !!rawText,
     messageKeys: msg.message ? Object.keys(msg.message) : [],
     contentKeys: content ? Object.keys(content) : [],
   }, 'Message received');
 
-  if (!text) return;
+  // ── Voice message transcription ──
+  // If it's a voice note, transcribe it and use the transcript as the message text.
+  const isVoice = isVoiceMessage(msg);
+  if (isVoice) {
+    const audioBuffer = await downloadVoiceAudio(msg);
+    if (audioBuffer) {
+      const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
+      if (transcript) {
+        logger.info({ transcriptLen: transcript.length }, 'Voice message transcribed');
+        rawText = transcript;
+      } else {
+        logger.debug('Voice message transcription failed — skipping');
+        return;
+      }
+    } else {
+      return;
+    }
+  }
+
+  // Allow messages with visual media through even without text (e.g. image-only)
+  const hasMedia = hasVisualMedia(msg);
+  if (!rawText && !hasMedia) return;
+
+  // ── Input sanitization ──
+  const sanitized = sanitizeMessage(rawText ?? '');
+  if (sanitized.rejected) {
+    logger.debug({ reason: sanitized.rejectionReason }, 'Message rejected by sanitizer');
+    return;
+  }
+  const text = sanitized.text;
 
   const senderJid = getSenderJid(remoteJid, msg.key.participant);
 
-  // ── Record message for conversation context + stats ──
+  // ── Record message for conversation context + stats + profile ──
   recordMessage(remoteJid, senderJid, text);
   if (isGroupJid(remoteJid)) {
     recordGroupMessage(remoteJid, senderJid);
+    // Passive profile tracking — update first/last seen and active groups
+    touchProfile(senderJid);
+    updateActiveGroups(senderJid, remoteJid);
   }
 
   // ── Moderation (runs on ALL group messages, not just mentions) ──
@@ -160,13 +221,18 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   }
 
   // ── Introductions (auto-respond, no @mention needed) ──
+  // Only top-level messages can be intros — replies to other messages are
+  // members welcoming/chatting with the new person, not introducing themselves.
   if (remoteJid === INTRODUCTIONS_JID) {
-    const messageId = msg.key.id;
-    if (messageId) {
-      const introResponse = await handleIntroduction(text, messageId, senderJid, remoteJid);
-      if (introResponse) {
-        await sock.sendMessage(remoteJid, { text: introResponse }, { quoted: msg });
-        return; // Intro handled — don't also process as a general message
+    const isReply = !!content?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!isReply) {
+      const messageId = msg.key.id;
+      if (messageId) {
+        const introResponse = await handleIntroduction(text, messageId, senderJid, remoteJid);
+        if (introResponse) {
+          await sock.sendMessage(remoteJid, { text: introResponse }, { quoted: msg });
+          return; // Intro handled — don't also process as a general message
+        }
       }
     }
   }
@@ -233,9 +299,58 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       return;
     }
 
-    // Check for poll command — sends native WhatsApp poll instead of text
+    // Check for feedback commands — !suggest, !bug, !upvote (group + owner DM)
     const featureCheck = matchFeature(query);
-    if (featureCheck?.feature === 'poll') {
+    if (featureCheck?.feature === 'feedback' && isFeatureEnabled(remoteJid, 'feedback')) {
+      const bangWord = query.trim().split(/\s+/)[0].toLowerCase().replace('!', '');
+      const feedbackArgs = query.trim().slice(query.trim().indexOf(' ') + 1).trim();
+      const isBareCommand = !query.trim().includes(' ');
+
+      if (bangWord === 'suggest' || bangWord === 'suggestion') {
+        const result = handleFeedbackSubmit('suggestion', isBareCommand ? '' : feedbackArgs, senderJid, remoteJid);
+        await sock.sendMessage(remoteJid, { text: result.response }, { quoted: msg });
+        if (result.ownerAlert) {
+          try {
+            await sock.sendMessage(config.OWNER_JID, { text: result.ownerAlert });
+          } catch (err) {
+            logger.error({ err }, 'Failed to forward feedback to owner');
+          }
+        }
+        recordBotResponse(remoteJid);
+        recordResponse(senderJid, remoteJid);
+      } else if (bangWord === 'bug') {
+        const result = handleFeedbackSubmit('bug', isBareCommand ? '' : feedbackArgs, senderJid, remoteJid);
+        await sock.sendMessage(remoteJid, { text: result.response }, { quoted: msg });
+        if (result.ownerAlert) {
+          try {
+            await sock.sendMessage(config.OWNER_JID, { text: result.ownerAlert });
+          } catch (err) {
+            logger.error({ err }, 'Failed to forward feedback to owner');
+          }
+        }
+        recordBotResponse(remoteJid);
+        recordResponse(senderJid, remoteJid);
+      } else if (bangWord === 'upvote') {
+        const response = handleUpvote(isBareCommand ? '' : feedbackArgs, senderJid);
+        await sock.sendMessage(remoteJid, { text: response }, { quoted: msg });
+        recordBotResponse(remoteJid);
+        recordResponse(senderJid, remoteJid);
+      } else if (bangWord === 'feedback') {
+        // !feedback in a group — show brief help, full management is owner DM only
+        await sock.sendMessage(remoteJid, {
+          text: [
+            '💡 *Submit feedback:*',
+            '  !suggest <your idea>',
+            '  !bug <what went wrong>',
+            '  !upvote <id>',
+          ].join('\n'),
+        }, { quoted: msg });
+      }
+      return;
+    }
+
+    // Check for poll command — sends native WhatsApp poll instead of text
+    if (featureCheck?.feature === 'poll' && isFeatureEnabled(remoteJid, 'poll')) {
       const pollResult = handlePoll(featureCheck.query);
       if (typeof pollResult === 'string') {
         // Error/help message
@@ -254,7 +369,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 
     // Check for character command — sends PDF document + text summary
     // Validates PDF fields internally; if incomplete, retries and deletes previous attempt
-    if (featureCheck?.feature === 'character') {
+    if (featureCheck?.feature === 'character' && isFeatureEnabled(remoteJid, 'character')) {
       const charResult = await handleCharacter(featureCheck.query);
       if (typeof charResult === 'string') {
         await sock.sendMessage(remoteJid, { text: charResult }, { quoted: msg });
@@ -296,14 +411,83 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       return;
     }
 
-    const response = await getResponse(query, {
+    // ── Voice command (!voice) — TTS reply ──
+    if (featureCheck?.feature === 'voice' && isFeatureEnabled(remoteJid, 'voice')) {
+      const voiceCmd = handleVoiceCommand(featureCheck.query);
+      if (voiceCmd.action === 'list') {
+        await sock.sendMessage(remoteJid, { text: formatVoiceList() }, { quoted: msg });
+      } else if (isTTSAvailable()) {
+        // Speak the quoted/replied-to text, or the voice command args
+        const textToSpeak = extractQuotedText(content) ?? featureCheck.query;
+        if (!textToSpeak || textToSpeak === voiceCmd.voiceId) {
+          await sock.sendMessage(remoteJid, {
+            text: '🎙️ Reply to a message with `!voice` to hear it spoken, or `!voice list` for available voices.',
+          }, { quoted: msg });
+        } else {
+          const audio = await textToSpeech(textToSpeak, voiceCmd.voiceId);
+          if (audio) {
+            await sock.sendMessage(remoteJid, {
+              audio,
+              mimetype: 'audio/ogg; codecs=opus',
+              ptt: true,
+            }, { quoted: msg });
+            recordBotResponse(remoteJid);
+            recordResponse(senderJid, remoteJid);
+          } else {
+            await sock.sendMessage(remoteJid, { text: '🎙️ Voice generation failed. Try again.' }, { quoted: msg });
+          }
+        }
+      } else {
+        await sock.sendMessage(remoteJid, { text: '🎙️ Voice feature is not configured on this server.' }, { quoted: msg });
+      }
+      return;
+    }
+
+    // ── Media understanding (images, videos, stickers, GIFs) ──
+    let visionImages: VisionImage[] | undefined;
+    if (hasMedia) {
+      const media = await extractMedia(msg);
+      if (media) {
+        const images = await prepareForVision(media);
+        if (images.length > 0) {
+          visionImages = images;
+          logger.info({ type: media.type, imageCount: images.length }, 'Media prepared for vision');
+        }
+      }
+    }
+
+    // ── URL context enrichment ──
+    let urlContext = '';
+    const urls = extractUrls(query);
+    if (urls.length > 0) {
+      // Process first URL only (avoid long delays)
+      const urlSummary = await processUrl(urls[0]);
+      if (urlSummary) {
+        urlContext = `\n\n[Shared link context]\n${urlSummary}`;
+      }
+    }
+
+    const enrichedQuery = urlContext ? query + urlContext : query;
+
+    const response = await getResponse(enrichedQuery, {
       groupName,
       groupJid: remoteJid,
       senderJid,
       quotedText: extractQuotedText(content),
-    });
+    }, visionImages);
 
     if (response) {
+      // If AI returned the error fallback, queue for retry instead of sending error
+      if (response.includes('I hit a snag')) {
+        queueRetry({
+          groupJid: remoteJid,
+          senderJid,
+          query,
+          quotedMsgId: msg.key.id ?? undefined,
+          timestamp: Date.now(),
+        });
+        return;
+      }
       recordBotResponse(remoteJid);
       recordResponse(senderJid, remoteJid);
       await sock.sendMessage(remoteJid, { text: response }, { quoted: msg });
@@ -336,6 +520,35 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
       return;
     }
 
+    if (text.trim().toLowerCase().startsWith('!feedback')) {
+      const args = text.trim().slice('!feedback'.length).trim();
+      const result = handleFeedbackOwner(args);
+      await sock.sendMessage(remoteJid, { text: result });
+      return;
+    }
+
+    if (text.trim().toLowerCase().startsWith('!release')) {
+      const args = text.trim().slice('!release'.length).trim();
+      const result = await handleRelease(args, sock);
+      await sock.sendMessage(remoteJid, { text: result });
+      return;
+    }
+
+    if (text.trim().toLowerCase().startsWith('!memory')) {
+      const args = text.trim().slice('!memory'.length).trim();
+      const result = handleMemory(args);
+      await sock.sendMessage(remoteJid, { text: result });
+      return;
+    }
+
+    // Owner help — show both regular + owner commands
+    const lower = text.trim().toLowerCase();
+    if (lower === '!help' || lower === '!help admin' || lower === '!admin') {
+      const help = getHelpMessage() + '\n\n---\n\n' + getOwnerHelpMessage();
+      await sock.sendMessage(remoteJid, { text: help });
+      return;
+    }
+
     const response = await getResponse(text, {
       groupName: 'DM',
       groupJid: remoteJid,
@@ -355,10 +568,11 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
 async function getResponse(
   query: string,
   ctx: import('../ai/persona.js').MessageContext,
+  visionImages?: VisionImage[],
 ): Promise<string | null> {
   const feature = matchFeature(query);
 
-  if (feature) {
+  if (feature && isFeatureEnabled(ctx.groupJid, feature.feature)) {
     logger.info({ feature: feature.feature }, 'Routing to feature handler');
 
     switch (feature.feature) {
@@ -389,11 +603,17 @@ async function getResponse(
         const charResult = await handleCharacter(feature.query);
         return typeof charResult === 'string' ? charResult : charResult.summary;
       }
+      case 'profile':
+        return handleProfile(feature.query, ctx.senderJid);
+      case 'summary':
+        return await handleSummary(feature.query, ctx.groupJid, ctx.senderJid);
+      case 'recommend':
+        return await handleRecommendations(feature.query, ctx.senderJid, ctx.groupJid);
     }
   }
 
-  // No feature matched — general AI response
-  return await getAIResponse(query, ctx);
+  // No feature matched — general AI response (with optional vision)
+  return await getAIResponse(query, ctx, visionImages);
 }
 
 /** Extract text content from unwrapped message content */

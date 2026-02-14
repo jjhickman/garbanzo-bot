@@ -6,6 +6,10 @@ interface GroupConfig {
   name: string;
   enabled: boolean;
   requireMention: boolean;
+  /** Optional feature allowlist. If omitted or empty, all features are enabled. */
+  enabledFeatures?: string[];
+  /** Optional per-group persona hint appended to the system prompt */
+  persona?: string;
 }
 
 interface GroupsConfig {
@@ -45,6 +49,26 @@ export function getGroupName(jid: string): string {
 /** Check if a group requires @mention to respond */
 export function requiresMention(jid: string): boolean {
   return GROUP_IDS[jid]?.requireMention ?? true;
+}
+
+/**
+ * Get the per-group persona hint, if any.
+ * Returns undefined if no custom persona is configured for this group.
+ */
+export function getGroupPersona(jid: string): string | undefined {
+  return GROUP_IDS[jid]?.persona;
+}
+
+/**
+ * Check if a specific feature is enabled for a group.
+ * If the group has no `enabledFeatures` array (or it's empty), all features are allowed.
+ * If it has a list, only those features work in that group.
+ */
+export function isFeatureEnabled(jid: string, feature: string): boolean {
+  const group = GROUP_IDS[jid];
+  if (!group) return true; // Unknown group — allow (DMs, etc.)
+  if (!group.enabledFeatures || group.enabledFeatures.length === 0) return true;
+  return group.enabledFeatures.includes(feature);
 }
 
 /** Extract the bare identifier (without device suffix or domain) from a JID or LID */
