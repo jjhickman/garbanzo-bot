@@ -3,9 +3,11 @@ import { logger } from '../../middleware/logger.js';
 import { markMessageReceived } from '../../middleware/health.js';
 import { isVoiceMessage, downloadVoiceAudio } from '../../features/media.js';
 import { transcribeAudio } from '../../features/voice.js';
+import { config } from '../../utils/config.js';
+import { isGroupEnabled } from '../../bot/groups.js';
 import { handleOwnerDM } from '../../bot/owner-commands.js';
 import { handleGroupMessage } from '../../bot/group-handler.js';
-import { isReplyToBot } from '../../bot/reactions.js';
+import { isReplyToBot, isAcknowledgment } from '../../bot/reactions.js';
 import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound.js';
 import { createWhatsAppAdapter } from './adapter.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
@@ -46,6 +48,8 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       return isReplyToBot(wa.content, sock.user?.id, sock.user?.lid);
     },
 
+    isAcknowledgment: (t) => isAcknowledgment(t),
+
     sendAcknowledgmentReaction: async (m) => {
       const wa = m as WhatsAppInbound;
       await sock.sendMessage(wa.chatId, { react: { text: '🫘', key: wa.raw.key } });
@@ -60,5 +64,8 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       const wa = m as WhatsAppInbound;
       await handleOwnerDM(sock, wa.chatId, wa.senderId, text);
     },
+  }, {
+    ownerId: config.OWNER_JID,
+    isGroupEnabled,
   });
 }
