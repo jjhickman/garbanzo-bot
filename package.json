@@ -1,6 +1,6 @@
 {
   "name": "garbanzo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Garbanzo Bean — WhatsApp community bot for a Boston-area meetup group",
   "type": "module",
   "main": "dist/index.js",
