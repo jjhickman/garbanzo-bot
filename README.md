@@ -210,6 +210,8 @@ Copy `.env.example` to `.env` and configure:
 | `GITHUB_ISSUES_TOKEN` | No | Token used to create GitHub issues from owner-approved feedback |
 | `GITHUB_ISSUES_REPO` | No | Target repo for issue creation (`owner/repo`) |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
+| `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
+| `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner WhatsApp JID for admin features |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
@@ -407,6 +409,23 @@ Then configure an HTTP monitor in Kuma to check:
 http://<garbanzo-host>:3001/health
 ```
 
+Recommended Kuma monitor settings:
+
+- **Monitor type:** HTTP(s)
+- **Method:** GET
+- **Heartbeat interval:** 30s
+- **Request timeout:** 5s
+- **Retries:** 3
+- **Accepted status codes:** 200-299
+- **Resend interval:** 30m (or your preferred alert noise level)
+
+Suggested setup on `nas.local`:
+
+1. Add monitor name `garbanzo-health` with URL `http://<garbanzo-host>:3001/health`.
+2. Save, then verify response body includes `status`, `stale`, `uptime`, and `backup` keys.
+3. Add your notification channel (Discord, email, Slack, etc.) and run a test notification.
+4. Optional second monitor: keyword check on `"stale":false` if you want alerting on stale chat activity, not just process uptime.
+
 Keep network access restricted to trusted LAN/VPN segments.
 
 ## Support Garbanzo
@@ -446,7 +465,7 @@ Repo guardrails are configured under `.github/`:
 - `pull_request_template.md` enforces verification checklist discipline
 - `dependabot.yml` keeps npm/docker dependencies updated weekly
 - `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
-- `release-docker.yml` builds and publishes versioned Docker images to GHCR on `v*` tags
+- `release-docker.yml` builds and publishes versioned Docker images to GHCR (and optional Docker Hub) on `v*` tags
 - `release-native-binaries.yml` builds and attaches cross-platform native bundles on `v*` tags
 - release Docker workflow runs a smoke test against published image health endpoint
 - `FUNDING.yml` enables sponsorship links in GitHub UI
