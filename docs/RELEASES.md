@@ -84,6 +84,8 @@ You can run workflows manually from Actions:
 
 - `Release Docker Image` with explicit version input (e.g., `v0.2.0`)
   - optional `git_ref` input to build an existing tag/commit
-- `Release Native Binaries` with optional `git_ref` input (tag/branch/SHA)
+- `Release Native Binaries` with:
+  - optional `git_ref` input (tag/branch/SHA) for build source
+  - `release_tag` input (required for manual dispatch) to select which GitHub Release receives assets
 
 This is useful for rerunning release asset generation without creating a new tag.
