@@ -30,7 +30,7 @@ describe('owner support commands', () => {
       getHelpMessage: vi.fn(() => 'help'),
       getOwnerHelpMessage: vi.fn(() => 'owner help'),
     }));
-    vi.doMock('../src/features/introductions.js', () => ({ triggerIntroCatchUp: vi.fn(async () => 'ok') }));
+    vi.doMock('../src/platforms/whatsapp/introductions-catchup.js', () => ({ triggerIntroCatchUp: vi.fn(async () => 'ok') }));
     vi.doMock('../src/features/digest.js', () => ({ previewDigest: vi.fn(() => 'digest') }));
     vi.doMock('../src/features/moderation.js', () => ({ formatStrikesReport: vi.fn(() => 'strikes') }));
     vi.doMock('../src/features/feedback.js', () => ({
