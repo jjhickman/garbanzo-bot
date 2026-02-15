@@ -9,6 +9,9 @@ on:
       git_ref:
         description: 'Git ref to build (tag like v0.1.1, branch, or SHA). Default: current ref'
         required: false
+      release_tag:
+        description: 'Release tag to publish assets to (e.g., v0.1.1). Required for manual reruns from branches.'
+        required: false
 
 permissions:
   contents: write
@@ -104,6 +107,24 @@ jobs:
     needs: build-binaries
 
     steps:
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+            if [ -z "$TAG" ]; then
+              echo "release_tag is required when manually dispatching this workflow."
+              exit 1
+            fi
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Download built artifacts
         uses: actions/download-artifact@v4
         with:
@@ -112,6 +133,7 @@ jobs:
       - name: Publish assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_tag.outputs.value }}
           files: |
             release-artifacts/**/*.tar.gz
             release-artifacts/**/*.zip
