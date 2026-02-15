@@ -2,7 +2,8 @@ import type { WASocket, WAMessage, WAMessageContent } from '@whiskeysockets/bail
 
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
-import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from '../../bot/groups.js';
+import { requiresMention, getGroupName, isFeatureEnabled } from '../../core/groups-config.js';
+import { isMentioned, stripMention } from './mentions.js';
 import { prepareForVision, type VisionImage } from '../../core/vision.js';
 import { extractMedia } from './media.js';
 import {

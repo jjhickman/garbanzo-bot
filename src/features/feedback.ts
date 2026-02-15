@@ -1,6 +1,6 @@
 import { bold } from '../utils/formatting.js';
 import { logger } from '../middleware/logger.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 import { config } from '../utils/config.js';
 import {
   submitFeedback,

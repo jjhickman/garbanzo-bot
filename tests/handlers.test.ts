@@ -42,7 +42,7 @@ function mockHandlerDeps(): HandlerMocks {
     getSenderJid: vi.fn((_remoteJid: string, participant?: string) => participant ?? 'user@s.whatsapp.net'),
   }));
 
-  vi.doMock('../src/bot/groups.js', () => ({
+  vi.doMock('../src/core/groups-config.js', () => ({
     isGroupEnabled,
     isFeatureEnabled: vi.fn(() => true),
     getGroupName: vi.fn(() => 'General'),

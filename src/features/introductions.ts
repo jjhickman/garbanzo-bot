@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
-import { getGroupName, getEnabledGroupJidByName } from '../bot/groups.js';
+import { getGroupName, getEnabledGroupJidByName } from '../core/groups-config.js';
 import { getAIResponse } from '../ai/router.js';
 import { looksLikeIntroduction } from './intro-classifier.js';
 

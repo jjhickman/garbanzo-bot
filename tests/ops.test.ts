@@ -295,7 +295,7 @@ describe('Retry — dead letter queue', async () => {
 // ── Feature flags ───────────────────────────────────────────────────
 
 describe('Feature flags — per-group feature control', async () => {
-  const { isFeatureEnabled, isGroupEnabled, getGroupName } = await import('../src/bot/groups.js');
+  const { isFeatureEnabled, isGroupEnabled, getGroupName } = await import('../src/core/groups-config.js');
 
   it('allows all features when enabledFeatures is not set', () => {
     // General group has no enabledFeatures in config

@@ -10,7 +10,7 @@ import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../../featur
 import { handleRelease } from '../../features/release.js';
 import { handleMemory } from '../../features/memory.js';
 import { recordOwnerDM } from '../../middleware/stats.js';
-import { GROUP_IDS, isFeatureEnabled } from '../../bot/groups.js';
+import { GROUP_IDS, isFeatureEnabled } from '../../core/groups-config.js';
 import { getResponse } from '../../core/response-router.js';
 
 function buildSupportMessage(): string {

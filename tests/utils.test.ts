@@ -49,7 +49,7 @@ describe('Formatting utilities', async () => {
 });
 
 describe('Mention detection', async () => {
-  const { isMentioned, stripMention } = await import('../src/bot/groups.js');
+  const { isMentioned, stripMention } = await import('../src/platforms/whatsapp/mentions.js');
 
   it('detects text-based @garbanzo mention', () => {
     expect(isMentioned('hey @garbanzo what is the weather')).toBe(true);

@@ -6,7 +6,7 @@ import { transcribeAudio } from '../../features/voice.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
 import { config } from '../../utils/config.js';
-import { isGroupEnabled, getEnabledGroupJidByName } from '../../bot/groups.js';
+import { isGroupEnabled, getEnabledGroupJidByName } from '../../core/groups-config.js';
 import { handleOwnerDM } from './owner-commands.js';
 import { handleGroupMessage } from './group-handler.js';
 import { isReplyToBot, isAcknowledgment } from './reactions.js';
