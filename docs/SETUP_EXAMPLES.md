@@ -72,3 +72,10 @@ docker compose up -d
 docker compose logs -f garbanzo
 curl http://127.0.0.1:3001/health
 ```
+
+Deploy a specific release image tag:
+
+```bash
+APP_VERSION=0.1.1 docker compose pull garbanzo
+APP_VERSION=0.1.1 docker compose up -d
+```

@@ -156,4 +156,5 @@ Operational protections:
 
 - Default deployment: Docker Compose
 - Alternative deployment: systemd user service on Terra (native Node)
+- Release images are published to GHCR via tag-driven workflow (`v*`)
 - Do not run multiple bot instances against same Baileys auth state

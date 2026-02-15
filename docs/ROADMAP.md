@@ -267,6 +267,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 5. [x] **Automated backups verification** — health check now reports latest nightly backup integrity (`verifyLatestBackupIntegrity` + SQLite `PRAGMA integrity_check`).
 6. [x] **Rate limiting on health endpoint** — basic per-IP rate limiting added to `/health`.
 7. [x] **Credential rotation workflow** — monthly GitHub Action reminder (`credential-rotation-reminder.yml`) + local helper for rotating Actions secrets from env (`npm run rotate:gh-secrets`).
+8. [x] **Release automation + version metadata** — tag-driven GHCR image publishing (`release-docker.yml`) and version injection into release notes / Docker runtime (`APP_VERSION`, `GARBANZO_VERSION`).
 7. [ ] **Log monitoring/alerting** — evaluate lightweight solutions (e.g., Logwatch, simple Pino log grep script) to surface error spikes or unusual patterns without a full observability stack.
 
 ### Gate
