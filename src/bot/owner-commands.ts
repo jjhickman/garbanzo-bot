@@ -9,9 +9,8 @@ import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../features/
 import { handleRelease } from '../features/release.js';
 import { handleMemory } from '../features/memory.js';
 import { recordOwnerDM } from '../middleware/stats.js';
-import { playChime } from '../utils/chime.js';
 import { GROUP_IDS } from './groups.js';
-import { getResponse } from './handlers.js';
+import { getResponse } from './response-router.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [
@@ -131,13 +130,6 @@ export async function handleOwnerDM(
     const args = text.trim().slice('!release'.length).trim();
     const result = await handleRelease(args, sock);
     await sock.sendMessage(remoteJid, { text: result });
-    return true;
-  }
-
-  // !chime test
-  if (trimmedLower === '!chime' || trimmedLower === '!chime test') {
-    const ok = await playChime('owner_dm_test');
-    await sock.sendMessage(remoteJid, { text: ok ? '🔔 Chime played on host.' : '⚠️ Chime not played (disabled or no audio player).' });
     return true;
   }
 

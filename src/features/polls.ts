@@ -51,11 +51,18 @@ export function isDuplicatePoll(groupJid: string, question: string): boolean {
 
 /** Record a poll as recently created */
 export function recordPoll(groupJid: string, question: string): void {
-  if (!recentPolls.has(groupJid)) recentPolls.set(groupJid, []);
-  recentPolls.get(groupJid)!.push({
+  const entry = {
     normalized: normalize(question),
     timestamp: Date.now(),
-  });
+  };
+
+  const existing = recentPolls.get(groupJid);
+  if (existing) {
+    existing.push(entry);
+    return;
+  }
+
+  recentPolls.set(groupJid, [entry]);
 }
 
 export interface PollData {

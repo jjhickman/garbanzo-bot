@@ -21,8 +21,8 @@ describe('Profiles — member profile management', async () => {
   it('creates profile on touch', () => {
     touchProfile(testJid);
     const profile = getProfile(testJid);
-    expect(profile).toBeDefined();
-    expect(profile!.jid).toBe('15551234567');
+    if (!profile) throw new Error('expected profile');
+    expect(profile.jid).toBe('15551234567');
   });
 
   it('sets interests via command', () => {
@@ -32,7 +32,8 @@ describe('Profiles — member profile management', async () => {
     expect(response).toContain('hiking');
 
     const profile = getProfile(testJid);
-    const interests = JSON.parse(profile!.interests);
+    if (!profile) throw new Error('expected profile');
+    const interests = JSON.parse(profile.interests);
     expect(interests).toContain('hiking');
     expect(interests).toContain('cooking');
     expect(interests).toContain('board games');
@@ -126,26 +127,26 @@ describe('Language — multi-language detection', async () => {
 
   it('detects Spanish', () => {
     const result = detectLanguage('Hola, cómo está todo? Gracias por la ayuda');
-    expect(result).not.toBeNull();
-    expect(result!.code).toBe('es');
+    if (!result) throw new Error('expected language result');
+    expect(result.code).toBe('es');
   });
 
   it('detects Chinese characters', () => {
     const result = detectLanguage('你好世界，今天天气怎么样');
-    expect(result).not.toBeNull();
-    expect(result!.code).toBe('zh');
+    if (!result) throw new Error('expected language result');
+    expect(result.code).toBe('zh');
   });
 
   it('detects Korean characters', () => {
     const result = detectLanguage('안녕하세요 오늘 날씨가 좋습니다');
-    expect(result).not.toBeNull();
-    expect(result!.code).toBe('ko');
+    if (!result) throw new Error('expected language result');
+    expect(result.code).toBe('ko');
   });
 
   it('detects Japanese characters', () => {
     const result = detectLanguage('こんにちは、今日はいい天気ですね');
-    expect(result).not.toBeNull();
-    expect(result!.code).toBe('ja');
+    if (!result) throw new Error('expected language result');
+    expect(result.code).toBe('ja');
   });
 
   it('returns empty string for English in buildLanguageInstruction', () => {

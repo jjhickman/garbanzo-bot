@@ -151,12 +151,14 @@ export function registerIntroCatchUp(sock: WASocket): void {
     return;
   }
 
+  const groupJid = INTRODUCTIONS_JID;
+
   const cutoffTimestamp = Math.floor(Date.now() / 1000) - (CATCHUP_DAYS * 24 * 60 * 60);
 
   // Filter function shared by both catch-up paths
   function filterIntroMessages(messages: WAMessage[]): WAMessage[] {
     return messages.filter((msg) => {
-      if (msg.key.remoteJid !== INTRODUCTIONS_JID) return false;
+      if (msg.key.remoteJid !== groupJid) return false;
       if (msg.key.fromMe) return false;
 
       const ts = msg.messageTimestamp;
@@ -195,7 +197,7 @@ export function registerIntroCatchUp(sock: WASocket): void {
       { count: introMessages.length, source: 'history-sync' },
       'Found missed introductions — responding',
     );
-    await processMissedIntros(sock, sortOldestFirst(introMessages));
+    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
   });
 
   // Path 2: messages.upsert with type != 'notify' — Baileys delivers messages
@@ -211,7 +213,7 @@ export function registerIntroCatchUp(sock: WASocket): void {
       { count: introMessages.length, type, source: 'messages-upsert' },
       'Found missed introductions via message sync — responding',
     );
-    await processMissedIntros(sock, sortOldestFirst(introMessages));
+    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
   });
 
   // Path 3: Actively request message history from the Introductions group.
@@ -220,14 +222,14 @@ export function registerIntroCatchUp(sock: WASocket): void {
   const HISTORY_REQUEST_DELAY_MS = 5_000; // wait for connection to stabilize
   setTimeout(async () => {
     try {
-      logger.info({ group: INTRODUCTIONS_JID }, 'Requesting Introductions group message history');
+      logger.info({ group: groupJid }, 'Requesting Introductions group message history');
       await sock.fetchMessageHistory(
         50,
-        { remoteJid: INTRODUCTIONS_JID!, fromMe: false, id: '' },
+        { remoteJid: groupJid, fromMe: false, id: '' },
         Math.floor(Date.now() / 1000),
       );
     } catch (err) {
-      logger.warn({ err, groupJid: INTRODUCTIONS_JID }, 'Failed to request message history — catch-up will rely on passive sync');
+      logger.warn({ err, groupJid }, 'Failed to request message history — catch-up will rely on passive sync');
     }
   }, HISTORY_REQUEST_DELAY_MS);
 
@@ -240,6 +242,7 @@ export function registerIntroCatchUp(sock: WASocket): void {
  */
 async function processMissedIntros(
   sock: WASocket,
+  groupJid: string,
   messages: WAMessage[],
 ): Promise<void> {
   for (const msg of messages) {
@@ -249,14 +252,16 @@ async function processMissedIntros(
       ?? content?.imageMessage?.caption
       ?? '';
 
-    const messageId = msg.key.id!;
-    const senderJid = getSenderJid(INTRODUCTIONS_JID!, msg.key.participant);
+    const messageId = msg.key.id;
+    if (!messageId) continue;
 
-    const response = await handleIntroduction(text, messageId, senderJid, INTRODUCTIONS_JID!);
+    const senderJid = getSenderJid(groupJid, msg.key.participant);
+
+    const response = await handleIntroduction(text, messageId, senderJid, groupJid);
 
     if (response) {
       try {
-        await sock.sendMessage(INTRODUCTIONS_JID!, { text: response }, { quoted: msg });
+        await sock.sendMessage(groupJid, { text: response }, { quoted: msg });
         logger.info({ messageId, sender: senderJid }, 'Catch-up introduction response sent');
       } catch (err) {
         logger.error({ err, messageId }, 'Failed to send catch-up intro response');

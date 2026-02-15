@@ -119,9 +119,6 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
   !support — preview support links message
   !support broadcast — send support message to all enabled groups
 
-*Ops*
-  !chime test — play a loud chime on the host (if enabled)
-
 _These commands only work in DM with the bot._"
 `;
 

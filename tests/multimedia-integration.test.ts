@@ -38,7 +38,8 @@ describe('Media pipeline integration (mocked)', () => {
     expect(media?.caption).toBe('Look at this');
     expect(downloadMediaMessage).toHaveBeenCalledTimes(1);
 
-    const vision = await prepareForVision(media!);
+    if (!media) throw new Error('expected media');
+    const vision = await prepareForVision(media);
     expect(vision).toHaveLength(1);
     expect(vision[0]?.mediaType).toBe('image/png');
     expect(vision[0]?.description).toBe('Look at this');

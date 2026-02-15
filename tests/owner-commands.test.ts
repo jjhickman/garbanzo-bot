@@ -40,7 +40,7 @@ describe('owner support commands', () => {
     vi.doMock('../src/features/release.js', () => ({ handleRelease: vi.fn(async () => 'release') }));
     vi.doMock('../src/features/memory.js', () => ({ handleMemory: vi.fn(() => 'memory') }));
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
-    vi.doMock('../src/bot/handlers.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
+    vi.doMock('../src/bot/response-router.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
     vi.doMock('../src/bot/groups.js', () => ({
       GROUP_IDS: {
         'g1@g.us': { name: 'General', enabled: true },

@@ -11,7 +11,6 @@ import { checkRateLimit, recordResponse } from '../middleware/rate-limit.js';
 import { recordBotResponse } from '../middleware/stats.js';
 import { queueRetry } from '../middleware/retry.js';
 import { getResponse } from '../bot/response-router.js';
-import { isFeatureEnabled } from '../bot/groups.js';
 import type { VisionImage } from '../features/media.js';
 import type { PlatformMessenger } from './platform-messenger.js';
 
@@ -24,6 +23,8 @@ export interface ProcessGroupMessageParams {
 
   /** Mention-stripped query string (optionally enriched, e.g. with URL context). */
   query: string;
+
+  isFeatureEnabled: (chatId: string, feature: string) => boolean;
 
   quotedText?: string;
   messageId?: string;
@@ -49,6 +50,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     messageId,
     replyTo,
     visionImages,
+    isFeatureEnabled,
   } = params;
 
   // Soft-muted users get silently ignored
