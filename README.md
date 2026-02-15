@@ -28,6 +28,11 @@ Garbanzo is opinionated around community operations, not just message transport.
 - **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows (`!feedback issue <id>`).
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
+## Personas
+
+- Default persona: `docs/PERSONA.md`
+- Optional per-platform persona override: `docs/personas/<platform>.md` (example: `docs/personas/whatsapp.md`)
+
 ## Lessons From Our OpenClaw-Inspired Stack (Trust & Maturity)
 
 Before Garbanzo, we ran a more ambitious OpenClaw-inspired setup (many services, lots of automation, and a bigger "agent surface area"). That project taught a key lesson:

@@ -1,8 +1,5 @@
-import { startConnection } from './bot/connection.js';
-import { registerHandlers } from './bot/handlers.js';
-import { registerIntroCatchUp } from './features/introductions.js';
-import { scheduleDigest } from './features/digest.js';
 import { closeDb, scheduleMaintenance } from './utils/db.js';
+import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
 import { config } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
@@ -14,18 +11,13 @@ async function main(): Promise<void> {
 
   const healthOnlyMode = process.env.HEALTH_ONLY?.toLowerCase() === 'true';
 
-  if (config.MESSAGING_PLATFORM !== 'whatsapp') {
-    logger.fatal({
-      messagingPlatform: config.MESSAGING_PLATFORM,
-      supported: ['whatsapp'],
-    }, 'Selected messaging platform is not implemented yet');
-    process.exit(1);
-  }
+  // Platform runtime selection
 
   const cloudProviders: string[] = [];
   if (config.OPENROUTER_API_KEY) cloudProviders.push('openrouter');
   if (config.ANTHROPIC_API_KEY) cloudProviders.push('anthropic');
   if (config.OPENAI_API_KEY) cloudProviders.push('openai');
+  if (config.GEMINI_API_KEY) cloudProviders.push('gemini');
 
   logger.info({
     cloudProviders,
@@ -52,12 +44,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  await startConnection((sock) => {
-    registerHandlers(sock);
-    registerIntroCatchUp(sock);
-    scheduleDigest(sock);
-    logger.info('🫘 Garbanzo Bean is online and listening');
-  });
+  const runtime = getPlatformRuntime();
+  logger.info({ platform: runtime.platform }, 'Starting platform runtime');
+  await runtime.start();
+  logger.info('🫘 Garbanzo Bean is online and listening');
 }
 
 main().catch((err) => {

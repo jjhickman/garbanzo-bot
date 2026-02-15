@@ -233,15 +233,34 @@ async function main() {
     let messagingPlatform = 'whatsapp';
     if (nonInteractive) {
       const requestedPlatform = (cli.options.platform || existing.MESSAGING_PLATFORM || 'whatsapp').trim().toLowerCase();
-      messagingPlatform = requestedPlatform === 'discord' ? 'discord' : 'whatsapp';
+      messagingPlatform = ['whatsapp', 'discord', 'slack', 'teams'].includes(requestedPlatform)
+        ? requestedPlatform
+        : 'whatsapp';
     } else {
       const platformIndex = await promptChoice(
         rl,
         'Messaging platform:',
-        ['WhatsApp (supported now)', 'Discord (planned; runtime support pending)'],
-        existing.MESSAGING_PLATFORM === 'discord' ? 1 : 0,
+        [
+          'WhatsApp (supported now)',
+          'Slack (planned; runtime support pending)',
+          'Teams (planned; runtime support pending)',
+          'Discord (planned; runtime support pending)',
+        ],
+        existing.MESSAGING_PLATFORM === 'slack'
+          ? 1
+          : existing.MESSAGING_PLATFORM === 'teams'
+            ? 2
+            : existing.MESSAGING_PLATFORM === 'discord'
+              ? 3
+              : 0,
       );
-      messagingPlatform = platformIndex === 1 ? 'discord' : 'whatsapp';
+      messagingPlatform = platformIndex === 1
+        ? 'slack'
+        : platformIndex === 2
+          ? 'teams'
+          : platformIndex === 3
+            ? 'discord'
+            : 'whatsapp';
     }
 
     let deployTarget = 'docker';

@@ -1,7 +1,7 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { PROJECT_ROOT, config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { INTRO_SYSTEM_ADDENDUM, INTRODUCTIONS_JID } from '../features/introductions.js';
 import { getGroupPersona } from '../bot/groups.js';
@@ -10,13 +10,16 @@ import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPrompt } from '../utils/db.js';
 
 // Load persona at startup
-const personaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
+const defaultPersonaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
+const platformPersonaPath = resolve(PROJECT_ROOT, 'docs', 'personas', `${config.MESSAGING_PLATFORM}.md`);
+
 let personaDoc: string;
 try {
-  personaDoc = readFileSync(personaPath, 'utf-8');
+  const chosen = existsSync(platformPersonaPath) ? platformPersonaPath : defaultPersonaPath;
+  personaDoc = readFileSync(chosen, 'utf-8');
 } catch {
   logger.warn('PERSONA.md not found — using minimal system prompt');
-  personaDoc = 'You are Garbanzo Bean, a WhatsApp community bot for a Boston meetup group. Be warm, direct, and helpful.';
+  personaDoc = 'You are Garbanzo Bean, a community chat bot. Be warm, direct, and helpful.';
 }
 
 export interface MessageContext {
