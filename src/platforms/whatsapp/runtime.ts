@@ -3,7 +3,7 @@ import { logger } from '../../middleware/logger.js';
 import { startConnection } from './connection.js';
 import { registerWhatsAppHandlers } from './handlers.js';
 import { registerIntroCatchUp } from './introductions-catchup.js';
-import { scheduleDigest } from '../../features/digest.js';
+import { scheduleDigest } from './digest.js';
 import type { PlatformRuntime } from '../types.js';
 
 export function createWhatsAppRuntime(): PlatformRuntime {
