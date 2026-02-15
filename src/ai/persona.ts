@@ -3,8 +3,8 @@ import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT, config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
-import { INTRO_SYSTEM_ADDENDUM, INTRODUCTIONS_JID } from '../features/introductions.js';
-import { getGroupPersona } from '../bot/groups.js';
+import { INTRO_SYSTEM_ADDENDUM } from '../features/introductions.js';
+import { getGroupPersona, getEnabledGroupJidByName } from '../bot/groups.js';
 import { formatContext } from '../middleware/context.js';
 import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPrompt } from '../utils/db.js';
@@ -35,7 +35,8 @@ export interface MessageContext {
  * Optionally accepts the user's message text for language detection.
  */
 export function buildSystemPrompt(ctx: MessageContext, userMessage?: string): string {
-  const isIntroGroup = INTRODUCTIONS_JID !== null && ctx.groupJid === INTRODUCTIONS_JID;
+  const introductionsChatId = getEnabledGroupJidByName('Introductions');
+  const isIntroGroup = !!introductionsChatId && ctx.groupJid === introductionsChatId;
   const context = formatContext(ctx.groupJid);
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
   const memories = formatMemoriesForPrompt();

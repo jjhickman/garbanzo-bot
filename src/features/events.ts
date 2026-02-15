@@ -1,7 +1,7 @@
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { bold } from '../utils/formatting.js';
-import { GROUP_IDS } from '../bot/groups.js';
+import { getEnabledGroupJidByName } from '../bot/groups.js';
 import { handleWeather } from './weather.js';
 import { handleTransit } from './transit.js';
 import { getAIResponse } from '../ai/router.js';
@@ -21,16 +21,7 @@ const MIN_EVENT_TEXT_LENGTH = 15;
 
 // ── Events group JID ────────────────────────────────────────────────
 
-function getEventsJid(): string | null {
-  for (const [jid, cfg] of Object.entries(GROUP_IDS)) {
-    if (cfg.name === 'Events' && cfg.enabled) {
-      return jid;
-    }
-  }
-  return null;
-}
-
-export const EVENTS_JID = getEventsJid();
+export const EVENTS_JID = getEnabledGroupJidByName('Events');
 
 // ── Event detection patterns ────────────────────────────────────────
 // Adapted from archive/openclaw/hooks/whatsapp-event-enrichment.js

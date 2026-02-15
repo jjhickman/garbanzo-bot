@@ -7,7 +7,7 @@ import {
 } from '@whiskeysockets/baileys';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT } from '../utils/config.js';
-import { getGroupName, GROUP_IDS } from '../bot/groups.js';
+import { getGroupName, getEnabledGroupJidByName } from '../bot/groups.js';
 import { getAIResponse } from '../ai/router.js';
 import { getSenderJid } from '../utils/jid.js';
 import { looksLikeIntroduction } from './intro-classifier.js';
@@ -40,17 +40,7 @@ const TRACKER_PATH = resolve(PROJECT_ROOT, 'data', 'intro-tracker.json');
 
 // ── Intro JID lookup ────────────────────────────────────────────────
 
-/** Find the Introductions group JID from config */
-function getIntroductionsJid(): string | null {
-  for (const [jid, cfg] of Object.entries(GROUP_IDS)) {
-    if (cfg.name === 'Introductions' && cfg.enabled) {
-      return jid;
-    }
-  }
-  return null;
-}
-
-export const INTRODUCTIONS_JID = getIntroductionsJid();
+export const INTRODUCTIONS_JID = getEnabledGroupJidByName('Introductions');
 
 // ── Tracker (persisted set of message IDs we've responded to) ───────
 
