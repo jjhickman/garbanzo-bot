@@ -76,6 +76,6 @@ curl http://127.0.0.1:3001/health
 Deploy a specific release image tag (recommended):
 
 ```bash
-APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
