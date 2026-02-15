@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 import { bold } from '../utils/formatting.js';
 import { phoneFromJid } from '../utils/jid.js';
 import { config } from '../utils/config.js';

@@ -16,7 +16,7 @@
 
 import { logger } from '../middleware/logger.js';
 import { getProfile, getOptedInProfiles, type MemberProfile } from '../utils/db.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 import { getAIResponse } from '../ai/router.js';
 
 /**

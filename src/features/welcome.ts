@@ -1,5 +1,5 @@
 import { logger } from '../middleware/logger.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 import { bold } from '../utils/formatting.js';
 
 /**

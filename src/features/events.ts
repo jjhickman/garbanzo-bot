@@ -1,7 +1,7 @@
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { bold } from '../utils/formatting.js';
-import { getEnabledGroupJidByName } from '../bot/groups.js';
+import { getEnabledGroupJidByName } from '../core/groups-config.js';
 import { handleWeather } from './weather.js';
 import { handleTransit } from './transit.js';
 import { getAIResponse } from '../ai/router.js';

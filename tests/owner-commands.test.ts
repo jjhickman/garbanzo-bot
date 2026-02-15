@@ -41,7 +41,7 @@ describe('owner support commands', () => {
     vi.doMock('../src/features/memory.js', () => ({ handleMemory: vi.fn(() => 'memory') }));
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
     vi.doMock('../src/core/response-router.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
-    vi.doMock('../src/bot/groups.js', () => ({
+    vi.doMock('../src/core/groups-config.js', () => ({
       GROUP_IDS: {
         'g1@g.us': { name: 'General', enabled: true },
         'g2@g.us': { name: 'Offtopic', enabled: true },

@@ -24,7 +24,7 @@ function setupMocks() {
     },
   }));
 
-  vi.doMock('../src/bot/groups.js', () => ({
+  vi.doMock('../src/core/groups-config.js', () => ({
     GROUP_IDS: {
       'intro@g.us': { name: 'Introductions', enabled: true },
       'events@g.us': { name: 'Events', enabled: true },
@@ -32,11 +32,12 @@ function setupMocks() {
       'group-legacy@g.us': { name: 'General Legacy', enabled: true },
       'group-core@g.us': { name: 'General Core', enabled: true },
     },
+    MENTION_PATTERNS: ['@garbanzo'],
     requiresMention: vi.fn(() => true),
-    isMentioned: vi.fn(() => true),
-    stripMention: vi.fn((t: string) => t),
     getGroupName: vi.fn(() => 'General'),
     isFeatureEnabled,
+    isGroupEnabled: vi.fn(() => true),
+    getEnabledGroupJidByName: vi.fn(() => null),
   }));
 
   vi.doMock('../src/middleware/rate-limit.js', () => ({

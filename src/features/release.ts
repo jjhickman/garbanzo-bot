@@ -12,7 +12,7 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
-import { GROUP_IDS } from '../bot/groups.js';
+import { GROUP_IDS } from '../core/groups-config.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 
 let cachedVersion: string | null = null;

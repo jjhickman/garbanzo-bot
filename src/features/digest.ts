@@ -7,7 +7,7 @@
 
 import { logger } from '../middleware/logger.js';
 import { getCurrentStats, type DailyStats } from '../middleware/stats.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 import { saveDailyStats } from '../utils/db.js';
 
 export function archiveDailyDigest(stats: DailyStats): void {

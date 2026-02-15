@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
 
 import { logger } from '../../middleware/logger.js';
-import { isGroupEnabled, getGroupName, getEnabledGroupJidByName, isFeatureEnabled } from '../../bot/groups.js';
+import { isGroupEnabled, getGroupName, getEnabledGroupJidByName, isFeatureEnabled } from '../../core/groups-config.js';
 import { buildWelcomeMessage } from '../../features/welcome.js';
 import { recordBotResponse } from '../../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../../middleware/retry.js';
