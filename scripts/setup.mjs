@@ -10,6 +10,17 @@ const PROJECT_ROOT = resolve(new URL('..', import.meta.url).pathname);
 const ENV_PATH = resolve(PROJECT_ROOT, '.env');
 const GROUPS_PATH = resolve(PROJECT_ROOT, 'config', 'groups.json');
 const PERSONA_PATH = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
+const PACKAGE_JSON_PATH = resolve(PROJECT_ROOT, 'package.json');
+
+let DEFAULT_APP_VERSION = '0.1.0';
+try {
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8'));
+  if (typeof pkg.version === 'string' && pkg.version.trim()) {
+    DEFAULT_APP_VERSION = pkg.version.trim();
+  }
+} catch {
+  // fallback is fine
+}
 
 const FEATURE_PROFILES = {
   full: {
@@ -129,6 +140,7 @@ function redactEnvContent(content) {
     'ANTHROPIC_API_KEY=',
     'OPENROUTER_API_KEY=',
     'OPENAI_API_KEY=',
+    'GITHUB_ISSUES_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
   ];
@@ -179,6 +191,7 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --platform=whatsapp --deploy=docker --providers=openrouter,openai --provider-order=openai,openrouter\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
+    output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=jjhickman/garbanzo-bot --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     process.exit(0);
   }
@@ -332,6 +345,9 @@ async function main() {
     const ownerJid = nonInteractive
       ? (cli.options['owner-jid'] ?? existing.OWNER_JID ?? 'your_number@s.whatsapp.net')
       : await rl.question(`OWNER_JID [${existing.OWNER_JID ?? 'your_number@s.whatsapp.net'}]: `);
+    const appVersion = nonInteractive
+      ? (cli.options['app-version'] ?? existing.APP_VERSION ?? DEFAULT_APP_VERSION)
+      : await rl.question(`APP_VERSION [${existing.APP_VERSION ?? DEFAULT_APP_VERSION}]: `);
 
     const githubSponsorsUrl = nonInteractive
       ? (cli.options['github-sponsors-url'] ?? existing.GITHUB_SPONSORS_URL ?? '')
@@ -348,6 +364,12 @@ async function main() {
     const supportMessage = nonInteractive
       ? (cli.options['support-message'] ?? existing.SUPPORT_MESSAGE ?? '')
       : await rl.question(`SUPPORT_MESSAGE [${existing.SUPPORT_MESSAGE ?? ''}]: `);
+    const githubIssuesToken = nonInteractive
+      ? (cli.options['github-issues-token'] ?? existing.GITHUB_ISSUES_TOKEN ?? '')
+      : await rl.question(`GITHUB_ISSUES_TOKEN [${existing.GITHUB_ISSUES_TOKEN ?? ''}]: `);
+    const githubIssuesRepo = nonInteractive
+      ? (cli.options['github-issues-repo'] ?? existing.GITHUB_ISSUES_REPO ?? 'jjhickman/garbanzo-bot')
+      : await rl.question(`GITHUB_ISSUES_REPO [${existing.GITHUB_ISSUES_REPO ?? 'jjhickman/garbanzo-bot'}]: `);
 
     const profileKeys = Object.keys(FEATURE_PROFILES);
     const profileLabels = profileKeys.map((key) => `${FEATURE_PROFILES[key].label} — ${FEATURE_PROFILES[key].description}`);
@@ -439,8 +461,11 @@ async function main() {
       KOFI_URL: (kofiUrl || existing.KOFI_URL || '').trim(),
       SUPPORT_CUSTOM_URL: (supportCustomUrl || existing.SUPPORT_CUSTOM_URL || '').trim(),
       SUPPORT_MESSAGE: (supportMessage || existing.SUPPORT_MESSAGE || '').trim(),
+      GITHUB_ISSUES_TOKEN: (githubIssuesToken || existing.GITHUB_ISSUES_TOKEN || '').trim(),
+      GITHUB_ISSUES_REPO: (githubIssuesRepo || existing.GITHUB_ISSUES_REPO || 'jjhickman/garbanzo-bot').trim(),
       OLLAMA_BASE_URL: (ollamaBaseUrl || existing.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim(),
       LOG_LEVEL: (existing.LOG_LEVEL || 'info').trim(),
+      APP_VERSION: (appVersion || existing.APP_VERSION || DEFAULT_APP_VERSION).trim(),
       OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
     };
 
@@ -473,10 +498,13 @@ async function main() {
       `KOFI_URL=${finalEnv.KOFI_URL}`,
       `SUPPORT_CUSTOM_URL=${finalEnv.SUPPORT_CUSTOM_URL}`,
       `SUPPORT_MESSAGE=${finalEnv.SUPPORT_MESSAGE}`,
+      `GITHUB_ISSUES_TOKEN=${finalEnv.GITHUB_ISSUES_TOKEN}`,
+      `GITHUB_ISSUES_REPO=${finalEnv.GITHUB_ISSUES_REPO}`,
       '',
       '# Runtime',
       `OLLAMA_BASE_URL=${finalEnv.OLLAMA_BASE_URL}`,
       `LOG_LEVEL=${finalEnv.LOG_LEVEL}`,
+      `APP_VERSION=${finalEnv.APP_VERSION}`,
       '',
     ].join('\n');
 

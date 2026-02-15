@@ -33,7 +33,10 @@ describe('owner support commands', () => {
     vi.doMock('../src/features/introductions.js', () => ({ triggerIntroCatchUp: vi.fn(async () => 'ok') }));
     vi.doMock('../src/features/digest.js', () => ({ previewDigest: vi.fn(() => 'digest') }));
     vi.doMock('../src/features/moderation.js', () => ({ formatStrikesReport: vi.fn(() => 'strikes') }));
-    vi.doMock('../src/features/feedback.js', () => ({ handleFeedbackOwner: vi.fn(() => 'feedback') }));
+    vi.doMock('../src/features/feedback.js', () => ({
+      handleFeedbackOwner: vi.fn(() => 'feedback'),
+      createGitHubIssueFromFeedback: vi.fn(async (id: number) => `created issue for #${id}`),
+    }));
     vi.doMock('../src/features/release.js', () => ({ handleRelease: vi.fn(async () => 'release') }));
     vi.doMock('../src/features/memory.js', () => ({ handleMemory: vi.fn(() => 'memory') }));
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
@@ -86,5 +89,23 @@ describe('owner support commands', () => {
     expect(targets).toContain('g1@g.us');
     expect(targets).toContain('g2@g.us');
     expect(targets).toContain('owner@s.whatsapp.net');
+  });
+
+  it('creates GitHub issue from accepted feedback via owner command', async () => {
+    mockOwnerDeps();
+    const { handleOwnerDM } = await import('../src/bot/owner-commands.js');
+    const sock = { sendMessage: vi.fn(async () => undefined) };
+
+    const handled = await handleOwnerDM(
+      sock as never,
+      'owner@s.whatsapp.net',
+      'owner@s.whatsapp.net',
+      '!feedback issue 42',
+    );
+
+    expect(handled).toBe(true);
+    expect(sock.sendMessage).toHaveBeenCalledTimes(1);
+    const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
+    expect(calls[0]?.[1]?.text).toContain('created issue for #42');
   });
 });
