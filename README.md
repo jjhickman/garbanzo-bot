@@ -574,6 +574,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
 - [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
 - [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
+- [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
 - [OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md) — OpenClaw-style stack comparison and tradeoffs
 - [CHANGELOG.md](CHANGELOG.md) — Full release history

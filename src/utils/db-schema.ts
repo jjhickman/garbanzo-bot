@@ -9,10 +9,15 @@ import Database from 'better-sqlite3';
 import { resolve } from 'path';
 import { mkdirSync } from 'fs';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from './config.js';
+import { PROJECT_ROOT, config } from './config.js';
 
 export const DB_DIR = resolve(PROJECT_ROOT, 'data');
 export const DB_PATH = resolve(DB_DIR, 'garbanzo.db');
+
+if (config.DB_DIALECT !== 'sqlite') {
+  logger.error({ dialect: config.DB_DIALECT }, 'Unsupported DB dialect (only sqlite is implemented)');
+  throw new Error('DB_DIALECT is set to a non-sqlite dialect, but only sqlite is implemented in this build');
+}
 
 // Ensure data directory exists
 mkdirSync(DB_DIR, { recursive: true });

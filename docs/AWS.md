@@ -11,6 +11,8 @@ Garbanzo also uses SQLite for local state by default. For the simplest, most rel
 
 ## Scaling Note (SQLite + Baileys)
 
+See also: `docs/SCALING.md`
+
 Today, Garbanzo is designed as a single-instance deployment:
 
 - Baileys session state is not designed for active-active multi-replica operation.
