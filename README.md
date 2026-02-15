@@ -136,47 +136,56 @@ On first run, Baileys will display a QR code in the terminal. Scan it with Whats
 
 ## Demo
 
-Real WhatsApp screenshots (no AI mockups):
+Real WhatsApp screenshots (tap to zoom). These are real outputs from Garbanzo in a WhatsApp chat.
 
 <table>
   <tr>
     <td width="50%">
       <b>Help + command discovery</b><br/>
-      <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Garbanzo help output in WhatsApp" />
+      <img src="docs/assets/screenshots/real/help-usage.jpg" width="520" alt="Garbanzo help output in WhatsApp" />
     </td>
     <td width="50%">
       <b>Introductions welcome</b><br/>
-      <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Garbanzo welcomes a new introduction" />
+      <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="520" alt="Garbanzo welcomes a new introduction" />
     </td>
   </tr>
+</table>
+
+<table>
   <tr>
     <td width="50%">
       <b>Weather report</b><br/>
-      <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Garbanzo weather report" />
+      <img src="docs/assets/screenshots/real/weather-report.jpg" width="520" alt="Garbanzo weather report" />
     </td>
     <td width="50%">
       <b>MBTA alerts</b><br/>
-      <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="Garbanzo MBTA transit alerts" />
+      <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="520" alt="Garbanzo MBTA transit alerts" />
     </td>
   </tr>
+</table>
+
+<table>
   <tr>
     <td width="50%">
       <b>Local news</b><br/>
-      <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Garbanzo local news" />
+      <img src="docs/assets/screenshots/real/news.jpg" width="520" alt="Garbanzo local news" />
     </td>
     <td width="50%">
       <b>Restaurant recommendations</b><br/>
-      <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Garbanzo restaurant recommendations" />
+      <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="520" alt="Garbanzo restaurant recommendations" />
     </td>
   </tr>
+</table>
+
+<table>
   <tr>
     <td width="50%">
       <b>Book recommendations</b><br/>
-      <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Garbanzo book recommendations" />
+      <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="520" alt="Garbanzo book recommendations" />
     </td>
     <td width="50%">
       <b>D&D character sheet generator</b><br/>
-      <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="Garbanzo DnD character generator" />
+      <img src="docs/assets/screenshots/real/dnd-character.jpg" width="520" alt="Garbanzo DnD character generator" />
     </td>
   </tr>
 </table>
