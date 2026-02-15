@@ -45,6 +45,17 @@ export function getGroupName(jid: string): string {
   return GROUP_IDS[jid]?.name ?? 'Unknown Group';
 }
 
+/**
+ * Find an enabled group JID by its configured name.
+ * Returns null if not found or not enabled.
+ */
+export function getEnabledGroupJidByName(name: string): string | null {
+  for (const [jid, cfg] of Object.entries(GROUP_IDS)) {
+    if (cfg.name === name && cfg.enabled) return jid;
+  }
+  return null;
+}
+
 /** Check if a group requires @mention to respond */
 export function requiresMention(jid: string): boolean {
   return GROUP_IDS[jid]?.requireMention ?? true;

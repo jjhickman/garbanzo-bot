@@ -3,10 +3,10 @@ import { logger } from '../../middleware/logger.js';
 import { markMessageReceived } from '../../middleware/health.js';
 import { isVoiceMessage, downloadVoiceAudio } from '../../features/media.js';
 import { transcribeAudio } from '../../features/voice.js';
-import { handleIntroduction, INTRODUCTIONS_JID } from '../../features/introductions.js';
-import { handleEventPassive, EVENTS_JID } from '../../features/events.js';
+import { handleIntroduction } from '../../features/introductions.js';
+import { handleEventPassive } from '../../features/events.js';
 import { config } from '../../utils/config.js';
-import { isGroupEnabled } from '../../bot/groups.js';
+import { isGroupEnabled, getEnabledGroupJidByName } from '../../bot/groups.js';
 import { handleOwnerDM } from '../../bot/owner-commands.js';
 import { handleGroupMessage } from '../../bot/group-handler.js';
 import { isReplyToBot, isAcknowledgment } from '../../bot/reactions.js';
@@ -69,8 +69,8 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
   }, {
     ownerId: config.OWNER_JID,
     isGroupEnabled,
-    introductionsChatId: INTRODUCTIONS_JID,
-    eventsChatId: EVENTS_JID,
+    introductionsChatId: getEnabledGroupJidByName('Introductions'),
+    eventsChatId: getEnabledGroupJidByName('Events'),
     handleIntroduction,
     handleEventPassive,
   });
