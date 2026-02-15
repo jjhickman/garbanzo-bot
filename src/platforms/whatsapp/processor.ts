@@ -9,7 +9,7 @@ import { config } from '../../utils/config.js';
 import { isGroupEnabled, getEnabledGroupJidByName } from '../../bot/groups.js';
 import { handleOwnerDM } from './owner-commands.js';
 import { handleGroupMessage } from './group-handler.js';
-import { isReplyToBot, isAcknowledgment } from '../../bot/reactions.js';
+import { isReplyToBot, isAcknowledgment } from './reactions.js';
 import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound.js';
 import { createWhatsAppAdapter } from './adapter.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
