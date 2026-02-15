@@ -40,6 +40,10 @@ git push origin main --follow-tags
 - `ghcr.io/jjhickman/garbanzo:vX.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:X.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:latest` (only for non-prerelease tags)
+- optional Docker Hub images (when configured):
+  - `<dockerhub-image>:vX.Y.Z`
+  - `<dockerhub-image>:X.Y.Z`
+  - `<dockerhub-image>:latest` (only for non-prerelease tags)
 - native bundles attached to release:
   - `garbanzo-linux-x64.tar.gz`
   - `garbanzo-macos.tar.gz`
@@ -89,3 +93,15 @@ You can run workflows manually from Actions:
   - `release_tag` input (required for manual dispatch) to select which GitHub Release receives assets
 
 This is useful for rerunning release asset generation without creating a new tag.
+
+## Optional Docker Hub Publishing
+
+`Release Docker Image` can push to Docker Hub in addition to GHCR.
+
+Set these repo settings in GitHub (`Settings` -> `Secrets and variables` -> `Actions`):
+
+- Variable `DOCKERHUB_IMAGE` (example: `yourdockerhubuser/garbanzo`)
+- Variable `DOCKERHUB_USERNAME`
+- Secret `DOCKERHUB_TOKEN` (Docker Hub access token)
+
+If any of these are missing, Docker Hub publish is skipped and GHCR publish still runs.
