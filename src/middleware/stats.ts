@@ -6,6 +6,7 @@
  */
 
 import { logger } from './logger.js';
+import { config } from '../utils/config.js';
 
 export interface GroupStats {
   messageCount: number;
@@ -163,8 +164,8 @@ const OPENAI_PRICING = {
  * per-model pricing or configurable pricing in env.
  */
 const GEMINI_PRICING = {
-  input: 0.0,
-  output: 0.0,
+  input: (config.GEMINI_PRICING_INPUT_PER_M ?? 0) / 1_000_000,
+  output: (config.GEMINI_PRICING_OUTPUT_PER_M ?? 0) / 1_000_000,
 };
 
 /**
