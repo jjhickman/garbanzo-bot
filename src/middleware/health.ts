@@ -110,7 +110,7 @@ function getCachedBackupStatus(now: number): { checkedAt: number; status: Backup
 /**
  * Start the local HTTP health endpoint (`/health`) with lightweight abuse protection.
  */
-export function startHealthServer(port: number = 3001): void {
+export function startHealthServer(port: number = 3001, host: string = '127.0.0.1'): void {
   server = createServer((req, res) => {
     if (req.url === '/health' && req.method === 'GET') {
       const now = Date.now();
@@ -151,8 +151,8 @@ export function startHealthServer(port: number = 3001): void {
     }
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    logger.info({ port, url: `http://127.0.0.1:${port}/health` }, 'Health check server started');
+  server.listen(port, host, () => {
+    logger.info({ port, host, url: `http://${host}:${port}/health` }, 'Health check server started');
   });
 
   server.on('error', (err) => {
