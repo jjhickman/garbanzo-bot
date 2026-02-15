@@ -175,7 +175,7 @@ async function handleFeedbackCommand(params: {
   senderId: string;
   ownerId: string;
   query: string;
-  replyTo?: unknown;
+  replyTo?: MessageRef;
 }): Promise<void> {
   const { messenger, chatId, senderId, ownerId, query, replyTo } = params;
 
@@ -236,7 +236,7 @@ async function handlePollCommand(params: {
   chatId: string;
   senderId: string;
   featureQuery: string;
-  replyTo?: unknown;
+  replyTo?: MessageRef;
 }): Promise<void> {
   const { messenger, chatId, senderId, featureQuery, replyTo } = params;
 
@@ -262,7 +262,7 @@ async function handleCharacterCommand(params: {
   chatId: string;
   ownerId: string;
   featureQuery: string;
-  replyTo?: unknown;
+  replyTo?: MessageRef;
 }): Promise<void> {
   const { messenger, chatId, ownerId, featureQuery, replyTo } = params;
 
@@ -307,7 +307,7 @@ async function handleVoiceFeature(params: {
   chatId: string;
   featureQuery: string;
   quotedText?: string;
-  replyTo?: unknown;
+  replyTo?: MessageRef;
 }): Promise<void> {
   const { messenger, chatId, featureQuery, quotedText, replyTo } = params;
 
