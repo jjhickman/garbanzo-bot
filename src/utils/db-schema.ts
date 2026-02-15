@@ -12,7 +12,23 @@ import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT, config } from './config.js';
 
 export const DB_DIR = resolve(PROJECT_ROOT, 'data');
-export const DB_PATH = resolve(DB_DIR, 'garbanzo.db');
+
+function isTestRuntime(): boolean {
+  // Vitest runs tests in multiple node processes by default; having all workers
+  // share a single sqlite file causes WAL/journal-mode contention and SQLITE_BUSY
+  // flakiness in CI.
+  return process.env.NODE_ENV === 'test'
+    || Boolean(process.env.VITEST)
+    || Boolean(process.env.VITEST_POOL_ID)
+    || Boolean(process.env.VITEST_WORKER_ID)
+    || Boolean(process.env.JEST_WORKER_ID);
+}
+
+const dbFileName = isTestRuntime()
+  ? `garbanzo-test-${process.pid}.db`
+  : 'garbanzo.db';
+
+export const DB_PATH = resolve(DB_DIR, dbFileName);
 
 if (config.DB_DIALECT !== 'sqlite') {
   logger.error({ dialect: config.DB_DIALECT }, 'Unsupported DB dialect (only sqlite is implemented)');
@@ -22,12 +38,15 @@ if (config.DB_DIALECT !== 'sqlite') {
 // Ensure data directory exists
 mkdirSync(DB_DIR, { recursive: true });
 
-const db: InstanceType<typeof Database> = new Database(DB_PATH);
+// Set a connection-level busy timeout early to reduce SQLITE_BUSY flakiness
+// when multiple processes/modules open the DB concurrently (common in tests/CI).
+const db: InstanceType<typeof Database> = new Database(DB_PATH, { timeout: 5000 });
 
 // Performance pragmas
+// NOTE: busy_timeout should be set before attempting journal_mode switches.
+db.pragma('busy_timeout = 5000');
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
-db.pragma('busy_timeout = 5000');
 
 logger.info({ path: DB_PATH }, 'SQLite database opened');
 
