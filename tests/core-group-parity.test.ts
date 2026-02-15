@@ -159,6 +159,7 @@ describe('Core group processor parity (WhatsApp)', () => {
       groupName: 'General',
       query: '!poll What day? / Fri / Sat',
       isFeatureEnabled: () => true,
+      getResponse: async () => 'ai response',
       replyTo: msg,
     });
 
@@ -224,6 +225,7 @@ describe('Core group processor parity (WhatsApp)', () => {
       groupName: 'General',
       query: text,
       isFeatureEnabled: () => true,
+      getResponse: async () => 'ai response',
       replyTo: msg,
     });
 
