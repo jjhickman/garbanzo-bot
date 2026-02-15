@@ -1,5 +1,5 @@
 [Unit]
-Description=Garbanzo Bean WhatsApp Bot
+Description=Garbanzo WhatsApp Bot
 After=network-online.target
 Wants=network-online.target
 
@@ -11,10 +11,10 @@ Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
 
-# Logging (stdout/stderr → journalctl)
+# Logging (stdout/stderr -> journalctl)
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=garbanzo-bot
+SyslogIdentifier=garbanzo
 
 [Install]
 WantedBy=default.target

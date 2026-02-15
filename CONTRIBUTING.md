@@ -1,6 +1,6 @@
-# Contributing to Garbanzo Bot
+# Contributing to Garbanzo
 
-Thanks for your interest in contributing! Garbanzo Bot is a community WhatsApp bot built for a Boston-area meetup group, but the codebase is designed to be adaptable for any community.
+Thanks for your interest in contributing! Garbanzo is a community WhatsApp bot built for a Boston-area meetup group, but the codebase is designed to be adaptable for any community.
 
 ## Getting Started
 

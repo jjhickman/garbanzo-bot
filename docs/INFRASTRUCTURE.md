@@ -1,6 +1,6 @@
 # Infrastructure Reference
 
-> Hardware and network available to Garbanzo Bot.
+> Hardware and network available to Garbanzo.
 
 ## Fleet
 
@@ -16,7 +16,7 @@
 
 | Service | Port | Binding | Notes |
 |---------|------|---------|-------|
-| **Garbanzo Bot** | 3001 | localhost | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count |
+| **Garbanzo** | 3001 | localhost | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count, backup integrity status; includes basic per-IP rate limiting |
 | Ollama | 11434 | localhost | 98.8 tok/s, qwen3:8b default |
 | ChromaDB | 8000 | localhost | RAG embeddings |
 | Whisper STT | 8090 | localhost | Speech-to-text (Docker) |
@@ -58,10 +58,10 @@ docker compose up -d
 curl http://127.0.0.1:3001/health
 
 # View logs
-docker compose logs -f garbanzo-bot
+docker compose logs -f garbanzo
 ```
 
-> **Note:** The bot's systemd user service is the primary deployment method on Terra. Docker is available for portability to other machines.
+> **Note:** Docker Compose is the default deployment method. A systemd user service is still supported for native Node deployments.
 
 ## Known Quirks
 
