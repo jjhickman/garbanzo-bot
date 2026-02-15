@@ -79,8 +79,14 @@ function setupMocks() {
     isTTSAvailable: vi.fn(() => false),
     transcribeAudio: vi.fn(async () => null),
   }));
-  vi.doMock('../src/features/media.js', () => ({
+  vi.doMock('../src/platforms/whatsapp/media.js', () => ({
     extractMedia: vi.fn(async () => null),
+    hasVisualMedia: vi.fn(() => false),
+    isVoiceMessage: vi.fn(() => false),
+    downloadVoiceAudio: vi.fn(async () => null),
+  }));
+
+  vi.doMock('../src/core/vision.js', () => ({
     prepareForVision: vi.fn(async () => []),
   }));
 

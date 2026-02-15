@@ -19,7 +19,8 @@ describe('Media pipeline integration (mocked)', () => {
       normalizeMessageContent,
     }));
 
-    const { extractMedia, prepareForVision } = await import('../src/features/media.js');
+    const { extractMedia } = await import('../src/platforms/whatsapp/media.js');
+    const { prepareForVision } = await import('../src/core/vision.js');
 
     const msg = {
       key: { id: 'm1', remoteJid: 'test@g.us' },
@@ -60,7 +61,7 @@ describe('Media pipeline integration (mocked)', () => {
       normalizeMessageContent,
     }));
 
-    const { extractMedia } = await import('../src/features/media.js');
+    const { extractMedia } = await import('../src/platforms/whatsapp/media.js');
 
     const msg = {
       key: { id: 'm2', remoteJid: 'test@g.us' },

@@ -4,7 +4,7 @@ import {
   type WAMessageContent,
   normalizeMessageContent,
 } from '@whiskeysockets/baileys';
-import { hasVisualMedia } from '../../features/media.js';
+import { hasVisualMedia } from './media.js';
 import { getSenderJid, isGroupJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
 

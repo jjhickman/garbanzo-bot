@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
 import { logger } from '../../middleware/logger.js';
 import { markMessageReceived } from '../../middleware/health.js';
-import { isVoiceMessage, downloadVoiceAudio } from '../../features/media.js';
+import { isVoiceMessage, downloadVoiceAudio } from './media.js';
 import { transcribeAudio } from '../../features/voice.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
