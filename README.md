@@ -360,6 +360,13 @@ docker compose logs -f garbanzo
 curl http://127.0.0.1:3001/health
 ```
 
+To deploy a specific release image:
+
+```bash
+APP_VERSION=0.1.1 docker compose pull garbanzo
+APP_VERSION=0.1.1 docker compose up -d
+```
+
 Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
 
 If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
@@ -367,6 +374,8 @@ If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
 The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status.
 
 ## Support Garbanzo
+
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Support-pink?logo=githubsponsors)](https://github.com/sponsors/jjhickman)
 
 If Garbanzo is useful for your community, you can support development and operating costs.
 
@@ -401,6 +410,7 @@ Repo guardrails are configured under `.github/`:
 - `pull_request_template.md` enforces verification checklist discipline
 - `dependabot.yml` keeps npm/docker dependencies updated weekly
 - `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
+- `release-docker.yml` builds and publishes versioned Docker images to GHCR on `v*` tags
 - `FUNDING.yml` enables sponsorship links in GitHub UI
 
 ## GitHub Account Workflow
@@ -442,6 +452,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
+- [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions
