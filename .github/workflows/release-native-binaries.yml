@@ -27,14 +27,27 @@ jobs:
           - os: ubuntu-latest
             bundle_name: garbanzo-linux-x64
             binary_name: garbanzo
+            pkg_target: node22-linux-x64
             archive_ext: tar.gz
-          - os: macos-latest
-            bundle_name: garbanzo-macos
+          - os: ubuntu-latest
+            bundle_name: garbanzo-linux-arm64
             binary_name: garbanzo
+            pkg_target: node22-linux-arm64
+            archive_ext: tar.gz
+          - os: macos-14
+            bundle_name: garbanzo-macos-arm64
+            binary_name: garbanzo
+            pkg_target: node22-macos-arm64
+            archive_ext: tar.gz
+          - os: macos-13
+            bundle_name: garbanzo-macos-x64
+            binary_name: garbanzo
+            pkg_target: node22-macos-x64
             archive_ext: tar.gz
           - os: windows-latest
             bundle_name: garbanzo-windows-x64
             binary_name: garbanzo.exe
+            pkg_target: node22-win-x64
             archive_ext: zip
 
     steps:
@@ -55,10 +68,10 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Build native executable (pkg host target)
+      - name: Build native executable (pkg)
         run: |
           mkdir -p dist/native
-          npx @yao-pkg/pkg@6.13.1 dist/index.js --target host --output "dist/native/${{ matrix.binary_name }}"
+          npx @yao-pkg/pkg@6.13.1 dist/index.js --target "${{ matrix.pkg_target }}" --output "dist/native/${{ matrix.binary_name }}"
 
       - name: Assemble portable bundle
         shell: bash
