@@ -60,3 +60,5 @@ All tags are multi-arch where available:
 - Exposing the health port on your LAN is useful for Uptime Kuma, but you should restrict access to trusted hosts (firewall or reverse proxy).
 
 Source code and docs: https://github.com/jjhickman/garbanzo-bot
+
+Docker Hub note: repository categories are set in the Docker Hub UI (the release workflow syncs overview + short description).
