@@ -46,7 +46,9 @@ git push origin main --follow-tags
   - `<dockerhub-image>:latest` (only for non-prerelease tags)
 - native bundles attached to release:
   - `garbanzo-linux-x64.tar.gz`
-  - `garbanzo-macos.tar.gz`
+  - `garbanzo-linux-arm64.tar.gz`
+  - `garbanzo-macos-arm64.tar.gz`
+  - `garbanzo-macos-x64.tar.gz`
   - `garbanzo-windows-x64.zip`
 
 5. Open a release checklist issue from `.github/ISSUE_TEMPLATE/release-checklist.yml` and track deploy verification.
@@ -81,6 +83,15 @@ Set `APP_VERSION` in your `.env` before deploy, then pull and restart:
 APP_VERSION=0.1.1 docker compose pull garbanzo
 APP_VERSION=0.1.1 docker compose up -d
 ```
+
+Recommended (production) — use `docker-compose.prod.yml` to disable local builds:
+
+```bash
+APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+`docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
 
 ## Manual Workflow Dispatch
 

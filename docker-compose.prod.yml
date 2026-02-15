@@ -1,0 +1,16 @@
+# docker-compose.prod.yml — Garbanzo (production override)
+#
+# Usage:
+#   APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+#   APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Purpose:
+# - Disables local image builds so production always runs a tagged release image.
+
+services:
+  garbanzo:
+    # Fail fast if APP_VERSION isn't provided.
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:?APP_VERSION is required (e.g. 0.1.1)}
+
+    # Ensure the tagged image is pulled even if present locally.
+    pull_policy: always

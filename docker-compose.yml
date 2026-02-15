@@ -10,12 +10,9 @@
 
 services:
   garbanzo:
-    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-dev}
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        APP_VERSION: ${APP_VERSION:-dev}
+    # Production default: run published release images (no local builds).
+    # If APP_VERSION is not set, we use `latest`.
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
     container_name: garbanzo
     restart: unless-stopped
 
@@ -27,7 +24,7 @@ services:
     environment:
       - NODE_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - GARBANZO_VERSION=${APP_VERSION:-dev}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
       - HEALTH_PORT=${HEALTH_PORT:-3001}
       - HEALTH_BIND_HOST=0.0.0.0
 

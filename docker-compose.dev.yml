@@ -1,0 +1,19 @@
+# docker-compose.dev.yml — Garbanzo (local dev override)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Purpose:
+# - Enables local image builds for development.
+
+services:
+  garbanzo:
+    image: garbanzo-local:${APP_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+
+    environment:
+      - GARBANZO_VERSION=${APP_VERSION:-dev}
