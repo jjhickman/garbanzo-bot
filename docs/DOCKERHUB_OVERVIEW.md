@@ -31,6 +31,12 @@ Health check:
 curl http://127.0.0.1:3001/health
 ```
 
+Readiness (non-200 when disconnected/stale):
+
+```bash
+curl -i http://127.0.0.1:3001/health/ready
+```
+
 ## Tags
 
 This repo publishes both GHCR and Docker Hub tags.
@@ -54,3 +60,5 @@ All tags are multi-arch where available:
 - Exposing the health port on your LAN is useful for Uptime Kuma, but you should restrict access to trusted hosts (firewall or reverse proxy).
 
 Source code and docs: https://github.com/jjhickman/garbanzo-bot
+
+Docker Hub note: repository categories are set in the Docker Hub UI (the release workflow syncs overview + short description).
