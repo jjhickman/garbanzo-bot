@@ -120,7 +120,7 @@ describe('Handlers helper functions', () => {
 
   it('extractText handles all supported message text fields', async () => {
     mockHandlerDeps();
-    const { extractText } = await import('../src/bot/handlers.js');
+    const { extractWhatsAppText: extractText } = await import('../src/platforms/whatsapp/inbound.js');
 
     expect(extractText({ conversation: 'hello' } as never)).toBe('hello');
     expect(extractText({ extendedTextMessage: { text: 'extended' } } as never)).toBe('extended');
@@ -132,7 +132,7 @@ describe('Handlers helper functions', () => {
 
   it('extractQuotedText unwraps quoted text and returns undefined when absent', async () => {
     mockHandlerDeps();
-    const { extractQuotedText } = await import('../src/bot/handlers.js');
+    const { extractWhatsAppQuotedText: extractQuotedText } = await import('../src/platforms/whatsapp/inbound.js');
 
     const content = {
       extendedTextMessage: {
@@ -150,7 +150,7 @@ describe('Handlers helper functions', () => {
 
   it('extractMentionedJids reads mentions from different content types', async () => {
     mockHandlerDeps();
-    const { extractMentionedJids } = await import('../src/bot/handlers.js');
+    const { extractWhatsAppMentionedJids: extractMentionedJids } = await import('../src/platforms/whatsapp/inbound.js');
 
     expect(extractMentionedJids({
       extendedTextMessage: { contextInfo: { mentionedJid: ['a@s.whatsapp.net'] } },
