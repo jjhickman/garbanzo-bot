@@ -6,3 +6,5 @@ baileys_auth/
 data/
 *.log
 .DS_Store
+release/
+archive/

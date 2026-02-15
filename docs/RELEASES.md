@@ -7,8 +7,17 @@ This project uses semantic versioning and tag-driven Docker image releases.
 1. Ensure `main` is green:
 
 ```bash
+npm run release:plan
 npm run check
 npm run gh:dependabot
+```
+
+`npm run release:plan` is the recommended dry-run validator. It checks branch state, version/tag consistency, changelog presence, and open Dependabot queue before publishing.
+
+If local artifact folders exist from prior packaging runs, use:
+
+```bash
+npm run release:plan -- --clean-artifacts
 ```
 
 2. Bump version in `package.json` and create git tag:
