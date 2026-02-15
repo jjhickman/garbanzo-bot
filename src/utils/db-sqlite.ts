@@ -9,7 +9,8 @@ import { stopMaintenance } from './db-maintenance.js';
 
 // ── Re-export sub-modules ───────────────────────────────────────────
 
-export { db } from './db-schema.js';
+// Do not export the raw SQLite handle from the backend-facing API.
+// Callers should import from `src/utils/db.ts` and use exported functions.
 export {
   touchProfile, getProfile, setProfileInterests, setProfileName,
   updateActiveGroups, getOptedInProfiles,
