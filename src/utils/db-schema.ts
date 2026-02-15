@@ -8,10 +8,9 @@
 import Database from 'better-sqlite3';
 import { resolve } from 'path';
 import { mkdirSync } from 'fs';
+import { tmpdir } from 'os';
 import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT, config } from './config.js';
-
-export const DB_DIR = resolve(PROJECT_ROOT, 'data');
 
 function isTestRuntime(): boolean {
   // Vitest runs tests in multiple node processes by default; having all workers
@@ -24,11 +23,11 @@ function isTestRuntime(): boolean {
     || Boolean(process.env.JEST_WORKER_ID);
 }
 
-const dbFileName = isTestRuntime()
-  ? `garbanzo-test-${process.pid}.db`
-  : 'garbanzo.db';
+export const DB_DIR = isTestRuntime()
+  ? resolve(tmpdir(), 'garbanzo-bot-tests', String(process.pid))
+  : resolve(PROJECT_ROOT, 'data');
 
-export const DB_PATH = resolve(DB_DIR, dbFileName);
+export const DB_PATH = resolve(DB_DIR, 'garbanzo.db');
 
 if (config.DB_DIALECT !== 'sqlite') {
   logger.error({ dialect: config.DB_DIALECT }, 'Unsupported DB dialect (only sqlite is implemented)');
