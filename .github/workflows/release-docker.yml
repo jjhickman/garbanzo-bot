@@ -9,6 +9,9 @@ on:
       version:
         description: 'Release version (e.g. v0.2.0)'
         required: true
+      git_ref:
+        description: 'Git ref to build (tag/branch/SHA). Default: current ref'
+        required: false
 
 permissions:
   contents: read
@@ -26,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || github.ref }}
 
       - name: Resolve version
         id: version
@@ -100,6 +105,7 @@ jobs:
           docker run -d --name garbanzo-smoke \
             -p 127.0.0.1:39001:3001 \
             -e HEALTH_ONLY=true \
+            -e HEALTH_BIND_HOST=0.0.0.0 \
             -e MESSAGING_PLATFORM=whatsapp \
             -e OWNER_JID=test_owner@s.whatsapp.net \
             -e OPENROUTER_API_KEY=test_key_ci \

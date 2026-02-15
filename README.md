@@ -392,6 +392,23 @@ If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
 
 The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status.
 
+### Monitoring with Uptime Kuma
+
+If your Kuma dashboard is running on another host (for example `nas.local`), expose health on a reachable bind host:
+
+```bash
+HEALTH_BIND_HOST=0.0.0.0
+HEALTH_PORT=3001
+```
+
+Then configure an HTTP monitor in Kuma to check:
+
+```text
+http://<garbanzo-host>:3001/health
+```
+
+Keep network access restricted to trusted LAN/VPN segments.
+
 ## Support Garbanzo
 
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Support-pink?logo=githubsponsors)](https://github.com/sponsors/jjhickman)

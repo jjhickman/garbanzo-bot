@@ -348,6 +348,12 @@ async function main() {
     const appVersion = nonInteractive
       ? (cli.options['app-version'] ?? existing.APP_VERSION ?? DEFAULT_APP_VERSION)
       : await rl.question(`APP_VERSION [${existing.APP_VERSION ?? DEFAULT_APP_VERSION}]: `);
+    const healthPort = nonInteractive
+      ? (cli.options['health-port'] ?? existing.HEALTH_PORT ?? '3001')
+      : await rl.question(`HEALTH_PORT [${existing.HEALTH_PORT ?? '3001'}]: `);
+    const healthBindHost = nonInteractive
+      ? (cli.options['health-bind-host'] ?? existing.HEALTH_BIND_HOST ?? '127.0.0.1')
+      : await rl.question(`HEALTH_BIND_HOST [${existing.HEALTH_BIND_HOST ?? '127.0.0.1'}]: `);
 
     const githubSponsorsUrl = nonInteractive
       ? (cli.options['github-sponsors-url'] ?? existing.GITHUB_SPONSORS_URL ?? '')
@@ -466,6 +472,8 @@ async function main() {
       OLLAMA_BASE_URL: (ollamaBaseUrl || existing.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim(),
       LOG_LEVEL: (existing.LOG_LEVEL || 'info').trim(),
       APP_VERSION: (appVersion || existing.APP_VERSION || DEFAULT_APP_VERSION).trim(),
+      HEALTH_PORT: (healthPort || existing.HEALTH_PORT || '3001').trim(),
+      HEALTH_BIND_HOST: (healthBindHost || existing.HEALTH_BIND_HOST || '127.0.0.1').trim(),
       OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
     };
 
@@ -505,6 +513,8 @@ async function main() {
       `OLLAMA_BASE_URL=${finalEnv.OLLAMA_BASE_URL}`,
       `LOG_LEVEL=${finalEnv.LOG_LEVEL}`,
       `APP_VERSION=${finalEnv.APP_VERSION}`,
+      `HEALTH_PORT=${finalEnv.HEALTH_PORT}`,
+      `HEALTH_BIND_HOST=${finalEnv.HEALTH_BIND_HOST}`,
       '',
     ].join('\n');
 
