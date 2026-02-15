@@ -33,7 +33,8 @@ function mockHandlerDeps(): HandlerMocks {
   }));
 
   vi.doMock('../src/utils/config.js', () => ({
-    config: { OWNER_JID: 'owner@s.whatsapp.net' },
+    PROJECT_ROOT: '/tmp',
+    config: { OWNER_JID: 'owner@s.whatsapp.net', MESSAGING_PLATFORM: 'whatsapp' },
   }));
 
   vi.doMock('../src/utils/jid.js', () => ({
