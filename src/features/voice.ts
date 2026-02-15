@@ -75,7 +75,9 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType?: string): P
 
     try {
       const formData = new FormData();
-      const blob = new Blob([audioBuffer], { type: mimeType ?? 'audio/ogg' });
+      const bytes = new Uint8Array(audioBuffer.length);
+      bytes.set(audioBuffer);
+      const blob = new Blob([bytes], { type: mimeType ?? 'audio/ogg' });
       formData.append('file', blob, `audio${ext}`);
       formData.append('model', 'whisper-1');
 
