@@ -129,10 +129,9 @@ export function buildProviderRequest(
     return {
       provider: 'gemini',
       model: config.GEMINI_MODEL,
-      endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent`,
+      endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`,
       headers: {
         'content-type': 'application/json',
-        'x-goog-api-key': config.GEMINI_API_KEY,
       },
       body: {
         systemInstruction: {

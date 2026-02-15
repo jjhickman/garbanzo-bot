@@ -26,6 +26,8 @@ const envSchema = z.object({
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
   OPENAI_MODEL: z.string().default('gpt-4.1'),
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+  GEMINI_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.0),
+  GEMINI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(0.0),
 
   // Ollama (local, optional)
   OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
