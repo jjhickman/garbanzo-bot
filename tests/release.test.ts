@@ -26,35 +26,35 @@ describe('release notes helper', () => {
   it('shows changelog usage in help text', async () => {
     mockReleaseDeps();
     const { handleRelease } = await import('../src/features/release.js');
-    const sock = { sendMessage: vi.fn(async () => undefined) };
+    const sendText = vi.fn(async () => undefined);
 
-    const result = await handleRelease('', sock as never);
+    const result = await handleRelease('', sendText);
     expect(result).toContain('!release changelog');
   });
 
   it('broadcasts changelog snippet to all enabled groups', async () => {
     mockReleaseDeps();
     const { handleRelease } = await import('../src/features/release.js');
-    const sock = { sendMessage: vi.fn(async () => undefined) };
+    const sendText = vi.fn(async () => undefined);
 
-    const result = await handleRelease('changelog', sock as never);
+    const result = await handleRelease('changelog', sendText);
     expect(result).toContain('Release notes sent to 2 groups');
 
-    const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
+    const calls = sendText.mock.calls as unknown as Array<[string, string]>;
     expect(calls).toHaveLength(2);
-    expect(calls[0]?.[1]?.text).toContain('What\'s New with Garbanzo');
-    expect(calls[0]?.[1]?.text).toContain('Changelog');
+    expect(calls[0]?.[1]).toContain('What\'s New with Garbanzo');
+    expect(calls[0]?.[1]).toContain('Changelog');
   });
 
   it('sends changelog snippet to one target group', async () => {
     mockReleaseDeps();
     const { handleRelease } = await import('../src/features/release.js');
-    const sock = { sendMessage: vi.fn(async () => undefined) };
+    const sendText = vi.fn(async () => undefined);
 
-    const result = await handleRelease('general changelog', sock as never);
+    const result = await handleRelease('general changelog', sendText);
     expect(result).toContain('Release notes sent to 1 group');
 
-    const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
+    const calls = sendText.mock.calls as unknown as Array<[string, string]>;
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe('general@g.us');
   });

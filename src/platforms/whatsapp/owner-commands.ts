@@ -129,7 +129,9 @@ export async function handleOwnerDM(
   // !release [args]
   if (trimmedLower.startsWith('!release')) {
     const args = text.trim().slice('!release'.length).trim();
-    const result = await handleRelease(args, sock);
+    const result = await handleRelease(args, async (jid, t) => {
+      await sock.sendMessage(jid, { text: t });
+    });
     await sock.sendMessage(remoteJid, { text: result });
     return true;
   }

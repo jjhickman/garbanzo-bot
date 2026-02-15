@@ -9,7 +9,6 @@
  * an official update from the bot operator.
  */
 
-import type { WASocket } from '@whiskeysockets/baileys';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
@@ -93,7 +92,7 @@ function getChangelogSnippet(maxLines: number = 12): string {
  */
 export async function handleRelease(
   args: string,
-  sock: WASocket,
+  sendText: (chatId: string, text: string) => Promise<void>,
 ): Promise<string> {
   if (!args.trim()) {
     return [
@@ -149,7 +148,7 @@ export async function handleRelease(
 
   for (const jid of targetJids) {
     try {
-      await sock.sendMessage(jid, { text: formatted });
+      await sendText(jid, formatted);
       sent++;
     } catch (err) {
       logger.error({ err, jid }, 'Failed to send release notes');

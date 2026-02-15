@@ -343,7 +343,7 @@ describe('Feature flags — per-group persona', async () => {
 
 describe('Release — command parsing', async () => {
   // We can't test actual sending without a socket, but we can test the help output
-  // handleRelease requires a WASocket which we can't easily mock here.
+  // handleRelease requires a sendText function which we don't exercise here.
   // Just verify the module imports without error.
   it('module loads without error', async () => {
     const mod = await import('../src/features/release.js');
