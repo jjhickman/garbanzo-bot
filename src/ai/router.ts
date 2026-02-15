@@ -9,12 +9,14 @@ import {
   recordAIError,
   estimateClaudeCost,
   estimateOpenAICost,
+  estimateGeminiCost,
   getDailyCost,
   DAILY_COST_ALERT_THRESHOLD,
 } from '../middleware/stats.js';
 import { callClaude } from './claude.js';
 import { callChatGPT } from './chatgpt.js';
-import type { CloudProvider } from './cloud-providers.js';
+import { callGemini } from './gemini.js';
+import type { CloudProvider, CloudResponse } from './cloud-providers.js';
 import type { VisionImage } from '../features/media.js';
 
 /**
@@ -31,7 +33,7 @@ import type { VisionImage } from '../features/media.js';
 /** Cached Ollama availability check — refreshed on failure */
 let ollamaReachable: boolean | null = null;
 
-const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai'];
+const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai', 'gemini'];
 
 /** Prevent spamming cost alerts — reset on rollover via stats module */
 let costAlertSentToday = false;
@@ -68,6 +70,7 @@ function getConfiguredProviderOrder(): CloudProvider[] {
 function isProviderConfigured(provider: CloudProvider): boolean {
   if (provider === 'openrouter') return !!config.OPENROUTER_API_KEY;
   if (provider === 'anthropic') return !!config.ANTHROPIC_API_KEY;
+  if (provider === 'gemini') return !!config.GEMINI_API_KEY;
   return !!config.OPENAI_API_KEY;
 }
 
@@ -118,7 +121,7 @@ export async function getAIResponse(
     }, 'Routing to cloud providers');
 
     const t0 = Date.now();
-    let aiResult: Awaited<ReturnType<typeof callClaude>>;
+    let aiResult: CloudResponse;
 
     let lastProviderError: Error | null = null;
     let resolved = false;
@@ -135,6 +138,8 @@ export async function getAIResponse(
       try {
         if (provider === 'openai') {
           aiResult = await callChatGPT(systemPrompt, query, visionImages);
+        } else if (provider === 'gemini') {
+          aiResult = await callGemini(systemPrompt, query, visionImages);
         } else {
           aiResult = await callClaude(provider, systemPrompt, query, visionImages);
         }
@@ -152,12 +157,18 @@ export async function getAIResponse(
     }
 
     const latencyMs = Date.now() - t0;
-    const routedModel = aiResult.provider === 'openai' ? 'openai' : 'claude';
+    const routedModel = aiResult.provider === 'openai'
+      ? 'openai'
+      : aiResult.provider === 'gemini'
+        ? 'gemini'
+        : 'claude';
     recordAIRoute(ctx.groupJid, routedModel);
 
     const costEntry = routedModel === 'openai'
       ? estimateOpenAICost(systemPrompt, query, aiResult.text)
-      : estimateClaudeCost(systemPrompt, query, aiResult.text);
+      : routedModel === 'gemini'
+        ? estimateGeminiCost(systemPrompt, query, aiResult.text)
+        : estimateClaudeCost(systemPrompt, query, aiResult.text);
     costEntry.latencyMs = latencyMs;
     recordAICost(costEntry);
     logger.info({
