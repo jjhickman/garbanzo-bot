@@ -116,8 +116,13 @@ function resolveStation(text: string): string | undefined {
 // ── API calls ────────────────────────────────────────────────────────
 
 async function mbtaFetch<T>(endpoint: string, params: Record<string, string>): Promise<JsonApiResponse<T>> {
+  const apiKey = config.MBTA_API_KEY;
+  if (!apiKey) {
+    throw new Error('MBTA_API_KEY is missing');
+  }
+
   const url = new URL(`${MBTA_BASE}${endpoint}`);
-  url.searchParams.set('api_key', config.MBTA_API_KEY!);
+  url.searchParams.set('api_key', apiKey);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
