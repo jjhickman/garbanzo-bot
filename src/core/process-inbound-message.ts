@@ -1,6 +1,4 @@
 import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
-import { isGroupEnabled } from '../bot/groups.js';
 import { checkMessage, formatModerationAlert, applyStrikeAndMute } from '../features/moderation.js';
 import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions.js';
 import { handleEventPassive, EVENTS_JID } from '../features/events.js';
@@ -8,7 +6,6 @@ import { sanitizeMessage } from '../middleware/sanitize.js';
 import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js';
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordModerationFlag } from '../middleware/stats.js';
-import { isAcknowledgment } from '../bot/reactions.js';
 import type { InboundMessage } from './inbound-message.js';
 import type { MessagingAdapter } from './messaging-adapter.js';
 
@@ -18,6 +15,9 @@ const MAX_MESSAGE_AGE_SECONDS = 5 * 60; // 5 minutes
 export interface CoreMessageHooks {
   /** Return true when the inbound message is a reply to the bot (platform-specific). */
   isReplyToBot(inbound: InboundMessage): boolean;
+
+  /** Return true when the text is a lightweight acknowledgment (e.g., thanks). */
+  isAcknowledgment(text: string): boolean;
 
   /** Send a bean reaction (platform-specific). */
   sendAcknowledgmentReaction(inbound: InboundMessage): Promise<void>;
@@ -48,10 +48,16 @@ export interface CoreMessageHooks {
  * - acknowledgment reactions
  * - dispatch to platform-specific handlers
  */
+export interface CoreInboundEnv {
+  ownerId: string;
+  isGroupEnabled: (chatId: string) => boolean;
+}
+
 export async function processInboundMessage(
   adapter: MessagingAdapter,
   inbound: InboundMessage,
   hooks: CoreMessageHooks,
+  env: CoreInboundEnv,
 ): Promise<void> {
   // Ignore messages sent by the bot itself
   if (inbound.fromSelf) return;
@@ -88,7 +94,7 @@ export async function processInboundMessage(
   }
 
   // Moderation (runs on ALL enabled group messages)
-  if (inbound.isGroupChat && isGroupEnabled(inbound.chatId)) {
+  if (inbound.isGroupChat && env.isGroupEnabled(inbound.chatId)) {
     const flag = await checkMessage(text);
     if (flag) {
       recordModerationFlag(inbound.chatId);
@@ -106,9 +112,9 @@ export async function processInboundMessage(
 
       const alert = formatModerationAlert(flag, text, inbound.senderId, inbound.chatId);
       try {
-        await adapter.sendText(config.OWNER_JID, alert);
+        await adapter.sendText(env.ownerId, alert);
       } catch (err) {
-        logger.error({ err, ownerJid: config.OWNER_JID, groupJid: inbound.chatId, senderJid: inbound.senderId }, 'Failed to send moderation alert to owner');
+        logger.error({ err, ownerId: env.ownerId, groupJid: inbound.chatId, senderJid: inbound.senderId }, 'Failed to send moderation alert to owner');
       }
 
       // Apply strike and soft-mute if threshold reached
@@ -149,7 +155,7 @@ export async function processInboundMessage(
   }
 
   // Emoji reaction to acknowledgment replies
-  if (hooks.isReplyToBot(inbound) && isAcknowledgment(text)) {
+  if (hooks.isReplyToBot(inbound) && hooks.isAcknowledgment(text)) {
     logger.info({ remoteJid: inbound.chatId, sender: inbound.senderId, text }, 'Acknowledgment reply — reacting');
     try {
       await hooks.sendAcknowledgmentReaction(inbound);
@@ -161,7 +167,7 @@ export async function processInboundMessage(
 
   // Dispatch
   if (inbound.isGroupChat) {
-    if (!isGroupEnabled(inbound.chatId)) return;
+    if (!env.isGroupEnabled(inbound.chatId)) return;
     await hooks.handleGroupMessage({ inbound, text, hasMedia });
     return;
   }
