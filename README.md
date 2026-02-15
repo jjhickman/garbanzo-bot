@@ -98,37 +98,23 @@ More recipes: [`docs/SETUP_EXAMPLES.md`](docs/SETUP_EXAMPLES.md)
 
 On first run, Baileys will display a QR code in the terminal. Scan it with WhatsApp (Settings > Linked Devices) to authenticate. Auth state persists in `baileys_auth/` across restarts.
 
-## Demo Placeholders
+## Demo
 
-Use these placeholders to drop in media for first-time users evaluating product value.
+Setup and onboarding:
 
-### Setup & Onboarding
+![Setup Wizard Demo](docs/assets/demos/setup-wizard.svg)
+![WhatsApp QR Linking](docs/assets/screenshots/qr-link.svg)
 
-- `SETUP_WIZARD_GIF` → `docs/assets/demos/setup-wizard.gif`
-- `WHATSAPP_QR_SCREENSHOT` → `docs/assets/screenshots/qr-link.png`
+Core value in action:
 
-### Core Value in Action
+![Mention to Response Flow](docs/assets/demos/mention-to-response.svg)
+![Event Enrichment Example](docs/assets/screenshots/event-enrichment.svg)
+![Catchup Summary Example](docs/assets/screenshots/summary-catchup.svg)
 
-- `MENTION_RESPONSE_GIF` → `docs/assets/demos/mention-to-response.gif`
-- `EVENT_ENRICHMENT_SCREENSHOT` → `docs/assets/screenshots/event-enrichment.png`
-- `SUMMARY_CATCHUP_SCREENSHOT` → `docs/assets/screenshots/summary-catchup.png`
+Admin and reliability:
 
-### Admin & Reliability
-
-- `OWNER_DIGEST_SCREENSHOT` → `docs/assets/screenshots/owner-digest.png`
-- `HEALTH_ENDPOINT_SCREENSHOT` → `docs/assets/screenshots/health-endpoint-json.png`
-
-Embed template:
-
-```md
-![Setup Wizard Demo](docs/assets/demos/setup-wizard.gif)
-![WhatsApp QR Linking](docs/assets/screenshots/qr-link.png)
-![Mention to Response Flow](docs/assets/demos/mention-to-response.gif)
-![Event Enrichment Example](docs/assets/screenshots/event-enrichment.png)
-![Catchup Summary Example](docs/assets/screenshots/summary-catchup.png)
-![Owner Daily Digest](docs/assets/screenshots/owner-digest.png)
-![Health Endpoint Output](docs/assets/screenshots/health-endpoint-json.png)
-```
+![Owner Daily Digest](docs/assets/screenshots/owner-digest.svg)
+![Health Endpoint Output](docs/assets/screenshots/health-endpoint-json.svg)
 
 ## Features
 
@@ -443,6 +429,23 @@ Suggested setup on `nas.local`:
 4. Optional second monitor: keyword check on `"stale":false` if you want alerting on stale chat activity, not just process uptime.
 
 Keep network access restricted to trusted LAN/VPN segments.
+
+If you expose port `3001` on your LAN for external monitoring, restrict it to your monitor host. For Docker deployments, the most reliable place is the `DOCKER-USER` iptables chain (so Docker's own rules can't bypass it):
+
+```bash
+# Allow Uptime Kuma (NAS) to reach /health
+sudo iptables -I DOCKER-USER 1 -i <lan-iface> -p tcp -s 192.168.50.219 --dport 3001 -j ACCEPT
+
+# Drop everyone else on LAN -> 3001
+sudo iptables -I DOCKER-USER 2 -i <lan-iface> -p tcp --dport 3001 -j DROP
+```
+
+To persist across reboots on Ubuntu, install and save:
+
+```bash
+sudo apt-get install -y iptables-persistent
+sudo netfilter-persistent save
+```
 
 ## Support Garbanzo
 

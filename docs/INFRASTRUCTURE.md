@@ -16,7 +16,7 @@
 
 | Service | Port | Binding | Notes |
 |---------|------|---------|-------|
-| **Garbanzo** | 3001 (configurable) | `127.0.0.1` default, configurable via `HEALTH_BIND_HOST` | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count, backup integrity status; includes basic per-IP rate limiting |
+| **Garbanzo** | 3001 (configurable) | `127.0.0.1` default, configurable via `HEALTH_BIND_HOST` | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count, backup integrity status. If published on LAN for Kuma, restrict to the monitor host (iptables `DOCKER-USER` allowlist). |
 | Ollama | 11434 | localhost | 98.8 tok/s, qwen3:8b default |
 | ChromaDB | 8000 | localhost | RAG embeddings |
 | Whisper STT | 8090 | localhost | Speech-to-text (Docker) |

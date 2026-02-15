@@ -28,7 +28,8 @@ services:
       - HEALTH_PORT=${HEALTH_PORT:-3001}
       - HEALTH_BIND_HOST=0.0.0.0
 
-    # Health check port (reachable on LAN for external monitoring)
+    # Health check port (reachable on LAN for external monitoring).
+    # If you publish this to your LAN, restrict it to trusted hosts (e.g., iptables `DOCKER-USER` allowlist).
     ports:
       - "0.0.0.0:3001:3001"
 

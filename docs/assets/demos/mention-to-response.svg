@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Mention to response flow placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f1e3"/>
+      <stop offset="1" stop-color="#dff2ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <text x="70" y="120" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="44" font-weight="700" fill="#124b2a">@mention → response (Placeholder)</text>
+  <text x="70" y="156" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="18" fill="#2d2d2d">Shows the primary interaction loop in group chat.</text>
+
+  <rect x="70" y="220" width="500" height="340" rx="22" fill="#ffffff" stroke="#d7d7d7"/>
+  <text x="110" y="270" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="16" fill="#2d2d2d">Member</text>
+  <path d="M140 300 h360 a18 18 0 0 1 18 18 v50 a18 18 0 0 1 -18 18 h-260 l-60 38 v-38 h-40 a18 18 0 0 1 -18 -18 v-50 a18 18 0 0 1 18 -18 z" fill="#e9f6ee" stroke="#b8e0c6"/>
+  <text x="170" y="340" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="16" fill="#124b2a">@garbanzo</text>
+  <text x="170" y="364" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="14" fill="#2d2d2d">what's the plan for tonight?</text>
+
+  <path d="M610 390 C 660 390, 690 390, 740 390" fill="none" stroke="#124b2a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M720 374 L742 390 L720 406" fill="none" stroke="#124b2a" stroke-width="6" stroke-linecap="round"/>
+
+  <rect x="740" y="220" width="390" height="340" rx="22" fill="#ffffff" stroke="#d7d7d7"/>
+  <text x="780" y="270" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="16" fill="#2d2d2d">Garbanzo</text>
+  <path d="M790 300 h300 a18 18 0 0 1 18 18 v84 a18 18 0 0 1 -18 18 h-120 l-60 38 v-38 h-120 a18 18 0 0 1 -18 -18 v-84 a18 18 0 0 1 18 -18 z" fill="#fffaf2" stroke="#ead9bf"/>
+  <text x="820" y="340" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="14" fill="#5a421d">3 ideas in Boston:</text>
+  <text x="820" y="364" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="14" fill="#5a421d">1) trivia  2) ramen  3) walk + cocoa</text>
+
+  <rect x="790" y="460" width="340" height="60" rx="14" fill="#e7f0ff" stroke="#b9d0ff"/>
+  <text x="820" y="496" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="14" fill="#20406b">(this is a placeholder image)</text>
+</svg>
