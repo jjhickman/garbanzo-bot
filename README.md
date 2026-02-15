@@ -136,59 +136,71 @@ On first run, Baileys will display a QR code in the terminal. Scan it with Whats
 
 ## Demo
 
-Real WhatsApp screenshots (tap to zoom). These are real outputs from Garbanzo in a WhatsApp chat.
+A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
 
-<table>
-  <tr>
-    <td width="50%">
-      <b>Help + command discovery</b><br/>
-      <img src="docs/assets/screenshots/real/help-usage.jpg" width="520" alt="Garbanzo help output in WhatsApp" />
-    </td>
-    <td width="50%">
-      <b>Introductions welcome</b><br/>
-      <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="520" alt="Garbanzo welcomes a new introduction" />
-    </td>
-  </tr>
-</table>
+### Help + command discovery
 
-<table>
-  <tr>
-    <td width="50%">
-      <b>Weather report</b><br/>
-      <img src="docs/assets/screenshots/real/weather-report.jpg" width="520" alt="Garbanzo weather report" />
-    </td>
-    <td width="50%">
-      <b>MBTA alerts</b><br/>
-      <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="520" alt="Garbanzo MBTA transit alerts" />
-    </td>
-  </tr>
-</table>
+In a busy group chat, "help" should be fast, readable, and copy/pasteable.
 
-<table>
-  <tr>
-    <td width="50%">
-      <b>Local news</b><br/>
-      <img src="docs/assets/screenshots/real/news.jpg" width="520" alt="Garbanzo local news" />
-    </td>
-    <td width="50%">
-      <b>Restaurant recommendations</b><br/>
-      <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="520" alt="Garbanzo restaurant recommendations" />
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Help + command discovery" />
+</p>
 
-<table>
-  <tr>
-    <td width="50%">
-      <b>Book recommendations</b><br/>
-      <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="520" alt="Garbanzo book recommendations" />
-    </td>
-    <td width="50%">
-      <b>D&D character sheet generator</b><br/>
-      <img src="docs/assets/screenshots/real/dnd-character.jpg" width="520" alt="Garbanzo DnD character generator" />
-    </td>
-  </tr>
-</table>
+### Introductions welcome
+
+Introductions are the one place Garbanzo replies without needing an @mention.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Introductions welcome" />
+</p>
+
+### Weather report
+
+Quick, local weather for planning (default city is configurable).
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Weather report" />
+</p>
+
+### MBTA alerts
+
+Transit alerts + delays when the group is trying to meet up.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="MBTA alerts" />
+</p>
+
+### Restaurant recommendations
+
+Local recommendations tuned to Boston-area neighborhoods.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Restaurant recommendations" />
+</p>
+
+### Local news
+
+Quick headlines and links when someone asks what's happening in the city.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Local news" />
+</p>
+
+### Book recommendations
+
+A lightweight example of "community concierge" behavior beyond Q&A.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Book recommendations" />
+</p>
+
+### D&D character sheet generator
+
+Structured output + a real PDF attachment for tabletop groups.
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="D&D character sheet generator" />
+</p>
 
 Setup flow (text-only for now):
 
@@ -207,10 +219,6 @@ Health check example:
 curl http://127.0.0.1:3001/health
 curl http://127.0.0.1:3001/health/ready
 ```
-
-Ops monitoring (Uptime Kuma):
-
-<img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
 
 ## Features
 
@@ -493,6 +501,12 @@ If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
 The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status.
 
 ### Monitoring with Uptime Kuma
+
+This is what Garbanzo looks like on a basic Kuma HTTP monitor (tracking `/health`):
+
+<p align="center">
+  <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
+</p>
 
 If your Kuma dashboard is running on another host (for example `nas.local`), expose health on a reachable bind host:
 
