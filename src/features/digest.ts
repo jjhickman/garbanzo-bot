@@ -81,6 +81,7 @@ function formatDigest(stats: DailyStats): string {
   let totalOllama = 0;
   let totalClaude = 0;
   let totalOpenAI = 0;
+  let totalGemini = 0;
   let totalFlags = 0;
 
   // Sort groups by message count (most active first)
@@ -98,7 +99,7 @@ function formatDigest(stats: DailyStats): string {
       lines.push(`• *${name}* — ${g.messageCount} msgs, ${userCount} active users`);
       if (g.botResponses > 0) {
         lines.push(
-          `  ↳ ${g.botResponses} bot responses (${g.ollamaRouted} Ollama, ${g.claudeRouted} Claude, ${g.openaiRouted} OpenAI)`,
+          `  ↳ ${g.botResponses} bot responses (${g.ollamaRouted} Ollama, ${g.claudeRouted} Claude, ${g.openaiRouted} OpenAI, ${g.geminiRouted} Gemini)`,
         );
       }
       if (g.moderationFlags > 0) {
@@ -110,6 +111,7 @@ function formatDigest(stats: DailyStats): string {
       totalOllama += g.ollamaRouted;
       totalClaude += g.claudeRouted;
       totalOpenAI += g.openaiRouted;
+      totalGemini += g.geminiRouted;
       totalFlags += g.moderationFlags;
     }
   }
@@ -120,13 +122,15 @@ function formatDigest(stats: DailyStats): string {
   lines.push(`• ${totalUsers} unique active users`);
 
   if (totalBotResponses > 0) {
-    const totalCloud = totalClaude + totalOpenAI;
+    const totalCloud = totalClaude + totalOpenAI + totalGemini;
     const ollamaPct = Math.round((totalOllama / totalBotResponses) * 100);
     const cloudPct = Math.max(0, 100 - ollamaPct);
     const openAiShare = totalCloud > 0 ? Math.round((totalOpenAI / totalCloud) * 100) : 0;
+    const geminiShare = totalCloud > 0 ? Math.round((totalGemini / totalCloud) * 100) : 0;
     lines.push(`• ${totalBotResponses} bot responses (${ollamaPct}% Ollama, ${cloudPct}% cloud)`);
     if (totalCloud > 0) {
-      lines.push(`  ↳ cloud split: ${Math.max(0, 100 - openAiShare)}% Claude, ${openAiShare}% OpenAI`);
+      const claudeShare = Math.max(0, 100 - openAiShare - geminiShare);
+      lines.push(`  ↳ cloud split: ${claudeShare}% Claude, ${openAiShare}% OpenAI, ${geminiShare}% Gemini`);
     }
   }
 
@@ -152,6 +156,7 @@ function serializeStats(stats: DailyStats): string {
       ollamaRouted: g.ollamaRouted,
       claudeRouted: g.claudeRouted,
       openaiRouted: g.openaiRouted,
+      geminiRouted: g.geminiRouted,
       moderationFlags: g.moderationFlags,
     };
   }

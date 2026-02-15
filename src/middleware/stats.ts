@@ -14,13 +14,14 @@ export interface GroupStats {
   ollamaRouted: number;
   claudeRouted: number;
   openaiRouted: number;
+  geminiRouted: number;
   moderationFlags: number;
   aiErrors: number;
 }
 
 /** Per-call cost entry for tracking spend */
 export interface CostEntry {
-  model: 'claude' | 'openai' | 'ollama';
+  model: 'claude' | 'openai' | 'gemini' | 'ollama';
   inputTokens: number;
   outputTokens: number;
   estimatedCost: number; // USD
@@ -68,6 +69,7 @@ function getGroupStats(groupJid: string): GroupStats {
       ollamaRouted: 0,
       claudeRouted: 0,
       openaiRouted: 0,
+      geminiRouted: 0,
       moderationFlags: 0,
       aiErrors: 0,
     };
@@ -104,12 +106,13 @@ export function recordBotResponse(groupJid: string): void {
   getGroupStats(groupJid).botResponses++;
 }
 
-/** Record which AI route handled a group response (Ollama/Claude/OpenAI). */
-export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai'): void {
+/** Record which AI route handled a group response (Ollama/Claude/OpenAI/Gemini). */
+export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai' | 'gemini'): void {
   maybeRollover();
   const stats = getGroupStats(groupJid);
   if (model === 'ollama') stats.ollamaRouted++;
   else if (model === 'openai') stats.openaiRouted++;
+  else if (model === 'gemini') stats.geminiRouted++;
   else stats.claudeRouted++;
 }
 
@@ -154,6 +157,17 @@ const OPENAI_PRICING = {
 };
 
 /**
+ * Gemini pricing varies by model and plan.
+ *
+ * We default to 0 so cost tracking remains conservative until we add
+ * per-model pricing or configurable pricing in env.
+ */
+const GEMINI_PRICING = {
+  input: 0.0,
+  output: 0.0,
+};
+
+/**
  * Record an AI call's cost. Call after each Claude response.
  * Ollama calls are free but tracked for latency stats.
  */
@@ -193,6 +207,23 @@ export function estimateOpenAICost(
     inputTokens,
     outputTokens,
     estimatedCost: (inputTokens * OPENAI_PRICING.input) + (outputTokens * OPENAI_PRICING.output),
+    latencyMs: 0,
+  };
+}
+
+/** Estimate cost of a Gemini call from prompt + response text */
+export function estimateGeminiCost(
+  systemPrompt: string,
+  userMessage: string,
+  response: string,
+): CostEntry {
+  const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userMessage);
+  const outputTokens = estimateTokens(response);
+  return {
+    model: 'gemini',
+    inputTokens,
+    outputTokens,
+    estimatedCost: (inputTokens * GEMINI_PRICING.input) + (outputTokens * GEMINI_PRICING.output),
     latencyMs: 0,
   };
 }
