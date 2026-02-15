@@ -8,12 +8,6 @@ import { buildWelcomeMessage } from '../features/welcome.js';
 import { recordBotResponse } from '../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../middleware/retry.js';
 import { processWhatsAppRawMessage } from '../platforms/whatsapp/processor.js';
-import {
-  extractWhatsAppText as extractText,
-  extractWhatsAppQuotedText as extractQuotedText,
-  extractWhatsAppMentionedJids as extractMentionedJids,
-} from '../platforms/whatsapp/inbound.js';
-
 import { getResponse } from './response-router.js';
 
 /**
@@ -72,12 +66,6 @@ export function registerHandlers(sock: WASocket): void {
 
   logger.info('Message handlers registered');
 }
-
-// ── Shared helpers (exported for use by owner-commands.ts and group-handler.ts) ──
-
-// These helpers are WhatsApp-specific today, but are implemented outside
-// the handlers module so we can reuse them in a future platform adapter.
-export { extractText, extractQuotedText, extractMentionedJids };
 
 // ── Message routing (private) ───────────────────────────────────────
 
