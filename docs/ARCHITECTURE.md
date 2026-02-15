@@ -1,48 +1,64 @@
 # Garbanzo Architecture
 
-This document explains runtime data flow, routing decisions, and major subsystems.
+This document explains runtime data flow, routing decisions, and the major subsystems.
 
 ## High-Level Components
 
-- **Transport:** WhatsApp Web multi-device via Baileys socket
-- **Entry + orchestration:** `src/index.ts`
-- **Message dispatch:** `src/bot/handlers.ts` + `src/bot/group-handler.ts` + `src/bot/owner-commands.ts`
-- **AI routing:** `src/ai/router.ts`
-- **Cloud AI callers:** `src/ai/claude.ts` (OpenRouter/Anthropic), `src/ai/chatgpt.ts` (OpenAI fallback)
-- **Local AI caller:** `src/ai/ollama.ts`
-- **Shared provider payload/parsing:** `src/ai/cloud-providers.ts`
-- **Persistence:** SQLite via `src/utils/db*.ts`
-- **Cross-cutting middleware:** sanitize, context, stats, retry, health, logger
+- Transport (primary): WhatsApp Web multi-device via Baileys
+- Entry + orchestration: `src/index.ts` (starts health/maintenance, selects platform runtime)
+- Platform runtime selection: `src/platforms/index.ts`
+- Core pipeline (platform-agnostic):
+  - `src/core/process-inbound-message.ts` (guards, sanitize, persistence, moderation, passive handlers)
+  - `src/core/process-group-message.ts` (feature routing + AI response)
+  - `src/core/response-router.ts` (bang commands + natural-language routing into AI/features)
+- Messaging seams (platform adapters):
+  - `src/core/messaging-adapter.ts` (sendText, sendMedia, etc.)
+  - `src/core/platform-messenger.ts` (group feature sending: text, polls)
+  - `src/core/message-ref.ts` / `src/core/poll-payload.ts` (explicit platform-opaque payloads)
+- WhatsApp platform implementation: `src/platforms/whatsapp/*`
+  - `runtime.ts`, `connection.ts`, `handlers.ts`, `processor.ts`
+  - `adapter.ts`, `inbound.ts`, `media.ts`, `mentions.ts`, `reactions.ts`
+  - `group-handler.ts`, `owner-commands.ts`, `digest.ts`, `introductions-catchup.ts`
+- Slack scaffold (fail-fast, not production): `src/platforms/slack/*`
+- AI routing: `src/ai/router.ts` (local Ollama vs cloud providers)
+- Cloud AI callers: `src/ai/claude.ts`, `src/ai/chatgpt.ts`, `src/ai/gemini.ts` (if enabled)
+- Shared cloud payload/parsing: `src/ai/cloud-providers.ts`
+- Persistence: SQLite via `src/utils/db*.ts`
+- Cross-cutting middleware: sanitize, context, stats, retry, health, logger, rate limiting
 
 ## Message Lifecycle
 
 ```text
 WhatsApp message
   -> Baileys `messages.upsert`
-  -> handlers.ts `registerHandlers` / `handleMessage`
-      -> unwrap + extract text/media
-      -> sanitize input
-      -> record context/stats/profile activity
-      -> moderation check (group-wide)
-      -> route by message type:
-           - introductions auto-response
-           - events passive enrichment
-           - acknowledgment reaction
-           - group mention path
-           - owner DM command path
-      -> response send + stats update
+  -> `src/platforms/whatsapp/handlers.ts` (socket event wiring)
+  -> `src/platforms/whatsapp/processor.ts` (platform preprocessing)
+       - normalize inbound message (`inbound.ts`)
+       - voice transcription (if PTT)
+       - build adapter (`adapter.ts`)
+  -> `src/core/process-inbound-message.ts` (core pipeline)
+       - transport guards (self/status/stale)
+       - sanitization
+       - persistence (context + profiles + stats)
+       - moderation + owner escalation
+       - passive handlers (introductions, events)
+       - acknowledgment reactions
+       - dispatch to:
+           - `src/platforms/whatsapp/group-handler.ts` (mention parsing + media extraction)
+             -> `src/core/process-group-message.ts` (feature routing + AI)
+           - `src/platforms/whatsapp/owner-commands.ts` (owner DM commands)
 ```
 
-### Handler Stages (group flow)
+### Core Pipeline Stages (group flow)
 
-1. **Guards**: ignore fromMe/status broadcasts/stale messages
-2. **Normalization**: unwrap message wrappers and extract text, mentions, quoted text
-3. **Media/voice preprocessing**: transcribe voice notes, detect visual media
-4. **Sanitization**: strip control chars, enforce limits, defang prompt-injection patterns
-5. **Persistence**: context + message/profile/stats updates
-6. **Moderation**: regex + OpenAI moderation layer; owner alerts and strike handling
-7. **Feature routing**: bang command or natural language matching
-8. **AI fallback route** when needed
+1. Guards: ignore fromSelf/status broadcasts/stale messages (introductions catch-up is exempt)
+2. Normalization: unwrap platform wrappers into `InboundMessage` (text, quoted text, timestamps)
+3. Media/voice preprocessing: transcribe voice notes; detect visual media
+4. Sanitization: strip control chars, enforce length limits, defang prompt injection patterns
+5. Persistence: context + message/profile/stats updates
+6. Moderation: rules + (optional) external moderation; owner alerts and strike handling
+7. Feature routing: bang commands or natural language matching
+8. AI fallback route when needed
 
 ## AI Routing Decision Tree
 
@@ -56,45 +72,41 @@ Incoming query (+ optional vision images)
   +-- classifyComplexity(query, context)
   |
   +-- if simple AND no vision AND Ollama available:
-  |      try Ollama (`qwen3:8b`)
+  |      try Ollama
   |      on failure -> cloud path
   |
   +-- cloud path:
          iterate providers in configured order (`AI_PROVIDER_ORDER`)
-           - `openrouter`/`anthropic` -> `callClaude(provider, ...)`
-           - `openai` -> `callChatGPT(...)`
+           - `openrouter`/`anthropic` -> Claude-family caller
+           - `openai` -> ChatGPT caller
+           - `gemini` -> Gemini caller
          first successful provider returns response
 ```
 
 ### Cloud Reliability Controls
 
-- **Per-request timeout:** 30s for Claude/OpenAI callers
-- **Circuit breaker:** open for 60s after 3 consecutive failures
-- **Cost tracking:** token-estimated cost entries in `stats.ts`
-- **Daily alert threshold:** warning when estimated spend crosses configured threshold
+- Per-request timeouts in cloud callers
+- Provider ordering + fallback via `AI_PROVIDER_ORDER`
+- Cost tracking in `src/middleware/stats.ts`
 
 ## Multimedia Pipeline
 
-Multimedia support spans `media.ts`, `voice.ts`, `links.ts`, and cloud vision payload builders.
-
-### Images / Video / Stickers
+### Images / Video / Stickers (vision)
 
 ```text
-Message with media
-  -> media.ts `extractMedia`
-  -> media.ts `prepareForVision`
-      - image/sticker/gif -> base64 image payload
-      - video -> ffmpeg frame extraction (JPEG frames)
-  -> ai/router.ts with `visionImages`
-  -> cloud-providers.ts builds Anthropic/OpenAI-compatible content blocks
+Message with visual media
+  -> `src/platforms/whatsapp/media.ts` (download + extract)
+  -> `src/core/vision.ts` (`prepareForVision` -> VisionImage[])
+  -> `src/ai/router.ts` with `visionImages`
+  -> `src/ai/cloud-providers.ts` builds provider content blocks
 ```
 
 ### Voice Notes
 
 ```text
 PTT audio message
-  -> media.ts `downloadVoiceAudio`
-  -> voice.ts `transcribeAudio` (local Whisper-compatible API)
+  -> `src/platforms/whatsapp/media.ts` (download audio bytes)
+  -> `src/features/voice.ts` (`transcribeAudio`)
   -> transcript replaces message text for normal routing
 ```
 
@@ -102,53 +114,55 @@ PTT audio message
 
 ```text
 Message containing URL
-  -> links.ts `processUrl`
-     - YouTube: yt-dlp metadata + audio download -> Whisper transcription
-     - Other URLs: fetch + HTML->text extraction
-  -> extracted text added as context for AI response
+  -> `src/features/links.ts` (`processUrl`)
+     - YouTube: metadata + transcription
+     - other URLs: fetch + extract text
+  -> extracted summary is appended as context before AI response
 ```
 
 ### Text-to-Speech
 
-- `voice.ts` uses Piper for synthesis and ffmpeg for output conversion when `!voice` commands are used.
+- `src/features/voice.ts` uses Piper for synthesis and ffmpeg for output conversion when `!voice` commands are used.
 
 ## Data Model and Storage
 
-SQLite database (`data/garbanzo.db`, WAL mode) stores:
+SQLite stores:
 
-- **messages**: chat history for context
-- **moderation_log**: flags and strike history
-- **daily_stats**: serialized digest snapshots
-- **memory**: owner-curated long-term facts
-- **member_profiles**: opt-in profile and activity metadata
-- **feedback**: suggestions/bugs/upvotes
+- messages: chat history for context
+- moderation_log: flags and strike history
+- daily_stats: serialized digest snapshots
+- memory: owner-curated long-term facts
+- member_profiles: opt-in profile and activity metadata
+- feedback: suggestions/bugs/upvotes
+
+### SQLite Paths
+
+- Production/dev default: `data/garbanzo.db` (WAL mode)
+- Test runtime: a per-process DB lives under `os.tmpdir()` to avoid cross-worker locking and to prevent polluting the repo data directory.
 
 ### Maintenance Jobs
 
-- **Nightly backup**: `VACUUM INTO` snapshots in `data/backups/`
-- **Retention prune**: message TTL cleanup + conditional VACUUM
-- **Backup verification**: latest backup integrity reported via health endpoint
+- Daily backup: `VACUUM INTO` snapshots in `data/backups/` (or the test temp dir)
+- Retention prune: message TTL cleanup + conditional VACUUM
+- Backup verification: latest backup integrity reported via health endpoint
 
 ## Health and Operations
 
-Health endpoint (default `http://127.0.0.1:3001/health`) reports:
+Health endpoints (default bind `127.0.0.1:3001`):
 
-- connection state and staleness
-- uptime/reconnect count
-- memory usage
-- latest backup integrity status
+- `GET /health`: status and diagnostics
+- `GET /health/ready`: readiness semantics for monitoring (disconnect/staleness)
 
 Operational protections:
 
 - memory watchdog with restart threshold
 - retry queue for transient AI failures
 - process-level `unhandledRejection` / `uncaughtException` handlers
-- basic health endpoint request rate limiting
-- if exposed beyond localhost (for Kuma), restrict access to trusted hosts (iptables `DOCKER-USER` allowlist for Docker)
+- if exposed beyond localhost (for monitoring), restrict access to trusted hosts
 
 ## Security Boundaries
 
-- secrets loaded from `.env` and validated via Zod (`config.ts`)
+- secrets loaded from `.env` and validated via Zod (`src/utils/config.ts`)
 - input sanitization before routing
 - moderation alerts are human-in-the-loop (owner DM)
 - gitleaks scanning in pre-commit and `npm run check`
@@ -156,6 +170,5 @@ Operational protections:
 ## Deployment Notes
 
 - Default deployment: Docker Compose
-- Alternative deployment: systemd user service on Terra (native Node)
-- Release images are published to GHCR via tag-driven workflow (`v*`)
-- Do not run multiple bot instances against same Baileys auth state
+- Alternative deployment: systemd user service (native Node)
+- Do not run multiple bot instances against the same Baileys auth state
