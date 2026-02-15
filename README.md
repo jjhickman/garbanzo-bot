@@ -99,6 +99,23 @@ npm run dev
 # Scan the QR code with WhatsApp when prompted
 ```
 
+### Slack Demo Mode (optional)
+
+Slack is scaffolded but not implemented as a real runtime yet. For local development, you can run a small HTTP demo server that exercises the core pipeline without Slack APIs:
+
+```bash
+# .env
+MESSAGING_PLATFORM=slack
+SLACK_DEMO=true
+
+npm run dev
+
+# In another terminal
+curl -s -X POST http://127.0.0.1:3002/slack/demo \
+  -H 'content-type: application/json' \
+  -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
+```
+
 ### Automated / Non-Interactive Setup
 
 Use non-interactive mode for reproducible setup in scripts or CI-like environments:
