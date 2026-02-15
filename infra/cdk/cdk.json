@@ -1,0 +1,3 @@
+{
+  "app": "node --loader ts-node/esm bin/garbanzo.ts"
+}

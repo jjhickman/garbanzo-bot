@@ -36,20 +36,28 @@ Reliability comes from fewer moving parts and explicit guardrails, not from more
 
 Important clarification: this section is about our previous deployment and migration learnings, not a critique of the upstream OpenClaw project.
 
-What we kept from OpenClaw-style systems:
+What we kept (inspiration from OpenClaw-style systems):
 
 - A bias toward useful "skills" (weather/transit/events/summaries) rather than generic chat
 - Tooling that makes the bot operationally observable (health endpoints, backups, logs)
+- Cost discipline: explicit routing and fallbacks instead of "just use the biggest model"
 
-What we intentionally changed in Garbanzo:
+What we intentionally changed in Garbanzo (why it's safer for group deployments):
 
-- **Single primary deployable:** one Docker image with versioned releases (plus optional native bundles)
+- **Smaller surface area:** WhatsApp only today (no web control UI, no multi-channel gateway)
+- **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
+- **Group safety defaults:** mention gating + per-group feature allowlists
 - **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
-- **Boring, inspectable state:** SQLite + explicit backups; health reports backup integrity
-- **Guardrails by default:** CI runs `npm run check` (secrets scan + typecheck + lint + tests)
-- **Reduced blast radius:** features are reviewed code in-repo (no arbitrary third-party skill execution)
+- **Local-first, inspectable state:** SQLite + explicit backups; health reports backup integrity
+- **Security guardrails in CI:** secrets scan + typecheck + lint + tests (`npm run check`)
 
-If you're looking for a general-purpose personal assistant with a skill marketplace and broad app integrations, OpenClaw may be a better fit. Garbanzo is optimized for group chat coordination and stable self-hosting.
+Upstream OpenClaw is explicitly designed as a general personal assistant with a large tool and channel surface, a skills ecosystem, and optional web surfaces. That power is great for single-user assistants, but it increases the amount you must secure.
+
+OpenClaw itself warns its web interface is intended for local use and should not be exposed directly to the public internet:
+
+- https://github.com/openclaw/openclaw/blob/main/SECURITY.md
+
+For a more explicit comparison, see `docs/OPENCLAW_COMPARISON.md`.
 
 ## What It Does
 
@@ -565,6 +573,9 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
 - [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
+- [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
+- [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
+- [OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md) — OpenClaw-style stack comparison and tradeoffs
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions
