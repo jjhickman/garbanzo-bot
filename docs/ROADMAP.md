@@ -133,13 +133,13 @@
 
 ### High Priority (low effort, high value)
 1. ~~**Health check HTTP endpoint** (`src/middleware/health.ts`) — HTTP server on `http://127.0.0.1:3001/health` by default, returns JSON: connection status, uptime, staleness, last message age, reconnect count, memory usage~~ ✅ Live
-2. ~~**Connection staleness detection** (`src/bot/connection.ts`) — tracks `lastMessageReceivedAt` via health module, auto-reconnect if >30 min with no messages. Checks every 5 min. Prevents "connected but deaf" failure mode~~ ✅ Live
+2. ~~**Connection staleness detection** (`src/platforms/whatsapp/connection.ts`) — tracks `lastMessageReceivedAt` via health module, auto-reconnect if >30 min with no messages. Checks every 5 min. Prevents "connected but deaf" failure mode~~ ✅ Live
 3. ~~**Ollama warm-up ping** (`src/ai/ollama.ts`) — sends `/api/generate` keep-alive with `keep_alive: 15m` every 10 min to prevent model unload. Immediate ping on startup~~ ✅ Live
 4. ~~**SQLite auto-vacuum** (`src/utils/db.ts`) — scheduled daily at 4 AM: prune messages older than 30 days + `VACUUM` to reclaim space~~ ✅ Live
 
 ### Medium Priority (medium effort, high value)
 5. ~~**Cost tracking** (`src/middleware/stats.ts`) — estimates tokens per Claude call (~4 chars/token heuristic), accumulates daily spend, logs per-call cost + daily total. Alert threshold at $1/day (logged, surfaced in digest)~~ ✅ Live
-6. ~~**Feature flags per group** (`src/bot/groups.ts`, `config/groups.json`) — optional `enabledFeatures` array per group. If omitted, all features enabled (backward compatible). Checked before routing to any feature handler~~ ✅ Live
+6. ~~**Feature flags per group** (`src/core/groups-config.ts`, `config/groups.json`) — optional `enabledFeatures` array per group. If omitted, all features enabled (backward compatible). Checked before routing to any feature handler~~ ✅ Live
 7. ~~**Dead letter retry** (`src/middleware/retry.ts`) — in-memory queue, messages that fail AI processing retried once after 30s. Max 50 entries, dedup by sender+group+timestamp. Cleared on shutdown~~ ✅ Live
 8. ~~**Automated SQLite backup** (`src/utils/db.ts`) — nightly at 4 AM (before vacuum): `VACUUM INTO` for WAL-safe snapshot to `data/backups/garbanzo-YYYY-MM-DD.db`, keep last 7, prune older~~ ✅ Live
 
@@ -231,7 +231,7 @@ Completed as part of 7.1 file splits:
 1. [x] Replace remaining `any` types — `connection.ts` (`as any` → `as ILogger`), `media.ts` (`Record<string, any>` → `WAMessageContent`), `claude.ts` (typed `ContentBlock` discriminated union for Anthropic/OpenRouter image formats)
 2. [x] Add Zod schemas for external API responses — `weather.ts` (3 schemas), `news.ts` (2), `venues.ts` (4), `books.ts` (3 + refactored `olFetch<T>` with schema param), `claude.ts` (inline `.safeParse()` for both API formats). Skipped `transit.ts` (already typed), `fun.ts`/`dnd-lookups.ts` (lower priority)
 3. [x] Create shared `Result<T, E>` type in `src/utils/formatting.ts` for feature handlers returning text or structured data
-4. [x] Type `config/groups.json` with Zod — `GroupConfigSchema` + `GroupsConfigSchema` in `src/bot/groups.ts`, validated with `.parse()` at startup
+4. [x] Type `config/groups.json` with Zod — `GroupConfigSchema` + `GroupsConfigSchema` in `src/core/groups-config.ts`, validated with `.parse()` at startup
 
 ### 7.5 — Test improvements ✅
 
