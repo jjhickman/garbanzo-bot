@@ -28,6 +28,8 @@ services:
       - NODE_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - GARBANZO_VERSION=${APP_VERSION:-dev}
+      - HEALTH_PORT=${HEALTH_PORT:-3001}
+      - HEALTH_BIND_HOST=0.0.0.0
 
     # Health check port (internal only by default)
     ports:

@@ -31,12 +31,14 @@ async function main(): Promise<void> {
     cloudProviders,
     messagingPlatform: config.MESSAGING_PLATFORM,
     healthOnlyMode,
+    healthPort: config.HEALTH_PORT,
+    healthBindHost: config.HEALTH_BIND_HOST,
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');
 
   // Start health check server + memory watchdog for monitoring
-  startHealthServer();
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST);
   startMemoryWatchdog();
 
   // Start Ollama warm-up pings to prevent model unloading

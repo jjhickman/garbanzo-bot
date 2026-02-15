@@ -49,6 +49,8 @@ const envSchema = z.object({
   GITHUB_ISSUES_REPO: z.string().default('jjhickman/garbanzo-bot'),
 
   // Infrastructure
+  HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  HEALTH_BIND_HOST: z.string().min(1).default('127.0.0.1'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   OWNER_JID: z.string().min(1, 'OWNER_JID is required — set in .env'),
 });
