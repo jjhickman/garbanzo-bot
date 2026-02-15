@@ -31,7 +31,7 @@
     "node": ">=20.0.0"
   },
   "author": "Josh Hickman",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.16",
