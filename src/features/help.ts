@@ -6,6 +6,7 @@ import { bold } from '../utils/formatting.js';
  * Separate help for regular members and owner-only commands.
  */
 
+/** Build the standard member-facing help message. */
 export function getHelpMessage(): string {
   return [
     `${bold('Hey, I\'m Garbanzo Bean!')} 🫘`,
@@ -121,6 +122,10 @@ export function getOwnerHelpMessage(): string {
     `${bold('Releases')}`,
     '  !release <notes> — broadcast release notes to all groups',
     '  !release <group> <notes> — broadcast to specific group',
+    '',
+    `${bold('Support')}`,
+    '  !support — preview support links message',
+    '  !support broadcast — send support message to all enabled groups',
     '',
     '_These commands only work in DM with the bot._',
   ].join('\n');
