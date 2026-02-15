@@ -10,7 +10,7 @@ import { handleRelease } from '../features/release.js';
 import { handleMemory } from '../features/memory.js';
 import { recordOwnerDM } from '../middleware/stats.js';
 import { GROUP_IDS } from './groups.js';
-import { getResponse } from './handlers.js';
+import { getResponse } from './response-router.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [
