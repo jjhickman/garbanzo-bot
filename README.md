@@ -28,16 +28,28 @@ Garbanzo is opinionated around community operations, not just message transport.
 - **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows (`!feedback issue <id>`).
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
-## Lessons From OpenClaw (Trust & Maturity)
+## Lessons From Our OpenClaw-Inspired Stack (Trust & Maturity)
 
-Garbanzo is the simplified successor to an earlier, more ambitious system ("OpenClaw"). OpenClaw was decommissioned after proving a key lesson: reliability comes from fewer moving parts and clear guardrails, not more services.
+Before Garbanzo, we ran a more ambitious OpenClaw-inspired setup (many services, lots of automation, and a bigger "agent surface area"). That project taught a key lesson:
 
-What that means in this repo:
+Reliability comes from fewer moving parts and explicit guardrails, not from more integrations.
 
-- One primary deployable (Docker image) plus optional native bundles; versioned releases are automated
-- Ops-first tooling: `/health` for visibility and `/health/ready` for alerting on disconnect/staleness
-- Boring, inspectable state: SQLite + explicit backups; health reports backup integrity
-- Guardrails by default: CI runs `npm run check` (secrets scan + typecheck + lint + tests)
+Important clarification: this section is about our previous deployment and migration learnings, not a critique of the upstream OpenClaw project.
+
+What we kept from OpenClaw-style systems:
+
+- A bias toward useful "skills" (weather/transit/events/summaries) rather than generic chat
+- Tooling that makes the bot operationally observable (health endpoints, backups, logs)
+
+What we intentionally changed in Garbanzo:
+
+- **Single primary deployable:** one Docker image with versioned releases (plus optional native bundles)
+- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
+- **Boring, inspectable state:** SQLite + explicit backups; health reports backup integrity
+- **Guardrails by default:** CI runs `npm run check` (secrets scan + typecheck + lint + tests)
+- **Reduced blast radius:** features are reviewed code in-repo (no arbitrary third-party skill execution)
+
+If you're looking for a general-purpose personal assistant with a skill marketplace and broad app integrations, OpenClaw may be a better fit. Garbanzo is optimized for group chat coordination and stable self-hosting.
 
 ## What It Does
 

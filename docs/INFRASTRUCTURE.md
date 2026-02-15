@@ -23,13 +23,13 @@
 | Piper TTS | 10200 | 0.0.0.0 | Text-to-speech (Docker) |
 | OpenWakeWord | 10400 | 0.0.0.0 | Wake word detection (Docker) |
 
-> **Note:** All OpenClaw services (gateway, embeddings, classifiers, ML gateway, task-router,
+> **Note:** All OpenClaw-inspired services (gateway, embeddings, classifiers, ML gateway, task-router,
 > voice-bridge, MBTA SSE/forwarder, webhooks, public-docs) were decommissioned 2026-02-13.
 
 ## Network
 
 - **Tailscale mesh VPN** connects all machines
-- **Tailscale Funnel** disabled (was exposing OpenClaw; can be re-enabled for webhook ingress)
+- **Tailscale Funnel** disabled (was exposing the OpenClaw-inspired stack; can be re-enabled for webhook ingress)
 - LAN: `192.168.50.0/24`
 - NAS NFS: model storage at `/volume2/models/`
 - Backups: encrypted (age) to NAS `/volume1/backups/`
