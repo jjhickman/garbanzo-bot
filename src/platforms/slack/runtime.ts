@@ -5,7 +5,10 @@ export function createSlackRuntime(): PlatformRuntime {
   return {
     platform: 'slack',
     async start(): Promise<void> {
-      logger.fatal({ platform: 'slack' }, 'Slack runtime is not implemented yet');
+      logger.fatal(
+        { platform: 'slack' },
+        'Slack runtime is not implemented yet (set MESSAGING_PLATFORM=whatsapp)',
+      );
       throw new Error('Slack runtime is not implemented');
     },
   };
