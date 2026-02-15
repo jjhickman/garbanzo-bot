@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
+function must<T>(value: T | null | undefined, message: string = 'expected value'): T {
+  if (value === null || value === undefined) throw new Error(message);
+  return value;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // 1. BANG COMMAND ROUTING
 // ═══════════════════════════════════════════════════════════════════
@@ -310,45 +315,40 @@ describe('D&D dice roller — rollDice', async () => {
   const { rollDice } = await import('../src/features/dnd.js');
 
   it('parses a simple d20', () => {
-    const result = rollDice('d20');
-    expect(result).not.toBeNull();
-    expect(result!.rolls).toHaveLength(1);
-    expect(result!.rolls[0]).toBeGreaterThanOrEqual(1);
-    expect(result!.rolls[0]).toBeLessThanOrEqual(20);
-    expect(result!.modifier).toBe(0);
-    expect(result!.total).toBe(result!.rolls[0]);
+    const result = must(rollDice('d20'), 'expected d20 result');
+    expect(result.rolls).toHaveLength(1);
+    expect(result.rolls[0]).toBeGreaterThanOrEqual(1);
+    expect(result.rolls[0]).toBeLessThanOrEqual(20);
+    expect(result.modifier).toBe(0);
+    expect(result.total).toBe(result.rolls[0]);
   });
 
   it('parses 2d6', () => {
-    const result = rollDice('2d6');
-    expect(result).not.toBeNull();
-    expect(result!.rolls).toHaveLength(2);
-    for (const r of result!.rolls) {
+    const result = must(rollDice('2d6'), 'expected 2d6 result');
+    expect(result.rolls).toHaveLength(2);
+    for (const r of result.rolls) {
       expect(r).toBeGreaterThanOrEqual(1);
       expect(r).toBeLessThanOrEqual(6);
     }
-    expect(result!.total).toBe(result!.rolls[0] + result!.rolls[1]);
+    expect(result.total).toBe(result.rolls[0] + result.rolls[1]);
   });
 
   it('parses modifier: 2d6+3', () => {
-    const result = rollDice('2d6+3');
-    expect(result).not.toBeNull();
-    expect(result!.modifier).toBe(3);
-    expect(result!.total).toBe(result!.rolls[0] + result!.rolls[1] + 3);
+    const result = must(rollDice('2d6+3'), 'expected 2d6+3 result');
+    expect(result.modifier).toBe(3);
+    expect(result.total).toBe(result.rolls[0] + result.rolls[1] + 3);
   });
 
   it('parses negative modifier: 4d8-1', () => {
-    const result = rollDice('4d8-1');
-    expect(result).not.toBeNull();
-    expect(result!.modifier).toBe(-1);
-    expect(result!.rolls).toHaveLength(4);
+    const result = must(rollDice('4d8-1'), 'expected 4d8-1 result');
+    expect(result.modifier).toBe(-1);
+    expect(result.rolls).toHaveLength(4);
   });
 
   it('parses d100 (percentile)', () => {
-    const result = rollDice('d100');
-    expect(result).not.toBeNull();
-    expect(result!.rolls[0]).toBeGreaterThanOrEqual(1);
-    expect(result!.rolls[0]).toBeLessThanOrEqual(100);
+    const result = must(rollDice('d100'), 'expected d100 result');
+    expect(result.rolls[0]).toBeGreaterThanOrEqual(1);
+    expect(result.rolls[0]).toBeLessThanOrEqual(100);
   });
 
   it('rejects invalid notation', () => {
@@ -442,31 +442,27 @@ describe('Polls — parsePoll', async () => {
   const { parsePoll } = await import('../src/features/polls.js');
 
   it('parses slash-separated format', () => {
-    const poll = parsePoll('What day? / Friday / Saturday / Sunday');
-    expect(poll).not.toBeNull();
-    expect(poll!.name).toBe('What day?');
-    expect(poll!.values).toEqual(['Friday', 'Saturday', 'Sunday']);
-    expect(poll!.selectableCount).toBe(1);
+    const poll = must(parsePoll('What day? / Friday / Saturday / Sunday'), 'expected poll');
+    expect(poll.name).toBe('What day?');
+    expect(poll.values).toEqual(['Friday', 'Saturday', 'Sunday']);
+    expect(poll.selectableCount).toBe(1);
   });
 
   it('parses quoted format', () => {
-    const poll = parsePoll('"Best pizza?" "Regina" "Santarpio" "Pepe\'s"');
-    expect(poll).not.toBeNull();
-    expect(poll!.name).toBe('Best pizza?');
-    expect(poll!.values).toEqual(['Regina', 'Santarpio', "Pepe's"]);
+    const poll = must(parsePoll('"Best pizza?" "Regina" "Santarpio" "Pepe\'s"'), 'expected poll');
+    expect(poll.name).toBe('Best pizza?');
+    expect(poll.values).toEqual(['Regina', 'Santarpio', "Pepe's"]);
   });
 
   it('parses newline-separated format', () => {
-    const poll = parsePoll('Best brunch spot?\nTiku\nSalted Pig\nMike\'s');
-    expect(poll).not.toBeNull();
-    expect(poll!.name).toBe('Best brunch spot?');
-    expect(poll!.values).toHaveLength(3);
+    const poll = must(parsePoll('Best brunch spot?\nTiku\nSalted Pig\nMike\'s'), 'expected poll');
+    expect(poll.name).toBe('Best brunch spot?');
+    expect(poll.values).toHaveLength(3);
   });
 
   it('appends ? to question if missing', () => {
-    const poll = parsePoll('Favorite color / Red / Blue / Green');
-    expect(poll).not.toBeNull();
-    expect(poll!.name).toBe('Favorite color?');
+    const poll = must(parsePoll('Favorite color / Red / Blue / Green'), 'expected poll');
+    expect(poll.name).toBe('Favorite color?');
   });
 
   it('returns null for empty input', () => {
@@ -485,16 +481,14 @@ describe('Polls — parsePoll', async () => {
   it('caps options at 12 (WhatsApp limit)', () => {
     const parts = ['Question?'];
     for (let i = 1; i <= 15; i++) parts.push(`Option ${i}`);
-    const poll = parsePoll(parts.join(' / '));
-    expect(poll).not.toBeNull();
-    expect(poll!.values).toHaveLength(12);
+    const poll = must(parsePoll(parts.join(' / ')), 'expected poll');
+    expect(poll.values).toHaveLength(12);
   });
 
   it('trims whitespace from question and options', () => {
-    const poll = parsePoll('  Question?  /  A  /  B  /  C  ');
-    expect(poll).not.toBeNull();
-    expect(poll!.name).toBe('Question?');
-    expect(poll!.values).toEqual(['A', 'B', 'C']);
+    const poll = must(parsePoll('  Question?  /  A  /  B  /  C  '), 'expected poll');
+    expect(poll.name).toBe('Question?');
+    expect(poll.values).toEqual(['A', 'B', 'C']);
   });
 });
 
