@@ -48,7 +48,6 @@ git push origin main --follow-tags
   - `garbanzo-linux-x64.tar.gz`
   - `garbanzo-linux-arm64.tar.gz`
   - `garbanzo-macos-arm64.tar.gz`
-  - `garbanzo-macos-x64.tar.gz`
   - `garbanzo-windows-x64.zip`
 
 5. Open a release checklist issue from `.github/ISSUE_TEMPLATE/release-checklist.yml` and track deploy verification.
