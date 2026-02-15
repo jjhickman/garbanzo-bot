@@ -1,7 +1,5 @@
 import { logger } from '../middleware/logger.js';
 import { checkMessage, formatModerationAlert, applyStrikeAndMute } from '../features/moderation.js';
-import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions.js';
-import { handleEventPassive, EVENTS_JID } from '../features/events.js';
 import { sanitizeMessage } from '../middleware/sanitize.js';
 import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js';
 import { recordMessage } from '../middleware/context.js';
@@ -51,6 +49,12 @@ export interface CoreMessageHooks {
 export interface CoreInboundEnv {
   ownerId: string;
   isGroupEnabled: (chatId: string) => boolean;
+
+  introductionsChatId: string | null;
+  eventsChatId: string | null;
+
+  handleIntroduction: (text: string, messageId: string, senderId: string, chatId: string) => Promise<string | null>;
+  handleEventPassive: (text: string, senderId: string, chatId: string) => Promise<string | null>;
 }
 
 export async function processInboundMessage(
@@ -68,7 +72,8 @@ export async function processInboundMessage(
   // Ignore stale messages (delivered long after being sent)
   // Exception: Introductions group — intros are caught up via dedup tracker
   const ageSeconds = Math.floor((Date.now() - inbound.timestampMs) / 1000);
-  if (ageSeconds > MAX_MESSAGE_AGE_SECONDS && inbound.chatId !== INTRODUCTIONS_JID) {
+  const isIntroductionsGroup = !!env.introductionsChatId && inbound.chatId === env.introductionsChatId;
+  if (ageSeconds > MAX_MESSAGE_AGE_SECONDS && !isIntroductionsGroup) {
     logger.debug({ ageSeconds, msgId: inbound.messageId }, 'Ignoring stale message');
     return;
   }
@@ -131,12 +136,12 @@ export async function processInboundMessage(
   }
 
   // Introductions (auto-respond, no @mention needed)
-  if (inbound.chatId === INTRODUCTIONS_JID) {
+  if (env.introductionsChatId && inbound.chatId === env.introductionsChatId) {
     const isReply = !!inbound.quotedText;
     if (!isReply) {
       const messageId = inbound.messageId;
       if (messageId) {
-        const introResponse = await handleIntroduction(text, messageId, inbound.senderId, inbound.chatId);
+        const introResponse = await env.handleIntroduction(text, messageId, inbound.senderId, inbound.chatId);
         if (introResponse) {
           await adapter.sendText(inbound.chatId, introResponse, { replyTo: inbound.raw });
           return;
@@ -146,8 +151,8 @@ export async function processInboundMessage(
   }
 
   // Events group (passive detection, no @mention needed)
-  if (inbound.chatId === EVENTS_JID) {
-    const eventResponse = await handleEventPassive(text, inbound.senderId, inbound.chatId);
+  if (env.eventsChatId && inbound.chatId === env.eventsChatId) {
+    const eventResponse = await env.handleEventPassive(text, inbound.senderId, inbound.chatId);
     if (eventResponse) {
       await adapter.sendText(inbound.chatId, eventResponse, { replyTo: inbound.raw });
       return;
