@@ -19,6 +19,9 @@ jobs:
     name: Build and Push GHCR Image
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      raw_version: ${{ steps.version.outputs.raw }}
+      image_ref: ghcr.io/${{ github.repository_owner }}/garbanzo:${{ steps.version.outputs.raw }}
 
     steps:
       - name: Checkout
@@ -74,3 +77,50 @@ jobs:
             APP_VERSION=${{ steps.version.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  smoke-test:
+    name: Smoke Test Published Image
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    timeout-minutes: 15
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        run: docker pull "${{ needs.build-and-push.outputs.image_ref }}"
+
+      - name: Run container
+        run: |
+          docker run -d --name garbanzo-smoke \
+            -p 127.0.0.1:39001:3001 \
+            -e MESSAGING_PLATFORM=whatsapp \
+            -e OWNER_JID=test_owner@s.whatsapp.net \
+            -e OPENROUTER_API_KEY=test_key_ci \
+            -e AI_PROVIDER_ORDER=openrouter \
+            "${{ needs.build-and-push.outputs.image_ref }}"
+
+      - name: Wait for health endpoint
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:39001/health >/dev/null; then
+              echo "Health endpoint responded"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health endpoint did not respond in time"
+          exit 1
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs garbanzo-smoke || true
+
+      - name: Cleanup container
+        if: always()
+        run: docker rm -f garbanzo-smoke || true
