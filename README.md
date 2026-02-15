@@ -442,6 +442,12 @@ Then configure an HTTP monitor in Kuma to check:
 http://<garbanzo-host>:3001/health
 ```
 
+Optional Prometheus scrape (if you enable it):
+
+```text
+http://<garbanzo-host>:3001/metrics
+```
+
 Optional (recommended) second monitor — alert when WhatsApp is disconnected or "connected but deaf":
 
 ```text

@@ -11,6 +11,8 @@ This combination is reliable and easy to run, but it is not "horizontal scale" b
 
 ## What Scales Today
 
+Prometheus/Grafana-style monitoring can be layered on via `GET /metrics` (optional). This gives you time-series visibility without changing the deployment model.
+
 - Vertical scale (bigger CPU/RAM) on one host
 - Higher availability through operational hygiene:
   - health endpoints (`/health`, `/health/ready`)
