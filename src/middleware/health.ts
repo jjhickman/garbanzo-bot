@@ -110,11 +110,78 @@ function getCachedBackupStatus(now: number): { checkedAt: number; status: Backup
 /**
  * Start the local HTTP health endpoint (`/health`) with lightweight abuse protection.
  */
-export function startHealthServer(port: number = 3001, host: string = '127.0.0.1'): void {
+function renderPrometheusMetrics(now: number): string {
+  const stale = isConnectionStale();
+  const uptimeSeconds = Math.floor((now - state.startedAt) / 1000);
+  const connectedForSeconds = state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : -1;
+  const lastMessageAgoSeconds = state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : -1;
+  const mem = process.memoryUsage();
+  const backup = getCachedBackupStatus(now);
+
+  const statusConnected = state.status === 'connected' ? 1 : 0;
+  const statusConnecting = state.status === 'connecting' ? 1 : 0;
+  const statusDisconnected = state.status === 'disconnected' ? 1 : 0;
+
+  const backupIntegrityOk = backup.status.integrityOk === true ? 1 : 0;
+  const backupAvailable = backup.status.available ? 1 : 0;
+
+  const lines: string[] = [];
+  lines.push('# HELP garbanzo_up_time_seconds Process uptime in seconds.');
+  lines.push('# TYPE garbanzo_up_time_seconds gauge');
+  lines.push(`garbanzo_up_time_seconds ${uptimeSeconds}`);
+
+  lines.push('# HELP garbanzo_connection_status WhatsApp connection status as one-hot gauges.');
+  lines.push('# TYPE garbanzo_connection_status gauge');
+  lines.push(`garbanzo_connection_status{status="connected"} ${statusConnected}`);
+  lines.push(`garbanzo_connection_status{status="connecting"} ${statusConnecting}`);
+  lines.push(`garbanzo_connection_status{status="disconnected"} ${statusDisconnected}`);
+
+  lines.push('# HELP garbanzo_connection_stale Whether the connection is stale (connected but no messages for threshold).');
+  lines.push('# TYPE garbanzo_connection_stale gauge');
+  lines.push(`garbanzo_connection_stale ${stale ? 1 : 0}`);
+
+  lines.push('# HELP garbanzo_connected_for_seconds Seconds since last connected (or -1).');
+  lines.push('# TYPE garbanzo_connected_for_seconds gauge');
+  lines.push(`garbanzo_connected_for_seconds ${connectedForSeconds}`);
+
+  lines.push('# HELP garbanzo_last_message_ago_seconds Seconds since last message received (or -1).');
+  lines.push('# TYPE garbanzo_last_message_ago_seconds gauge');
+  lines.push(`garbanzo_last_message_ago_seconds ${lastMessageAgoSeconds}`);
+
+  lines.push('# HELP garbanzo_reconnect_count Number of reconnects observed in this process lifetime.');
+  lines.push('# TYPE garbanzo_reconnect_count gauge');
+  lines.push(`garbanzo_reconnect_count ${state.reconnectCount}`);
+
+  lines.push('# HELP garbanzo_memory_rss_bytes Resident set size in bytes.');
+  lines.push('# TYPE garbanzo_memory_rss_bytes gauge');
+  lines.push(`garbanzo_memory_rss_bytes ${mem.rss}`);
+
+  lines.push('# HELP garbanzo_memory_heap_used_bytes Heap used in bytes.');
+  lines.push('# TYPE garbanzo_memory_heap_used_bytes gauge');
+  lines.push(`garbanzo_memory_heap_used_bytes ${mem.heapUsed}`);
+
+  lines.push('# HELP garbanzo_backup_available Whether a backup file is available (best effort).');
+  lines.push('# TYPE garbanzo_backup_available gauge');
+  lines.push(`garbanzo_backup_available ${backupAvailable}`);
+
+  lines.push('# HELP garbanzo_backup_integrity_ok Whether the latest backup integrity check passed (1 only when available and ok).');
+  lines.push('# TYPE garbanzo_backup_integrity_ok gauge');
+  lines.push(`garbanzo_backup_integrity_ok ${backupIntegrityOk}`);
+
+  return lines.join('\n') + '\n';
+}
+
+export function startHealthServer(
+  port: number = 3001,
+  host: string = '127.0.0.1',
+  options?: { metricsEnabled?: boolean },
+): void {
+  const metricsEnabled = options?.metricsEnabled === true;
+
   server = createServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
 
-    if ((path === '/health' || path === '/health/ready') && req.method === 'GET') {
+    if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
       const now = Date.now();
       const ip = req.socket.remoteAddress ?? 'unknown';
 
@@ -125,6 +192,12 @@ export function startHealthServer(port: number = 3001, host: string = '127.0.0.1
       }
 
       const stale = isConnectionStale();
+
+      if (path === '/metrics') {
+        res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
+        res.end(renderPrometheusMetrics(now));
+        return;
+      }
 
       // `/health` is informational and always 200.
       // `/health/ready` is actionable: 200 only when connected + not stale.

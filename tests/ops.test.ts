@@ -99,7 +99,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
 
   it('health payload includes backup integrity fields', async () => {
     const port = await getFreePort();
-    startHealthServer(port);
+    startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health`);
     expect(response.status).toBe(200);
@@ -111,7 +111,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
 
   it('returns 429 when health endpoint request limit is exceeded', async () => {
     const port = await getFreePort();
-    startHealthServer(port);
+    startHealthServer(port, '127.0.0.1');
 
     let lastStatus = 0;
     for (let i = 0; i < 125; i++) {
@@ -125,7 +125,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
   it('ready endpoint returns 503 when disconnected', async () => {
     const port = await getFreePort();
     markDisconnected();
-    startHealthServer(port);
+    startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
     expect(response.status).toBe(503);
@@ -137,7 +137,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     const port = await getFreePort();
     markConnected();
     markMessageReceived();
-    startHealthServer(port);
+    startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
     expect(response.status).toBe(200);
@@ -154,12 +154,35 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     markMessageReceived();
 
     nowSpy.mockReturnValue(1_700_000_000_000 + 31 * 60 * 1000);
-    startHealthServer(port);
+    startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
     expect(response.status).toBe(503);
 
     nowSpy.mockRestore();
+  });
+
+  it('metrics endpoint returns 404 when disabled', async () => {
+    const port = await getFreePort();
+    startHealthServer(port, '127.0.0.1');
+
+    const response = await fetch(`http://127.0.0.1:${port}/metrics`);
+    expect(response.status).toBe(404);
+  });
+
+  it('metrics endpoint returns Prometheus text when enabled', async () => {
+    const port = await getFreePort();
+    markConnected();
+    markMessageReceived();
+    startHealthServer(port, '127.0.0.1', { metricsEnabled: true });
+
+    const response = await fetch(`http://127.0.0.1:${port}/metrics`);
+    expect(response.status).toBe(200);
+    const text = await response.text();
+
+    expect(text).toContain('garbanzo_up_time_seconds');
+    expect(text).toContain('garbanzo_connection_status');
+    expect(text).toContain('garbanzo_connection_stale');
   });
 });
 

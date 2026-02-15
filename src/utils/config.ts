@@ -51,6 +51,7 @@ const envSchema = z.object({
   // Infrastructure
   HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   HEALTH_BIND_HOST: z.string().min(1).default('127.0.0.1'),
+  METRICS_ENABLED: z.coerce.boolean().default(false),
 
   // Database
   DB_DIALECT: z.enum(['sqlite', 'postgres']).default('sqlite'),

@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   }, 'Configuration loaded');
 
   // Start health check server + memory watchdog for monitoring
-  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST);
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, { metricsEnabled: config.METRICS_ENABLED });
   startMemoryWatchdog();
 
   // Start Ollama warm-up pings to prevent model unloading
