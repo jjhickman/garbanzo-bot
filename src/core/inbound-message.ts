@@ -12,11 +12,17 @@ export interface InboundMessage {
   chatId: string;
   senderId: string;
 
+  /** Platform message id, when available. */
+  messageId?: string;
+
   /** True when the message was sent by the bot itself. */
   fromSelf: boolean;
 
   /** Status/broadcast messages should be ignored. */
   isStatusBroadcast: boolean;
+
+  /** True when this chat is a group chat on the platform. */
+  isGroupChat: boolean;
 
   /** Milliseconds since epoch. */
   timestampMs: number;

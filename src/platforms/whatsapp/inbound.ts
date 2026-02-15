@@ -5,7 +5,7 @@ import {
   normalizeMessageContent,
 } from '@whiskeysockets/baileys';
 import { hasVisualMedia } from '../../features/media.js';
-import { getSenderJid } from '../../utils/jid.js';
+import { getSenderJid, isGroupJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
 
 export interface WhatsAppInbound extends InboundMessage {
@@ -72,8 +72,10 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     platform: 'whatsapp',
     chatId,
     senderId,
+    messageId: msg.key.id ?? undefined,
     fromSelf: !!msg.key.fromMe,
     isStatusBroadcast: chatId === 'status@broadcast',
+    isGroupChat: isGroupJid(chatId),
     timestampMs: timestampSeconds > 0 ? timestampSeconds * 1000 : Date.now(),
     text,
     quotedText: extractWhatsAppQuotedText(content),

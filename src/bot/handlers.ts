@@ -3,29 +3,16 @@ import {
   type WAMessage,
 } from '@whiskeysockets/baileys';
 import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
-import { isGroupJid } from '../utils/jid.js';
 import { isGroupEnabled, getGroupName } from './groups.js';
 import { buildWelcomeMessage } from '../features/welcome.js';
-import { checkMessage, formatModerationAlert, applyStrikeAndMute } from '../features/moderation.js';
-import { handleIntroduction, INTRODUCTIONS_JID } from '../features/introductions.js';
-import { handleEventPassive, EVENTS_JID } from '../features/events.js';
-import { sanitizeMessage } from '../middleware/sanitize.js';
-import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js';
-import { recordMessage } from '../middleware/context.js';
-import { recordGroupMessage, recordModerationFlag, recordBotResponse } from '../middleware/stats.js';
+import { INTRODUCTIONS_JID } from '../features/introductions.js';
+import { recordBotResponse } from '../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../middleware/retry.js';
-import { isVoiceMessage, downloadVoiceAudio } from '../features/media.js';
-import { transcribeAudio } from '../features/voice.js';
-import { markMessageReceived } from '../middleware/health.js';
-import { handleOwnerDM } from './owner-commands.js';
-import { handleGroupMessage } from './group-handler.js';
-import { isReplyToBot, isAcknowledgment } from './reactions.js';
+import { processWhatsAppRawMessage } from '../platforms/whatsapp/processor.js';
 import {
   extractWhatsAppText as extractText,
   extractWhatsAppQuotedText as extractQuotedText,
   extractWhatsAppMentionedJids as extractMentionedJids,
-  normalizeWhatsAppInboundMessage,
 } from '../platforms/whatsapp/inbound.js';
 
 // Re-export getResponse for owner-commands + group-handler; also used by retry handler below
@@ -95,196 +82,7 @@ export { extractText, extractQuotedText, extractMentionedJids };
 
 // ── Message routing (private) ───────────────────────────────────────
 
-/** Maximum age (in seconds) for a message to be processed. Older messages are silently ignored. */
-const MAX_MESSAGE_AGE_SECONDS = 5 * 60; // 5 minutes
-
-/**
- * Route a single incoming message.
- *
- * Architecture stages:
- * 1) transport guards (self/status/stale)
- * 2) normalization and extraction (text, mentions, quoted text)
- * 3) voice/media preprocessing
- * 4) sanitization + persistence (context/stats/profile)
- * 5) moderation and owner escalation
- * 6) feature/group/owner routing and response dispatch
- */
 async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
-  // Track message freshness for staleness detection
-  markMessageReceived();
-
-  // Ignore messages sent by the bot itself
-  if (msg.key.fromMe) return;
-
-  // Ignore status broadcasts
-  if (msg.key.remoteJid === 'status@broadcast') return;
-
-  // Ignore stale messages (e.g. delivered after bot was offline for a while)
-  // Exception: Introductions group — intros are caught up via dedup tracker
-  const isIntroGroupMsg = msg.key.remoteJid === INTRODUCTIONS_JID;
-  if (isStale(msg) && !isIntroGroupMsg) return;
-
-  const inbound = normalizeWhatsAppInboundMessage(sock, msg);
-  if (!inbound) return;
-
-  const remoteJid = inbound.chatId;
-  const content = inbound.content;
-  let rawText = inbound.text;
-
-  logger.debug({
-    remoteJid,
-    hasMessage: !!msg.message,
-    hasContent: !!content,
-    hasText: !!rawText,
-    messageKeys: msg.message ? Object.keys(msg.message) : [],
-    contentKeys: content ? Object.keys(content) : [],
-  }, 'Message received');
-
-  // ── Voice message transcription ──
-  // If it's a voice note, transcribe it and use the transcript as the message text.
-  const isVoice = isVoiceMessage(msg);
-  if (isVoice) {
-    const audioBuffer = await downloadVoiceAudio(msg);
-    if (audioBuffer) {
-      const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
-      if (transcript) {
-        logger.info({ transcriptLen: transcript.length }, 'Voice message transcribed');
-        rawText = transcript;
-      } else {
-        logger.debug('Voice message transcription failed — skipping');
-        return;
-      }
-    } else {
-      return;
-    }
-  }
-
-  // Allow messages with visual media through even without text (e.g. image-only)
-  const hasMedia = inbound.hasVisualMedia;
-  if (!rawText && !hasMedia) return;
-
-  // ── Input sanitization ──
-  const sanitized = sanitizeMessage(rawText ?? '');
-  if (sanitized.rejected) {
-    logger.debug({ reason: sanitized.rejectionReason }, 'Message rejected by sanitizer');
-    return;
-  }
-  const text = sanitized.text;
-
-  const senderJid = inbound.senderId;
-
-  // ── Record message for conversation context + stats + profile ──
-  recordMessage(remoteJid, senderJid, text);
-  if (isGroupJid(remoteJid)) {
-    recordGroupMessage(remoteJid, senderJid);
-    // Passive profile tracking — update first/last seen and active groups
-    touchProfile(senderJid);
-    updateActiveGroups(senderJid, remoteJid);
-  }
-
-  // ── Moderation (runs on ALL group messages, not just mentions) ──
-  if (isGroupJid(remoteJid) && isGroupEnabled(remoteJid)) {
-    const flag = await checkMessage(text);
-    if (flag) {
-      recordModerationFlag(remoteJid);
-      logModeration({
-        chatJid: remoteJid,
-        sender: senderJid,
-        text: text.slice(0, 500),
-        reason: flag.reason,
-        severity: flag.severity,
-        source: flag.source,
-        timestamp: Math.floor(Date.now() / 1000),
-      });
-      logger.warn({ group: remoteJid, sender: senderJid, reason: flag.reason, severity: flag.severity, source: flag.source }, 'Moderation flag');
-      const alert = formatModerationAlert(flag, text, senderJid, remoteJid);
-      try {
-        logger.info({ ownerJid: config.OWNER_JID }, 'Sending moderation alert to owner');
-        const result = await sock.sendMessage(config.OWNER_JID, { text: alert });
-        logger.info({ msgId: result?.key?.id, to: result?.key?.remoteJid }, 'Moderation alert sent');
-      } catch (err) {
-        logger.error({ err, ownerJid: config.OWNER_JID, groupJid: remoteJid, senderJid }, 'Failed to send moderation alert to owner');
-      }
-
-      // Apply strike and soft-mute if threshold reached
-      const { muted, dmMessage } = applyStrikeAndMute(senderJid);
-      if (muted && dmMessage) {
-        try {
-          await sock.sendMessage(senderJid, { text: dmMessage });
-          logger.info({ senderJid }, 'Soft-mute DM sent to user');
-        } catch (err) {
-          logger.error({ err, senderJid }, 'Failed to send soft-mute DM');
-        }
-      }
-    }
-  }
-
-  // ── Introductions (auto-respond, no @mention needed) ──
-  if (remoteJid === INTRODUCTIONS_JID) {
-    const isReply = !!content?.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (!isReply) {
-      const messageId = msg.key.id;
-      if (messageId) {
-        const introResponse = await handleIntroduction(text, messageId, senderJid, remoteJid);
-        if (introResponse) {
-          await sock.sendMessage(remoteJid, { text: introResponse }, { quoted: msg });
-          return; // Intro handled — don't also process as a general message
-        }
-      }
-    }
-  }
-
-  // ── Events group (passive detection, no @mention needed) ──
-  if (remoteJid === EVENTS_JID) {
-    const eventResponse = await handleEventPassive(text, senderJid, remoteJid);
-    if (eventResponse) {
-      await sock.sendMessage(remoteJid, { text: eventResponse }, { quoted: msg });
-      return;
-    }
-  }
-
-  // ── Emoji reactions to bot replies (acknowledgments) ──
-  if (isReplyToBot(content, sock.user?.id, sock.user?.lid) && isAcknowledgment(text)) {
-    logger.info({ remoteJid, sender: senderJid, text }, 'Acknowledgment reply — reacting');
-    try {
-      await sock.sendMessage(remoteJid, {
-        react: { text: '🫘', key: msg.key },
-      });
-    } catch (err) {
-      logger.error({ err, remoteJid, senderJid, msgId: msg.key.id }, 'Failed to send reaction');
-    }
-    return;
-  }
-
-  // ── Group messages ──
-  if (isGroupJid(remoteJid)) {
-    if (!isGroupEnabled(remoteJid)) return;
-    await handleGroupMessage(sock, msg, remoteJid, senderJid, text, content, hasMedia);
-    return;
-  }
-
-  // ── Direct messages ──
-  // Only respond to owner DMs for now (Phase 1 safety)
-  await handleOwnerDM(sock, remoteJid, senderJid, text);
-}
-
-// ── Staleness check ─────────────────────────────────────────────────
-
-/**
- * Check if a message is too old to process.
- * Prevents the bot from replying to stale mentions delivered after
- * an outage (e.g., "what's the weather?" asked 3 hours ago).
- */
-function isStale(msg: WAMessage): boolean {
-  const ts = msg.messageTimestamp;
-  if (!ts) return false; // No timestamp — treat as fresh
-
-  const epochSeconds = typeof ts === 'number' ? ts : Number(ts);
-  const ageSeconds = Math.floor(Date.now() / 1000) - epochSeconds;
-
-  if (ageSeconds > MAX_MESSAGE_AGE_SECONDS) {
-    logger.debug({ ageSeconds, msgId: msg.key.id }, 'Ignoring stale message');
-    return true;
-  }
-  return false;
+  // WhatsApp-specific preprocessing + core pipeline
+  await processWhatsAppRawMessage(sock, msg);
 }
