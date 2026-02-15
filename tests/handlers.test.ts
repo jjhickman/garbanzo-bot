@@ -44,6 +44,7 @@ function mockHandlerDeps(): HandlerMocks {
 
   vi.doMock('../src/bot/groups.js', () => ({
     isGroupEnabled,
+    isFeatureEnabled: vi.fn(() => true),
     getGroupName: vi.fn(() => 'General'),
     getEnabledGroupJidByName: vi.fn((name: string) => (name === 'Introductions' ? 'intro@g.us' : null)),
   }));
@@ -100,7 +101,7 @@ function mockHandlerDeps(): HandlerMocks {
     isReplyToBot: vi.fn(() => false),
     isAcknowledgment: vi.fn(() => false),
   }));
-  vi.doMock('../src/bot/response-router.js', () => ({ getResponse }));
+  vi.doMock('../src/core/response-router.js', () => ({ getResponse }));
 
   return {
     setRetryHandler,

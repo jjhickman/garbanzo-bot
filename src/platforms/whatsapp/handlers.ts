@@ -1,11 +1,11 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
 
 import { logger } from '../../middleware/logger.js';
-import { isGroupEnabled, getGroupName, getEnabledGroupJidByName } from '../../bot/groups.js';
+import { isGroupEnabled, getGroupName, getEnabledGroupJidByName, isFeatureEnabled } from '../../bot/groups.js';
 import { buildWelcomeMessage } from '../../features/welcome.js';
 import { recordBotResponse } from '../../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../../middleware/retry.js';
-import { getResponse } from '../../bot/response-router.js';
+import { getResponse } from '../../core/response-router.js';
 
 import { processWhatsAppRawMessage } from './processor.js';
 
@@ -20,7 +20,7 @@ export function registerWhatsAppHandlers(sock: WASocket): void {
       groupName,
       groupJid: entry.groupJid,
       senderJid: entry.senderJid,
-    });
+    }, isFeatureEnabled);
     if (response) {
       await sock.sendMessage(entry.groupJid, { text: response });
       recordBotResponse(entry.groupJid);

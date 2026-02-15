@@ -10,8 +10,8 @@ import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../../featur
 import { handleRelease } from '../../features/release.js';
 import { handleMemory } from '../../features/memory.js';
 import { recordOwnerDM } from '../../middleware/stats.js';
-import { GROUP_IDS } from '../../bot/groups.js';
-import { getResponse } from '../../bot/response-router.js';
+import { GROUP_IDS, isFeatureEnabled } from '../../bot/groups.js';
+import { getResponse } from '../../core/response-router.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [
@@ -171,7 +171,7 @@ export async function handleOwnerDM(
     groupName: 'DM',
     groupJid: remoteJid,
     senderJid,
-  });
+  }, isFeatureEnabled);
 
   if (response) {
     await sock.sendMessage(remoteJid, { text: response });
