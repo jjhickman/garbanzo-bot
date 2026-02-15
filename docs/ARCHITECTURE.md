@@ -131,7 +131,7 @@ SQLite database (`data/garbanzo.db`, WAL mode) stores:
 
 ## Health and Operations
 
-Health endpoint (`127.0.0.1:3001/health`) reports:
+Health endpoint (default `http://127.0.0.1:3001/health`) reports:
 
 - connection state and staleness
 - uptime/reconnect count
@@ -144,6 +144,7 @@ Operational protections:
 - retry queue for transient AI failures
 - process-level `unhandledRejection` / `uncaughtException` handlers
 - basic health endpoint request rate limiting
+- if exposed beyond localhost (for Kuma), restrict access to trusted hosts (iptables `DOCKER-USER` allowlist for Docker)
 
 ## Security Boundaries
 

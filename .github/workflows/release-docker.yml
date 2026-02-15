@@ -135,6 +135,16 @@ jobs:
           tags: ${{ steps.meta_dockerhub.outputs.tags }}
           labels: ${{ steps.meta_dockerhub.outputs.labels }}
 
+      - name: Update Docker Hub repository overview
+        if: ${{ steps.registries.outputs.dockerhub_enabled == 'true' }}
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.registries.outputs.dockerhub_image }}
+          short-description: WhatsApp community bot with AI routing and ops tooling.
+          readme-filepath: ./docs/DOCKERHUB_OVERVIEW.md
+
   smoke-test:
     name: Smoke Test Published Image
     runs-on: ubuntu-latest
