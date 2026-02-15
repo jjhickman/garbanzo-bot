@@ -1,0 +1,55 @@
+name: Release Checklist
+description: Track a Garbanzo version release from verification through rollout
+title: "[release] vX.Y.Z checklist"
+labels:
+  - release
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Complete this checklist before and after releasing.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Semantic version to release (e.g. 0.2.0)
+      placeholder: 0.2.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pre_release
+    attributes:
+      label: Pre-release quality gate
+      options:
+        - label: "`npm run check` passes on local main"
+        - label: "Dependabot queue reviewed (`npm run gh:dependabot`)"
+        - label: "`CHANGELOG.md` updated for this release"
+        - label: "Docs updates complete (`README.md`, `docs/RELEASES.md`, relevant feature docs)"
+
+  - type: checkboxes
+    id: tag_release
+    attributes:
+      label: Tag and publish
+      options:
+        - label: "Bump version (`npm version patch|minor|major`)"
+        - label: "Push commit + tags (`git push origin main --follow-tags`)"
+        - label: Confirm `Release Docker Image` workflow success
+        - label: Confirm `Release Native Binaries` workflow success
+
+  - type: checkboxes
+    id: deploy_verify
+    attributes:
+      label: Deploy and verify
+      options:
+        - label: Deploy image with `APP_VERSION`
+        - label: Health endpoint responds after deploy
+        - label: Owner DM `!release` broadcast sent with expected version
+        - label: Rollback plan prepared/documented
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Release notes / rollout notes
+      description: Optional notes, caveats, or post-release incidents
