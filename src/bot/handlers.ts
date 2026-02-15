@@ -3,9 +3,8 @@ import {
   type WAMessage,
 } from '@whiskeysockets/baileys';
 import { logger } from '../middleware/logger.js';
-import { isGroupEnabled, getGroupName } from './groups.js';
+import { isGroupEnabled, getGroupName, getEnabledGroupJidByName } from './groups.js';
 import { buildWelcomeMessage } from '../features/welcome.js';
-import { INTRODUCTIONS_JID } from '../features/introductions.js';
 import { recordBotResponse } from '../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../middleware/retry.js';
 import { processWhatsAppRawMessage } from '../platforms/whatsapp/processor.js';
@@ -36,12 +35,14 @@ export function registerHandlers(sock: WASocket): void {
     }
   });
 
+  const introductionsChatId = getEnabledGroupJidByName('Introductions');
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     for (const msg of messages) {
       try {
         // Process all message types for the Introductions group (catch-up path),
         // but only real-time ('notify') messages for everything else.
-        const isIntroGroup = msg.key.remoteJid === INTRODUCTIONS_JID;
+        const isIntroGroup = !!introductionsChatId && msg.key.remoteJid === introductionsChatId;
         if (type !== 'notify' && !isIntroGroup) continue;
 
         await handleMessage(sock, msg);

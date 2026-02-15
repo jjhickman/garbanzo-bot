@@ -45,6 +45,7 @@ function mockHandlerDeps(): HandlerMocks {
   vi.doMock('../src/bot/groups.js', () => ({
     isGroupEnabled,
     getGroupName: vi.fn(() => 'General'),
+    getEnabledGroupJidByName: vi.fn((name: string) => (name === 'Introductions' ? 'intro@g.us' : null)),
   }));
 
   vi.doMock('../src/features/welcome.js', () => ({ buildWelcomeMessage }));
