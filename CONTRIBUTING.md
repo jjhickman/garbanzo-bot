@@ -2,6 +2,10 @@
 
 Thanks for your interest in contributing! Garbanzo is a community WhatsApp bot built for a Boston-area meetup group, but the codebase is designed to be adaptable for any community.
 
+## License
+
+By contributing to this repository, you agree that your contributions will be licensed under the project license in `LICENSE`.
+
 ## Getting Started
 
 1. Fork the repository

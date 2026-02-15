@@ -28,6 +28,17 @@ Garbanzo is opinionated around community operations, not just message transport.
 - **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows (`!feedback issue <id>`).
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
+## Lessons From OpenClaw (Trust & Maturity)
+
+Garbanzo is the simplified successor to an earlier, more ambitious system ("OpenClaw"). OpenClaw was decommissioned after proving a key lesson: reliability comes from fewer moving parts and clear guardrails, not more services.
+
+What that means in this repo:
+
+- One primary deployable (Docker image) plus optional native bundles; versioned releases are automated
+- Ops-first tooling: `/health` for visibility and `/health/ready` for alerting on disconnect/staleness
+- Boring, inspectable state: SQLite + explicit backups; health reports backup integrity
+- Guardrails by default: CI runs `npm run check` (secrets scan + typecheck + lint + tests)
+
 ## What It Does
 
 Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
@@ -464,6 +475,8 @@ sudo netfilter-persistent save
 
 If Garbanzo is useful for your community, you can support development and operating costs.
 
+Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant a commercial license. For commercial licensing, see `COMMERCIAL_LICENSE.md`.
+
 - GitHub Sponsors: https://github.com/sponsors/jjhickman
 - (Optional) Configure Patreon/Ko-fi/custom links in `.env`
 
@@ -546,4 +559,10 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 
 ## License
 
-[MIT](LICENSE) — Josh Hickman
+Garbanzo is source-available under the [Prosperity Public License 3.0.0](LICENSE):
+
+- Free for noncommercial use (personal + qualifying noncommercial organizations)
+- Commercial use is allowed for a limited 30-day trial
+- Ongoing commercial use requires a commercial license (see `COMMERCIAL_LICENSE.md`)
+
+See `LICENSE_FAQ.md` for examples.
