@@ -1,6 +1,7 @@
 import type { WASocket, WAMessage, WAMessageContent } from '@whiskeysockets/baileys';
 
 import { logger } from '../middleware/logger.js';
+import { config } from '../utils/config.js';
 import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from './groups.js';
 import { extractMedia, prepareForVision, type VisionImage } from '../features/media.js';
 import {
@@ -72,6 +73,7 @@ export async function handleGroupMessage(
     chatId: remoteJid,
     senderId: senderJid,
     groupName,
+    ownerId: config.OWNER_JID,
     query,
     isFeatureEnabled,
     getResponse,
