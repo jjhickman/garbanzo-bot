@@ -1,4 +1,5 @@
 import type { MessagingPlatform } from './messaging-platform.js';
+import type { MessageRef } from './message-ref.js';
 
 /**
  * Normalized inbound message.
@@ -40,5 +41,5 @@ export interface InboundMessage {
   hasVisualMedia: boolean;
 
   /** Platform-specific raw message for advanced operations. */
-  raw: unknown;
+  raw: MessageRef;
 }
