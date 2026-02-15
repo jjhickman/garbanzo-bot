@@ -3,7 +3,7 @@ import type { WASocket } from '@whiskeysockets/baileys';
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import { getHelpMessage, getOwnerHelpMessage } from '../../features/help.js';
-import { triggerIntroCatchUp } from '../../features/introductions.js';
+import { triggerIntroCatchUp } from './introductions-catchup.js';
 import { previewDigest } from '../../features/digest.js';
 import { formatStrikesReport } from '../../features/moderation.js';
 import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../../features/feedback.js';
