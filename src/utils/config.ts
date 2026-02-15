@@ -13,7 +13,7 @@ loadDotenv({ path: resolve(PROJECT_ROOT, '.env') });
 
 const envSchema = z.object({
   // Runtime platform
-  MESSAGING_PLATFORM: z.enum(['whatsapp', 'discord']).default('whatsapp'),
+  MESSAGING_PLATFORM: z.enum(['whatsapp', 'discord', 'slack', 'teams']).default('whatsapp'),
 
   // AI — at least one must be set
   ANTHROPIC_API_KEY: z.string().optional(),
