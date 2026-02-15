@@ -132,7 +132,7 @@
 **Goal:** Make the bot self-monitoring, resilient, and cost-aware. Keep it running without babysitting.
 
 ### High Priority (low effort, high value)
-1. ~~**Health check HTTP endpoint** (`src/middleware/health.ts`) — HTTP server on `127.0.0.1:3001/health`, returns JSON: connection status, uptime, staleness, last message age, reconnect count, memory usage~~ ✅ Live
+1. ~~**Health check HTTP endpoint** (`src/middleware/health.ts`) — HTTP server on `http://127.0.0.1:3001/health` by default, returns JSON: connection status, uptime, staleness, last message age, reconnect count, memory usage~~ ✅ Live
 2. ~~**Connection staleness detection** (`src/bot/connection.ts`) — tracks `lastMessageReceivedAt` via health module, auto-reconnect if >30 min with no messages. Checks every 5 min. Prevents "connected but deaf" failure mode~~ ✅ Live
 3. ~~**Ollama warm-up ping** (`src/ai/ollama.ts`) — sends `/api/generate` keep-alive with `keep_alive: 15m` every 10 min to prevent model unload. Immediate ping on startup~~ ✅ Live
 4. ~~**SQLite auto-vacuum** (`src/utils/db.ts`) — scheduled daily at 4 AM: prune messages older than 30 days + `VACUUM` to reclaim space~~ ✅ Live

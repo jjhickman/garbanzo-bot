@@ -111,7 +111,9 @@ This is useful for rerunning release asset generation without creating a new tag
 Set these repo settings in GitHub (`Settings` -> `Secrets and variables` -> `Actions`):
 
 - Variable `DOCKERHUB_IMAGE` (example: `yourdockerhubuser/garbanzo`)
-- Variable `DOCKERHUB_USERNAME`
+- Variable `DOCKERHUB_USERNAME` (Docker Hub username, not email)
 - Secret `DOCKERHUB_TOKEN` (Docker Hub access token)
 
 If any of these are missing, Docker Hub publish is skipped and GHCR publish still runs.
+
+When Docker Hub publishing is enabled, the workflow also syncs the Docker Hub repository overview from `docs/DOCKERHUB_OVERVIEW.md`.
