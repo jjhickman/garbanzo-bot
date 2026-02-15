@@ -112,7 +112,9 @@ function getCachedBackupStatus(now: number): { checkedAt: number; status: Backup
  */
 export function startHealthServer(port: number = 3001, host: string = '127.0.0.1'): void {
   server = createServer((req, res) => {
-    if (req.url === '/health' && req.method === 'GET') {
+    const path = (req.url ?? '').split('?')[0];
+
+    if ((path === '/health' || path === '/health/ready') && req.method === 'GET') {
       const now = Date.now();
       const ip = req.socket.remoteAddress ?? 'unknown';
 
@@ -122,12 +124,23 @@ export function startHealthServer(port: number = 3001, host: string = '127.0.0.1
         return;
       }
 
+      const stale = isConnectionStale();
+
+      // `/health` is informational and always 200.
+      // `/health/ready` is actionable: 200 only when connected + not stale.
+      if (path === '/health/ready') {
+        const ready = state.status === 'connected' && !stale;
+        res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ready, status: state.status, stale }));
+        return;
+      }
+
       const mem = process.memoryUsage();
       const backup = getCachedBackupStatus(now);
 
       const body = JSON.stringify({
         status: state.status,
-        stale: isConnectionStale(),
+        stale,
         uptime: Math.floor((now - state.startedAt) / 1000),
         connectedFor: state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : null,
         lastMessageAgo: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
@@ -145,10 +158,11 @@ export function startHealthServer(port: number = 3001, host: string = '127.0.0.1
 
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(body);
-    } else {
-      res.writeHead(404);
-      res.end();
+      return;
     }
+
+    res.writeHead(404);
+    res.end();
   });
 
   server.listen(port, host, () => {
