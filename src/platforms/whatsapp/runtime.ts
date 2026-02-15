@@ -1,6 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import { logger } from '../../middleware/logger.js';
-import { startConnection } from '../../bot/connection.js';
+import { startConnection } from './connection.js';
 import { registerWhatsAppHandlers } from './handlers.js';
 import { registerIntroCatchUp } from '../../features/introductions.js';
 import { scheduleDigest } from '../../features/digest.js';

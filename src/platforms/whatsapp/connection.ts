@@ -11,9 +11,10 @@ import { Boom } from '@hapi/boom';
 import { resolve } from 'path';
 // @ts-expect-error — qrcode-terminal has no type declarations
 import qrcode from 'qrcode-terminal';
-import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
-import { markConnected, markDisconnected, isConnectionStale } from '../middleware/health.js';
+
+import { logger } from '../../middleware/logger.js';
+import { PROJECT_ROOT } from '../../utils/config.js';
+import { markConnected, markDisconnected, isConnectionStale } from '../../middleware/health.js';
 
 const AUTH_DIR = resolve(PROJECT_ROOT, 'baileys_auth');
 const baileysLogger = logger.child({ module: 'baileys' });
@@ -23,9 +24,6 @@ baileysLogger.level = 'warn';
 
 type MessageHandler = (sock: WASocket) => void;
 
-// Re-export for handlers to use
-export { markMessageReceived } from '../middleware/health.js';
-
 /** Staleness check interval (5 minutes) */
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 let staleCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -34,9 +32,7 @@ let staleCheckTimer: ReturnType<typeof setInterval> | null = null;
  * Create and manage the Baileys WhatsApp connection.
  * Handles auth persistence, reconnection, and lifecycle.
  */
-export async function startConnection(
-  onReady: MessageHandler,
-): Promise<WASocket> {
+export async function startConnection(onReady: MessageHandler): Promise<WASocket> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
