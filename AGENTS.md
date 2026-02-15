@@ -158,7 +158,8 @@ garbanzo-bot/
 │   ├── ROADMAP.md            # Phased implementation plan
 │   ├── ARCHITECTURE.md       # Data flow, routing, multimedia pipeline docs
 │   ├── INFRASTRUCTURE.md     # Hardware/network reference
-│   └── SETUP_EXAMPLES.md     # Reusable setup command recipes
+│   ├── SETUP_EXAMPLES.md     # Reusable setup command recipes
+│   └── RELEASES.md           # Versioning and Docker release workflow
 ├── data/                     # Runtime data (gitignored DBs, persisted state)
 ├── scripts/
 │   ├── setup.mjs             # Interactive setup wizard

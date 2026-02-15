@@ -10,6 +10,7 @@
 
 services:
   garbanzo:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-dev}
     build:
       context: .
       dockerfile: Dockerfile
