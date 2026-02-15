@@ -2,7 +2,7 @@
 # Install all dependencies (including devDependencies) and compile TypeScript.
 # better-sqlite3 requires native compilation, so we need build tools here.
 
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 # Build tools for native addons (better-sqlite3)
 RUN apk add --no-cache python3 make g++
@@ -30,7 +30,7 @@ RUN npm prune --omit=dev
 # ─── Stage 2: Production ──────────────────────────────────────────────────────
 # Minimal runtime image. No build tools, no devDeps, no source code.
 
-FROM node:22-alpine
+FROM node:25-alpine
 
 # dumb-init: proper PID 1 signal handling (SIGTERM → graceful shutdown)
 # ffmpeg: video frame extraction for Claude Vision
