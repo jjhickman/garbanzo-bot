@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage, WAMessageContent } from '@whiskeysockets/baileys';
 
 import { logger } from '../middleware/logger.js';
-import { requiresMention, isMentioned, stripMention, getGroupName } from './groups.js';
+import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from './groups.js';
 import { extractMedia, prepareForVision, type VisionImage } from '../features/media.js';
 import {
   extractWhatsAppMentionedJids as extractMentionedJids,
@@ -72,6 +72,7 @@ export async function handleGroupMessage(
     senderId: senderJid,
     groupName,
     query,
+    isFeatureEnabled,
     quotedText: extractQuotedText(content),
     messageId: msg.key.id ?? undefined,
     replyTo: msg,
