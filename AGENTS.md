@@ -92,6 +92,7 @@ npm run check
 
 # GitHub account workflow helpers
 npm run gh:status
+npm run gh:dependabot
 npm run gh:switch:author
 npm run gh:switch:owner
 npm run gh:whoami
