@@ -20,6 +20,7 @@
     "check": "npm run audit:secrets && npm run typecheck && npm run lint && npm run test",
     "gh:status": "bash scripts/gh-workflow.sh status",
     "gh:whoami": "bash scripts/gh-workflow.sh whoami",
+    "gh:dependabot": "bash scripts/gh-workflow.sh dependabot",
     "gh:ensure": "bash scripts/gh-workflow.sh ensure",
     "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",

@@ -14,6 +14,7 @@ Usage: bash scripts/gh-workflow.sh <command>
 Commands:
   status          Show authenticated accounts
   whoami          Print active GitHub login
+  dependabot      List open Dependabot PRs targeting main
   ensure          Verify owner/author accounts are authenticated
   switch-owner    Switch active account to owner (${OWNER_ACCOUNT})
   switch-author   Switch active account to author (${AUTHOR_ACCOUNT})
@@ -48,6 +49,10 @@ case "$command_name" in
       exit 1
     fi
     echo "Both accounts are authenticated: $OWNER_ACCOUNT, $AUTHOR_ACCOUNT"
+    ;;
+
+  dependabot)
+    gh pr list --state open --base main --search "author:app/dependabot" --json number,title,url --jq '.[] | "#\(.number)\t\(.title)\t\(.url)"'
     ;;
 
   switch-owner)

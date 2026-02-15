@@ -46,6 +46,7 @@ Manual smoke test notes:
 - [ ] Error handling/log context added for new failure paths
 - [ ] Health/monitoring implications reviewed
 - [ ] Performance/cost implications reviewed (AI routes, API calls)
+- [ ] Open Dependabot PRs reviewed (or PR includes `allow-open-dependabot` label + justification)
 
 ## Docs and Communication
 
