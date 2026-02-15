@@ -1,4 +1,6 @@
 import type { MessagingAdapter } from '../../core/messaging-adapter.js';
+import type { MessageRef } from '../../core/message-ref.js';
+import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, DocumentPayload, AudioPayload } from '../../core/platform-messenger.js';
 
 /**
@@ -17,15 +19,15 @@ export function createSlackAdapter(): PlatformMessenger {
       throw err();
     },
 
-    async sendPoll(): Promise<void> {
+    async sendPoll(_chatId: string, _poll: PollPayload): Promise<void> {
       throw err();
     },
 
-    async sendTextWithRef(): Promise<unknown> {
+    async sendTextWithRef(): Promise<MessageRef> {
       throw err();
     },
 
-    async sendDocument(_chatId: string, _doc: DocumentPayload): Promise<unknown> {
+    async sendDocument(_chatId: string, _doc: DocumentPayload): Promise<MessageRef> {
       throw err();
     },
 
