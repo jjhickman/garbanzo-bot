@@ -94,7 +94,7 @@ function mockHandlerDeps(): HandlerMocks {
   vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => null) }));
   vi.doMock('../src/middleware/health.js', () => ({ markMessageReceived }));
   vi.doMock('../src/bot/owner-commands.js', () => ({ handleOwnerDM }));
-  vi.doMock('../src/bot/group-handler.js', () => ({ handleGroupMessage: vi.fn(async () => undefined) }));
+  vi.doMock('../src/platforms/whatsapp/group-handler.js', () => ({ handleGroupMessage: vi.fn(async () => undefined) }));
   vi.doMock('../src/bot/reactions.js', () => ({
     isReplyToBot: vi.fn(() => false),
     isAcknowledgment: vi.fn(() => false),

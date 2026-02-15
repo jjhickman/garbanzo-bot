@@ -113,7 +113,7 @@ describe('Core group processor parity (WhatsApp)', () => {
     const { isFeatureEnabled } = setupMocks();
     isFeatureEnabled.mockImplementation((_jid: string, feature: string) => feature === 'poll');
 
-    const { handleGroupMessage } = await import('../src/bot/group-handler.js');
+    const { handleGroupMessage } = await import('../src/platforms/whatsapp/group-handler.js');
     const { processGroupMessage } = await import('../src/core/process-group-message.js');
 
     const legacyCalls: Array<{ to: string; content: unknown }> = [];
@@ -179,7 +179,7 @@ describe('Core group processor parity (WhatsApp)', () => {
   it('suggest command sends equivalent group response and owner DM', async () => {
     setupMocks();
 
-    const { handleGroupMessage } = await import('../src/bot/group-handler.js');
+    const { handleGroupMessage } = await import('../src/platforms/whatsapp/group-handler.js');
     const { processGroupMessage } = await import('../src/core/process-group-message.js');
 
     const legacyCalls: Array<{ to: string; content: unknown }> = [];
