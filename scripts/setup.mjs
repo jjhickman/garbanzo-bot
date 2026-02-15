@@ -59,6 +59,7 @@ const PROVIDER_LABELS = {
   openrouter: 'OpenRouter Claude',
   anthropic: 'Anthropic Claude',
   openai: 'OpenAI',
+  gemini: 'Google Gemini',
 };
 
 const ALL_FEATURES = [
@@ -140,6 +141,7 @@ function redactEnvContent(content) {
     'ANTHROPIC_API_KEY=',
     'OPENROUTER_API_KEY=',
     'OPENAI_API_KEY=',
+    'GEMINI_API_KEY=',
     'GITHUB_ISSUES_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
@@ -189,6 +191,7 @@ async function main() {
     output.write('  npm run setup\n\n');
     output.write('Non-interactive examples:\n');
     output.write('  npm run setup -- --non-interactive --platform=whatsapp --deploy=docker --providers=openrouter,openai --provider-order=openai,openrouter\n');
+    output.write('  npm run setup -- --non-interactive --providers=gemini --gemini-key=$GEMINI_API_KEY --gemini-model=gemini-1.5-flash --gemini-pricing-input-per-m=0.15 --gemini-pricing-output-per-m=0.60\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
     output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=jjhickman/garbanzo-bot --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
@@ -259,6 +262,7 @@ async function main() {
     let useOpenRouter = true;
     let useAnthropic = true;
     let useOpenAI = true;
+    let useGemini = false;
 
     if (nonInteractive) {
       const providerCsv = cli.options.providers || cli.options.provider || '';
@@ -267,18 +271,21 @@ async function main() {
         useOpenRouter = providers.includes('openrouter');
         useAnthropic = providers.includes('anthropic');
         useOpenAI = providers.includes('openai');
+        useGemini = providers.includes('gemini');
       } else {
         useOpenRouter = parseBoolean(cli.options['use-openrouter'], !!existing.OPENROUTER_API_KEY);
         useAnthropic = parseBoolean(cli.options['use-anthropic'], !!existing.ANTHROPIC_API_KEY);
         useOpenAI = parseBoolean(cli.options['use-openai'], !!existing.OPENAI_API_KEY);
+        useGemini = parseBoolean(cli.options['use-gemini'], !!existing.GEMINI_API_KEY);
       }
     } else {
       useOpenRouter = yn(await rl.question(`Use OpenRouter Claude? [Y/n] (current: ${existing.OPENROUTER_API_KEY ? 'set' : 'empty'}): `), true);
       useAnthropic = yn(await rl.question(`Use Anthropic direct Claude? [Y/n] (current: ${existing.ANTHROPIC_API_KEY ? 'set' : 'empty'}): `), true);
       useOpenAI = yn(await rl.question(`Use OpenAI? [Y/n] (current: ${existing.OPENAI_API_KEY ? 'set' : 'empty'}): `), true);
+      useGemini = yn(await rl.question(`Use Google Gemini? [y/N] (current: ${existing.GEMINI_API_KEY ? 'set' : 'empty'}): `), false);
     }
 
-    if (!useOpenRouter && !useAnthropic && !useOpenAI) {
+    if (!useOpenRouter && !useAnthropic && !useOpenAI && !useGemini) {
       output.write('⚠️ No provider selected, enabling OpenAI fallback by default.\n');
       useOpenAI = true;
     }
@@ -287,6 +294,7 @@ async function main() {
     if (useOpenRouter) selectedProviders.push('openrouter');
     if (useAnthropic) selectedProviders.push('anthropic');
     if (useOpenAI) selectedProviders.push('openai');
+    if (useGemini) selectedProviders.push('gemini');
 
     let providerOrder = [...selectedProviders];
     if (cli.options['provider-order']) {
@@ -328,6 +336,11 @@ async function main() {
           ? (cli.options['openai-key'] ?? existing.OPENAI_API_KEY ?? '')
           : await rl.question(`OPENAI_API_KEY [${existing.OPENAI_API_KEY ?? ''}]: `))
       : '';
+    const geminiKey = useGemini
+      ? (nonInteractive
+          ? (cli.options['gemini-key'] ?? existing.GEMINI_API_KEY ?? '')
+          : await rl.question(`GEMINI_API_KEY [${existing.GEMINI_API_KEY ?? ''}]: `))
+      : '';
 
     const anthropicModel = nonInteractive
       ? (cli.options['anthropic-model'] ?? existing.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250514')
@@ -338,6 +351,16 @@ async function main() {
     const openAIModel = nonInteractive
       ? (cli.options['openai-model'] ?? existing.OPENAI_MODEL ?? 'gpt-4.1')
       : await rl.question(`OPENAI_MODEL [${existing.OPENAI_MODEL ?? 'gpt-4.1'}]: `);
+    const geminiModel = nonInteractive
+      ? (cli.options['gemini-model'] ?? existing.GEMINI_MODEL ?? 'gemini-1.5-flash')
+      : await rl.question(`GEMINI_MODEL [${existing.GEMINI_MODEL ?? 'gemini-1.5-flash'}]: `);
+
+    const geminiPricingInputPerM = nonInteractive
+      ? (cli.options['gemini-pricing-input-per-m'] ?? existing.GEMINI_PRICING_INPUT_PER_M ?? '0')
+      : await rl.question(`GEMINI_PRICING_INPUT_PER_M (USD per 1M tokens) [${existing.GEMINI_PRICING_INPUT_PER_M ?? '0'}]: `);
+    const geminiPricingOutputPerM = nonInteractive
+      ? (cli.options['gemini-pricing-output-per-m'] ?? existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0')
+      : await rl.question(`GEMINI_PRICING_OUTPUT_PER_M (USD per 1M tokens) [${existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0'}]: `);
 
     const ollamaBaseUrl = nonInteractive
       ? (cli.options['ollama-base-url'] ?? existing.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434')
@@ -453,10 +476,14 @@ async function main() {
       ANTHROPIC_API_KEY: (anthropicKey || existing.ANTHROPIC_API_KEY || '').trim(),
       OPENROUTER_API_KEY: (openRouterKey || existing.OPENROUTER_API_KEY || '').trim(),
       OPENAI_API_KEY: (openAIKey || existing.OPENAI_API_KEY || '').trim(),
+      GEMINI_API_KEY: (geminiKey || existing.GEMINI_API_KEY || '').trim(),
       AI_PROVIDER_ORDER: aiProviderOrder,
       ANTHROPIC_MODEL: (anthropicModel || existing.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250514').trim(),
       OPENROUTER_MODEL: (openRouterModel || existing.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4-5').trim(),
       OPENAI_MODEL: (openAIModel || existing.OPENAI_MODEL || 'gpt-4.1').trim(),
+      GEMINI_MODEL: (geminiModel || existing.GEMINI_MODEL || 'gemini-1.5-flash').trim(),
+      GEMINI_PRICING_INPUT_PER_M: String(geminiPricingInputPerM || existing.GEMINI_PRICING_INPUT_PER_M || '0').trim(),
+      GEMINI_PRICING_OUTPUT_PER_M: String(geminiPricingOutputPerM || existing.GEMINI_PRICING_OUTPUT_PER_M || '0').trim(),
       BOT_PHONE_NUMBER: (existing.BOT_PHONE_NUMBER || '').trim(),
       GOOGLE_API_KEY: (existing.GOOGLE_API_KEY || '').trim(),
       MBTA_API_KEY: (existing.MBTA_API_KEY || '').trim(),
@@ -485,10 +512,14 @@ async function main() {
       `ANTHROPIC_API_KEY=${finalEnv.ANTHROPIC_API_KEY}`,
       `OPENROUTER_API_KEY=${finalEnv.OPENROUTER_API_KEY}`,
       `OPENAI_API_KEY=${finalEnv.OPENAI_API_KEY}`,
+      `GEMINI_API_KEY=${finalEnv.GEMINI_API_KEY}`,
       `AI_PROVIDER_ORDER=${finalEnv.AI_PROVIDER_ORDER}`,
       `ANTHROPIC_MODEL=${finalEnv.ANTHROPIC_MODEL}`,
       `OPENROUTER_MODEL=${finalEnv.OPENROUTER_MODEL}`,
       `OPENAI_MODEL=${finalEnv.OPENAI_MODEL}`,
+      `GEMINI_MODEL=${finalEnv.GEMINI_MODEL}`,
+      `GEMINI_PRICING_INPUT_PER_M=${finalEnv.GEMINI_PRICING_INPUT_PER_M}`,
+      `GEMINI_PRICING_OUTPUT_PER_M=${finalEnv.GEMINI_PRICING_OUTPUT_PER_M}`,
       '',
       '# Messaging and bot identity',
       `BOT_PHONE_NUMBER=${finalEnv.BOT_PHONE_NUMBER}`,
