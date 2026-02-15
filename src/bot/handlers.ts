@@ -1,12 +1,10 @@
 import {
   type WASocket,
   type WAMessage,
-  type WAMessageContent,
-  normalizeMessageContent,
 } from '@whiskeysockets/baileys';
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
-import { isGroupJid, getSenderJid } from '../utils/jid.js';
+import { isGroupJid } from '../utils/jid.js';
 import { isGroupEnabled, getGroupName } from './groups.js';
 import { buildWelcomeMessage } from '../features/welcome.js';
 import { checkMessage, formatModerationAlert, applyStrikeAndMute } from '../features/moderation.js';
@@ -17,12 +15,18 @@ import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js'
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordModerationFlag, recordBotResponse } from '../middleware/stats.js';
 import { setRetryHandler, type RetryEntry } from '../middleware/retry.js';
-import { isVoiceMessage, downloadVoiceAudio, hasVisualMedia } from '../features/media.js';
+import { isVoiceMessage, downloadVoiceAudio } from '../features/media.js';
 import { transcribeAudio } from '../features/voice.js';
 import { markMessageReceived } from '../middleware/health.js';
 import { handleOwnerDM } from './owner-commands.js';
 import { handleGroupMessage } from './group-handler.js';
 import { isReplyToBot, isAcknowledgment } from './reactions.js';
+import {
+  extractWhatsAppText as extractText,
+  extractWhatsAppQuotedText as extractQuotedText,
+  extractWhatsAppMentionedJids as extractMentionedJids,
+  normalizeWhatsAppInboundMessage,
+} from '../platforms/whatsapp/inbound.js';
 
 // Re-export getResponse for owner-commands + group-handler; also used by retry handler below
 export { getResponse } from './response-router.js';
@@ -85,48 +89,9 @@ export function registerHandlers(sock: WASocket): void {
 
 // ── Shared helpers (exported for use by owner-commands.ts and group-handler.ts) ──
 
-/**
- * Unwrap the message content, handling ephemeral/viewOnce/protocol wrappers
- * that WhatsApp applies in groups with disappearing messages etc.
- */
-function unwrapMessage(msg: WAMessage): WAMessageContent | undefined {
-  return normalizeMessageContent(msg.message);
-}
-
-/** Extract text content from unwrapped message content */
-export function extractText(content: WAMessageContent | undefined): string | null {
-  if (!content) return null;
-
-  return (
-    content.conversation ??
-    content.extendedTextMessage?.text ??
-    content.imageMessage?.caption ??
-    content.videoMessage?.caption ??
-    content.documentMessage?.caption ??
-    null
-  );
-}
-
-/** Extract quoted/replied-to text if present */
-export function extractQuotedText(content: WAMessageContent | undefined): string | undefined {
-  const quoted = content?.extendedTextMessage?.contextInfo?.quotedMessage;
-  if (!quoted) return undefined;
-  // The quoted message itself may need unwrapping
-  const unwrapped = normalizeMessageContent(quoted);
-  return extractText(unwrapped) ?? undefined;
-}
-
-/** Extract JIDs mentioned via WhatsApp's native @mention system */
-export function extractMentionedJids(content: WAMessageContent | undefined): string[] | undefined {
-  if (!content) return undefined;
-  const ctx = content.extendedTextMessage?.contextInfo
-    ?? content.imageMessage?.contextInfo
-    ?? content.videoMessage?.contextInfo
-    ?? content.documentMessage?.contextInfo;
-  const jids = ctx?.mentionedJid;
-  if (!jids || jids.length === 0) return undefined;
-  return jids;
-}
+// These helpers are WhatsApp-specific today, but are implemented outside
+// the handlers module so we can reuse them in a future platform adapter.
+export { extractText, extractQuotedText, extractMentionedJids };
 
 // ── Message routing (private) ───────────────────────────────────────
 
@@ -159,11 +124,12 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   const isIntroGroupMsg = msg.key.remoteJid === INTRODUCTIONS_JID;
   if (isStale(msg) && !isIntroGroupMsg) return;
 
-  const remoteJid = msg.key.remoteJid;
-  if (!remoteJid) return;
+  const inbound = normalizeWhatsAppInboundMessage(sock, msg);
+  if (!inbound) return;
 
-  const content = unwrapMessage(msg);
-  let rawText = extractText(content);
+  const remoteJid = inbound.chatId;
+  const content = inbound.content;
+  let rawText = inbound.text;
 
   logger.debug({
     remoteJid,
@@ -194,7 +160,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   }
 
   // Allow messages with visual media through even without text (e.g. image-only)
-  const hasMedia = hasVisualMedia(msg);
+  const hasMedia = inbound.hasVisualMedia;
   if (!rawText && !hasMedia) return;
 
   // ── Input sanitization ──
@@ -205,7 +171,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   }
   const text = sanitized.text;
 
-  const senderJid = getSenderJid(remoteJid, msg.key.participant);
+  const senderJid = inbound.senderId;
 
   // ── Record message for conversation context + stats + profile ──
   recordMessage(remoteJid, senderJid, text);
