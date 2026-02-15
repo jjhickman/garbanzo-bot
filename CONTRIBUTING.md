@@ -45,7 +45,10 @@ Each feature lives in its own file under `src/features/`:
 1. Create `src/features/your-feature.ts`
 2. Add bang command(s) to `BANG_COMMANDS` in `src/features/router.ts`
 3. Add natural language patterns to `FEATURE_PATTERNS` if appropriate
-4. Wire into `src/bot/handlers.ts`
+4. Wire into core routing:
+   - DM / generic routing: `src/core/response-router.ts`
+   - Group-only flows (polls, attachments, richer interactions): `src/core/process-group-message.ts`
+   - Platform-specific preprocessing (mentions/media/etc.): `src/platforms/<platform>/*`
 5. Write tests in `tests/`
 6. Update `src/features/help.ts` with the new command(s)
 

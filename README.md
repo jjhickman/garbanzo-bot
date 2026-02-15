@@ -49,7 +49,7 @@ What we kept (inspiration from OpenClaw-style systems):
 
 What we intentionally changed in Garbanzo (why it's safer for group deployments):
 
-- **Smaller surface area:** WhatsApp only today (no web control UI, no multi-channel gateway)
+- **Smaller surface area:** WhatsApp is the only production platform today (no web control UI, no multi-channel gateway); other platforms have scaffolds but are not implemented
 - **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
 - **Group safety defaults:** mention gating + per-group feature allowlists
 - **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
@@ -283,7 +283,7 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging app target (`whatsapp` default, `discord` planned) |
+| `MESSAGING_PLATFORM` | No | Messaging app target (`whatsapp` default; `slack` scaffold; `discord`/`teams` placeholder) |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
@@ -371,58 +371,35 @@ After deploying, use `!memory add` to teach the bot about your community's venue
 
 ## Architecture
 
+Core/platform separation:
+
+- Core pipeline: `src/core/*` (platform-agnostic processing)
+- Platform runtimes/adapters: `src/platforms/*` (WhatsApp production; others are scaffolds)
+
+Full walkthrough: `docs/ARCHITECTURE.md`
+
 ```
 src/
-  index.ts              # Entry point — starts bot, wires services
-  bot/
-    connection.ts       # Baileys socket, auth, reconnect, staleness detection
-    handlers.ts         # Top-level message dispatcher
-    group-handler.ts    # Group message routing + mention handling
-    owner-commands.ts   # Owner DM command routing
-    response-router.ts  # Bang commands + natural language feature routing
-    reactions.ts        # Emoji reactions (🫘 for acknowledgments)
-    groups.ts           # Group config, feature flags, per-group persona
-  ai/
-    router.ts           # Model selection (cloud vs Ollama) + cost tracking
-    claude.ts           # Claude-family caller (OpenRouter/Anthropic) + circuit breaker
-    chatgpt.ts          # OpenAI fallback caller + circuit breaker
-    cloud-providers.ts  # Shared cloud request builders/parsers
-    ollama.ts           # Local Ollama client + warm-up scheduler
-    persona.ts          # System prompt builder (PERSONA.md + memory + language)
-  features/             # One file per feature, max ~300 lines
-    character/          # D&D 5e character sheet generator (6 files)
-    weather.ts          # Google Weather API
-    transit.ts          # MBTA schedule/alerts
-    transit-data.ts     # Station/route aliases, emoji maps, types
-    moderation.ts       # Content moderation (human-in-the-loop)
-    moderation-patterns.ts # Regex rules, category maps, thresholds
-    introductions.ts    # Auto-respond to new member intros
-    intro-classifier.ts # Signal-based intro detection logic
-    dnd.ts              # D&D dice roller + command handler
-    dnd-lookups.ts      # SRD API lookups (spell, monster, class, item)
-    events.ts, news.ts, books.ts, venues.ts, polls.ts, fun.ts,
-    welcome.ts, feedback.ts, profiles.ts, summary.ts,
-    recommendations.ts, language.ts, memory.ts, media.ts,
-    voice.ts, links.ts, release.ts, help.ts, router.ts, digest.ts
-  middleware/
-    rate-limit.ts       # Per-user/per-group sliding window
-    logger.ts           # Pino structured logging
-    context.ts          # Two-tier context compression + caching
-    stats.ts            # Token estimation, daily cost tracking
-    health.ts           # HTTP health endpoint + memory watchdog
-    retry.ts            # Dead letter retry queue
-    sanitize.ts         # Input sanitization + prompt injection detection
-  utils/
-    config.ts           # Zod-validated env vars
-    formatting.ts       # WhatsApp text formatting
-    jid.ts              # JID parsing/comparison
-    db.ts               # SQLite barrel (re-exports schema, profiles, maintenance)
-    db-schema.ts        # Database init, table definitions
-    db-profiles.ts      # Member profile queries
-    db-maintenance.ts   # Backup, vacuum, prune, scheduled maintenance
-config/groups.json      # Per-group settings
-docs/                   # Persona, roadmap, security, infrastructure
-tests/                  # Vitest (12 files, 446 tests)
+  index.ts              # Entry point — starts health/maintenance, starts selected platform runtime
+  core/                 # Platform-agnostic pipeline + feature routing
+    process-inbound-message.ts
+    process-group-message.ts
+    response-router.ts
+    groups-config.ts
+    vision.ts
+  platforms/
+    index.ts            # Platform runtime selection
+    whatsapp/           # Baileys runtime + WhatsApp-specific adapters
+    slack/              # Scaffold (not production)
+    discord/            # Placeholder runtime
+    teams/              # Placeholder runtime
+  ai/                   # Local + cloud model routing + providers
+  features/             # Feature handlers (weather, transit, polls, etc.)
+  middleware/           # Health, retry, sanitize, rate limiting, stats, logging
+  utils/                # Config (Zod), db, jid helpers
+config/
+docs/
+tests/
 ```
 
 ## Stack
@@ -433,7 +410,7 @@ tests/                  # Vitest (12 files, 446 tests)
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (446 tests)
+- **Testing:** Vitest (450+ tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
