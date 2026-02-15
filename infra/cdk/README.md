@@ -22,6 +22,10 @@ npm install
 
 ## Create SSM parameters
 
+You have two options:
+
+1) Recommended: create parameters out-of-band (does not store secrets in CloudFormation)
+
 Store your `.env` as a SecureString:
 
 ```bash
@@ -41,6 +45,17 @@ aws ssm put-parameter \
   --value "$(cat ../../config/groups.json)" \
   --overwrite
 ```
+
+2) Optional: have CDK create placeholder parameters (values set to `__SET_ME__`)
+
+```bash
+cdk deploy \
+  -c createParameters=true \
+  -c envParamName=/garbanzo/prod/env \
+  -c groupsParamName=/garbanzo/prod/groups_json
+```
+
+After deploy, overwrite both parameters with real values using the AWS CLI.
 
 ## Deploy
 
@@ -65,12 +80,11 @@ cdk deploy \
 
 ## QR Linking
 
-On first boot, read logs and scan the QR code:
+On first boot, you need to read logs and scan the QR code.
 
-- Use SSM Session Manager (recommended) or SSH if you enable it.
-- Then:
+This CDK stack configures Docker Compose to ship container logs to CloudWatch Logs via the `awslogs` driver.
 
-```bash
-cd /opt/garbanzo/garbanzo-bot
-APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f garbanzo
-```
+Options:
+
+- Preferred: view logs in CloudWatch Logs (Log Group: `/garbanzo/prod` by default)
+- Alternate: SSM Session Manager and run `docker compose logs -f garbanzo`

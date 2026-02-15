@@ -9,6 +9,21 @@ Garbanzo's WhatsApp transport is Baileys (WhatsApp Web multi-device). That has t
 
 Garbanzo also uses SQLite for local state by default. For the simplest, most reliable AWS deployment, prefer a single VM with local disk (EBS) rather than a network filesystem.
 
+## Scaling Note (SQLite + Baileys)
+
+Today, Garbanzo is designed as a single-instance deployment:
+
+- Baileys session state is not designed for active-active multi-replica operation.
+- SQLite is a single-node database and does not support horizontal scaling the way Postgres does.
+
+On AWS, the practical scaling strategy is vertical (bigger instance) plus good backups.
+
+If you later want true multi-instance scalability, the likely path is:
+
+- add official messaging platform adapters (Slack/Teams/WhatsApp Business Platform)
+- move durable state from SQLite to Postgres (RDS)
+- use queues (SQS) for async work where ordering is not critical
+
 ## Recommended: EC2 + Docker Compose (Simple + Reliable)
 
 If you like infrastructure-as-code, see `infra/cdk/` for an AWS CDK app that provisions an EC2 instance and bootstraps a pinned Docker Compose deployment.

@@ -1,0 +1,18 @@
+# docker-compose.aws.yml — Garbanzo (AWS override)
+#
+# Purpose:
+# - Ship container logs to CloudWatch Logs without SSH.
+#
+# Usage (on EC2):
+#   AWS_REGION=us-east-1 AWS_INSTANCE_ID=i-... \
+#   AWS_LOG_GROUP=/garbanzo/prod \
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.aws.yml up -d
+
+services:
+  garbanzo:
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: ${AWS_LOG_GROUP:-/garbanzo/prod}
+        awslogs-stream: ${AWS_LOG_STREAM:-garbanzo/${AWS_INSTANCE_ID}}
