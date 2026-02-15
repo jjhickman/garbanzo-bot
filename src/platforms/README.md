@@ -9,4 +9,5 @@ Today:
 Future:
 
 - Slack/Teams should be built on official APIs.
-- Each platform should be a thin adapter that normalizes inbound messages and calls core routing.
+- Each platform should normalize inbound messages to `src/core/inbound-message.ts`.
+- Each platform can optionally override persona via `docs/personas/<platform>.md`.
