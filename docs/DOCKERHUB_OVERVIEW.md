@@ -37,6 +37,8 @@ Readiness (non-200 when disconnected/stale):
 curl -i http://127.0.0.1:3001/health/ready
 ```
 
+Troubleshooting: if `/health` reports `status=connected` but `/health/ready` is 503 with `stale=true` immediately after a reconnect, you are likely running an older build where staleness was carried over across reconnects. Upgrade to a newer release, or as a short-term workaround send any message in a monitored chat to refresh `lastMessageAt`.
+
 ## Tags
 
 This repo publishes both GHCR and Docker Hub tags.
