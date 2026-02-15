@@ -41,6 +41,10 @@ const envSchema = z.object({
   SUPPORT_CUSTOM_URL: z.string().url().optional(),
   SUPPORT_MESSAGE: z.string().optional(),
 
+  // Optional GitHub issue automation for owner-approved feedback
+  GITHUB_ISSUES_TOKEN: z.string().optional(),
+  GITHUB_ISSUES_REPO: z.string().default('jjhickman/garbanzo-bot'),
+
   // Infrastructure
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   OWNER_JID: z.string().min(1, 'OWNER_JID is required — set in .env'),
@@ -86,6 +90,11 @@ if (invalidProviders.length > 0) {
 }
 
 const normalizedProviderOrder = Array.from(new Set(requestedProviderOrder)).join(',');
+
+if (!/^[^/\s]+\/[^/\s]+$/.test(parsed.data.GITHUB_ISSUES_REPO)) {
+  console.error('❌ GITHUB_ISSUES_REPO must be in the form owner/repo');
+  process.exit(1);
+}
 
 export const config = {
   ...parsed.data,

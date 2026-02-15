@@ -91,12 +91,35 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'accepted', 'rejected', 'done')),
     upvotes INTEGER NOT NULL DEFAULT 0,
     upvoters TEXT NOT NULL DEFAULT '[]',
+    github_issue_number INTEGER,
+    github_issue_url TEXT,
+    github_issue_created_at INTEGER,
     timestamp INTEGER NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_feedback_status
     ON feedback (status, timestamp DESC);
 `);
+
+interface TableColumnInfo {
+  name: string;
+}
+
+function tableHasColumn(table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as TableColumnInfo[];
+  return rows.some((row) => row.name === column);
+}
+
+// Forward-compatible migration for older databases created before feedback issue-link columns.
+if (!tableHasColumn('feedback', 'github_issue_number')) {
+  db.exec('ALTER TABLE feedback ADD COLUMN github_issue_number INTEGER');
+}
+if (!tableHasColumn('feedback', 'github_issue_url')) {
+  db.exec('ALTER TABLE feedback ADD COLUMN github_issue_url TEXT');
+}
+if (!tableHasColumn('feedback', 'github_issue_created_at')) {
+  db.exec('ALTER TABLE feedback ADD COLUMN github_issue_created_at INTEGER');
+}
 
 // ── Cleanup ─────────────────────────────────────────────────────────
 

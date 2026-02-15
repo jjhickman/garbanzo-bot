@@ -59,6 +59,9 @@ const selectAllFeedback = db.prepare(
 const selectFeedbackById = db.prepare(`SELECT * FROM feedback WHERE id = ?`);
 const updateFeedbackStatus = db.prepare(`UPDATE feedback SET status = ? WHERE id = ?`);
 const updateFeedbackUpvote = db.prepare(`UPDATE feedback SET upvotes = ?, upvoters = ? WHERE id = ?`);
+const updateFeedbackGitHubIssue = db.prepare(
+  `UPDATE feedback SET github_issue_number = ?, github_issue_url = ?, github_issue_created_at = ? WHERE id = ?`,
+);
 const insertMemory = db.prepare(
   `INSERT INTO memory (fact, category, source, created_at) VALUES (?, ?, ?, ?)`,
 );
@@ -103,6 +106,9 @@ export interface FeedbackEntry {
   status: 'open' | 'accepted' | 'rejected' | 'done';
   upvotes: number;
   upvoters: string;
+  github_issue_number: number | null;
+  github_issue_url: string | null;
+  github_issue_created_at: number | null;
   timestamp: number;
 }
 
@@ -172,7 +178,15 @@ export function submitFeedback(
   const result = insertFeedback.run(type, bare, groupJid, text, ts);
   return {
     id: Number(result.lastInsertRowid), type, sender: bare,
-    group_jid: groupJid, text, status: 'open', upvotes: 0, upvoters: '[]', timestamp: ts,
+    group_jid: groupJid,
+    text,
+    status: 'open',
+    upvotes: 0,
+    upvoters: '[]',
+    github_issue_number: null,
+    github_issue_url: null,
+    github_issue_created_at: null,
+    timestamp: ts,
   };
 }
 
@@ -208,6 +222,16 @@ export function upvoteFeedback(id: number, senderJid: string): boolean {
   voters.push(bare);
   updateFeedbackUpvote.run(entry.upvotes + 1, JSON.stringify(voters), id);
   return true;
+}
+
+/** Link a feedback entry to a created GitHub issue. */
+export function linkFeedbackToGitHubIssue(
+  id: number,
+  issueNumber: number,
+  issueUrl: string,
+): boolean {
+  const ts = Math.floor(Date.now() / 1000);
+  return updateFeedbackGitHubIssue.run(issueNumber, issueUrl, ts, id).changes > 0;
 }
 
 // ── Public API: Memory ──────────────────────────────────────────────

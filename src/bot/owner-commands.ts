@@ -5,7 +5,7 @@ import { getHelpMessage, getOwnerHelpMessage } from '../features/help.js';
 import { triggerIntroCatchUp } from '../features/introductions.js';
 import { previewDigest } from '../features/digest.js';
 import { formatStrikesReport } from '../features/moderation.js';
-import { handleFeedbackOwner } from '../features/feedback.js';
+import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../features/feedback.js';
 import { handleRelease } from '../features/release.js';
 import { handleMemory } from '../features/memory.js';
 import { recordOwnerDM } from '../middleware/stats.js';
@@ -111,6 +111,15 @@ export async function handleOwnerDM(
   // !feedback [args]
   if (trimmedLower.startsWith('!feedback')) {
     const args = text.trim().slice('!feedback'.length).trim();
+
+    const issueMatch = args.match(/^issue\s+(\d+)$/i);
+    if (issueMatch) {
+      const id = Number.parseInt(issueMatch[1], 10);
+      const result = await createGitHubIssueFromFeedback(id);
+      await sock.sendMessage(remoteJid, { text: result });
+      return true;
+    }
+
     const result = handleFeedbackOwner(args);
     await sock.sendMessage(remoteJid, { text: result });
     return true;

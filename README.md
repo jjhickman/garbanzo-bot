@@ -168,6 +168,7 @@ Embed template:
 ### Owner Commands (DM only)
 - `!memory add/delete/search` — manage long-term community facts injected into AI context
 - `!feedback` — review pending suggestions and bug reports
+- `!feedback issue <id>` — create GitHub issue from accepted feedback item
 - `!release <notes>` — broadcast release notes to all groups
 - `!strikes` — view moderation strike counts
 - `!digest` — preview daily activity summary
@@ -195,7 +196,10 @@ Copy `.env.example` to `.env` and configure:
 | `KOFI_URL` | No | Optional Ko-fi support link |
 | `SUPPORT_CUSTOM_URL` | No | Optional custom support URL |
 | `SUPPORT_MESSAGE` | No | Optional custom support intro message |
+| `GITHUB_ISSUES_TOKEN` | No | Token used to create GitHub issues from owner-approved feedback |
+| `GITHUB_ISSUES_REPO` | No | Target repo for issue creation (`owner/repo`) |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
+| `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner WhatsApp JID for admin features |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 
@@ -315,7 +319,7 @@ src/
     db-maintenance.ts   # Backup, vacuum, prune, scheduled maintenance
 config/groups.json      # Per-group settings
 docs/                   # Persona, roadmap, security, infrastructure
-tests/                  # Vitest (11 files, 440 tests)
+tests/                  # Vitest (11 files, 443 tests)
 ```
 
 ## Stack
@@ -326,7 +330,7 @@ tests/                  # Vitest (11 files, 440 tests)
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (440 tests)
+- **Testing:** Vitest (443 tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -381,6 +385,11 @@ Support links are read from:
 - `KOFI_URL`
 - `SUPPORT_CUSTOM_URL`
 - `SUPPORT_MESSAGE` (optional custom intro text)
+
+Feedback-to-issue automation (owner approved):
+
+- `!feedback issue <id>` creates a GitHub issue for an accepted item
+- Requires `GITHUB_ISSUES_TOKEN` and optional `GITHUB_ISSUES_REPO`
 
 ## Main Branch Stability
 

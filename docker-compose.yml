@@ -13,6 +13,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: garbanzo
     restart: unless-stopped
 
@@ -24,6 +26,7 @@ services:
     environment:
       - NODE_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-dev}
 
     # Health check port (internal only by default)
     ports:

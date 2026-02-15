@@ -10,8 +10,38 @@
  */
 
 import type { WASocket } from '@whiskeysockets/baileys';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
 import { GROUP_IDS } from '../bot/groups.js';
+import { PROJECT_ROOT } from '../utils/config.js';
+
+let cachedVersion: string | null = null;
+
+function getAppVersion(): string {
+  if (cachedVersion) return cachedVersion;
+
+  const fromEnv = process.env.GARBANZO_VERSION?.trim();
+  if (fromEnv) {
+    cachedVersion = fromEnv.startsWith('v') ? fromEnv : `v${fromEnv}`;
+    return cachedVersion;
+  }
+
+  try {
+    const pkgPath = resolve(PROJECT_ROOT, 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string };
+    const version = pkg.version?.trim();
+    if (version) {
+      cachedVersion = version.startsWith('v') ? version : `v${version}`;
+      return cachedVersion;
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to resolve package version for release notes');
+  }
+
+  cachedVersion = 'v0.0.0';
+  return cachedVersion;
+}
 
 /**
  * Parse and send release notes.
@@ -28,6 +58,7 @@ export async function handleRelease(
       'Usage:',
       '  !release <message> — broadcast to all groups',
       '  !release <group> <message> — send to one group',
+      `  (header auto-includes version ${getAppVersion()})`,
       '',
       'Groups: ' + Object.values(GROUP_IDS).map((g) => g.name.toLowerCase()).join(', '),
     ].join('\n');
@@ -57,6 +88,7 @@ export async function handleRelease(
 
   const formatted = [
     '📋 *What\'s New with Garbanzo* 🫘',
+    `*Version:* ${getAppVersion()}`,
     '',
     message,
   ].join('\n');

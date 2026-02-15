@@ -167,7 +167,7 @@ garbanzo-bot/
 │   ├── rotate-gh-secrets.sh  # Rotate GitHub Actions secrets from env vars
 │   └── audit-secrets.sh      # Local gitleaks wrapper
 ├── tests/
-│   └── *.test.ts             # Vitest test files (11 files, 440 tests)
+│   └── *.test.ts             # Vitest test files (11 files, 443 tests)
 ├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)
 ├── docker-compose.yml        # Named volumes, env_file, health check
 ├── .dockerignore             # Excludes .git, node_modules, tests, etc.

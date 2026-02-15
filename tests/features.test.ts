@@ -782,7 +782,7 @@ describe('Feedback — handleUpvote', async () => {
 });
 
 describe('Feedback — handleFeedbackOwner', async () => {
-  const { handleFeedbackOwner } = await import('../src/features/feedback.js');
+  const { handleFeedbackOwner, createGitHubIssueFromFeedback } = await import('../src/features/feedback.js');
   const { submitFeedback, setFeedbackStatus: _setFeedbackStatus } = await import('../src/utils/db.js');
 
   it('lists open items with no args', () => {
@@ -825,6 +825,20 @@ describe('Feedback — handleFeedbackOwner', async () => {
   it('handles nonexistent ID gracefully', () => {
     const result = handleFeedbackOwner('accept 99999');
     expect(result).toContain('No feedback item found');
+  });
+
+  it('requires accepted status before creating github issue', async () => {
+    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Need issue creation approval gate');
+    const result = await createGitHubIssueFromFeedback(entry.id);
+    expect(result).toContain('must be');
+    expect(result).toContain('accepted');
+  });
+
+  it('requires token config to create github issue', async () => {
+    const entry = submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Token missing should fail safely');
+    _setFeedbackStatus(entry.id, 'accepted');
+    const result = await createGitHubIssueFromFeedback(entry.id);
+    expect(result).toContain('GITHUB_ISSUES_TOKEN');
   });
 });
 

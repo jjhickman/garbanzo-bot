@@ -2,6 +2,8 @@
 # Install all dependencies (including devDependencies) and compile TypeScript.
 # better-sqlite3 requires native compilation, so we need build tools here.
 
+ARG APP_VERSION=0.0.0
+
 FROM node:25-alpine AS builder
 
 # Build tools for native addons (better-sqlite3)
@@ -31,6 +33,10 @@ RUN npm prune --omit=dev
 # Minimal runtime image. No build tools, no devDeps, no source code.
 
 FROM node:25-alpine
+
+ARG APP_VERSION=0.0.0
+LABEL org.opencontainers.image.title="Garbanzo"
+LABEL org.opencontainers.image.version="$APP_VERSION"
 
 # dumb-init: proper PID 1 signal handling (SIGTERM → graceful shutdown)
 # ffmpeg: video frame extraction for Claude Vision
@@ -72,6 +78,7 @@ EXPOSE 3001
 # Runtime environment defaults (override with .env file or docker-compose env_file)
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
+ENV GARBANZO_VERSION=$APP_VERSION
 
 # Volumes for persistent data
 # - data/: SQLite database, backups, voice models
