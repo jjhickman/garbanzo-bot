@@ -22,12 +22,15 @@ if (config.DB_DIALECT !== 'sqlite') {
 // Ensure data directory exists
 mkdirSync(DB_DIR, { recursive: true });
 
-const db: InstanceType<typeof Database> = new Database(DB_PATH);
+// Set a connection-level busy timeout early to reduce SQLITE_BUSY flakiness
+// when multiple processes/modules open the DB concurrently (common in tests/CI).
+const db: InstanceType<typeof Database> = new Database(DB_PATH, { timeout: 5000 });
 
 // Performance pragmas
+// NOTE: busy_timeout should be set before attempting journal_mode switches.
+db.pragma('busy_timeout = 5000');
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
-db.pragma('busy_timeout = 5000');
 
 logger.info({ path: DB_PATH }, 'SQLite database opened');
 
