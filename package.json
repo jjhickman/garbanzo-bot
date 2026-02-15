@@ -17,7 +17,13 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist/",
     "audit:secrets": "bash scripts/audit-secrets.sh",
-    "check": "npm run audit:secrets && npm run typecheck && npm run lint && npm run test"
+    "check": "npm run audit:secrets && npm run typecheck && npm run lint && npm run test",
+    "gh:status": "bash scripts/gh-workflow.sh status",
+    "gh:whoami": "bash scripts/gh-workflow.sh whoami",
+    "gh:ensure": "bash scripts/gh-workflow.sh ensure",
+    "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
+    "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
+    "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh"
   },
   "engines": {
     "node": ">=20.0.0"

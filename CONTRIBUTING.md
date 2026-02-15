@@ -17,6 +17,8 @@ npm run dev        # Hot-reload development (requires WhatsApp auth)
 npm run typecheck  # Type-check only
 npm run test       # Run all tests
 npm run check      # Full pre-commit check (typecheck + lint + test)
+npm run gh:status  # Show authenticated GitHub accounts
+npm run gh:ensure  # Verify owner + author accounts exist locally
 ```
 
 **Always run `npm run check` before submitting a PR.**
@@ -52,6 +54,31 @@ Examples:
 - `feat: add weather command`
 - `fix: handle empty message body`
 - `docs: update ROADMAP with Phase 3 status`
+
+## GitHub PR Account Workflow
+
+Use separate accounts to keep review discipline consistent:
+
+- `garbanzo-dev`: opens and updates PRs (author role)
+- `jjhickman`: reviews/approves/merges (owner role)
+
+Switch accounts with helper scripts:
+
+```bash
+npm run gh:switch:author
+npm run gh:switch:owner
+npm run gh:whoami
+```
+
+## Credential Rotation (GitHub Secrets)
+
+Monthly rotation reminders are automated via `.github/workflows/credential-rotation-reminder.yml`.
+
+To push newly rotated provider keys into GitHub Actions secrets from local env vars:
+
+```bash
+OPENAI_API_KEY=... OPENROUTER_API_KEY=... ANTHROPIC_API_KEY=... npm run rotate:gh-secrets
+```
 
 ## What to Contribute
 

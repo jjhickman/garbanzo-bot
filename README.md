@@ -390,7 +390,39 @@ Repo guardrails are configured under `.github/`:
 - `CODEOWNERS` requires owner review coverage
 - `pull_request_template.md` enforces verification checklist discipline
 - `dependabot.yml` keeps npm/docker dependencies updated weekly
+- `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
 - `FUNDING.yml` enables sponsorship links in GitHub UI
+
+## GitHub Account Workflow
+
+For stable review discipline, use two accounts:
+
+- `garbanzo-dev` for authoring PRs
+- `jjhickman` for reviewing/approving/merging
+
+Helper commands:
+
+```bash
+npm run gh:status
+npm run gh:ensure
+npm run gh:switch:author
+npm run gh:switch:owner
+npm run gh:whoami
+```
+
+These wrappers call `scripts/gh-workflow.sh`.
+
+## Credential Rotation Workflow
+
+- Monthly reminder issue is automated via `.github/workflows/credential-rotation-reminder.yml`.
+- To update GitHub Actions secrets from your local shell environment:
+
+```bash
+# Example (values supplied from your shell/session manager)
+OPENAI_API_KEY=... OPENROUTER_API_KEY=... ANTHROPIC_API_KEY=... npm run rotate:gh-secrets
+```
+
+Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 
 ## Docs
 

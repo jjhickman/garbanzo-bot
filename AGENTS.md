@@ -89,6 +89,15 @@ npm run start
 
 # Full pre-commit check (secrets + typecheck + lint + test)
 npm run check
+
+# GitHub account workflow helpers
+npm run gh:status
+npm run gh:switch:author
+npm run gh:switch:owner
+npm run gh:whoami
+
+# Rotate GitHub Actions secrets from local env vars
+npm run rotate:gh-secrets
 ```
 
 ## Project Structure
@@ -152,7 +161,10 @@ garbanzo-bot/
 ├── data/                     # Runtime data (gitignored DBs, persisted state)
 ├── scripts/
 │   ├── setup.mjs             # Interactive setup wizard
-│   └── setup.sh              # Wrapper for setup wizard
+│   ├── setup.sh              # Wrapper for setup wizard
+│   ├── gh-workflow.sh        # GitHub account switch helpers
+│   ├── rotate-gh-secrets.sh  # Rotate GitHub Actions secrets from env vars
+│   └── audit-secrets.sh      # Local gitleaks wrapper
 ├── tests/
 │   └── *.test.ts             # Vitest test files (11 files, 440 tests)
 ├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)

@@ -167,6 +167,12 @@ chmod +x .git/hooks/pre-commit
 - Health status now includes nightly backup integrity metadata (latest backup path/age/size and SQLite integrity check result).
 - Default deployment path is Docker Compose with non-root container runtime and persisted volumes for auth/database state.
 
+## Credential Rotation Program
+
+- A monthly reminder issue is created by `.github/workflows/credential-rotation-reminder.yml`.
+- Use `npm run rotate:gh-secrets` to push freshly rotated provider keys from local env vars to GitHub Actions secrets.
+- Keep provider key rotation and GitHub secret updates paired in the same maintenance window.
+
 ---
 
 ## Remediation Log
