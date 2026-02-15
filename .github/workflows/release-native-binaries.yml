@@ -20,6 +20,7 @@ jobs:
   build-binaries:
     name: Build ${{ matrix.bundle_name }}
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -39,11 +40,14 @@ jobs:
             binary_name: garbanzo
             pkg_target: node22-macos-arm64
             archive_ext: tar.gz
-          - os: macos-13
+          # macOS x64 builds have become less consistent on GitHub-hosted runners.
+          # We keep this target as best-effort and do not fail the entire release if it breaks.
+          - os: macos-14
             bundle_name: garbanzo-macos-x64
             binary_name: garbanzo
             pkg_target: node22-macos-x64
             archive_ext: tar.gz
+            allow_failure: true
           - os: windows-latest
             bundle_name: garbanzo-windows-x64
             binary_name: garbanzo.exe
