@@ -1,4 +1,4 @@
-import type { MessagingPlatform } from '../platforms/types.js';
+import type { MessagingPlatform } from './messaging-platform.js';
 
 /**
  * Messaging adapter API.

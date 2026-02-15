@@ -1,6 +1,6 @@
-export type MessagingPlatform = 'whatsapp' | 'discord' | 'slack' | 'teams';
+export type { MessagingPlatform } from '../core/messaging-platform.js';
 
 export interface PlatformRuntime {
-  platform: MessagingPlatform;
+  platform: import('../core/messaging-platform.js').MessagingPlatform;
   start(): Promise<void>;
 }
