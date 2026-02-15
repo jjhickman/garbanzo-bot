@@ -132,9 +132,6 @@ export function getOwnerHelpMessage(): string {
     '  !support — preview support links message',
     '  !support broadcast — send support message to all enabled groups',
     '',
-    `${bold('Ops')}`,
-    '  !chime test — play a loud chime on the host (if enabled)',
-    '',
     '_These commands only work in DM with the bot._',
   ].join('\n');
 }

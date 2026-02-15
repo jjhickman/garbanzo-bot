@@ -57,10 +57,6 @@ const envSchema = z.object({
   HEALTH_BIND_HOST: z.string().min(1).default('127.0.0.1'),
   METRICS_ENABLED: z.coerce.boolean().default(false),
 
-  // Local operator audio cues (best-effort)
-  CHIME_ENABLED: z.coerce.boolean().default(false),
-  CHIME_PATH: z.string().optional(),
-
   // Database
   DB_DIALECT: z.enum(['sqlite', 'postgres']).default('sqlite'),
   DATABASE_URL: z.string().optional(),
