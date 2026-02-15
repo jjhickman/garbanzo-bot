@@ -139,7 +139,7 @@ describe('Router — voice bang commands', async () => {
 describe('Media — helper functions', async () => {
   // We can't easily test extractMedia/downloadMediaMessage without a real
   // Baileys socket, but we can test the helper logic.
-  const { hasVisualMedia, isVoiceMessage } = await import('../src/features/media.js');
+  const { hasVisualMedia, isVoiceMessage } = await import('../src/platforms/whatsapp/media.js');
 
   it('hasVisualMedia returns false for null message', () => {
     // @ts-expect-error — testing with invalid input

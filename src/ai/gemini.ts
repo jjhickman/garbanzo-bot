@@ -1,6 +1,6 @@
 import { logger } from '../middleware/logger.js';
 import { buildProviderRequest, type CloudResponse } from './cloud-providers.js';
-import type { VisionImage } from '../features/media.js';
+import type { VisionImage } from '../core/vision.js';
 
 /** Call the Gemini API (Google AI Studio) via the Generative Language REST endpoint. */
 export async function callGemini(

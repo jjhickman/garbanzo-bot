@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { config } from '../utils/config.js';
-import type { VisionImage } from '../features/media.js';
+import type { VisionImage } from '../core/vision.js';
 
 /** Cloud providers supported for fallback chain. */
 export type CloudProvider = 'openrouter' | 'anthropic' | 'openai' | 'gemini';

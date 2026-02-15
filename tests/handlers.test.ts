@@ -85,10 +85,11 @@ function mockHandlerDeps(): HandlerMocks {
 
   vi.doMock('../src/middleware/retry.js', () => ({ setRetryHandler }));
 
-  vi.doMock('../src/features/media.js', () => ({
+  vi.doMock('../src/platforms/whatsapp/media.js', () => ({
     isVoiceMessage: vi.fn(() => false),
     downloadVoiceAudio: vi.fn(async () => null),
     hasVisualMedia: vi.fn(() => false),
+    extractMedia: vi.fn(async () => null),
   }));
 
   vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => null) }));
