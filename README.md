@@ -136,21 +136,68 @@ On first run, Baileys will display a QR code in the terminal. Scan it with Whats
 
 ## Demo
 
-Setup and onboarding:
+Real WhatsApp screenshots (no AI mockups):
 
-![Setup Wizard Demo](docs/assets/demos/setup-wizard.svg)
-![WhatsApp QR Linking](docs/assets/screenshots/qr-link.svg)
+<table>
+  <tr>
+    <td width="50%">
+      <b>Help + command discovery</b><br/>
+      <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Garbanzo help output in WhatsApp" />
+    </td>
+    <td width="50%">
+      <b>Introductions welcome</b><br/>
+      <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Garbanzo welcomes a new introduction" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <b>Weather report</b><br/>
+      <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Garbanzo weather report" />
+    </td>
+    <td width="50%">
+      <b>MBTA alerts</b><br/>
+      <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="Garbanzo MBTA transit alerts" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <b>Local news</b><br/>
+      <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Garbanzo local news" />
+    </td>
+    <td width="50%">
+      <b>Restaurant recommendations</b><br/>
+      <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Garbanzo restaurant recommendations" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <b>Book recommendations</b><br/>
+      <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Garbanzo book recommendations" />
+    </td>
+    <td width="50%">
+      <b>D&D character sheet generator</b><br/>
+      <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="Garbanzo DnD character generator" />
+    </td>
+  </tr>
+</table>
 
-Core value in action:
+Setup flow (text-only for now):
 
-![Mention to Response Flow](docs/assets/demos/mention-to-response.svg)
-![Event Enrichment Example](docs/assets/screenshots/event-enrichment.svg)
-![Catchup Summary Example](docs/assets/screenshots/summary-catchup.svg)
+```bash
+npm run setup
+# follow prompts to set platform, AI provider order/models, and groups
 
-Admin and reliability:
+docker compose up -d
+docker compose logs -f garbanzo
+# scan QR code shown in terminal: WhatsApp > Settings > Linked Devices
+```
 
-![Owner Daily Digest](docs/assets/screenshots/owner-digest.svg)
-![Health Endpoint Output](docs/assets/screenshots/health-endpoint-json.svg)
+Health check example:
+
+```bash
+curl http://127.0.0.1:3001/health
+curl http://127.0.0.1:3001/health/ready
+```
 
 ## Features
 
