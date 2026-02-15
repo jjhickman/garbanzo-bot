@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 
@@ -11,6 +11,7 @@ function parseArgs(argv) {
     version: '',
     skipCheck: false,
     allowDirty: false,
+    cleanArtifacts: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -30,6 +31,10 @@ function parseArgs(argv) {
     }
     if (token === '--allow-dirty') {
       args.allowDirty = true;
+      continue;
+    }
+    if (token === '--clean-artifacts') {
+      args.cleanArtifacts = true;
       continue;
     }
     if (token === '--help' || token === '-h') {
@@ -54,7 +59,32 @@ function printHelp() {
     '  --version <semver>  Target release version (must match package.json)',
     '  --skip-check        Skip running npm run check',
     '  --allow-dirty       Allow dirty git working tree',
+    '  --clean-artifacts   Remove local release/archive folders before checks',
   ].join('\n'));
+}
+
+function cleanupArtifacts(enabled) {
+  const artifactDirs = ['release', 'archive'];
+  const found = artifactDirs
+    .map((dir) => ({ dir, path: resolve(PROJECT_ROOT, dir) }))
+    .filter((entry) => existsSync(entry.path));
+
+  if (found.length === 0) return;
+
+  if (!enabled) {
+    process.stdout.write('\n⚠ Found local artifact directories:\n');
+    for (const entry of found) {
+      process.stdout.write(`  - ${entry.dir}/\n`);
+    }
+    process.stdout.write('  Tip: run with --clean-artifacts to remove them automatically before validation.\n');
+    return;
+  }
+
+  process.stdout.write('\n▶ Cleaning local artifact directories\n');
+  for (const entry of found) {
+    rmSync(entry.path, { recursive: true, force: true });
+    process.stdout.write(`  removed ${entry.dir}/\n`);
+  }
 }
 
 function run(command, description) {
@@ -82,6 +112,8 @@ function isSemverLike(value) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  cleanupArtifacts(args.cleanArtifacts);
 
   const packageJsonPath = resolve(PROJECT_ROOT, 'package.json');
   const changelogPath = resolve(PROJECT_ROOT, 'CHANGELOG.md');

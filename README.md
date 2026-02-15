@@ -353,6 +353,7 @@ npm run test        # Run all tests
 npm run lint        # ESLint
 npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run release:plan # Dry-run release validation before tagging
+# add -- --clean-artifacts to remove local release/archive folders
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```
