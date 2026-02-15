@@ -19,10 +19,10 @@ export type {
 export type { MemberProfile } from './db-profiles.js';
 export type { BackupIntegrityStatus } from './db-maintenance.js';
 
-if (config.DB_DIALECT !== 'sqlite') {
-  throw new Error(
-    `DB_DIALECT=${config.DB_DIALECT} is not implemented yet. Use DB_DIALECT=sqlite for now.`,
-  );
+if (config.DB_DIALECT === 'postgres') {
+  const pg = await import('./db-postgres.js');
+  // Initialize to ensure we fail with a clear error message.
+  pg.createPostgresBackend();
 }
 
 const sqlite = await import('./db-sqlite.js');
