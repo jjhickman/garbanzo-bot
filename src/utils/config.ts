@@ -4,7 +4,10 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(__dirname, '../..');
+const processWithPkg = process as NodeJS.Process & { pkg?: unknown };
+const PROJECT_ROOT = processWithPkg.pkg
+  ? dirname(process.execPath)
+  : resolve(__dirname, '../..');
 
 loadDotenv({ path: resolve(PROJECT_ROOT, '.env') });
 

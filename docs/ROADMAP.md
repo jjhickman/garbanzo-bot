@@ -191,7 +191,7 @@
 
 ### 7.1 — Split oversized files (convention: max ~300 lines) ✅
 
-All oversized files have been split. `npm run check` passes after every split — 443 tests, 0 errors.
+All oversized files have been split. `npm run check` passes after every split — 446 tests, 0 errors.
 
 | File | Was | Now | Extracted To |
 |------|----:|----:|-------------|
@@ -215,7 +215,7 @@ Audited all exports across `src/`. Found 28 exports that were never imported ext
 | Un-exported internal types | 10 | `Complexity`, `CategoryConfig`, `ModerationRule`, `InjectionCheck`, `SanitizeResult`, `SpellcastingInfo`, `PDFResult`, `MessageContent`, `MessageHandler`, `CharacterArgs`, `FeedbackResult`, `MediaContent` |
 | Un-exported internal functions | 9 | `buildUserContent`, `checkMessageOpenAI`, `fetchUrlContent`, `getYouTubeMetadata`, `transcribeYouTube`, `sendDigest`, `ABILITY_DISPLAY` |
 
-All 443 tests pass. Typecheck clean. Lint: 0 errors, 52 warnings (reduced).
+All 446 tests pass. Typecheck clean. Lint: 0 errors, 52 warnings (reduced).
 
 ### 7.3 — Consolidate AI clients ✅
 
@@ -240,7 +240,7 @@ Completed as part of 7.1 file splits:
 3. [x] Added integration tests for link processing (mocked fetch + yt-dlp + YouTube transcript path)
 4. [x] Increased branch coverage for `handlers.ts` edge cases (helper extraction, upsert/wiring branches)
 5. [x] Added snapshot tests for formatted outputs (`help`, `profiles`, `memory`)
-6. [x] Test suite increased to 11 files / 443 tests
+6. [x] Test suite increased to 12 files / 446 tests
 
 ### 7.6 — Error handling audit ✅
 
@@ -272,7 +272,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 
 ### Gate
 - [x] No file in `src/` exceeds 350 lines (largest: `character/class-race-data.ts` at 338)
-- [x] All 443+ tests still pass after refactoring
+- [x] All 446+ tests still pass after refactoring
 - [x] `npm run check` clean (0 errors, warnings stable or reduced)
 - [x] Every exported function has a JSDoc comment
 - [x] No `any` types in `src/`

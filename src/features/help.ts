@@ -126,6 +126,7 @@ export function getOwnerHelpMessage(): string {
     `${bold('Releases')}`,
     '  !release <notes> — broadcast release notes to all groups',
     '  !release <group> <notes> — broadcast to specific group',
+    '  !release changelog — broadcast latest changelog snippet',
     '',
     `${bold('Support')}`,
     '  !support — preview support links message',

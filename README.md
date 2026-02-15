@@ -18,6 +18,16 @@ A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/
 - Small teams that want an AI chat ops assistant with local-first data and low infra overhead
 - Builders who need a reusable WhatsApp bot base with clear extension points and production guardrails
 
+## What Makes Garbanzo Different
+
+Garbanzo is opinionated around community operations, not just message transport.
+
+- **Compared to API platforms (e.g. Twilio WhatsApp):** Twilio provides messaging primitives and sender onboarding APIs; Garbanzo ships community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage). Source: [Twilio WhatsApp docs](https://www.twilio.com/docs/whatsapp).
+- **Compared to WhatsApp client libraries (e.g. `whatsapp-web.js`, `@open-wa/wa-automate`):** those are foundational SDKs; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included. Sources: [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), [open-wa](https://github.com/open-wa/wa-automate-nodejs).
+- **AI cost/reliability posture:** configurable cloud provider ordering plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
+- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows (`!feedback issue <id>`).
+- **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
+
 ## What It Does
 
 Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
@@ -170,6 +180,7 @@ Embed template:
 - `!feedback` — review pending suggestions and bug reports
 - `!feedback issue <id>` — create GitHub issue from accepted feedback item
 - `!release <notes>` — broadcast release notes to all groups
+- `!release changelog` — broadcast latest changelog section with version header
 - `!strikes` — view moderation strike counts
 - `!digest` — preview daily activity summary
 - `!catchup intros` — recent introduction summaries
@@ -319,7 +330,7 @@ src/
     db-maintenance.ts   # Backup, vacuum, prune, scheduled maintenance
 config/groups.json      # Per-group settings
 docs/                   # Persona, roadmap, security, infrastructure
-tests/                  # Vitest (11 files, 443 tests)
+tests/                  # Vitest (12 files, 446 tests)
 ```
 
 ## Stack
@@ -330,7 +341,7 @@ tests/                  # Vitest (11 files, 443 tests)
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (443 tests)
+- **Testing:** Vitest (446 tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -366,6 +377,12 @@ To deploy a specific release image:
 APP_VERSION=0.1.1 docker compose pull garbanzo
 APP_VERSION=0.1.1 docker compose up -d
 ```
+
+Cross-platform portable binaries are published on version tags (`v*`) as release assets:
+
+- `garbanzo-linux-x64.tar.gz`
+- `garbanzo-macos.tar.gz`
+- `garbanzo-windows-x64.zip`
 
 Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
 
@@ -411,6 +428,8 @@ Repo guardrails are configured under `.github/`:
 - `dependabot.yml` keeps npm/docker dependencies updated weekly
 - `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
 - `release-docker.yml` builds and publishes versioned Docker images to GHCR on `v*` tags
+- `release-native-binaries.yml` builds and attaches cross-platform native bundles on `v*` tags
+- release Docker workflow runs a smoke test against published image health endpoint
 - `FUNDING.yml` enables sponsorship links in GitHub UI
 
 ## GitHub Account Workflow

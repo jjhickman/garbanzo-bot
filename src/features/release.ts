@@ -17,6 +17,7 @@ import { GROUP_IDS } from '../bot/groups.js';
 import { PROJECT_ROOT } from '../utils/config.js';
 
 let cachedVersion: string | null = null;
+let cachedChangelogSnippet: string | null = null;
 
 function getAppVersion(): string {
   if (cachedVersion) return cachedVersion;
@@ -43,6 +44,49 @@ function getAppVersion(): string {
   return cachedVersion;
 }
 
+function getChangelogSnippet(maxLines: number = 12): string {
+  if (cachedChangelogSnippet) return cachedChangelogSnippet;
+
+  try {
+    const changelogPath = resolve(PROJECT_ROOT, 'CHANGELOG.md');
+    const lines = readFileSync(changelogPath, 'utf-8').split('\n');
+    const sectionHeaders: number[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('## [')) sectionHeaders.push(i);
+    }
+
+    if (sectionHeaders.length === 0) {
+      cachedChangelogSnippet = 'Changelog section headers not found.';
+      return cachedChangelogSnippet;
+    }
+
+    const unreleasedHeader = sectionHeaders.find((idx) => lines[idx].startsWith('## [Unreleased]'));
+    const startIdx = unreleasedHeader ?? sectionHeaders[0];
+    const nextHeader = sectionHeaders.find((idx) => idx > startIdx) ?? lines.length;
+
+    const sectionTitle = lines[startIdx].replace(/^##\s+/, '').trim();
+    const rawSection = lines.slice(startIdx + 1, nextHeader)
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim().length > 0);
+
+    const snippetLines = rawSection.slice(0, maxLines);
+    if (rawSection.length > maxLines) {
+      snippetLines.push('...');
+    }
+
+    cachedChangelogSnippet = [
+      `🧾 *Changelog ${sectionTitle}*`,
+      '',
+      ...snippetLines,
+    ].join('\n');
+    return cachedChangelogSnippet;
+  } catch (err) {
+    logger.error({ err }, 'Failed to load changelog snippet for release notes');
+    return '❌ Unable to load changelog snippet.';
+  }
+}
+
 /**
  * Parse and send release notes.
  * Returns a confirmation message for the owner DM.
@@ -58,6 +102,8 @@ export async function handleRelease(
       'Usage:',
       '  !release <message> — broadcast to all groups',
       '  !release <group> <message> — send to one group',
+      '  !release changelog — broadcast latest changelog section',
+      '  !release <group> changelog — send changelog to one group',
       `  (header auto-includes version ${getAppVersion()})`,
       '',
       'Groups: ' + Object.values(GROUP_IDS).map((g) => g.name.toLowerCase()).join(', '),
@@ -86,11 +132,16 @@ export async function handleRelease(
     message = args.trim();
   }
 
+  const changelogMatch = message.match(/^changelog(?:\s+(\d+))?$/i);
+  const payload = changelogMatch
+    ? getChangelogSnippet(Number.parseInt(changelogMatch[1] ?? '12', 10) || 12)
+    : message;
+
   const formatted = [
     '📋 *What\'s New with Garbanzo* 🫘',
     `*Version:* ${getAppVersion()}`,
     '',
-    message,
+    payload,
   ].join('\n');
 
   let sent = 0;

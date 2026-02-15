@@ -26,11 +26,17 @@ This creates a commit and tag like `v0.1.1`.
 git push origin main --follow-tags
 ```
 
-4. GitHub Action `release-docker.yml` builds and pushes:
+4. GitHub Actions publish release artifacts:
 
 - `ghcr.io/jjhickman/garbanzo:vX.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:X.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:latest` (only for non-prerelease tags)
+- native bundles attached to release:
+  - `garbanzo-linux-x64.tar.gz`
+  - `garbanzo-macos.tar.gz`
+  - `garbanzo-windows-x64.zip`
+
+5. Open a release checklist issue from `.github/ISSUE_TEMPLATE/release-checklist.yml` and track deploy verification.
 
 ## Version Injection Behavior
 
@@ -39,6 +45,20 @@ git push origin main --follow-tags
 - `!release` message header auto-includes version from:
   1. `GARBANZO_VERSION`, else
   2. `package.json` version.
+- `!release changelog` broadcasts the latest changelog section with version header.
+
+## Native Binary Strategy
+
+We use `@yao-pkg/pkg` in CI to generate host-native binaries on Linux, macOS, and Windows runners.
+
+- Workflow: `.github/workflows/release-native-binaries.yml`
+- Trigger: tag push (`v*`)
+- Output: compressed portable bundle with executable + runtime config/template files
+
+Notes:
+
+- Native binary artifacts are intended for convenience/testing and lightweight deployments.
+- Docker remains the default and best-supported production deployment path.
 
 ## Deploying a Released Image
 

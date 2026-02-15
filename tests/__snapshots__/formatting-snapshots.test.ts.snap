@@ -113,6 +113,7 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
 *Releases*
   !release <notes> — broadcast release notes to all groups
   !release <group> <notes> — broadcast to specific group
+  !release changelog — broadcast latest changelog snippet
 
 *Support*
   !support — preview support links message
