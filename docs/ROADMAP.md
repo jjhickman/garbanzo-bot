@@ -1,4 +1,4 @@
-# Garbanzo Bot — Implementation Roadmap
+# Garbanzo — Implementation Roadmap
 
 > **Core principle:** Start simple. Validate each phase with real users before advancing.
 > Each phase has a **gate** — a set of conditions that must be true before moving on.
@@ -16,7 +16,7 @@
 - [x] Fix QR code display (`printQRInTerminal` deprecated in Baileys v6.7 — added `qrcode-terminal`)
 - [x] Configure AI router to prefer OpenRouter with Sonnet 4
 - [x] Start with General group only (other 7 disabled in `config/groups.json`)
-- [x] Create systemd user service (`scripts/garbanzo-bot.service`)
+- [x] Create systemd user service (`scripts/garbanzo.service`)
 - [x] Run `npm run dev` — scan QR code, verify connection
 - [x] Test: send a message in General group with `@garbanzo` mention
 - [x] Test: verify bot responds with AI-generated answer
@@ -191,7 +191,7 @@
 
 ### 7.1 — Split oversized files (convention: max ~300 lines) ✅
 
-All oversized files have been split. `npm run check` passes after every split — 420 tests, 0 errors.
+All oversized files have been split. `npm run check` passes after every split — 440 tests, 0 errors.
 
 | File | Was | Now | Extracted To |
 |------|----:|----:|-------------|
@@ -204,49 +204,57 @@ All oversized files have been split. `npm run check` passes after every split �
 | `dnd.ts` | 362 | 151 | `dnd-lookups.ts` (209) — SRD API fetch, spell/monster/class/item lookups |
 | `router.ts` (ai) | 313 | 172 | `claude.ts` (128) — callClaude, buildUserContent, MessageContent type |
 
-### 7.2 — Reduce unused exports
+### 7.2 — Reduce unused exports ✅
 
-Audit identified ~21 exported functions/types that are never imported elsewhere. For each:
-- If it's a utility that other features might genuinely need later → keep, add `/** @public */` JSDoc
-- If it was an accident of development → un-export (make private)
-- Remove dead code entirely if the function is never called at all
+Audited all exports across `src/`. Found 28 exports that were never imported externally. Resolved as follows:
 
-### 7.3 — Consolidate AI client ✅
+| Action | Count | Examples |
+|--------|------:|---------|
+| Removed dead code | 8 functions + 4 prepared statements | `formatMessagesForPrompt`, `getModerationLogs`, `getStrikes`, `getMemoriesByCategory`, `getRecentMessages`, `sanitizeBareJid`, `sanitizeCommandArg`, `recordEventAttendance` |
+| Removed dead constant | 1 | `ADMINS` (loaded from config but never referenced) |
+| Un-exported internal types | 10 | `Complexity`, `CategoryConfig`, `ModerationRule`, `InjectionCheck`, `SanitizeResult`, `SpellcastingInfo`, `PDFResult`, `MessageContent`, `MessageHandler`, `CharacterArgs`, `FeedbackResult`, `MediaContent` |
+| Un-exported internal functions | 9 | `buildUserContent`, `checkMessageOpenAI`, `fetchUrlContent`, `getYouTubeMetadata`, `transcribeYouTube`, `sendDigest`, `ABILITY_DISPLAY` |
+
+All 440 tests pass. Typecheck clean. Lint: 0 errors, 52 warnings (reduced).
+
+### 7.3 — Consolidate AI clients ✅
 
 Completed as part of 7.1 file splits:
-1. [x] Created `src/ai/claude.ts` — exported `callClaude(systemPrompt, userMessage, visionImages?)` function
-2. [x] Moved OpenRouter vs Anthropic endpoint logic there
-3. [x] Moved `buildUserContent` (vision support) there
-4. [x] `router.ts` imports and delegates — stays focused on routing decisions (Ollama vs Claude, complexity classification, cost tracking)
+1. [x] Created `src/ai/claude.ts` — exported `callClaude(systemPrompt, userMessage, visionImages?)` for Claude-family cloud calls
+2. [x] Split provider request/parsing logic into `src/ai/cloud-providers.ts` (shared payload builders + response parsers)
+3. [x] Added `src/ai/chatgpt.ts` — OpenAI fallback caller with dedicated timeout + circuit breaker
+4. [x] `router.ts` imports and delegates — stays focused on routing decisions (Ollama vs cloud, complexity classification, cost tracking)
+5. [x] Cloud failover order is configurable via `AI_PROVIDER_ORDER` (provider-specific callers + ordered routing loop)
 
-### 7.4 — Type safety improvements
+### 7.4 — Type safety improvements ✅
 
-1. [ ] Replace remaining `any` types in `connection.ts` (Baileys event handlers) with proper types from `@whiskeysockets/baileys`
-2. [ ] Add Zod schemas for external API responses (weather, transit, news, venues, books) — currently raw `as` casts
-3. [ ] Create shared `Result<T, E>` type for feature handlers that can return text OR structured data (character PDF, poll, voice audio)
-4. [ ] Type the `config/groups.json` structure with a Zod schema loaded at startup
+1. [x] Replace remaining `any` types — `connection.ts` (`as any` → `as ILogger`), `media.ts` (`Record<string, any>` → `WAMessageContent`), `claude.ts` (typed `ContentBlock` discriminated union for Anthropic/OpenRouter image formats)
+2. [x] Add Zod schemas for external API responses — `weather.ts` (3 schemas), `news.ts` (2), `venues.ts` (4), `books.ts` (3 + refactored `olFetch<T>` with schema param), `claude.ts` (inline `.safeParse()` for both API formats). Skipped `transit.ts` (already typed), `fun.ts`/`dnd-lookups.ts` (lower priority)
+3. [x] Create shared `Result<T, E>` type in `src/utils/formatting.ts` for feature handlers returning text or structured data
+4. [x] Type `config/groups.json` with Zod — `GroupConfigSchema` + `GroupsConfigSchema` in `src/bot/groups.ts`, validated with `.parse()` at startup
 
-### 7.5 — Test improvements
+### 7.5 — Test improvements ✅
 
-1. [ ] Add integration tests for media pipeline (mock Baileys `downloadMediaMessage`, verify vision image prep)
-2. [ ] Add integration tests for voice pipeline (mock Whisper API, mock Piper subprocess)
-3. [ ] Add integration tests for link processing (mock fetch, mock yt-dlp)
-4. [ ] Increase branch coverage for edge cases in `handlers.ts` (the file is complex and mostly tested indirectly)
-5. [ ] Add snapshot tests for formatted outputs (help text, profile display, memory list)
+1. [x] Added integration tests for media pipeline (mocked Baileys `downloadMediaMessage`, quoted media extraction, vision prep)
+2. [x] Added integration tests for voice pipeline (mocked Whisper API fetch + Piper/ffmpeg subprocess flow)
+3. [x] Added integration tests for link processing (mocked fetch + yt-dlp + YouTube transcript path)
+4. [x] Increased branch coverage for `handlers.ts` edge cases (helper extraction, upsert/wiring branches)
+5. [x] Added snapshot tests for formatted outputs (`help`, `profiles`, `memory`)
+6. [x] Test suite increased to 11 files / 440 tests
 
-### 7.6 — Error handling audit
+### 7.6 — Error handling audit ✅
 
-1. [ ] Audit all `catch` blocks — ensure every error is logged with context (not just `{ err }`)
-2. [ ] Add timeout handling to all external HTTP calls (some fetch calls lack AbortController)
-3. [ ] Add circuit breaker for Claude API — if 3 consecutive failures, pause for 60s before retrying
-4. [ ] Ensure no unhandled promise rejections can crash the process
+1. [x] Audited `catch` blocks — added structured context (group, sender, path/query/IDs) where logs only had `{ err }`
+2. [x] Added timeout handling to external HTTP calls lacking explicit timeout (`weather`, `news`, `transit`, `voice`)
+3. [x] Added 60s circuit breakers after 3 consecutive failures (`claude.ts` + `chatgpt.ts`)
+4. [x] Added process-level guards for unhandled rejections/exceptions in `src/index.ts`
 
-### 7.7 — Documentation
+### 7.7 — Documentation ✅
 
-1. [ ] Add JSDoc to all exported functions (currently sparse)
-2. [ ] Create `docs/ARCHITECTURE.md` — data flow diagrams, message lifecycle, AI routing decision tree
-3. [ ] Document the multimedia pipeline (Whisper, Piper, Claude Vision, yt-dlp, ffmpeg)
-4. [ ] Add inline architecture comments in `handlers.ts` explaining the routing stages
+1. [x] Add JSDoc to exported functions in `src/`
+2. [x] Create `docs/ARCHITECTURE.md` — data flow diagrams, message lifecycle, AI routing decision tree
+3. [x] Document multimedia pipeline (Whisper, Piper, Claude/OpenAI Vision payloads, yt-dlp, ffmpeg)
+4. [x] Add inline architecture comments in `handlers.ts` explaining routing stages
 
 ### 7.8 — Security & environment hardening
 
@@ -256,16 +264,17 @@ Research and adopt established, free, trustworthy tools for automated security. 
 2. [ ] **Host hardening audit** — evaluate [Lynis](https://github.com/CISOfy/lynis) (GPL, 13k+ stars) for automated CIS-style system audits on Terra. Run periodically, track score improvements.
 3. [ ] **Intrusion prevention** — evaluate [fail2ban](https://github.com/fail2ban/fail2ban) (GPL, 12k+ stars) for SSH brute-force protection. May already be partially configured via UFW.
 4. [ ] **Container security** — if Docker usage grows beyond Piper/Whisper, evaluate [Trivy](https://github.com/aquasecurity/trivy) (Apache 2.0, 24k+ stars) for image vulnerability scanning.
-5. [ ] **Automated backups verification** — add a health check that verifies nightly SQLite backups exist and are non-corrupt (open + `PRAGMA integrity_check`).
-6. [ ] **Rate limiting on health endpoint** — port 3001 is HTTP; add basic abuse protection if ever exposed beyond localhost.
+5. [x] **Automated backups verification** — health check now reports latest nightly backup integrity (`verifyLatestBackupIntegrity` + SQLite `PRAGMA integrity_check`).
+6. [x] **Rate limiting on health endpoint** — basic per-IP rate limiting added to `/health`.
+7. [x] **Credential rotation workflow** — monthly GitHub Action reminder (`credential-rotation-reminder.yml`) + local helper for rotating Actions secrets from env (`npm run rotate:gh-secrets`).
 7. [ ] **Log monitoring/alerting** — evaluate lightweight solutions (e.g., Logwatch, simple Pino log grep script) to surface error spikes or unusual patterns without a full observability stack.
 
 ### Gate
 - [x] No file in `src/` exceeds 350 lines (largest: `character/class-race-data.ts` at 338)
-- [ ] All 420+ tests still pass after refactoring
-- [ ] `npm run check` clean (0 errors, warnings stable or reduced)
-- [ ] Every exported function has a JSDoc comment
-- [ ] No `any` types in `src/` (warnings reduced to 0)
+- [x] All 440+ tests still pass after refactoring
+- [x] `npm run check` clean (0 errors, warnings stable or reduced)
+- [x] Every exported function has a JSDoc comment
+- [x] No `any` types in `src/`
 
 ---
 
@@ -292,6 +301,30 @@ Research and adopt established, free, trustworthy tools for automated security. 
 - [ ] Bridge relaying messages reliably between at least one WA ↔ Discord channel pair
 - [ ] No message duplication or loops in the bridge
 - [ ] Community members are actually using Discord (don't build it if nobody comes)
+
+## Backlog — Onboarding & Setup UX
+
+> Candidate placement suggestion: keep this as a cross-cutting backlog item until Phase 7.7 docs are complete, then promote into its own “Phase 8.5 Developer Experience” track if adoption becomes a priority.
+
+1. [x] **Interactive setup wizard** (`npm run setup`) to reduce manual config steps for new users:
+   - Prompt for messaging app target (WhatsApp now, Discord planned)
+   - Default deployment path to Docker Compose, with optional native Node/systemd instructions
+   - Prompt for provider selection and failover order (OpenRouter / Anthropic / OpenAI / Ollama)
+   - Prompt for model choices per provider (with sensible defaults)
+   - Prompt for feature selection by use case (community moderation, events-heavy, book club, D&D, lightweight chat-only)
+   - Generate `enabledFeatures` defaults per group from selected use-case profile, with manual override
+   - Optional prompt to import/replace `docs/PERSONA.md` from a user-provided file path
+   - Validate credentials and write `.env` safely (never commit)
+   - Bootstrap `config/groups.json` with guided prompts
+   - Run post-setup validation (`npm run typecheck`, `npm test`, health check hints)
+
+2. [ ] **Wizard follow-ups**
+   - [ ] Add true Discord config generation once Discord runtime is implemented (bot token, guild/channel mapping)
+   - [x] Add optional dry-run mode that previews file output without writing
+3. [x] **Project sustainability / patronage UX**
+   - Added sponsor/contribution section in `README.md`
+   - Added funding metadata file (`.github/FUNDING.yml`)
+   - Added owner support commands (`!support`, `!support broadcast`) and optional support link env vars
 
 ---
 

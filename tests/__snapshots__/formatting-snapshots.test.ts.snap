@@ -1,0 +1,143 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Formatted output snapshots > help message snapshot stays stable > member-help 1`] = `
+"*Hey, I'm Garbanzo Bean!* 🫘
+Your Boston community bot. Here's what I can do:
+
+*Weather*
+  !weather — current conditions in Boston
+  !weather [city] — weather elsewhere
+  !forecast — 5-day forecast
+
+*MBTA Transit*
+  !transit — current service alerts
+  !transit [station] — live arrivals
+  !mbta red line — line status
+
+*News*
+  !news — top US headlines
+  !news [topic] — search for articles
+
+*Events*
+  !events [idea] — plan an outing
+
+*D&D 5e*
+  !roll d20 — roll dice
+  !roll 2d6+3 — multiple dice + modifier
+  !dnd spell fireball — spell lookup
+  !dnd monster goblin — monster stats
+  !dnd class wizard — class info
+  !dnd item longsword — equipment lookup
+
+*Venues*
+  !venue bars in somerville — search near Boston
+  !venue escape rooms — find places
+  !venue details [name] — phone, hours, website
+
+*Book Club*
+  !book [title] — search by title
+  !book author [name] — books by author
+  !book isbn [number] — ISBN lookup
+
+*Polls*
+  !poll Question? / Option 1 / Option 2 / Option 3
+  !poll multi Pick two / A / B / C — multi-select
+
+*Character Sheets*
+  !character — random Level 1 character + PDF
+  !character elf wizard — specify race/class
+  !char dwarf — random class, specific race
+
+*Fun*
+  !trivia — random trivia question
+  !trivia [category] — by category
+  !fact — random fun fact
+  !today — this day in history
+  !icebreaker — conversation starter
+
+*Your Profile*
+  !profile — view your profile
+  !profile interests hiking, cooking — set interests
+  !profile name Alex — set display name
+  !profile delete — remove your data
+
+*Conversation*
+  !summary — summarize recent chat (last 50 msgs)
+  !summary 100 — summarize last 100 messages
+  !catchup / !missed — same as !summary
+  !recommend / !recs — event ideas based on your interests
+
+*Voice & Media*
+  !voice — speak the replied-to message aloud
+  !voice british — use a specific voice
+  !voice list — show all available voices
+  Send an image/video/sticker and @mention me — I'll describe it
+  Send a voice note — I'll transcribe and respond
+  Share a YouTube link — I'll transcribe and summarize
+
+*Feedback*
+  !suggest <idea> — submit a feature suggestion
+  !bug <description> — report a bug
+  !upvote <id> — upvote an existing suggestion/report
+
+*Anything Else*
+  Just ask! I can answer questions, give Boston
+  recs, or chat about whatever.
+
+_You can also use natural language — "what's the weather?" works too._
+_Send me images, voice notes, or links — I understand multimedia._
+_@mention me in any group to get started._"
+`;
+
+exports[`Formatted output snapshots > help message snapshot stays stable > owner-help 1`] = `
+"*Owner Commands* 🔧
+
+*Memory*
+  !memory — list all stored community facts
+  !memory add <category> <fact> — store a fact
+  !memory delete <id> — remove a fact
+  !memory search <keyword> — search facts
+
+*Feedback Review*
+  !feedback — view all pending suggestions/bugs
+  !feedback digest — summary of recent feedback
+
+*Moderation*
+  !strikes — view strike counts
+  !catchup intros — recent introductions summary
+
+*Releases*
+  !release <notes> — broadcast release notes to all groups
+  !release <group> <notes> — broadcast to specific group
+
+*Support*
+  !support — preview support links message
+  !support broadcast — send support message to all enabled groups
+
+_These commands only work in DM with the bot._"
+`;
+
+exports[`Formatted output snapshots > memory list snapshot stays stable > memory-list 1`] = `
+"🧠 *Garbanzo Memory* — 3 facts stored
+
+*events:*
+  #1 — Trivia night is Wednesdays at 7 PM
+
+*venues:*
+  #2 — Parlor in Cambridge has great vibes
+
+*traditions:*
+  #3 — Book club meets every second Sunday"
+`;
+
+exports[`Formatted output snapshots > profile display snapshot stays stable > profile-view 1`] = `
+"📋 *Your Profile*
+
+*Name:* Alex
+*Interests:* hiking, trivia, board games
+*Active in:* General, Events
+*Events attended:* 4
+*Member since:* Jan 1, 2025
+
+_Use \`!profile delete\` to remove your data._"
+`;

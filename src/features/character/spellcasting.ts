@@ -10,7 +10,7 @@ import { abilityModifier } from './abilities.js';
 
 // ── Spellcasting Info ───────────────────────────────────────────────
 
-export interface SpellcastingInfo {
+interface SpellcastingInfo {
   isSpellcaster: boolean;
   spellcastingAbility: string;
   spellSaveDC: number;
@@ -105,7 +105,7 @@ const CLASS_SPELLCASTING: Record<string, {
   wizard: { ability: 'int', cantripCount: 3, spellsKnown: 6, slots: 2 },  // Spellbook has 6
 };
 
-export const ABILITY_DISPLAY: Record<AbilityName, string> = {
+const ABILITY_DISPLAY: Record<AbilityName, string> = {
   str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA',
 };
 
@@ -155,6 +155,7 @@ const CLASS_LEVEL1_SPELLS: Record<string, string[]> = {
 
 // ── Spellcasting Generator ──────────────────────────────────────────
 
+/** Generate spellcasting stats, known spells, and slot progression for a class/level. */
 export function generateSpellcasting(classIndex: string, abilities: AbilityScores, level: number, profBonus: number): SpellcastingInfo {
   const spellConfig = CLASS_SPELLCASTING[classIndex];
   const emptySlots = [0, 0, 0, 0, 0, 0, 0, 0, 0];

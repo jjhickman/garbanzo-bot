@@ -1,4 +1,4 @@
-# docker-compose.yml — Garbanzo Bot
+# docker-compose.yml — Garbanzo
 #
 # Quick start:
 #   1. cp .env.example .env && edit .env with your API keys
@@ -9,11 +9,11 @@
 # so it survives container rebuilds and restarts.
 
 services:
-  garbanzo-bot:
+  garbanzo:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: garbanzo-bot
+    container_name: garbanzo
     restart: unless-stopped
 
     # Load secrets from .env file (gitignored)

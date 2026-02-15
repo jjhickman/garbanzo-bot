@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Garbanzo Bot are documented here.
+All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 

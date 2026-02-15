@@ -29,6 +29,7 @@ const execAsync = promisify(exec);
 const WHISPER_URL = process.env.WHISPER_URL ?? 'http://127.0.0.1:8090';
 const PIPER_BIN = process.env.PIPER_BIN ?? '/home/linuxbrew/.linuxbrew/bin/piper';
 const VOICES_DIR = resolve(PROJECT_ROOT, 'data', 'voices');
+const WHISPER_TIMEOUT_MS = 30_000;
 
 // ── Voice registry ──────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType?: string): P
       const response = await fetch(`${WHISPER_URL}/v1/audio/transcriptions`, {
         method: 'POST',
         body: formData,
+        signal: AbortSignal.timeout(WHISPER_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -99,7 +101,7 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType?: string): P
       await unlink(tmpPath).catch(() => {});
     }
   } catch (err) {
-    logger.error({ err }, 'Audio transcription error');
+    logger.error({ err, mimeType, whisperUrl: WHISPER_URL }, 'Audio transcription error');
     return null;
   }
 }

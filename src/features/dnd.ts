@@ -50,6 +50,7 @@ export function rollDice(notation: string): RollResult | null {
   return { notation: notation.trim(), rolls, modifier, total };
 }
 
+/** Format a parsed dice roll result into WhatsApp-friendly text. */
 export function formatRoll(result: RollResult): string {
   const modStr = result.modifier > 0
     ? ` + ${result.modifier}`

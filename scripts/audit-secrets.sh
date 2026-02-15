@@ -1,5 +1,5 @@
 #!/bin/bash
-# Garbanzo Bot — Secret/Credential Audit (powered by gitleaks)
+# Garbanzo — Secret/Credential Audit (powered by gitleaks)
 # Scans tracked files for hardcoded API keys, tokens, and sensitive data.
 #
 # Exit codes: 0 = clean, 1 = secrets found, 2 = gitleaks not installed

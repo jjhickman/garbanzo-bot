@@ -205,10 +205,12 @@ export const FLAWS: Record<string, string> = {
 
 // ── Pick Utilities ──────────────────────────────────────────────────
 
+/** Pick one random element from an array. */
 export function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/** Pick N unique random elements from an array (Fisher-Yates shuffle). */
 export function pickRandomN<T>(arr: readonly T[], n: number): T[] {
   const shuffled = [...arr];
   for (let i = shuffled.length - 1; i > 0; i--) {

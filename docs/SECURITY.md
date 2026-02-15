@@ -1,4 +1,4 @@
-# Security Audit — Garbanzo Bot Infrastructure
+# Security Audit — Garbanzo Infrastructure
 
 **Date:** 2026-02-13
 **Auditor:** Pre-build infrastructure assessment
@@ -110,7 +110,7 @@ Prompt injection detection is deliberately non-blocking — flagged messages are
 | `memory` | None (community facts only, no PII) | Long-term bot knowledge | Owner-managed (manual delete) |
 | `member_profiles` | JID, display name, interests, groups active | Personalized recommendations | Opt-in; user can delete via `!profile delete` |
 
-All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is sent to external services except message text sent to AI APIs (Claude/Ollama) for response generation.
+All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is sent to external services except message text sent to AI APIs (cloud failover order configured by `AI_PROVIDER_ORDER`, plus local Ollama for simple queries) for response generation.
 
 **Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically. Backups are currently **unencrypted** local files — suitable for crash recovery but not for off-site storage. Future work: encrypt with `age`/GPG before syncing to NAS (see Phase 7.8 in ROADMAP.md).
 
@@ -159,6 +159,20 @@ chmod +x .git/hooks/pre-commit
 3. Add the new credential to `.env` only
 4. If already pushed, consider using `git filter-repo` or BFG Repo-Cleaner to remove from history
 
+## Runtime Hardening Updates
+
+**Added:** 2026-02-14 (Phase 7.8 partial)
+
+- Health endpoint (`/health`) now includes basic per-IP rate limiting to reduce abuse if accidentally exposed.
+- Health status now includes nightly backup integrity metadata (latest backup path/age/size and SQLite integrity check result).
+- Default deployment path is Docker Compose with non-root container runtime and persisted volumes for auth/database state.
+
+## Credential Rotation Program
+
+- A monthly reminder issue is created by `.github/workflows/credential-rotation-reminder.yml`.
+- Use `npm run rotate:gh-secrets` to push freshly rotated provider keys from local env vars to GitHub Actions secrets.
+- Keep provider key rotation and GitHub secret updates paired in the same maintenance window.
+
 ---
 
 ## Remediation Log
@@ -188,7 +202,7 @@ chmod +x .git/hooks/pre-commit
    | `PUBSUB_VERIFICATION_TOKEN` | Regenerate — this was a self-generated token |
    | `CALENDAR_CHANNEL_TOKEN` | Regenerate — this was a self-generated token |
 
-   After rotating, add new keys to `~/garbanzo-bot/.env` **only**. Never put keys in JSON configs.
+   After rotating, add new keys to your `.env` **only**. Never put keys in JSON configs.
 
-2. **[x] Create dedicated systemd service** for the new bot — `garbanzo-bot.service` installed and running as systemd user service (completed 2026-02-13, Phase 1)
+2. **[x] Create dedicated systemd service** for the new bot — `garbanzo.service` installed and running as systemd user service (completed 2026-02-13, Phase 1)
 3. **[ ] Consider SSH key-only auth** — disable password auth in `/etc/ssh/sshd_config`

@@ -6,6 +6,7 @@ import makeWASocket, {
   type WASocket,
   type ConnectionState,
 } from '@whiskeysockets/baileys';
+import type { ILogger } from '@whiskeysockets/baileys/lib/Utils/logger.js';
 import { Boom } from '@hapi/boom';
 import { resolve } from 'path';
 // @ts-expect-error — qrcode-terminal has no type declarations
@@ -20,7 +21,7 @@ const baileysLogger = logger.child({ module: 'baileys' });
 // Suppress Baileys internal noise
 baileysLogger.level = 'warn';
 
-export type MessageHandler = (sock: WASocket) => void;
+type MessageHandler = (sock: WASocket) => void;
 
 // Re-export for handlers to use
 export { markMessageReceived } from '../middleware/health.js';
@@ -43,10 +44,10 @@ export async function startConnection(
 
   const sock = makeWASocket({
     version,
-    logger: baileysLogger as any,
+    logger: baileysLogger as ILogger,
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, baileysLogger as any),
+      keys: makeCacheableSignalKeyStore(state.keys, baileysLogger as ILogger),
     },
     generateHighQualityLinkPreview: false,
     markOnlineOnConnect: false,
@@ -67,7 +68,7 @@ export async function startConnection(
 
       // Set the bot's display name so it shows as "Garbanzo Bean" in groups
       sock.updateProfileName('Garbanzo Bean').catch((err) => {
-        logger.warn({ err }, 'Failed to set profile name — may need to set manually in WhatsApp');
+        logger.warn({ err, desiredName: 'Garbanzo Bean' }, 'Failed to set profile name — may need to set manually in WhatsApp');
       });
 
       // Start staleness monitor — force reconnect if connected but deaf

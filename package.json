@@ -1,5 +1,5 @@
 {
-  "name": "garbanzo-bot",
+  "name": "garbanzo",
   "version": "0.1.0",
   "description": "Garbanzo Bean — WhatsApp community bot for a Boston-area meetup group",
   "type": "module",
@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "dev:once": "tsx src/index.ts",
+    "setup": "node scripts/setup.mjs",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
     "test": "vitest run",
@@ -16,7 +17,13 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist/",
     "audit:secrets": "bash scripts/audit-secrets.sh",
-    "check": "npm run audit:secrets && npm run typecheck && npm run lint && npm run test"
+    "check": "npm run audit:secrets && npm run typecheck && npm run lint && npm run test",
+    "gh:status": "bash scripts/gh-workflow.sh status",
+    "gh:whoami": "bash scripts/gh-workflow.sh whoami",
+    "gh:ensure": "bash scripts/gh-workflow.sh ensure",
+    "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
+    "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
+    "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh"
   },
   "engines": {
     "node": ">=20.0.0"

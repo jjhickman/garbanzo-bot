@@ -28,7 +28,7 @@ export function scheduleDigest(sock: WASocket): void {
     try {
       await sendDigest(sock);
     } catch (err) {
-      logger.error({ err }, 'Failed to send daily digest');
+      logger.error({ err, targetHour: DIGEST_HOUR }, 'Failed to send daily digest');
     }
     // Reschedule for tomorrow
     scheduleDigest(sock);
@@ -39,7 +39,7 @@ export function scheduleDigest(sock: WASocket): void {
  * Send the daily digest to the owner's DM.
  * Also available as `!digest` owner command.
  */
-export async function sendDigest(sock: WASocket): Promise<string> {
+async function sendDigest(sock: WASocket): Promise<string> {
   const stats = snapshotAndReset();
   const text = formatDigest(stats);
 
@@ -48,14 +48,14 @@ export async function sendDigest(sock: WASocket): Promise<string> {
     const archiveData = serializeStats(stats);
     saveDailyStats(stats.date, archiveData);
   } catch (err) {
-    logger.error({ err }, 'Failed to archive daily stats');
+    logger.error({ err, date: stats.date }, 'Failed to archive daily stats');
   }
 
   try {
     await sock.sendMessage(config.OWNER_JID, { text });
     logger.info({ date: stats.date }, 'Daily digest sent');
   } catch (err) {
-    logger.error({ err }, 'Failed to send digest to owner DM');
+    logger.error({ err, ownerJid: config.OWNER_JID, date: stats.date }, 'Failed to send digest to owner DM');
   }
 
   return text;
@@ -80,6 +80,7 @@ function formatDigest(stats: DailyStats): string {
   let totalBotResponses = 0;
   let totalOllama = 0;
   let totalClaude = 0;
+  let totalOpenAI = 0;
   let totalFlags = 0;
 
   // Sort groups by message count (most active first)
@@ -96,7 +97,9 @@ function formatDigest(stats: DailyStats): string {
       const userCount = g.activeUsers.size;
       lines.push(`• *${name}* — ${g.messageCount} msgs, ${userCount} active users`);
       if (g.botResponses > 0) {
-        lines.push(`  ↳ ${g.botResponses} bot responses (${g.ollamaRouted} Ollama, ${g.claudeRouted} Claude)`);
+        lines.push(
+          `  ↳ ${g.botResponses} bot responses (${g.ollamaRouted} Ollama, ${g.claudeRouted} Claude, ${g.openaiRouted} OpenAI)`,
+        );
       }
       if (g.moderationFlags > 0) {
         lines.push(`  ⚠️ ${g.moderationFlags} moderation flags`);
@@ -106,6 +109,7 @@ function formatDigest(stats: DailyStats): string {
       totalBotResponses += g.botResponses;
       totalOllama += g.ollamaRouted;
       totalClaude += g.claudeRouted;
+      totalOpenAI += g.openaiRouted;
       totalFlags += g.moderationFlags;
     }
   }
@@ -116,10 +120,14 @@ function formatDigest(stats: DailyStats): string {
   lines.push(`• ${totalUsers} unique active users`);
 
   if (totalBotResponses > 0) {
-    const ollamaPct = totalBotResponses > 0
-      ? Math.round((totalOllama / (totalOllama + totalClaude)) * 100)
-      : 0;
-    lines.push(`• ${totalBotResponses} bot responses (${ollamaPct}% Ollama, ${100 - ollamaPct}% Claude)`);
+    const totalCloud = totalClaude + totalOpenAI;
+    const ollamaPct = Math.round((totalOllama / totalBotResponses) * 100);
+    const cloudPct = Math.max(0, 100 - ollamaPct);
+    const openAiShare = totalCloud > 0 ? Math.round((totalOpenAI / totalCloud) * 100) : 0;
+    lines.push(`• ${totalBotResponses} bot responses (${ollamaPct}% Ollama, ${cloudPct}% cloud)`);
+    if (totalCloud > 0) {
+      lines.push(`  ↳ cloud split: ${Math.max(0, 100 - openAiShare)}% Claude, ${openAiShare}% OpenAI`);
+    }
   }
 
   if (totalFlags > 0) {
@@ -143,6 +151,7 @@ function serializeStats(stats: DailyStats): string {
       botResponses: g.botResponses,
       ollamaRouted: g.ollamaRouted,
       claudeRouted: g.claudeRouted,
+      openaiRouted: g.openaiRouted,
       moderationFlags: g.moderationFlags,
     };
   }

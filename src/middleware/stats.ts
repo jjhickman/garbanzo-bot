@@ -13,13 +13,14 @@ export interface GroupStats {
   botResponses: number;
   ollamaRouted: number;
   claudeRouted: number;
+  openaiRouted: number;
   moderationFlags: number;
   aiErrors: number;
 }
 
 /** Per-call cost entry for tracking spend */
 export interface CostEntry {
-  model: 'claude' | 'ollama';
+  model: 'claude' | 'openai' | 'ollama';
   inputTokens: number;
   outputTokens: number;
   estimatedCost: number; // USD
@@ -66,6 +67,7 @@ function getGroupStats(groupJid: string): GroupStats {
       botResponses: 0,
       ollamaRouted: 0,
       claudeRouted: 0,
+      openaiRouted: 0,
       moderationFlags: 0,
       aiErrors: 0,
     };
@@ -88,6 +90,7 @@ function maybeRollover(): DailyStats | null {
 
 // ── Public recording functions ──────────────────────────────────────
 
+/** Record a user message for per-group volume and active-user tracking. */
 export function recordGroupMessage(groupJid: string, senderJid: string): void {
   maybeRollover();
   const stats = getGroupStats(groupJid);
@@ -95,28 +98,34 @@ export function recordGroupMessage(groupJid: string, senderJid: string): void {
   stats.activeUsers.add(senderJid.split('@')[0].split(':')[0]);
 }
 
+/** Record that the bot sent a response in a group. */
 export function recordBotResponse(groupJid: string): void {
   maybeRollover();
   getGroupStats(groupJid).botResponses++;
 }
 
-export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude'): void {
+/** Record which AI route handled a group response (Ollama/Claude/OpenAI). */
+export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai'): void {
   maybeRollover();
   const stats = getGroupStats(groupJid);
   if (model === 'ollama') stats.ollamaRouted++;
+  else if (model === 'openai') stats.openaiRouted++;
   else stats.claudeRouted++;
 }
 
+/** Record that a moderation flag was raised in a group. */
 export function recordModerationFlag(groupJid: string): void {
   maybeRollover();
   getGroupStats(groupJid).moderationFlags++;
 }
 
+/** Record an owner DM interaction. */
 export function recordOwnerDM(): void {
   maybeRollover();
   current.ownerDMs++;
 }
 
+/** Record an AI processing error for a group. */
 export function recordAIError(groupJid: string): void {
   maybeRollover();
   getGroupStats(groupJid).aiErrors++;
@@ -136,6 +145,12 @@ export function estimateTokens(text: string): number {
 const CLAUDE_PRICING = {
   input: 3.0 / 1_000_000,
   output: 15.0 / 1_000_000,
+};
+
+/** OpenAI GPT-4.1 pricing — USD per million tokens */
+const OPENAI_PRICING = {
+  input: 2.0 / 1_000_000,
+  output: 8.0 / 1_000_000,
 };
 
 /**
@@ -162,6 +177,23 @@ export function estimateClaudeCost(
     outputTokens,
     estimatedCost: (inputTokens * CLAUDE_PRICING.input) + (outputTokens * CLAUDE_PRICING.output),
     latencyMs: 0, // caller fills this in
+  };
+}
+
+/** Estimate cost of an OpenAI call from prompt + response text */
+export function estimateOpenAICost(
+  systemPrompt: string,
+  userMessage: string,
+  response: string,
+): CostEntry {
+  const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userMessage);
+  const outputTokens = estimateTokens(response);
+  return {
+    model: 'openai',
+    inputTokens,
+    outputTokens,
+    estimatedCost: (inputTokens * OPENAI_PRICING.input) + (outputTokens * OPENAI_PRICING.output),
+    latencyMs: 0,
   };
 }
 

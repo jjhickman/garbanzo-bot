@@ -9,7 +9,63 @@ import { handleFeedbackOwner } from '../features/feedback.js';
 import { handleRelease } from '../features/release.js';
 import { handleMemory } from '../features/memory.js';
 import { recordOwnerDM } from '../middleware/stats.js';
+import { GROUP_IDS } from './groups.js';
 import { getResponse } from './handlers.js';
+
+function buildSupportMessage(): string {
+  const lines: string[] = [
+    '❤️ *Support Garbanzo*',
+    '',
+    config.SUPPORT_MESSAGE
+      ?? 'If Garbanzo helps your community, you can support ongoing development and hosting costs:',
+  ];
+
+  const links: Array<{ label: string; url?: string }> = [
+    { label: 'GitHub Sponsors', url: config.GITHUB_SPONSORS_URL },
+    { label: 'Patreon', url: config.PATREON_URL },
+    { label: 'Ko-fi', url: config.KOFI_URL },
+    { label: 'Support Link', url: config.SUPPORT_CUSTOM_URL },
+  ];
+
+  const activeLinks = links.filter((entry) => !!entry.url);
+  if (activeLinks.length === 0) {
+    lines.push('⚠️ No support links configured yet.');
+    lines.push('Add any of: `GITHUB_SPONSORS_URL`, `PATREON_URL`, `KOFI_URL`, `SUPPORT_CUSTOM_URL` to `.env`.');
+    return lines.join('\n');
+  }
+
+  lines.push('');
+  for (const entry of activeLinks) {
+    lines.push(`• ${entry.label}: ${entry.url}`);
+  }
+  lines.push('');
+  lines.push('Thanks for helping keep Garbanzo useful, reliable, and actively maintained. 🫘');
+  return lines.join('\n');
+}
+
+async function broadcastSupportMessage(sock: WASocket, text: string): Promise<string> {
+  const targets = Object.entries(GROUP_IDS)
+    .filter(([, group]) => group.enabled)
+    .map(([jid]) => jid);
+
+  if (targets.length === 0) {
+    return '⚠️ No enabled groups found to broadcast support message.';
+  }
+
+  let sent = 0;
+  let failed = 0;
+  for (const jid of targets) {
+    try {
+      await sock.sendMessage(jid, { text });
+      sent += 1;
+    } catch (err) {
+      failed += 1;
+      logger.error({ err, jid }, 'Failed to send support message');
+    }
+  }
+
+  return `✅ Support message sent to ${sent} group${sent !== 1 ? 's' : ''}${failed > 0 ? ` (${failed} failed)` : ''}.`;
+}
 
 /**
  * Handle a direct message from the bot owner.
@@ -65,6 +121,21 @@ export async function handleOwnerDM(
     const args = text.trim().slice('!release'.length).trim();
     const result = await handleRelease(args, sock);
     await sock.sendMessage(remoteJid, { text: result });
+    return true;
+  }
+
+  // !support [broadcast]
+  if (trimmedLower.startsWith('!support')) {
+    const args = text.trim().slice('!support'.length).trim().toLowerCase();
+    const supportMessage = buildSupportMessage();
+
+    if (args === 'broadcast') {
+      const result = await broadcastSupportMessage(sock, supportMessage);
+      await sock.sendMessage(remoteJid, { text: `${supportMessage}\n\n---\n\n${result}` });
+      return true;
+    }
+
+    await sock.sendMessage(remoteJid, { text: supportMessage });
     return true;
   }
 

@@ -12,11 +12,16 @@ import { stopMaintenance } from './db-maintenance.js';
 export { db } from './db-schema.js';
 export {
   touchProfile, getProfile, setProfileInterests, setProfileName,
-  updateActiveGroups, recordEventAttendance, getOptedInProfiles,
+  updateActiveGroups, getOptedInProfiles,
   deleteProfileData, type MemberProfile,
 } from './db-profiles.js';
 export {
-  backupDatabase, runMaintenance, scheduleMaintenance, stopMaintenance,
+  backupDatabase,
+  runMaintenance,
+  verifyLatestBackupIntegrity,
+  scheduleMaintenance,
+  stopMaintenance,
+  type BackupIntegrityStatus,
 } from './db-maintenance.js';
 
 // ── Prepared statements ─────────────────────────────────────────────
@@ -33,17 +38,11 @@ const pruneOldMessages = db.prepare(
 const insertModerationLog = db.prepare(
   `INSERT INTO moderation_log (chat_jid, sender, text, reason, severity, source, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 );
-const selectModerationLogs = db.prepare(
-  `SELECT * FROM moderation_log WHERE timestamp > ? ORDER BY timestamp DESC`,
-);
 const upsertDailyStats = db.prepare(
   `INSERT INTO daily_stats (date, data) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET data = excluded.data`,
 );
 const countStrikesBySender = db.prepare(
   `SELECT COUNT(*) as count FROM moderation_log WHERE sender = ?`,
-);
-const selectStrikesBySender = db.prepare(
-  `SELECT chat_jid, reason, severity, source, timestamp FROM moderation_log WHERE sender = ? ORDER BY timestamp DESC`,
 );
 const selectRepeatOffenders = db.prepare(
   `SELECT sender, COUNT(*) as strike_count, MAX(timestamp) as last_flag, GROUP_CONCAT(DISTINCT reason) as reasons FROM moderation_log GROUP BY sender HAVING strike_count >= ? ORDER BY strike_count DESC`,
@@ -64,7 +63,6 @@ const insertMemory = db.prepare(
   `INSERT INTO memory (fact, category, source, created_at) VALUES (?, ?, ?, ?)`,
 );
 const selectAllMemories = db.prepare(`SELECT * FROM memory ORDER BY category, created_at DESC`);
-const selectMemoriesByCategory = db.prepare(`SELECT * FROM memory WHERE category = ? ORDER BY created_at DESC`);
 const deleteMemoryById = db.prepare(`DELETE FROM memory WHERE id = ?`);
 const searchMemories = db.prepare(`SELECT * FROM memory WHERE fact LIKE ? ORDER BY created_at DESC LIMIT ?`);
 
@@ -133,25 +131,14 @@ export function getMessages(chatJid: string, limit: number = 15): DbMessage[] {
   return rows.reverse();
 }
 
-/** Format recent messages as a string for AI prompts. */
-export function formatMessagesForPrompt(chatJid: string, limit: number = 15): string {
-  const messages = getMessages(chatJid, limit);
-  if (messages.length === 0) return '';
-  const lines = messages.map((m) => `[${m.sender}]: ${m.text}`);
-  return ['Recent conversation (oldest first):', ...lines].join('\n');
-}
-
 // ── Public API: Moderation ──────────────────────────────────────────
 
+/** Persist a moderation flag entry for strikes/audit history. */
 export function logModeration(entry: ModerationEntry): void {
   insertModerationLog.run(
     entry.chatJid, entry.sender, entry.text,
     entry.reason, entry.severity, entry.source, entry.timestamp,
   );
-}
-
-export function getModerationLogs(sinceTimestamp: number): ModerationEntry[] {
-  return selectModerationLogs.all(sinceTimestamp) as ModerationEntry[];
 }
 
 // ── Public API: Strikes ─────────────────────────────────────────────
@@ -162,12 +149,6 @@ export function getStrikeCount(senderJid: string): number {
   return (countStrikesBySender.get(bare) as { count: number }).count;
 }
 
-/** Get all strikes for a sender */
-export function getStrikes(senderJid: string): ModerationEntry[] {
-  const bare = senderJid.split('@')[0].split(':')[0];
-  return selectStrikesBySender.all(bare) as ModerationEntry[];
-}
-
 /** Get all users with N+ strikes */
 export function getRepeatOffenders(minStrikes: number = 3): StrikeSummary[] {
   return selectRepeatOffenders.all(minStrikes) as StrikeSummary[];
@@ -175,6 +156,7 @@ export function getRepeatOffenders(minStrikes: number = 3): StrikeSummary[] {
 
 // ── Public API: Daily Stats ─────────────────────────────────────────
 
+/** Persist serialized daily stats snapshot by date. */
 export function saveDailyStats(date: string, data: string): void {
   upsertDailyStats.run(date, data);
 }
@@ -242,11 +224,6 @@ export function getAllMemories(): MemoryEntry[] {
   return selectAllMemories.all() as MemoryEntry[];
 }
 
-/** Get memories by category */
-export function getMemoriesByCategory(category: string): MemoryEntry[] {
-  return selectMemoriesByCategory.all(category) as MemoryEntry[];
-}
-
 /** Delete a memory by ID */
 export function deleteMemory(id: number): boolean {
   return deleteMemoryById.run(id).changes > 0;
@@ -277,6 +254,7 @@ export function formatMemoriesForPrompt(): string {
 
 // ── Cleanup ─────────────────────────────────────────────────────────
 
+/** Stop scheduled maintenance and close SQLite handle for shutdown. */
 export function closeDb(): void {
   stopMaintenance();
   closeDbHandle();

@@ -1,0 +1,8 @@
+# Patronage links for GitHub's "Sponsor" button.
+# Keep values in sync with README support section.
+
+github: [jjhickman]
+# patreon: your_patreon_handle
+# ko_fi: your_kofi_handle
+custom:
+  - https://github.com/sponsors/jjhickman

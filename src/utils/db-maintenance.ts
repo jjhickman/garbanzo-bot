@@ -6,7 +6,8 @@
  */
 
 import { resolve } from 'path';
-import { mkdirSync, copyFileSync, readdirSync, unlinkSync } from 'fs';
+import { mkdirSync, copyFileSync, readdirSync, unlinkSync, statSync } from 'fs';
+import Database from 'better-sqlite3';
 import { logger } from '../middleware/logger.js';
 import { db, DB_DIR, DB_PATH } from './db-schema.js';
 
@@ -49,7 +50,7 @@ export function backupDatabase(): string {
       logger.info({ file }, 'Old backup pruned');
     }
   } catch (err) {
-    logger.error({ err }, 'Failed to prune old backups');
+    logger.error({ err, backupDir: BACKUP_DIR }, 'Failed to prune old backups');
   }
 
   return backupPath;
@@ -96,6 +97,73 @@ export function runMaintenance(): { pruned: number; beforeCount: number; afterCo
   return { pruned, beforeCount, afterCount };
 }
 
+export interface BackupIntegrityStatus {
+  available: boolean;
+  path: string | null;
+  modifiedAt: number | null;
+  ageHours: number | null;
+  sizeBytes: number | null;
+  integrityOk: boolean | null;
+  message: string;
+}
+
+/**
+ * Verify the latest nightly backup exists and passes SQLite integrity checks.
+ */
+export function verifyLatestBackupIntegrity(): BackupIntegrityStatus {
+  try {
+    const files = readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith('garbanzo-') && f.endsWith('.db'))
+      .sort();
+
+    if (files.length === 0) {
+      return {
+        available: false,
+        path: null,
+        modifiedAt: null,
+        ageHours: null,
+        sizeBytes: null,
+        integrityOk: null,
+        message: 'No backup files found',
+      };
+    }
+
+    const latest = files[files.length - 1];
+    const latestPath = resolve(BACKUP_DIR, latest);
+    const stat = statSync(latestPath);
+    const modifiedAt = stat.mtimeMs;
+    const ageHours = (Date.now() - modifiedAt) / 3_600_000;
+
+    const backupDb = new Database(latestPath, { readonly: true, fileMustExist: true });
+    try {
+      const result = backupDb.pragma('integrity_check', { simple: true }) as string;
+      const integrityOk = result === 'ok';
+      return {
+        available: true,
+        path: latestPath,
+        modifiedAt,
+        ageHours: Number(ageHours.toFixed(2)),
+        sizeBytes: stat.size,
+        integrityOk,
+        message: integrityOk ? 'Backup integrity check passed' : `Integrity check failed: ${result}`,
+      };
+    } finally {
+      backupDb.close();
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return {
+      available: false,
+      path: null,
+      modifiedAt: null,
+      ageHours: null,
+      sizeBytes: null,
+      integrityOk: false,
+      message: `Backup integrity check failed: ${error}`,
+    };
+  }
+}
+
 // ── Scheduled maintenance ───────────────────────────────────────────
 
 let maintenanceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -120,12 +188,12 @@ export function scheduleMaintenance(): void {
     try {
       backupDatabase();
     } catch (err) {
-      logger.error({ err }, 'Database backup failed');
+      logger.error({ err, backupDir: BACKUP_DIR }, 'Database backup failed');
     }
     try {
       runMaintenance();
     } catch (err) {
-      logger.error({ err }, 'Database maintenance failed');
+      logger.error({ err, retentionDays: MESSAGE_RETENTION_DAYS }, 'Database maintenance failed');
     }
     // Reschedule for next day
     scheduleMaintenance();
@@ -137,6 +205,7 @@ export function scheduleMaintenance(): void {
   }, 'Database maintenance scheduled');
 }
 
+/** Stop the scheduled daily maintenance timer. */
 export function stopMaintenance(): void {
   if (maintenanceTimer) {
     clearTimeout(maintenanceTimer);

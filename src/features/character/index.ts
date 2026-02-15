@@ -36,7 +36,6 @@ export {
 } from './abilities.js';
 export type { CharacterData } from './class-race-data.js';
 export { generateCharacterPDF } from './pdf.js';
-export type { PDFResult } from './pdf.js';
 
 // ── Proficiency Helpers ──────────────────────────────────────────────
 
@@ -184,7 +183,7 @@ function resolveArg(arg: string): { type: 'race'; index: string } | { type: 'cla
   return null;
 }
 
-export interface CharacterArgs {
+interface CharacterArgs {
   race?: string;
   class?: string;
   name?: string;
@@ -271,6 +270,7 @@ export function parseCharacterArgs(input: string): CharacterArgs {
 
 // ── Text Summary ────────────────────────────────────────────────────
 
+/** Format a short WhatsApp summary for a generated character sheet. */
 export function formatCharacterSummary(char: CharacterData): string {
   const modStr = (ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha') => {
     const mod = abilityModifier(char.abilities[ability]);
@@ -332,7 +332,7 @@ export async function handleCharacter(query: string): Promise<CharacterResult | 
       hasEmptyFields: pdfResult.emptyFields.length > 0,
     };
   } catch (err) {
-    logger.error({ err }, 'Character generation failed');
+    logger.error({ err, query: trimmed }, 'Character generation failed');
     return '🎲 Character generation failed. Try again or use !character help.';
   }
 }

@@ -41,6 +41,7 @@ async function searchSRD(endpoint: string, query: string): Promise<string | null
 
 // ── Spell lookup ────────────────────────────────────────────────────
 
+/** Lookup and format a D&D 5e spell from the SRD API. */
 export async function lookupSpell(query: string): Promise<string> {
   const slug = await searchSRD('spells', query);
   if (!slug) return `🧙 No spell found matching "${query}".`;
@@ -82,6 +83,7 @@ export async function lookupSpell(query: string): Promise<string> {
 
 // ── Monster lookup ──────────────────────────────────────────────────
 
+/** Lookup and format a D&D 5e monster from the SRD API. */
 export async function lookupMonster(query: string): Promise<string> {
   const slug = await searchSRD('monsters', query);
   if (!slug) return `👹 No monster found matching "${query}".`;
@@ -139,6 +141,7 @@ function formatSpeed(speed: Record<string, string> | undefined): string {
 
 // ── Class lookup ────────────────────────────────────────────────────
 
+/** Lookup and format a D&D 5e class from the SRD API. */
 export async function lookupClass(query: string): Promise<string> {
   const slug = await searchSRD('classes', query);
   if (!slug) return `⚔️ No class found matching "${query}".`;
@@ -172,6 +175,7 @@ export async function lookupClass(query: string): Promise<string> {
 
 // ── Equipment lookup ────────────────────────────────────────────────
 
+/** Lookup and format D&D 5e equipment or magic item data from the SRD API. */
 export async function lookupItem(query: string): Promise<string> {
   // Try equipment first, then magic items
   let slug = await searchSRD('equipment', query);

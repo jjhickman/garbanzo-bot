@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createServer } from 'node:net';
 
 /**
  * Phase 5 — Operations & Reliability tests.
@@ -63,6 +64,59 @@ describe('Health — connection state tracking', async () => {
     markConnected();
     markConnected();
     expect(getConnectionState().reconnectCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('Health endpoint — backup status and rate limiting', async () => {
+  const {
+    startHealthServer,
+    stopHealthServer,
+  } = await import('../src/middleware/health.js');
+
+  async function getFreePort(): Promise<number> {
+    return await new Promise((resolve, reject) => {
+      const srv = createServer();
+      srv.listen(0, '127.0.0.1', () => {
+        const addr = srv.address();
+        if (!addr || typeof addr === 'string') {
+          srv.close();
+          reject(new Error('Failed to allocate test port'));
+          return;
+        }
+        const port = addr.port;
+        srv.close(() => resolve(port));
+      });
+      srv.on('error', reject);
+    });
+  }
+
+  afterEach(() => {
+    stopHealthServer();
+  });
+
+  it('health payload includes backup integrity fields', async () => {
+    const port = await getFreePort();
+    startHealthServer(port);
+
+    const response = await fetch(`http://127.0.0.1:${port}/health`);
+    expect(response.status).toBe(200);
+    const data = await response.json() as { backup?: { available: boolean; integrityOk: boolean | null; message: string } };
+    expect(data.backup).toBeDefined();
+    expect(typeof data.backup?.available).toBe('boolean');
+    expect(typeof data.backup?.message).toBe('string');
+  });
+
+  it('returns 429 when health endpoint request limit is exceeded', async () => {
+    const port = await getFreePort();
+    startHealthServer(port);
+
+    let lastStatus = 0;
+    for (let i = 0; i < 125; i++) {
+      const response = await fetch(`http://127.0.0.1:${port}/health`);
+      lastStatus = response.status;
+    }
+
+    expect(lastStatus).toBe(429);
   });
 });
 

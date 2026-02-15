@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { bold } from '../utils/formatting.js';
@@ -10,24 +11,26 @@ import { bold } from '../utils/formatting.js';
  */
 
 const NEWS_BASE = 'https://newsapi.org/v2';
+const TIMEOUT_MS = 10_000;
 
-// ── Types ────────────────────────────────────────────────────────────
+// ── Zod schemas ─────────────────────────────────────────────────────
 
-interface Article {
-  source: { name: string };
-  title: string;
-  description: string | null;
-  url: string;
-  publishedAt: string;
-}
+const ArticleSchema = z.object({
+  source: z.object({ name: z.string() }),
+  title: z.string(),
+  description: z.string().nullable(),
+  url: z.string(),
+  publishedAt: z.string(),
+});
+type Article = z.infer<typeof ArticleSchema>;
 
-interface NewsAPIResponse {
-  status: 'ok' | 'error';
-  totalResults: number;
-  articles: Article[];
-  code?: string;
-  message?: string;
-}
+const NewsAPIResponseSchema = z.object({
+  status: z.enum(['ok', 'error']),
+  totalResults: z.number(),
+  articles: z.array(ArticleSchema),
+  code: z.string().optional(),
+  message: z.string().optional(),
+});
 
 // ── Public API ───────────────────────────────────────────────────────
 
@@ -93,6 +96,7 @@ async function searchNews(searchTerm: string): Promise<string> {
 
   const res = await fetch(url.toString(), {
     headers: { 'X-Api-Key': config.NEWSAPI_KEY! },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -100,7 +104,7 @@ async function searchNews(searchTerm: string): Promise<string> {
     throw new Error(`NewsAPI error ${res.status}: ${errText}`);
   }
 
-  const data = await res.json() as NewsAPIResponse;
+  const data = NewsAPIResponseSchema.parse(await res.json());
 
   if (data.status !== 'ok') {
     throw new Error(`NewsAPI error: ${data.code} — ${data.message}`);
@@ -120,6 +124,7 @@ async function getTopHeadlines(): Promise<string> {
 
   const res = await fetch(url.toString(), {
     headers: { 'X-Api-Key': config.NEWSAPI_KEY! },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -127,7 +132,7 @@ async function getTopHeadlines(): Promise<string> {
     throw new Error(`NewsAPI error ${res.status}: ${errText}`);
   }
 
-  const data = await res.json() as NewsAPIResponse;
+  const data = NewsAPIResponseSchema.parse(await res.json());
 
   if (data.status !== 'ok') {
     throw new Error(`NewsAPI error: ${data.code} — ${data.message}`);

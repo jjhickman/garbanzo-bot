@@ -32,7 +32,7 @@ import {
 
 // ── Member commands ─────────────────────────────────────────────────
 
-export interface FeedbackResult {
+interface FeedbackResult {
   /** Response text to send back to the user in the group */
   response: string;
   /** Alert to forward to the owner via DM (null if no forwarding needed) */

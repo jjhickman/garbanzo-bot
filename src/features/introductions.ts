@@ -68,7 +68,7 @@ function loadTracker(): TrackerData {
       return JSON.parse(raw) as TrackerData;
     }
   } catch (err) {
-    logger.warn({ err }, 'Failed to load intro tracker — starting fresh');
+    logger.warn({ err, trackerPath: TRACKER_PATH }, 'Failed to load intro tracker — starting fresh');
   }
   return { respondedIds: [], lastCatchup: null };
 }
@@ -81,7 +81,7 @@ function saveTracker(data: TrackerData): void {
     }
     writeFileSync(TRACKER_PATH, JSON.stringify(data, null, 2));
   } catch (err) {
-    logger.error({ err }, 'Failed to save intro tracker');
+    logger.error({ err, trackerPath: TRACKER_PATH }, 'Failed to save intro tracker');
   }
 }
 
@@ -227,7 +227,7 @@ export function registerIntroCatchUp(sock: WASocket): void {
         Math.floor(Date.now() / 1000),
       );
     } catch (err) {
-      logger.warn({ err }, 'Failed to request message history — catch-up will rely on passive sync');
+      logger.warn({ err, groupJid: INTRODUCTIONS_JID }, 'Failed to request message history — catch-up will rely on passive sync');
     }
   }, HISTORY_REQUEST_DELAY_MS);
 
@@ -291,7 +291,7 @@ export async function triggerIntroCatchUp(sock: WASocket): Promise<string> {
     );
     return '🫘 Requested message history for the Introductions group. Any missed intros will be processed as they arrive (may take a few seconds).';
   } catch (err) {
-    logger.error({ err }, 'Manual intro catch-up failed');
+    logger.error({ err, groupJid: INTRODUCTIONS_JID }, 'Manual intro catch-up failed');
     return '❌ Failed to request message history. Check the logs.';
   }
 }

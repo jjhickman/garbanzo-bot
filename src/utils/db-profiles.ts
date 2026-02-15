@@ -31,10 +31,6 @@ const updateProfileGroups = db.prepare(`
   UPDATE member_profiles SET groups_active = ? WHERE jid = ?
 `);
 
-const incrementEventCount = db.prepare(`
-  UPDATE member_profiles SET event_count = event_count + 1 WHERE jid = ?
-`);
-
 const selectOptedInProfiles = db.prepare(`
   SELECT * FROM member_profiles WHERE opted_in = 1
 `);
@@ -94,12 +90,6 @@ export function updateActiveGroups(senderJid: string, groupJid: string): void {
     groups.push(groupJid);
     updateProfileGroups.run(JSON.stringify(groups), bare);
   }
-}
-
-/** Increment a member's event attendance count */
-export function recordEventAttendance(senderJid: string): void {
-  const bare = senderJid.split('@')[0].split(':')[0];
-  incrementEventCount.run(bare);
 }
 
 /** Get all opted-in profiles */

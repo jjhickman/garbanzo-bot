@@ -41,7 +41,7 @@ const SKILL_FIELDS: Record<string, string> = {
   'Sleight of Hand': 'SleightofHand', Stealth: 'Stealth ', Survival: 'Survival',
 };
 
-export interface PDFResult {
+interface PDFResult {
   pdfBytes: Uint8Array;
   emptyFields: string[];
 }
@@ -90,7 +90,7 @@ export async function generateCharacterPDF(char: CharacterData): Promise<PDFResu
   setText('CharacterName', char.name);
   setText('ClassLevel', `${char.class} ${char.level}`);
   setText('Background', char.background);
-  setText('PlayerName', 'Garbanzo Bot');
+  setText('PlayerName', 'Garbanzo');
   setText('Race ', char.race);  // Note trailing space in field name
   setText('Alignment', char.alignment);
   setText('XP', '0');

@@ -22,7 +22,7 @@ export interface ModerationFlag {
 // We skip categories that don't align with community rules (e.g. "self-harm"
 // is still flagged but as a warning so the owner can check in supportively).
 
-export interface CategoryConfig {
+interface CategoryConfig {
   reason: string;
   severity: 'warning' | 'alert';
 }
@@ -50,7 +50,7 @@ export const SCORE_THRESHOLD_WARNING = 0.5;
 // These catch obvious violations without any API calls.
 // Intentionally conservative — better to miss edge cases than false-flag.
 
-export interface ModerationRule {
+interface ModerationRule {
   name: string;
   severity: 'warning' | 'alert';
   patterns: RegExp[];

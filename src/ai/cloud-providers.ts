@@ -1,0 +1,195 @@
+import { z } from 'zod';
+import { config } from '../utils/config.js';
+import type { VisionImage } from '../features/media.js';
+
+/** Cloud providers supported for fallback chain. */
+export type CloudProvider = 'openrouter' | 'anthropic' | 'openai';
+
+/** Normalized cloud AI response metadata. */
+export interface CloudResponse {
+  text: string;
+  provider: CloudProvider;
+  model: string;
+}
+
+/** Provider-specific request configuration. */
+export interface ProviderRequest {
+  provider: CloudProvider;
+  model: string;
+  endpoint: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  parser: (data: unknown) => string;
+}
+
+interface AnthropicImageBlock {
+  type: 'image';
+  source: { type: 'base64'; media_type: string; data: string };
+}
+
+interface OpenAIImageBlock {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+type AnthropicContentBlock = AnthropicImageBlock | TextBlock;
+type OpenAIContentBlock = OpenAIImageBlock | TextBlock;
+type AnthropicMessageContent = string | AnthropicContentBlock[];
+type OpenAIMessageContent = string | OpenAIContentBlock[];
+
+const ChatCompletionResponseSchema = z.object({
+  choices: z.array(z.object({
+    message: z.object({
+      content: z.union([
+        z.string(),
+        z.array(z.object({
+          type: z.string().optional(),
+          text: z.string().optional(),
+        })),
+      ]),
+    }),
+  })),
+});
+
+const AnthropicResponseSchema = z.object({
+  content: z.array(z.object({
+    type: z.string().optional(),
+    text: z.string().optional(),
+  })),
+});
+
+/** Build a provider-specific request if that provider is configured. */
+export function buildProviderRequest(
+  provider: CloudProvider,
+  systemPrompt: string,
+  userMessage: string,
+  visionImages?: VisionImage[],
+): ProviderRequest | null {
+  if (provider === 'openrouter') {
+    if (!config.OPENROUTER_API_KEY) return null;
+    return {
+      provider: 'openrouter',
+      model: config.OPENROUTER_MODEL,
+      endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${config.OPENROUTER_API_KEY}`,
+        'x-title': 'Garbanzo',
+      },
+      body: {
+        model: config.OPENROUTER_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
+        ],
+        max_tokens: 1024,
+      },
+      parser: parseChatCompletionResponse,
+    };
+  }
+
+  if (provider === 'anthropic') {
+    if (!config.ANTHROPIC_API_KEY) return null;
+    return {
+      provider: 'anthropic',
+      model: config.ANTHROPIC_MODEL,
+      endpoint: 'https://api.anthropic.com/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': config.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: {
+        model: config.ANTHROPIC_MODEL,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: buildAnthropicUserContent(userMessage, visionImages) }],
+      },
+      parser: parseAnthropicResponse,
+    };
+  }
+
+  if (!config.OPENAI_API_KEY) return null;
+  return {
+    provider: 'openai',
+    model: config.OPENAI_MODEL,
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${config.OPENAI_API_KEY}`,
+    },
+    body: {
+      model: config.OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
+      ],
+      max_tokens: 1024,
+    },
+    parser: parseChatCompletionResponse,
+  };
+}
+
+function parseChatCompletionResponse(data: unknown): string {
+  const parsed = ChatCompletionResponseSchema.safeParse(data);
+  if (!parsed.success) return 'No response generated.';
+
+  const content = parsed.data.choices[0]?.message.content;
+  if (typeof content === 'string') return content;
+  return content.map((block) => block.text ?? '').join('').trim() || 'No response generated.';
+}
+
+function parseAnthropicResponse(data: unknown): string {
+  const parsed = AnthropicResponseSchema.safeParse(data);
+  if (!parsed.success) return 'No response generated.';
+  return parsed.data.content.map((block) => block.text ?? '').join('').trim() || 'No response generated.';
+}
+
+function buildAnthropicUserContent(
+  text: string,
+  images: VisionImage[] | undefined,
+): AnthropicMessageContent {
+  if (!images || images.length === 0) return text;
+
+  const blocks: AnthropicContentBlock[] = [];
+  for (const img of images) {
+    blocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.mediaType,
+        data: img.base64,
+      },
+    });
+  }
+
+  const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
+  blocks.push({ type: 'text', text: textPrompt });
+  return blocks;
+}
+
+function buildOpenAICompatibleUserContent(
+  text: string,
+  images: VisionImage[] | undefined,
+): OpenAIMessageContent {
+  if (!images || images.length === 0) return text;
+
+  const blocks: OpenAIContentBlock[] = [];
+  for (const img of images) {
+    blocks.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${img.mediaType};base64,${img.base64}`,
+      },
+    });
+  }
+
+  const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
+  blocks.push({ type: 'text', text: textPrompt });
+  return blocks;
+}

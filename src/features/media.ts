@@ -13,6 +13,7 @@ import {
   getContentType,
   normalizeMessageContent,
   type WAMessage,
+  type WAMessageContent,
 } from '@whiskeysockets/baileys';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -23,7 +24,7 @@ import { logger } from '../middleware/logger.js';
 
 const execAsync = promisify(exec);
 
-export interface MediaContent {
+interface MediaContent {
   type: 'image' | 'video' | 'sticker' | 'gif';
   data: Buffer;
   mimeType: string;
@@ -85,14 +86,13 @@ export async function extractMedia(msg: WAMessage): Promise<MediaContent | null>
     // Quoted media (replying to a media message)
     return await extractQuotedMedia(content);
   } catch (err) {
-    logger.error({ err }, 'Failed to extract media from message');
+    logger.error({ err, msgId: msg.key.id, remoteJid: msg.key.remoteJid }, 'Failed to extract media from message');
     return null;
   }
 }
 
 async function extractQuotedMedia(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  content: Record<string, any>,
+  content: WAMessageContent,
 ): Promise<MediaContent | null> {
   const contextInfo =
     content.extendedTextMessage?.contextInfo
@@ -177,7 +177,7 @@ export async function downloadVoiceAudio(msg: WAMessage): Promise<Buffer | null>
   try {
     return await downloadMediaMessage(msg, 'buffer', {}) as Buffer;
   } catch (err) {
-    logger.error({ err }, 'Failed to download voice audio');
+    logger.error({ err, msgId: msg.key.id, remoteJid: msg.key.remoteJid }, 'Failed to download voice audio');
     return null;
   }
 }
@@ -266,7 +266,7 @@ async function extractVideoFrames(videoBuffer: Buffer): Promise<VisionImage[]> {
 
     return frames.length > 0 ? frames : [];
   } catch (err) {
-    logger.error({ err }, 'Failed to extract video frames');
+    logger.error({ err, tmpVideo }, 'Failed to extract video frames');
     return [];
   } finally {
     await unlink(tmpVideo).catch(() => {});

@@ -1,9 +1,20 @@
 import { logger } from '../middleware/logger.js';
 import { truncate } from '../utils/formatting.js';
+import { config } from '../utils/config.js';
 import { buildSystemPrompt, buildOllamaPrompt, type MessageContext } from './persona.js';
 import { callOllama, isOllamaAvailable } from './ollama.js';
-import { recordAIRoute, recordAICost, recordAIError, estimateClaudeCost, getDailyCost, DAILY_COST_ALERT_THRESHOLD } from '../middleware/stats.js';
+import {
+  recordAIRoute,
+  recordAICost,
+  recordAIError,
+  estimateClaudeCost,
+  estimateOpenAICost,
+  getDailyCost,
+  DAILY_COST_ALERT_THRESHOLD,
+} from '../middleware/stats.js';
 import { callClaude } from './claude.js';
+import { callChatGPT } from './chatgpt.js';
+import type { CloudProvider } from './cloud-providers.js';
 import type { VisionImage } from '../features/media.js';
 
 /**
@@ -11,14 +22,16 @@ import type { VisionImage } from '../features/media.js';
  *
  * Routing strategy:
  * - Simple queries (greetings, short factual, casual chat) → Ollama (local, free)
- * - Complex queries (multi-step, persona-heavy, long) → Claude (API, paid)
- * - If Ollama fails or is unavailable → falls back to Claude
+ * - Complex queries (multi-step, persona-heavy, long) → cloud model (API, paid)
+ * - If Ollama fails or is unavailable → falls back to cloud model
  *
- * Claude API client logic lives in claude.ts.
+ * Claude and OpenAI provider logic lives in ai/claude.ts and ai/chatgpt.ts.
  */
 
 /** Cached Ollama availability check — refreshed on failure */
 let ollamaReachable: boolean | null = null;
+
+const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai'];
 
 /** Prevent spamming cost alerts — reset on rollover via stats module */
 let costAlertSentToday = false;
@@ -40,6 +53,27 @@ async function checkOllama(): Promise<boolean> {
   return ollamaReachable;
 }
 
+function getConfiguredProviderOrder(): CloudProvider[] {
+  const requested = config.AI_PROVIDER_ORDER
+    .split(',')
+    .map((provider: string) => provider.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((provider): provider is CloudProvider =>
+      DEFAULT_PROVIDER_ORDER.includes(provider as CloudProvider),
+    );
+
+  return Array.from(new Set(requested));
+}
+
+function isProviderConfigured(provider: CloudProvider): boolean {
+  if (provider === 'openrouter') return !!config.OPENROUTER_API_KEY;
+  if (provider === 'anthropic') return !!config.ANTHROPIC_API_KEY;
+  return !!config.OPENAI_API_KEY;
+}
+
+/**
+ * Route a message to Ollama or cloud providers and return final reply text.
+ */
 export async function getAIResponse(
   query: string,
   ctx: MessageContext,
@@ -49,7 +83,7 @@ export async function getAIResponse(
 
   maybeResetCostAlert();
   const complexity = classifyComplexity(query, ctx);
-  // Always use Claude for vision (Ollama can't do multimodal well)
+  // Always use cloud providers for vision (Ollama can't do multimodal well)
   const hasVision = visionImages && visionImages.length > 0;
   const useOllama = !hasVision && complexity === 'simple' && await checkOllama();
 
@@ -66,29 +100,74 @@ export async function getAIResponse(
         recordAICost({ model: 'ollama', inputTokens: 0, outputTokens: 0, estimatedCost: 0, latencyMs });
         return truncate(response, 4000);
       } catch (err) {
-        logger.warn({ err }, 'Ollama failed — falling back to Claude');
+        logger.warn({ err, groupJid: ctx.groupJid }, 'Ollama failed — falling back to cloud providers');
         recordAIError(ctx.groupJid);
         ollamaReachable = null; // Re-check availability next time
       }
     }
 
-    // Claude path (primary for complex, fallback for Ollama failures)
+    // Cloud model path (primary for complex, fallback for Ollama failures)
     const systemPrompt = buildSystemPrompt(ctx, query);
-    logger.info({ query: truncate(query, 80), model: 'claude', complexity, hasVision }, 'Routing to Claude');
-    recordAIRoute(ctx.groupJid, 'claude');
+    const providerOrder = getConfiguredProviderOrder();
+    logger.info({
+      query: truncate(query, 80),
+      model: 'cloud',
+      complexity,
+      hasVision,
+      providerOrder,
+    }, 'Routing to cloud providers');
+
     const t0 = Date.now();
-    const response = await callClaude(systemPrompt, query, visionImages);
+    let aiResult: Awaited<ReturnType<typeof callClaude>>;
+
+    let lastProviderError: Error | null = null;
+    let resolved = false;
+    aiResult = { text: '', provider: 'openai', model: '' };
+
+    const configuredProviders = providerOrder.filter(isProviderConfigured);
+    if (configuredProviders.length === 0) {
+      throw new Error(
+        `No configured providers available in AI_PROVIDER_ORDER=${config.AI_PROVIDER_ORDER}`,
+      );
+    }
+
+    for (const provider of configuredProviders) {
+      try {
+        if (provider === 'openai') {
+          aiResult = await callChatGPT(systemPrompt, query, visionImages);
+        } else {
+          aiResult = await callClaude(provider, systemPrompt, query, visionImages);
+        }
+        resolved = true;
+        break;
+      } catch (providerErr) {
+        const error = providerErr instanceof Error ? providerErr : new Error(String(providerErr));
+        lastProviderError = error;
+        logger.warn({ err: error, provider, groupJid: ctx.groupJid }, 'Cloud provider failed — trying next in configured order');
+      }
+    }
+
+    if (!resolved) {
+      throw new Error(`All configured cloud providers failed. Last error: ${lastProviderError?.message ?? 'unknown error'}`);
+    }
+
     const latencyMs = Date.now() - t0;
-    const costEntry = estimateClaudeCost(systemPrompt, query, response);
+    const routedModel = aiResult.provider === 'openai' ? 'openai' : 'claude';
+    recordAIRoute(ctx.groupJid, routedModel);
+
+    const costEntry = routedModel === 'openai'
+      ? estimateOpenAICost(systemPrompt, query, aiResult.text)
+      : estimateClaudeCost(systemPrompt, query, aiResult.text);
     costEntry.latencyMs = latencyMs;
     recordAICost(costEntry);
     logger.info({
-      model: 'claude',
-      responseLen: response.length,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      responseLen: aiResult.text.length,
       latencyMs,
       estCost: `$${costEntry.estimatedCost.toFixed(4)}`,
       dailyTotal: `$${getDailyCost().toFixed(4)}`,
-    }, 'Claude response received');
+    }, 'Cloud response received');
 
     // Alert owner if daily cost is approaching threshold
     if (getDailyCost() >= DAILY_COST_ALERT_THRESHOLD && !costAlertSentToday) {
@@ -98,7 +177,7 @@ export async function getAIResponse(
       // is wired through the daily digest, not here (avoid circular deps).
     }
 
-    return truncate(response, 4000);
+    return truncate(aiResult.text, 4000);
   } catch (err) {
     logger.error({ err, query }, 'AI response failed');
     recordAIError(ctx.groupJid);
@@ -108,7 +187,7 @@ export async function getAIResponse(
 
 // ── Query complexity classifier ─────────────────────────────────────
 
-export type Complexity = 'simple' | 'complex';
+type Complexity = 'simple' | 'complex';
 
 /**
  * Classify a query as simple or complex to decide routing.

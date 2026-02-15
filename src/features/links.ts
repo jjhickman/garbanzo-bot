@@ -60,7 +60,7 @@ export function extractYouTubeId(url: string): string | null {
  * Uses yt-dlp to download audio-only, then Whisper for transcription.
  * Max 15 minutes of audio (to keep Whisper processing reasonable).
  */
-export async function transcribeYouTube(url: string): Promise<string | null> {
+async function transcribeYouTube(url: string): Promise<string | null> {
   const tmpAudio = join(tmpdir(), `garbanzo-yt-${Date.now()}.m4a`);
 
   try {
@@ -105,7 +105,7 @@ export async function transcribeYouTube(url: string): Promise<string | null> {
 /**
  * Get YouTube video metadata (title, duration, channel) via yt-dlp.
  */
-export async function getYouTubeMetadata(url: string): Promise<{
+async function getYouTubeMetadata(url: string): Promise<{
   title: string;
   duration: number;
   channel: string;
@@ -132,7 +132,7 @@ export async function getYouTubeMetadata(url: string): Promise<{
  * Fetch and extract text content from a URL.
  * Returns the text content (max 4000 chars for AI context), or null.
  */
-export async function fetchUrlContent(url: string): Promise<string | null> {
+async function fetchUrlContent(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);

@@ -59,7 +59,7 @@ export function checkMessageRegex(text: string): ModerationFlag | null {
  * Returns a ModerationFlag if a violation is detected, null otherwise.
  * Returns null (no-op) if OPENAI_API_KEY is not configured.
  */
-export async function checkMessageOpenAI(text: string): Promise<ModerationFlag | null> {
+async function checkMessageOpenAI(text: string): Promise<ModerationFlag | null> {
   const client = getOpenAIClient();
   if (!client) return null;
 
@@ -115,7 +115,7 @@ export async function checkMessageOpenAI(text: string): Promise<ModerationFlag |
       source: 'openai',
     };
   } catch (err) {
-    logger.error({ err }, 'OpenAI moderation API call failed — falling back to regex only');
+    logger.error({ err, textLen: text.length }, 'OpenAI moderation API call failed — falling back to regex only');
     return null;
   }
 }
