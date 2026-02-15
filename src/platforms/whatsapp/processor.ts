@@ -8,7 +8,7 @@ import { handleEventPassive } from '../../features/events.js';
 import { config } from '../../utils/config.js';
 import { isGroupEnabled, getEnabledGroupJidByName } from '../../bot/groups.js';
 import { handleOwnerDM } from '../../bot/owner-commands.js';
-import { handleGroupMessage } from '../../bot/group-handler.js';
+import { handleGroupMessage } from './group-handler.js';
 import { isReplyToBot, isAcknowledgment } from '../../bot/reactions.js';
 import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound.js';
 import { createWhatsAppAdapter } from './adapter.js';

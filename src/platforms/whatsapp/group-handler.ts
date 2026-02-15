@@ -1,16 +1,16 @@
 import type { WASocket, WAMessage, WAMessageContent } from '@whiskeysockets/baileys';
 
-import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
-import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from './groups.js';
-import { extractMedia, prepareForVision, type VisionImage } from '../features/media.js';
+import { logger } from '../../middleware/logger.js';
+import { config } from '../../utils/config.js';
+import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from '../../bot/groups.js';
+import { extractMedia, prepareForVision, type VisionImage } from '../../features/media.js';
 import {
   extractWhatsAppMentionedJids as extractMentionedJids,
   extractWhatsAppQuotedText as extractQuotedText,
-} from '../platforms/whatsapp/inbound.js';
-import { processGroupMessage } from '../core/process-group-message.js';
-import { getResponse } from './response-router.js';
-import { createWhatsAppAdapter } from '../platforms/whatsapp/adapter.js';
+} from './inbound.js';
+import { processGroupMessage } from '../../core/process-group-message.js';
+import { getResponse } from '../../bot/response-router.js';
+import { createWhatsAppAdapter } from './adapter.js';
 
 /**
  * Handle a group message that has already passed preprocessing
