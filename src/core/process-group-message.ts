@@ -10,7 +10,7 @@ import { isSoftMuted } from '../features/moderation.js';
 import { checkRateLimit, recordResponse } from '../middleware/rate-limit.js';
 import { recordBotResponse } from '../middleware/stats.js';
 import { queueRetry } from '../middleware/retry.js';
-import { getResponse } from '../bot/response-router.js';
+import type { MessageContext } from '../ai/persona.js';
 import type { VisionImage } from '../features/media.js';
 import type { PlatformMessenger } from './platform-messenger.js';
 
@@ -25,6 +25,7 @@ export interface ProcessGroupMessageParams {
   query: string;
 
   isFeatureEnabled: (chatId: string, feature: string) => boolean;
+  getResponse: (query: string, ctx: MessageContext, visionImages?: VisionImage[]) => Promise<string | null>;
 
   quotedText?: string;
   messageId?: string;
@@ -51,6 +52,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     replyTo,
     visionImages,
     isFeatureEnabled,
+    getResponse,
   } = params;
 
   // Soft-muted users get silently ignored

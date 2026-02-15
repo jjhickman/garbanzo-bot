@@ -8,6 +8,7 @@ import {
   extractWhatsAppQuotedText as extractQuotedText,
 } from '../platforms/whatsapp/inbound.js';
 import { processGroupMessage } from '../core/process-group-message.js';
+import { getResponse } from './response-router.js';
 import { createWhatsAppAdapter } from '../platforms/whatsapp/adapter.js';
 
 /**
@@ -73,6 +74,7 @@ export async function handleGroupMessage(
     groupName,
     query,
     isFeatureEnabled,
+    getResponse,
     quotedText: extractQuotedText(content),
     messageId: msg.key.id ?? undefined,
     replyTo: msg,
