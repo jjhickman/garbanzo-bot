@@ -1,4 +1,6 @@
 import type { MessagingAdapter } from './messaging-adapter.js';
+import type { MessageRef } from './message-ref.js';
+import type { PollPayload } from './poll-payload.js';
 
 export interface DocumentPayload {
   bytes: Uint8Array;
@@ -19,15 +21,15 @@ export interface AudioPayload {
  * operations that some features rely on (polls, documents, audio, deletes).
  */
 export interface PlatformMessenger extends MessagingAdapter {
-  sendPoll(chatId: string, poll: unknown): Promise<void>;
+  sendPoll(chatId: string, poll: PollPayload): Promise<void>;
 
   /** Returns a platform-specific message ref for optional deletes. */
-  sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<unknown>;
+  sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<MessageRef>;
 
   /** Returns a platform-specific message ref for optional deletes. */
-  sendDocument(chatId: string, doc: DocumentPayload): Promise<unknown>;
+  sendDocument(chatId: string, doc: DocumentPayload): Promise<MessageRef>;
 
   sendAudio(chatId: string, audio: AudioPayload, options?: { replyTo?: unknown }): Promise<void>;
 
-  deleteMessage(chatId: string, messageRef: unknown): Promise<void>;
+  deleteMessage(chatId: string, messageRef: MessageRef): Promise<void>;
 }

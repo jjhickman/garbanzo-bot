@@ -1,4 +1,6 @@
 import type { WASocket, WAMessage, PollMessageOptions, WAMessageKey } from '@whiskeysockets/baileys';
+import type { MessageRef } from '../../core/message-ref.js';
+import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 
 export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
@@ -10,17 +12,17 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
       await sock.sendMessage(chatId, { text }, replyTo ? { quoted: replyTo } : undefined);
     },
 
-    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<unknown> {
+    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<MessageRef> {
       const replyTo = options?.replyTo as WAMessage | undefined;
       return await sock.sendMessage(chatId, { text }, replyTo ? { quoted: replyTo } : undefined);
     },
 
-    async sendPoll(chatId: string, poll: unknown): Promise<void> {
+    async sendPoll(chatId: string, poll: PollPayload): Promise<void> {
       // Accept the core's opaque poll object and assert to Baileys poll payload.
       await sock.sendMessage(chatId, { poll: poll as PollMessageOptions });
     },
 
-    async sendDocument(chatId: string, doc: { bytes: Uint8Array; mimetype: string; fileName: string }): Promise<unknown> {
+    async sendDocument(chatId: string, doc: { bytes: Uint8Array; mimetype: string; fileName: string }): Promise<MessageRef> {
       return await sock.sendMessage(chatId, {
         document: Buffer.from(doc.bytes),
         mimetype: doc.mimetype,
@@ -37,7 +39,7 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
       }, replyTo ? { quoted: replyTo } : undefined);
     },
 
-    async deleteMessage(chatId: string, messageRef: unknown): Promise<void> {
+    async deleteMessage(chatId: string, messageRef: MessageRef): Promise<void> {
       if (!messageRef || typeof messageRef !== 'object') return;
       const maybe = messageRef as { key?: unknown };
       if (!maybe.key) return;
