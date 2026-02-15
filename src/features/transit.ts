@@ -22,6 +22,7 @@ import type {
  */
 
 const MBTA_BASE = 'https://api-v3.mbta.com';
+const TIMEOUT_MS = 10_000;
 
 // ── Public API ───────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ async function mbtaFetch<T>(endpoint: string, params: Record<string, string>): P
 
   const res = await fetch(url.toString(), {
     headers: { 'accept-encoding': 'gzip' },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {

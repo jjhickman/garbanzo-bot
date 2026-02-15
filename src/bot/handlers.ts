@@ -135,6 +135,14 @@ const MAX_MESSAGE_AGE_SECONDS = 5 * 60; // 5 minutes
 
 /**
  * Route a single incoming message.
+ *
+ * Architecture stages:
+ * 1) transport guards (self/status/stale)
+ * 2) normalization and extraction (text, mentions, quoted text)
+ * 3) voice/media preprocessing
+ * 4) sanitization + persistence (context/stats/profile)
+ * 5) moderation and owner escalation
+ * 6) feature/group/owner routing and response dispatch
  */
 async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   // Track message freshness for staleness detection
@@ -229,7 +237,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
         const result = await sock.sendMessage(config.OWNER_JID, { text: alert });
         logger.info({ msgId: result?.key?.id, to: result?.key?.remoteJid }, 'Moderation alert sent');
       } catch (err) {
-        logger.error({ err }, 'Failed to send moderation alert to owner');
+        logger.error({ err, ownerJid: config.OWNER_JID, groupJid: remoteJid, senderJid }, 'Failed to send moderation alert to owner');
       }
 
       // Apply strike and soft-mute if threshold reached
@@ -277,7 +285,7 @@ async function handleMessage(sock: WASocket, msg: WAMessage): Promise<void> {
         react: { text: '🫘', key: msg.key },
       });
     } catch (err) {
-      logger.error({ err }, 'Failed to send reaction');
+      logger.error({ err, remoteJid, senderJid, msgId: msg.key.id }, 'Failed to send reaction');
     }
     return;
   }
@@ -314,5 +322,3 @@ function isStale(msg: WAMessage): boolean {
   }
   return false;
 }
-
-

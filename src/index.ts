@@ -10,9 +10,24 @@ import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
 
 async function main(): Promise<void> {
-  logger.info('🫘 Garbanzo Bot starting...');
+  logger.info('🫘 Garbanzo starting...');
+
+  if (config.MESSAGING_PLATFORM !== 'whatsapp') {
+    logger.fatal({
+      messagingPlatform: config.MESSAGING_PLATFORM,
+      supported: ['whatsapp'],
+    }, 'Selected messaging platform is not implemented yet');
+    process.exit(1);
+  }
+
+  const cloudProviders: string[] = [];
+  if (config.OPENROUTER_API_KEY) cloudProviders.push('openrouter');
+  if (config.ANTHROPIC_API_KEY) cloudProviders.push('anthropic');
+  if (config.OPENAI_API_KEY) cloudProviders.push('openai');
+
   logger.info({
-    aiProvider: config.OPENROUTER_API_KEY ? 'openrouter' : 'anthropic',
+    cloudProviders,
+    messagingPlatform: config.MESSAGING_PLATFORM,
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');
@@ -37,6 +52,16 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   logger.fatal({ err }, 'Fatal error — bot shutting down');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.fatal({ err: reason }, 'Unhandled promise rejection — bot shutting down');
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception — bot shutting down');
   process.exit(1);
 });
 

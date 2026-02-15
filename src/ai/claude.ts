@@ -1,137 +1,98 @@
 /**
- * Claude API client — calls Claude via Anthropic Messages API or OpenRouter.
+ * Claude-family cloud caller with timeout and circuit breaker.
  *
- * Extracted from router.ts (Phase 7.3) for separation of concerns.
- * Router handles model selection; this module handles the actual API call.
+ * Handles OpenRouter Claude and Anthropic direct Claude.
  */
 
-import { config } from '../utils/config.js';
 import { logger } from '../middleware/logger.js';
 import type { VisionImage } from '../features/media.js';
+import {
+  buildProviderRequest,
+  type CloudResponse,
+} from './cloud-providers.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MessageContent = string | Array<Record<string, any>>;
+const REQUEST_TIMEOUT_MS = 30_000;
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
+
+let consecutiveClaudeFailures = 0;
+let circuitOpenUntil = 0;
+
+export type ClaudeProvider = 'openrouter' | 'anthropic';
 
 /**
- * Call Claude via Anthropic Messages API.
- * Works with both direct Anthropic and OpenRouter (same API format).
- * Supports vision (image inputs) when visionImages are provided.
+ * Call Claude providers with failover.
+ *
+ * Order: OpenRouter Claude -> Anthropic Claude.
  */
 export async function callClaude(
+  provider: ClaudeProvider,
   systemPrompt: string,
   userMessage: string,
   visionImages?: VisionImage[],
-): Promise<string> {
-  // Prefer OpenRouter when available (better pricing + fallback routing)
-  const isOpenRouter = !!config.OPENROUTER_API_KEY;
-  const apiKey = isOpenRouter ? config.OPENROUTER_API_KEY : config.ANTHROPIC_API_KEY;
-  const baseUrl = isOpenRouter
-    ? 'https://openrouter.ai/api/v1'
-    : 'https://api.anthropic.com';
-
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    'anthropic-version': '2023-06-01',
-  };
-
-  if (isOpenRouter) {
-    headers['authorization'] = `Bearer ${apiKey}`;
-    headers['x-title'] = 'Garbanzo Bot';
-  } else {
-    headers['x-api-key'] = apiKey!;
+): Promise<CloudResponse> {
+  if (Date.now() < circuitOpenUntil) {
+    const secondsRemaining = Math.ceil((circuitOpenUntil - Date.now()) / 1000);
+    throw new Error(`Claude circuit breaker open (${secondsRemaining}s remaining)`);
   }
 
-  const endpoint = isOpenRouter
-    ? `${baseUrl}/chat/completions`
-    : `${baseUrl}/v1/messages`;
-
-  // Build user content — text-only or multimodal with images
-  const userContent = buildUserContent(userMessage, visionImages, isOpenRouter);
-
-  const body = isOpenRouter
-    ? {
-        model: 'anthropic/claude-sonnet-4-5',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        max_tokens: 1024,
-      }
-    : {
-        model: 'claude-sonnet-4-5-20250514',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userContent }],
-      };
-
-  logger.debug({
-    endpoint,
-    model: isOpenRouter ? 'openrouter' : 'anthropic',
-    hasVision: !!visionImages?.length,
-    imageCount: visionImages?.length ?? 0,
-  }, 'Calling Claude');
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI API error ${response.status}: ${errorText}`);
+  const req = buildProviderRequest(provider, systemPrompt, userMessage, visionImages);
+  if (!req) {
+    throw new Error(`${provider} provider not configured`);
   }
 
-  const data = await response.json() as Record<string, unknown>;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  // Extract text from response (different formats)
-  if (isOpenRouter) {
-    const choices = data.choices as Array<{ message: { content: string } }> | undefined;
-    return choices?.[0]?.message?.content ?? 'No response generated.';
-  }
-  const content = data.content as Array<{ text: string }> | undefined;
-  return content?.[0]?.text ?? 'No response generated.';
-}
+  try {
+    logger.debug({
+      provider: req.provider,
+      model: req.model,
+      endpoint: req.endpoint,
+      hasVision: !!visionImages?.length,
+      imageCount: visionImages?.length ?? 0,
+    }, 'Calling Claude provider');
 
-/**
- * Build user message content for Claude API.
- * Plain string for text-only, array of content blocks for multimodal.
- */
-export function buildUserContent(
-  text: string,
-  images: VisionImage[] | undefined,
-  isOpenRouter: boolean,
-): MessageContent {
-  if (!images || images.length === 0) return text;
+    const response = await fetch(req.endpoint, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const blocks: Array<Record<string, any>> = [];
-
-  for (const img of images) {
-    if (isOpenRouter) {
-      // OpenAI-compatible format: image_url with data URI
-      blocks.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${img.mediaType};base64,${img.base64}`,
-        },
-      });
-    } else {
-      // Anthropic native format: image with base64 source
-      blocks.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: img.mediaType,
-          data: img.base64,
-        },
-      });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
     }
+
+    const data: unknown = await response.json();
+    const text = req.parser(data).trim();
+    if (!text) throw new Error(`${req.provider} returned empty response`);
+
+    consecutiveClaudeFailures = 0;
+    circuitOpenUntil = 0;
+    return { text, provider: req.provider, model: req.model };
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    logger.warn({
+      provider: req.provider,
+      model: req.model,
+      endpoint: req.endpoint,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      err: error,
+    }, 'Claude provider failed');
+
+    consecutiveClaudeFailures += 1;
+    if (consecutiveClaudeFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+      logger.warn({
+        consecutiveClaudeFailures,
+        cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
+      }, 'Claude circuit breaker opened after repeated failures');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  // Add text prompt after images
-  const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
-  blocks.push({ type: 'text', text: textPrompt });
-
-  return blocks;
 }

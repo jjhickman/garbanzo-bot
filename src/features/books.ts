@@ -10,6 +10,7 @@
  *   !book isbn 9780441013593  — lookup by ISBN
  */
 
+import { z } from 'zod';
 import { logger } from '../middleware/logger.js';
 import { bold } from '../utils/formatting.js';
 
@@ -19,40 +20,44 @@ const TIMEOUT_MS = 8_000;
 
 const USER_AGENT = 'GarbanzoBot/1.0 (WhatsApp community bot)';
 
-// ── Open Library API ────────────────────────────────────────────────
+// ── Zod schemas ─────────────────────────────────────────────────────
 
-interface OLSearchDoc {
-  key: string;           // e.g. "/works/OL45804W"
-  title: string;
-  author_name?: string[];
-  first_publish_year?: number;
-  number_of_pages_median?: number;
-  subject?: string[];
-  cover_i?: number;
-  isbn?: string[];
-  ratings_average?: number;
-  ratings_count?: number;
-  want_to_read_count?: number;
-  currently_reading_count?: number;
-  already_read_count?: number;
-  edition_count?: number;
-}
+const OLSearchDocSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  author_name: z.array(z.string()).optional(),
+  first_publish_year: z.number().optional(),
+  number_of_pages_median: z.number().optional(),
+  subject: z.array(z.string()).optional(),
+  cover_i: z.number().optional(),
+  isbn: z.array(z.string()).optional(),
+  ratings_average: z.number().optional(),
+  ratings_count: z.number().optional(),
+  want_to_read_count: z.number().optional(),
+  currently_reading_count: z.number().optional(),
+  already_read_count: z.number().optional(),
+  edition_count: z.number().optional(),
+});
+type OLSearchDoc = z.infer<typeof OLSearchDocSchema>;
 
-interface OLWork {
-  title: string;
-  description?: string | { value: string };
-  subjects?: string[];
-  covers?: number[];
-}
+const OLSearchResponseSchema = z.object({ docs: z.array(OLSearchDocSchema) });
 
-async function olFetch<T>(url: string): Promise<T | null> {
+const OLWorkSchema = z.object({
+  title: z.string(),
+  description: z.union([z.string(), z.object({ value: z.string() })]).optional(),
+  subjects: z.array(z.string()).optional(),
+  covers: z.array(z.number()).optional(),
+});
+
+/** Fetch and parse a URL against a Zod schema. Returns null on failure. */
+async function olFetch<T>(url: string, schema: z.ZodType<T>): Promise<T | null> {
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) return null;
-    return await response.json() as T;
+    return schema.parse(await response.json());
   } catch (err) {
     logger.error({ err, url }, 'Open Library API fetch failed');
     return null;
@@ -70,12 +75,12 @@ async function searchBooks(query: string, field?: 'title' | 'author'): Promise<O
     params.set('q', query);
   }
 
-  const data = await olFetch<{ docs: OLSearchDoc[] }>(`${OL_SEARCH}?${params}`);
+  const data = await olFetch(`${OL_SEARCH}?${params}`, OLSearchResponseSchema);
   return data?.docs ?? [];
 }
 
 async function getWorkDescription(workKey: string): Promise<string | null> {
-  const work = await olFetch<OLWork>(`${OL_WORKS}${workKey}.json`);
+  const work = await olFetch(`${OL_WORKS}${workKey}.json`, OLWorkSchema);
   if (!work?.description) return null;
 
   if (typeof work.description === 'string') return work.description;
@@ -84,7 +89,7 @@ async function getWorkDescription(workKey: string): Promise<string | null> {
 
 async function lookupByISBN(isbn: string): Promise<OLSearchDoc[]> {
   const params = new URLSearchParams({ q: `isbn:${isbn}`, limit: '1', fields: 'key,title,author_name,first_publish_year,number_of_pages_median,subject,cover_i,isbn,ratings_average,ratings_count,want_to_read_count,currently_reading_count,already_read_count,edition_count' });
-  const data = await olFetch<{ docs: OLSearchDoc[] }>(`${OL_SEARCH}?${params}`);
+  const data = await olFetch(`${OL_SEARCH}?${params}`, OLSearchResponseSchema);
   return data?.docs ?? [];
 }
 

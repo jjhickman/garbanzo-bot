@@ -1,8 +1,8 @@
-# AGENTS.md — Garbanzo Bot
+# AGENTS.md — Garbanzo
 
 ## Project Overview
 
-**Garbanzo Bot** is a WhatsApp community bot for a 120+ member Boston-area meetup group. It uses the Baileys library (unofficial WhatsApp Web API) to connect to WhatsApp, and routes messages to AI models (Claude via Anthropic/OpenRouter, local Ollama) for intelligent responses.
+**Garbanzo** is a WhatsApp community bot for a 120+ member Boston-area meetup group. It uses the Baileys library (unofficial WhatsApp Web API) to connect to WhatsApp, and routes messages to AI models (configurable cloud failover order + local Ollama) for intelligent responses.
 
 The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy community connector.
 
@@ -10,11 +10,12 @@ The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy com
 
 - **Runtime:** Node.js 20+ with TypeScript (ES Modules)
 - **WhatsApp:** `@whiskeysockets/baileys` v6 (multi-device, socket-based)
-- **AI:** Anthropic Claude API (primary), Ollama (local fallback on Terra)
+- **AI:** Configurable cloud failover order (`AI_PROVIDER_ORDER`) + Ollama (local for simple queries)
 - **Validation:** Zod for runtime type checking
 - **Logging:** Pino
 - **Testing:** Vitest
 - **Build:** `tsc` → `dist/`, dev via `tsx watch`
+- **Default deployment:** Docker Compose (`docker compose up -d`)
 
 ## Development Principles
 
@@ -65,6 +66,9 @@ npm install
 # Development (hot-reload)
 npm run dev
 
+# Interactive setup wizard (platform/provider order/models/features/persona/groups)
+npm run setup
+
 # Type-check without emitting
 npm run typecheck
 
@@ -85,6 +89,15 @@ npm run start
 
 # Full pre-commit check (secrets + typecheck + lint + test)
 npm run check
+
+# GitHub account workflow helpers
+npm run gh:status
+npm run gh:switch:author
+npm run gh:switch:owner
+npm run gh:whoami
+
+# Rotate GitHub Actions secrets from local env vars
+npm run rotate:gh-secrets
 ```
 
 ## Project Structure
@@ -102,8 +115,10 @@ garbanzo-bot/
 │   │   ├── reactions.ts      # Emoji reactions (🫘 for acknowledgments)
 │   │   └── groups.ts         # Group config, JID mapping, mention patterns
 │   ├── ai/
-│   │   ├── router.ts         # Model selection (Claude vs Ollama) + cost tracking
-│   │   ├── claude.ts         # Anthropic/OpenRouter API client + vision support
+│   │   ├── router.ts         # Model selection (cloud vs Ollama) + cost tracking
+│   │   ├── claude.ts         # Claude-family caller (OpenRouter/Anthropic)
+│   │   ├── chatgpt.ts        # OpenAI fallback caller
+│   │   ├── cloud-providers.ts # Shared cloud request builders/parsers
 │   │   ├── ollama.ts         # Local Ollama client
 │   │   └── persona.ts        # System prompt builder (loads PERSONA.md)
 │   ├── features/             # Each feature = one file (or directory), max ~300 lines
@@ -140,12 +155,18 @@ garbanzo-bot/
 │   ├── PERSONA.md            # Garbanzo Bean character doc (loaded at runtime)
 │   ├── SECURITY.md           # Security audit findings + recommendations
 │   ├── ROADMAP.md            # Phased implementation plan
-│   └── INFRASTRUCTURE.md     # Hardware/network reference
+│   ├── ARCHITECTURE.md       # Data flow, routing, multimedia pipeline docs
+│   ├── INFRASTRUCTURE.md     # Hardware/network reference
+│   └── SETUP_EXAMPLES.md     # Reusable setup command recipes
 ├── data/                     # Runtime data (gitignored DBs, persisted state)
 ├── scripts/
-│   └── setup.sh              # First-time setup helper
+│   ├── setup.mjs             # Interactive setup wizard
+│   ├── setup.sh              # Wrapper for setup wizard
+│   ├── gh-workflow.sh        # GitHub account switch helpers
+│   ├── rotate-gh-secrets.sh  # Rotate GitHub Actions secrets from env vars
+│   └── audit-secrets.sh      # Local gitleaks wrapper
 ├── tests/
-│   └── *.test.ts             # Vitest test files (7 files, 420 tests)
+│   └── *.test.ts             # Vitest test files (11 files, 440 tests)
 ├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)
 ├── docker-compose.yml        # Named volumes, env_file, health check
 ├── .dockerignore             # Excludes .git, node_modules, tests, etc.

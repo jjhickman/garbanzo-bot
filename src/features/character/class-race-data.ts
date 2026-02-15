@@ -111,6 +111,7 @@ export const CLASS_FEATURES: Record<string, string> = {
   wizard: 'Spellcasting, Arcane Recovery',
 };
 
+/** Calculate starting armor class from class defaults and ability modifiers. */
 export function calculateAC(classIndex: string, abilities: AbilityScores): number {
   const dexMod = abilityModifier(abilities.dex);
   switch (classIndex) {
@@ -191,6 +192,7 @@ function formatHeight(inches: number): string {
   return `${feet}'${remaining}"`;
 }
 
+/** Generate randomized appearance details within race-appropriate ranges. */
 export function generateAppearance(raceIndex: string): AppearanceData {
   const ageRange = RACE_AGE_RANGES[raceIndex] ?? [18, 80];
   const size = RACE_SIZE[raceIndex] ?? { height: [60, 76], weight: [110, 220] };
@@ -261,6 +263,7 @@ const BACKSTORY_TEMPLATES: Record<string, string[]> = {
   ],
 };
 
+/** Generate a short backstory template based on background/race/class. */
 export function generateBackstory(background: string, race: string, className: string): string {
   const templates = BACKSTORY_TEMPLATES[background] ?? BACKSTORY_TEMPLATES.Soldier;
   const template = pickRandom(templates);
@@ -279,6 +282,7 @@ const BACKGROUND_GOLD: Record<string, number> = {
   Charlatan: 15, Entertainer: 15, 'Guild Artisan': 15, Hermit: 5, Outlander: 10, Sailor: 10,
 };
 
+/** Generate starting gold based on selected background defaults. */
 export function generateStartingTreasure(background: string): string {
   const gold = BACKGROUND_GOLD[background] ?? 10;
   return `${gold} gp`;
@@ -334,5 +338,4 @@ export const BACKGROUND_ALLIES: Record<string, { faction: string; allies: string
     allies: 'Fellow sailors from my years at sea. A first mate who runs a tavern by the docks, a navigator who charts private routes, and a captain who still owes me wages.',
   },
 };
-
 

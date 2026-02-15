@@ -169,7 +169,7 @@ async function handleFeedbackCommand(
       try {
         await sock.sendMessage(config.OWNER_JID, { text: result.ownerAlert });
       } catch (err) {
-        logger.error({ err }, 'Failed to forward feedback to owner');
+        logger.error({ err, ownerJid: config.OWNER_JID, senderJid, groupJid: remoteJid, type: 'suggestion' }, 'Failed to forward feedback to owner');
       }
     }
     recordBotResponse(remoteJid);
@@ -181,7 +181,7 @@ async function handleFeedbackCommand(
       try {
         await sock.sendMessage(config.OWNER_JID, { text: result.ownerAlert });
       } catch (err) {
-        logger.error({ err }, 'Failed to forward feedback to owner');
+        logger.error({ err, ownerJid: config.OWNER_JID, senderJid, groupJid: remoteJid, type: 'bug' }, 'Failed to forward feedback to owner');
       }
     }
     recordBotResponse(remoteJid);

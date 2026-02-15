@@ -1,38 +1,129 @@
-# Garbanzo Bot
+# Garbanzo
 
-A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and Claude AI. Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
+
+A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and cloud AI routing. Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+
+## Why Garbanzo
+
+- Turn busy group chats into actionable community coordination (events, plans, recs, summaries)
+- Keep group context useful with memory, profiles, moderation alerts, and daily owner digests
+- Blend local + cloud AI routing so quality stays high while costs stay predictable
+- Ship quickly with Docker Compose default deployment and setup wizard onboarding
+
+## Who This Is For
+
+- Meetup/community organizers running active group chats who want structure without killing vibe
+- Hobby groups (book clubs, tabletop groups, local interest communities) needing quick planning tools
+- Small teams that want an AI chat ops assistant with local-first data and low infra overhead
+- Builders who need a reusable WhatsApp bot base with clear extension points and production guardrails
 
 ## What It Does
 
-Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. It runs as a single Node.js process with SQLite storage — no external databases, no containers, no cloud infrastructure required.
+Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
 
 ## Quick Start
 
 ```bash
-# 1. Clone and install
+# 1. Clone
 git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
-npm install
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys (see Configuration below)
+# 2. Run interactive setup (messaging platform, provider order, models, feature profile, optional PERSONA.md import, groups)
+npm run setup
 
-# 3. Configure your groups
-# Edit config/groups.json with your WhatsApp group IDs
+# 3. Start default deployment (Docker Compose)
+docker compose up -d
 
-# 4. Start in development mode
-npm run dev
+# 4. Watch logs and scan QR code on first run
+docker compose logs -f garbanzo
 
-# 5. Scan the QR code with WhatsApp when prompted
+# 5. Health check
+curl http://127.0.0.1:3001/health
 ```
 
+## Local Development (without Docker)
+
+```bash
+npm install
+cp .env.example .env
+# Edit .env and config/groups.json
+npm run dev
+
+# Scan the QR code with WhatsApp when prompted
+```
+
+### Automated / Non-Interactive Setup
+
+Use non-interactive mode for reproducible setup in scripts or CI-like environments:
+
+```bash
+npm run setup -- --non-interactive \
+  --platform=whatsapp \
+  --deploy=docker \
+  --providers=openrouter,openai \
+  --provider-order=openai,openrouter \
+  --profile=events \
+  --features=weather,transit,events,venues,poll,summary \
+  --owner-jid=your_number@s.whatsapp.net \
+  --owner-name="Your Name" \
+  --group-id=120000000000000000@g.us \
+  --group-name="General" \
+  --persona-file=./my-persona.md
+```
+
+Get flag help:
+
+```bash
+npm run setup -- --help
+```
+
+Preview changes without writing files:
+
+```bash
+npm run setup -- --non-interactive --dry-run --platform=whatsapp --providers=openai --profile=lightweight
+```
+
+More recipes: [`docs/SETUP_EXAMPLES.md`](docs/SETUP_EXAMPLES.md)
+
 On first run, Baileys will display a QR code in the terminal. Scan it with WhatsApp (Settings > Linked Devices) to authenticate. Auth state persists in `baileys_auth/` across restarts.
+
+## Demo Placeholders
+
+Use these placeholders to drop in media for first-time users evaluating product value.
+
+### Setup & Onboarding
+
+- `SETUP_WIZARD_GIF` → `docs/assets/demos/setup-wizard.gif`
+- `WHATSAPP_QR_SCREENSHOT` → `docs/assets/screenshots/qr-link.png`
+
+### Core Value in Action
+
+- `MENTION_RESPONSE_GIF` → `docs/assets/demos/mention-to-response.gif`
+- `EVENT_ENRICHMENT_SCREENSHOT` → `docs/assets/screenshots/event-enrichment.png`
+- `SUMMARY_CATCHUP_SCREENSHOT` → `docs/assets/screenshots/summary-catchup.png`
+
+### Admin & Reliability
+
+- `OWNER_DIGEST_SCREENSHOT` → `docs/assets/screenshots/owner-digest.png`
+- `HEALTH_ENDPOINT_SCREENSHOT` → `docs/assets/screenshots/health-endpoint-json.png`
+
+Embed template:
+
+```md
+![Setup Wizard Demo](docs/assets/demos/setup-wizard.gif)
+![WhatsApp QR Linking](docs/assets/screenshots/qr-link.png)
+![Mention to Response Flow](docs/assets/demos/mention-to-response.gif)
+![Event Enrichment Example](docs/assets/screenshots/event-enrichment.png)
+![Catchup Summary Example](docs/assets/screenshots/summary-catchup.png)
+![Owner Daily Digest](docs/assets/screenshots/owner-digest.png)
+![Health Endpoint Output](docs/assets/screenshots/health-endpoint-json.png)
+```
 
 ## Features
 
 ### AI Chat
-- Responds to `@garbanzo` mentions with Claude AI (Anthropic/OpenRouter)
+- Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
 - Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
 - Conversation context from SQLite — remembers recent messages per group
 - Multi-language detection (14 languages) — responds in the user's language
@@ -90,11 +181,20 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | Yes | AI responses (Claude) |
+| `MESSAGING_PLATFORM` | No | Messaging app target (`whatsapp` default, `discord` planned) |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI failover) |
+| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `openai,openrouter,anthropic`) |
+| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
+| `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
+| `OPENAI_MODEL` | No | OpenAI fallback model override (default: `gpt-4.1`) |
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
-| `OPENAI_API_KEY` | No | Content moderation |
+| `GITHUB_SPONSORS_URL` | No | Support link shown by owner `!support` command |
+| `PATREON_URL` | No | Optional Patreon support link |
+| `KOFI_URL` | No | Optional Ko-fi support link |
+| `SUPPORT_CUSTOM_URL` | No | Optional custom support URL |
+| `SUPPORT_MESSAGE` | No | Optional custom support intro message |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
 | `OWNER_JID` | Yes | Owner WhatsApp JID for admin features |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
@@ -176,8 +276,10 @@ src/
     reactions.ts        # Emoji reactions (🫘 for acknowledgments)
     groups.ts           # Group config, feature flags, per-group persona
   ai/
-    router.ts           # Model selection (Claude vs Ollama) + cost tracking
-    claude.ts           # Anthropic/OpenRouter API client + vision
+    router.ts           # Model selection (cloud vs Ollama) + cost tracking
+    claude.ts           # Claude-family caller (OpenRouter/Anthropic) + circuit breaker
+    chatgpt.ts          # OpenAI fallback caller + circuit breaker
+    cloud-providers.ts  # Shared cloud request builders/parsers
     ollama.ts           # Local Ollama client + warm-up scheduler
     persona.ts          # System prompt builder (PERSONA.md + memory + language)
   features/             # One file per feature, max ~300 lines
@@ -213,18 +315,18 @@ src/
     db-maintenance.ts   # Backup, vacuum, prune, scheduled maintenance
 config/groups.json      # Per-group settings
 docs/                   # Persona, roadmap, security, infrastructure
-tests/                  # Vitest (7 files, 420 tests)
+tests/                  # Vitest (11 files, 440 tests)
 ```
 
 ## Stack
 
 - **Runtime:** Node.js 20+ / TypeScript (ES Modules, strict mode)
 - **WhatsApp:** @whiskeysockets/baileys v6 (multi-device)
-- **AI:** Claude via Anthropic/OpenRouter (primary), Ollama qwen3:8b (local fallback)
+- **AI:** Ollama qwen3:8b (simple local queries) + configurable cloud failover chain (`AI_PROVIDER_ORDER`)
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (420 tests)
+- **Testing:** Vitest (440 tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -241,24 +343,86 @@ npm run start       # Production (from dist/)
 
 ## Production Deployment
 
-The bot runs as a systemd user service:
+Default: Docker Compose.
 
 ```bash
-# Build
-npm run build
+# Start
+docker compose up -d
 
-# Install service (adjust paths in scripts/garbanzo-bot.service)
-cp scripts/garbanzo-bot.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable garbanzo-bot
-systemctl --user start garbanzo-bot
+# Logs
+docker compose logs -f garbanzo
 
 # Check status
-systemctl --user status garbanzo-bot
 curl http://127.0.0.1:3001/health
 ```
 
-The health endpoint returns JSON with connection status, uptime, memory usage, and message staleness.
+Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
+
+If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
+
+The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status.
+
+## Support Garbanzo
+
+If Garbanzo is useful for your community, you can support development and operating costs.
+
+- GitHub Sponsors: https://github.com/sponsors/jjhickman
+- (Optional) Configure Patreon/Ko-fi/custom links in `.env`
+
+Owner-side support messaging:
+
+- `!support` — preview the support message in owner DM
+- `!support broadcast` — send support message to all enabled groups
+
+Support links are read from:
+
+- `GITHUB_SPONSORS_URL`
+- `PATREON_URL`
+- `KOFI_URL`
+- `SUPPORT_CUSTOM_URL`
+- `SUPPORT_MESSAGE` (optional custom intro text)
+
+## Main Branch Stability
+
+Repo guardrails are configured under `.github/`:
+
+- `ci.yml` runs `npm run check` on PRs and pushes to `main`
+- `CODEOWNERS` requires owner review coverage
+- `pull_request_template.md` enforces verification checklist discipline
+- `dependabot.yml` keeps npm/docker dependencies updated weekly
+- `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
+- `FUNDING.yml` enables sponsorship links in GitHub UI
+
+## GitHub Account Workflow
+
+For stable review discipline, use two accounts:
+
+- `garbanzo-dev` for authoring PRs
+- `jjhickman` for reviewing/approving/merging
+
+Helper commands:
+
+```bash
+npm run gh:status
+npm run gh:ensure
+npm run gh:switch:author
+npm run gh:switch:owner
+npm run gh:whoami
+```
+
+These wrappers call `scripts/gh-workflow.sh`.
+
+## Credential Rotation Workflow
+
+- Monthly reminder issue is automated via `.github/workflows/credential-rotation-reminder.yml`.
+- To update GitHub Actions secrets from your local shell environment:
+
+```bash
+# Example (values supplied from your shell/session manager)
+OPENAI_API_KEY=... OPENROUTER_API_KEY=... ANTHROPIC_API_KEY=... npm run rotate:gh-secrets
+```
+
+Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 
 ## Docs
 
@@ -266,6 +430,8 @@ The health endpoint returns JSON with connection status, uptime, memory usage, a
 - [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-6 complete, Phase 7 in progress)
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
+- [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions

@@ -1,30 +1,31 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { z } from 'zod';
 import { PROJECT_ROOT } from '../utils/config.js';
 
-interface GroupConfig {
-  name: string;
-  enabled: boolean;
-  requireMention: boolean;
-  /** Optional feature allowlist. If omitted or empty, all features are enabled. */
-  enabledFeatures?: string[];
-  /** Optional per-group persona hint appended to the system prompt */
-  persona?: string;
-}
+// ── Zod schema for config/groups.json ───────────────────────────────
 
-interface GroupsConfig {
-  groups: Record<string, GroupConfig>;
-  mentionPatterns: string[];
-  admins: {
-    owner: { name: string; jid: string };
-    moderators: { name: string }[];
-  };
-}
+const GroupConfigSchema = z.object({
+  name: z.string(),
+  enabled: z.boolean(),
+  requireMention: z.boolean(),
+  enabledFeatures: z.array(z.string()).optional(),
+  persona: z.string().optional(),
+});
 
-// Load group config from JSON
+const GroupsConfigSchema = z.object({
+  groups: z.record(GroupConfigSchema),
+  mentionPatterns: z.array(z.string()),
+  admins: z.object({
+    owner: z.object({ name: z.string(), jid: z.string() }),
+    moderators: z.array(z.object({ name: z.string() })),
+  }),
+});
+
+// Load and validate group config from JSON at startup
 const configPath = resolve(PROJECT_ROOT, 'config', 'groups.json');
-const groupsConfig: GroupsConfig = JSON.parse(
-  readFileSync(configPath, 'utf-8'),
+const groupsConfig = GroupsConfigSchema.parse(
+  JSON.parse(readFileSync(configPath, 'utf-8')),
 );
 
 /** All configured group JIDs */
@@ -32,9 +33,6 @@ export const GROUP_IDS = groupsConfig.groups;
 
 /** Mention patterns that trigger the bot */
 export const MENTION_PATTERNS = groupsConfig.mentionPatterns;
-
-/** Admin contacts */
-export const ADMINS = groupsConfig.admins;
 
 /** Check if a group is enabled */
 export function isGroupEnabled(jid: string): boolean {

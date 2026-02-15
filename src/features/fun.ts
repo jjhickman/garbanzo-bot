@@ -51,6 +51,7 @@ interface TriviaQuestion {
   incorrect_answers: string[];
 }
 
+/** Decode common HTML entities returned by trivia/history APIs. */
 export function decodeHTML(text: string): string {
   return text
     .replace(/&amp;/g, '&')
@@ -107,7 +108,7 @@ async function fetchTrivia(category?: string): Promise<string> {
 
     return lines.join('\n');
   } catch (err) {
-    logger.error({ err }, 'Trivia fetch failed');
+    logger.error({ err, category: category ?? 'random' }, 'Trivia fetch failed');
     return '🧠 Couldn\'t fetch trivia right now. Try again later.';
   }
 }
@@ -124,7 +125,7 @@ async function fetchFunFact(): Promise<string> {
     const data = await response.json() as { text: string };
     return `💡 ${bold('Fun Fact')}\n\n${data.text}`;
   } catch (err) {
-    logger.error({ err }, 'Fun fact fetch failed');
+    logger.error({ err, source: 'uselessfacts.jsph.pl' }, 'Fun fact fetch failed');
     return '💡 Couldn\'t fetch a fun fact right now.';
   }
 }
@@ -187,7 +188,7 @@ async function fetchToday(): Promise<string> {
 
     return lines.join('\n');
   } catch (err) {
-    logger.error({ err }, 'History API fetch failed');
+    logger.error({ err, month, day }, 'History API fetch failed');
     return '📅 Couldn\'t fetch today\'s history. Try again later.';
   }
 }
@@ -244,6 +245,7 @@ function getIcebreaker(): string {
 
 // ── Public handler ──────────────────────────────────────────────────
 
+/** Route and execute `!fun` subcommands (trivia/fact/today/icebreaker). */
 export async function handleFun(subcommand: string): Promise<string> {
   const trimmed = subcommand.trim().toLowerCase();
 

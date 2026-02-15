@@ -1,9 +1,29 @@
 /**
- * WhatsApp text formatting helpers
+ * WhatsApp text formatting helpers + shared utility types.
  *
  * WhatsApp uses its own markdown-like syntax:
  *   *bold*  _italic_  ~strikethrough~  ```monospace```
  */
+
+// ── Shared utility types ────────────────────────────────────────────
+
+/**
+ * Discriminated union for feature handlers that can return different result types.
+ * Use this instead of returning `string | SomeOtherType` to make the handler's
+ * success/failure explicit.
+ *
+ * @example
+ * ```ts
+ * type CharOutput = Result<{ pdf: Buffer; summary: string }, string>;
+ * function handleChar(q: string): CharOutput {
+ *   if (error) return { ok: false, error: 'Invalid class' };
+ *   return { ok: true, value: { pdf, summary } };
+ * }
+ * ```
+ */
+export type Result<T, E = string> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
 
 /** Bold text */
 export function bold(text: string): string {

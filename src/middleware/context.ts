@@ -52,13 +52,6 @@ export function recordMessage(
 }
 
 /**
- * Get recent messages for a chat (oldest first).
- */
-export function getRecentMessages(chatJid: string): DbMessage[] {
-  return getMessages(chatJid, 15);
-}
-
-/**
  * Format context for AI prompts using the two-tier compression strategy.
  *
  * Returns a string with:

@@ -14,6 +14,7 @@
 
 import { createServer, type Server } from 'http';
 import { logger } from './logger.js';
+import { verifyLatestBackupIntegrity, type BackupIntegrityStatus } from '../utils/db-maintenance.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -77,11 +78,52 @@ export function getConnectionState(): ConnectionState {
 
 let server: Server | null = null;
 
+const HEALTH_RATE_WINDOW_MS = 60_000;
+const HEALTH_RATE_LIMIT = 120;
+
+const healthRateWindow = new Map<string, { windowStart: number; count: number }>();
+
+const BACKUP_CHECK_CACHE_MS = 5 * 60_000;
+let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | null = null;
+
+function isHealthRequestRateLimited(ip: string, now: number): boolean {
+  const existing = healthRateWindow.get(ip);
+  if (!existing || now - existing.windowStart >= HEALTH_RATE_WINDOW_MS) {
+    healthRateWindow.set(ip, { windowStart: now, count: 1 });
+    return false;
+  }
+
+  existing.count += 1;
+  return existing.count > HEALTH_RATE_LIMIT;
+}
+
+function getCachedBackupStatus(now: number): { checkedAt: number; status: BackupIntegrityStatus } {
+  if (!backupStatusCache || now - backupStatusCache.checkedAt >= BACKUP_CHECK_CACHE_MS) {
+    backupStatusCache = {
+      checkedAt: now,
+      status: verifyLatestBackupIntegrity(),
+    };
+  }
+  return backupStatusCache;
+}
+
+/**
+ * Start the local HTTP health endpoint (`/health`) with lightweight abuse protection.
+ */
 export function startHealthServer(port: number = 3001): void {
   server = createServer((req, res) => {
     if (req.url === '/health' && req.method === 'GET') {
-      const mem = process.memoryUsage();
       const now = Date.now();
+      const ip = req.socket.remoteAddress ?? 'unknown';
+
+      if (isHealthRequestRateLimited(ip, now)) {
+        res.writeHead(429, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'rate_limited', message: 'Too many health requests' }));
+        return;
+      }
+
+      const mem = process.memoryUsage();
+      const backup = getCachedBackupStatus(now);
 
       const body = JSON.stringify({
         status: state.status,
@@ -94,6 +136,10 @@ export function startHealthServer(port: number = 3001): void {
           rss: Math.round(mem.rss / 1024 / 1024),
           heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
           heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+        },
+        backup: {
+          ...backup.status,
+          checkedAt: backup.checkedAt,
         },
       });
 
@@ -110,16 +156,19 @@ export function startHealthServer(port: number = 3001): void {
   });
 
   server.on('error', (err) => {
-    logger.error({ err }, 'Health check server error');
+    logger.error({ err, port }, 'Health check server error');
   });
 }
 
+/** Stop the local health endpoint and memory watchdog timers. */
 export function stopHealthServer(): void {
   if (server) {
     server.close();
     server = null;
   }
   stopMemoryWatchdog();
+  healthRateWindow.clear();
+  backupStatusCache = null;
 }
 
 // ── Memory watchdog ─────────────────────────────────────────────────
