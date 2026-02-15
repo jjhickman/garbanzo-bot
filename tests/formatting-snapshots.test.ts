@@ -24,8 +24,8 @@ describe('Formatted output snapshots', () => {
         interests: JSON.stringify(['hiking', 'trivia', 'board games']),
         groups_active: JSON.stringify(['general@g.us', 'events@g.us']),
         event_count: 4,
-        first_seen: 1735689600,
-        last_seen: 1735776000,
+        first_seen: 1735732800,
+        last_seen: 1735819200,
         opted_in: 1,
       })),
     }));

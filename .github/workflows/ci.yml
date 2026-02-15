@@ -41,4 +41,9 @@ jobs:
           gitleaks version
 
       - name: Run quality checks
+        env:
+          MESSAGING_PLATFORM: whatsapp
+          OWNER_JID: test_owner@s.whatsapp.net
+          OPENROUTER_API_KEY: test_key_ci
+          AI_PROVIDER_ORDER: openrouter
         run: npm run check
