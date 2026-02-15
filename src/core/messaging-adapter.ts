@@ -1,4 +1,5 @@
 import type { MessagingPlatform } from './messaging-platform.js';
+import type { MessageRef } from './message-ref.js';
 
 /**
  * Messaging adapter API.
@@ -9,5 +10,5 @@ import type { MessagingPlatform } from './messaging-platform.js';
 export interface MessagingAdapter {
   platform: MessagingPlatform;
 
-  sendText(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<void>;
+  sendText(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void>;
 }
