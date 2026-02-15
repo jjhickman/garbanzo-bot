@@ -46,7 +46,9 @@ describe('Health — connection state tracking', async () => {
     markMessageReceived();
     const state = getConnectionState();
     expect(state.lastMessageAt).toBeTypeOf('number');
-    expect(state.lastMessageAt! - Date.now()).toBeLessThan(100);
+    const lastMessageAt = state.lastMessageAt;
+    if (typeof lastMessageAt !== 'number') throw new Error('expected lastMessageAt');
+    expect(lastMessageAt - Date.now()).toBeLessThan(100);
   });
 
   it('is not stale when recently received messages', () => {
@@ -358,7 +360,7 @@ describe('Stats — AI error recording', async () => {
     recordAIError(groupJid);
     const stats = getCurrentStats();
     const group = stats.groups.get(groupJid);
-    expect(group).toBeDefined();
-    expect(group!.aiErrors).toBeGreaterThanOrEqual(1);
+    if (!group) throw new Error('expected group stats');
+    expect(group.aiErrors).toBeGreaterThanOrEqual(1);
   });
 });

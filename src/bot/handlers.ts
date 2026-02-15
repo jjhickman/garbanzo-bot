@@ -15,8 +15,6 @@ import {
   extractWhatsAppMentionedJids as extractMentionedJids,
 } from '../platforms/whatsapp/inbound.js';
 
-// Re-export getResponse for owner-commands + group-handler; also used by retry handler below
-export { getResponse } from './response-router.js';
 import { getResponse } from './response-router.js';
 
 /**

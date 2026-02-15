@@ -38,7 +38,8 @@ const NewsAPIResponseSchema = z.object({
  * Handle a news query. Returns a formatted WhatsApp message string.
  */
 export async function handleNews(query: string): Promise<string> {
-  if (!config.NEWSAPI_KEY) {
+  const apiKey = config.NEWSAPI_KEY;
+  if (!apiKey) {
     return '🫘 News search is unavailable — no NewsAPI key configured.';
   }
 
@@ -47,10 +48,10 @@ export async function handleNews(query: string): Promise<string> {
 
     if (!searchTerm) {
       // No specific topic — show Boston top headlines
-      return await getTopHeadlines();
+      return await getTopHeadlines(apiKey);
     }
 
-    return await searchNews(searchTerm);
+    return await searchNews(apiKey, searchTerm);
   } catch (err) {
     logger.error({ err, query }, 'News feature error');
     return '🫘 Couldn\'t fetch news right now. Try again in a moment.';
@@ -87,7 +88,7 @@ function extractSearchTerm(query: string): string | null {
 
 // ── API calls ────────────────────────────────────────────────────────
 
-async function searchNews(searchTerm: string): Promise<string> {
+async function searchNews(apiKey: string, searchTerm: string): Promise<string> {
   const url = new URL(`${NEWS_BASE}/everything`);
   url.searchParams.set('q', searchTerm);
   url.searchParams.set('language', 'en');
@@ -95,7 +96,7 @@ async function searchNews(searchTerm: string): Promise<string> {
   url.searchParams.set('pageSize', '5');
 
   const res = await fetch(url.toString(), {
-    headers: { 'X-Api-Key': config.NEWSAPI_KEY! },
+    headers: { 'X-Api-Key': apiKey },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
@@ -117,13 +118,13 @@ async function searchNews(searchTerm: string): Promise<string> {
   return formatArticles(data.articles, `News: "${searchTerm}"`);
 }
 
-async function getTopHeadlines(): Promise<string> {
+async function getTopHeadlines(apiKey: string): Promise<string> {
   const url = new URL(`${NEWS_BASE}/top-headlines`);
   url.searchParams.set('country', 'us');
   url.searchParams.set('pageSize', '5');
 
   const res = await fetch(url.toString(), {
-    headers: { 'X-Api-Key': config.NEWSAPI_KEY! },
+    headers: { 'X-Api-Key': apiKey },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 

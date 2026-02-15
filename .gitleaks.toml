@@ -24,6 +24,9 @@ title = "Garbanzo Bot secret scanning config"
     '''\.env$''',
     '''package-lock\.json''',
     '''\.gitleaks\.toml''',
+    # OpenCode local config (gitignored; may contain secrets)
+    '''opencode\.json$''',
+    '''\.opencode/''',
   ]
 
 # ─── Per-file allowlists for expected patterns ─────────────────────────

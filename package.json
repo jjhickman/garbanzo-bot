@@ -25,7 +25,10 @@
     "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
     "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh",
-    "release:plan": "node scripts/release-plan.mjs"
+    "release:plan": "node scripts/release-plan.mjs",
+    "chime:ready": "tsx scripts/chime.ts ready",
+    "chime:error": "tsx scripts/chime.ts error",
+    "chime:test": "tsx scripts/chime.ts test"
   },
   "engines": {
     "node": ">=20.0.0"

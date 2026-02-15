@@ -21,7 +21,9 @@ export function isReplyToBot(
   const quotedParticipant = ctx.participant;
   if (!quotedParticipant) return false;
 
-  const botIds = [botJid, botLid].filter(Boolean).map((id) => bareId(id!));
+  const botIds = [botJid, botLid]
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .map((id) => bareId(id));
   return botIds.includes(bareId(quotedParticipant));
 }
 

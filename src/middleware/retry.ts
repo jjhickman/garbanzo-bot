@@ -73,7 +73,11 @@ export function queueRetry(entry: RetryEntry): boolean {
     logger.info({ groupJid: entry.groupJid, sender: entry.senderJid, query: entry.query.slice(0, 80) }, 'Retrying failed message');
 
     try {
-      await handler!(entry);
+      if (!handler) {
+        logger.warn({ groupJid: entry.groupJid }, 'Retry handler missing at execution time — message dropped');
+        return;
+      }
+      await handler(entry);
     } catch (err) {
       logger.error({ err, groupJid: entry.groupJid }, 'Retry also failed — message dropped');
     }

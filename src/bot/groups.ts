@@ -90,7 +90,9 @@ export function isMentioned(
 ): boolean {
   // Primary: check WhatsApp's native mention (JID or LID based)
   if (mentionedJids?.length) {
-    const botIds = [botJid, botLid].filter(Boolean).map((id) => bareId(id!));
+    const botIds = [botJid, botLid]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .map((id) => bareId(id));
     if (mentionedJids.some((jid) => botIds.includes(bareId(jid)))) {
       return true;
     }
@@ -110,8 +112,8 @@ export function stripMention(text: string, botJid?: string, botLid?: string): st
   let result = text;
 
   // Strip native WhatsApp mention formats (@phonenumber or @lid)
-  for (const id of [botJid, botLid].filter(Boolean)) {
-    const num = bareId(id!);
+  for (const id of [botJid, botLid].filter((v): v is string => typeof v === 'string' && v.length > 0)) {
+    const num = bareId(id);
     const idRegex = new RegExp(`@${num}\\b`, 'g');
     result = result.replace(idRegex, '').trim();
   }

@@ -1,4 +1,7 @@
+import type { WAMessage } from '@whiskeysockets/baileys';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 
 function setupMocks() {
   const isFeatureEnabled = vi.fn((_jid: string, feature: string) => feature !== 'poll');
@@ -65,8 +68,6 @@ function setupMocks() {
     formatMemoriesForPrompt: vi.fn(() => ''),
   }));
 
-  // Poll dedup state is in-memory; no mock required.
-
   // Character/voice/media not exercised in these parity tests
   vi.doMock('../src/features/character.js', () => ({
     handleCharacter: vi.fn(async () => 'character not used'),
@@ -90,6 +91,18 @@ function setupMocks() {
   return { isFeatureEnabled };
 }
 
+function getPollFromContent(content: unknown): unknown | undefined {
+  if (!content || typeof content !== 'object') return undefined;
+  const obj = content as Record<string, unknown>;
+  return obj.poll;
+}
+
+function getTextFromContent(content: unknown): string | undefined {
+  if (!content || typeof content !== 'object') return undefined;
+  const obj = content as Record<string, unknown>;
+  return typeof obj.text === 'string' ? obj.text : undefined;
+}
+
 describe('Core group processor parity (WhatsApp)', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -103,30 +116,40 @@ describe('Core group processor parity (WhatsApp)', () => {
     const { handleGroupMessage } = await import('../src/bot/group-handler.js');
     const { processGroupMessage } = await import('../src/core/process-group-message.js');
 
-    const legacyCalls: Array<{ to: string; content: any }> = [];
-    const sock: any = {
+    const legacyCalls: Array<{ to: string; content: unknown }> = [];
+    const sock = {
       user: { id: 'bot@s.whatsapp.net', lid: 'bot@lid' },
-      sendMessage: vi.fn(async (to: string, content: any) => {
+      sendMessage: vi.fn(async (to: string, content: unknown) => {
         legacyCalls.push({ to, content });
         return { key: { id: 'sent1', remoteJid: to } };
       }),
     };
 
-    const msg: any = { key: { id: 'm1' } };
-    await handleGroupMessage(sock, msg, 'group-legacy@g.us', 'user@s.whatsapp.net', '!poll What day? / Fri / Sat', undefined, false);
+    const msg = { key: { id: 'm1' } } as unknown as WAMessage;
+    await handleGroupMessage(sock as never, msg, 'group-legacy@g.us', 'user@s.whatsapp.net', '!poll What day? / Fri / Sat', undefined, false);
 
-    const coreCalls: Array<{ type: string; to: string; payload: any }> = [];
-    const messenger: any = {
+    const coreCalls: Array<{ type: 'text' | 'textRef' | 'poll'; to: string; payload: unknown }> = [];
+    const messenger: PlatformMessenger = {
       platform: 'whatsapp',
-      sendText: vi.fn(async (to: string, text: string) => coreCalls.push({ type: 'text', to, payload: text })),
-      sendTextWithRef: vi.fn(async (to: string, text: string) => {
+      async sendText(to: string, text: string): Promise<void> {
+        coreCalls.push({ type: 'text', to, payload: text });
+      },
+      async sendTextWithRef(to: string, text: string): Promise<unknown> {
         coreCalls.push({ type: 'textRef', to, payload: text });
         return { key: { id: 'sent2', remoteJid: to } };
-      }),
-      sendPoll: vi.fn(async (to: string, poll: any) => coreCalls.push({ type: 'poll', to, payload: poll })),
-      sendDocument: vi.fn(async () => ({ key: { id: 'doc1' } })),
-      sendAudio: vi.fn(async () => undefined),
-      deleteMessage: vi.fn(async () => undefined),
+      },
+      async sendPoll(to: string, poll: unknown): Promise<void> {
+        coreCalls.push({ type: 'poll', to, payload: poll });
+      },
+      async sendDocument(): Promise<unknown> {
+        return { key: { id: 'doc1' } };
+      },
+      async sendAudio(): Promise<void> {
+        // not used
+      },
+      async deleteMessage(): Promise<void> {
+        // not used
+      },
     };
 
     await processGroupMessage({
@@ -135,15 +158,20 @@ describe('Core group processor parity (WhatsApp)', () => {
       senderId: 'user@s.whatsapp.net',
       groupName: 'General',
       query: '!poll What day? / Fri / Sat',
+      isFeatureEnabled: () => true,
       replyTo: msg,
     });
 
-    const legacyPoll = legacyCalls.find((c) => c.to === 'group-legacy@g.us' && c.content?.poll)?.content?.poll;
-    const corePoll = coreCalls.find((c) => c.type === 'poll' && c.to === 'group-core@g.us')?.payload;
+    const legacyPoll = legacyCalls
+      .find((c) => c.to === 'group-legacy@g.us')
+      ?.content;
 
-    expect(legacyPoll).toBeTruthy();
-    expect(corePoll).toBeTruthy();
-    expect(corePoll).toEqual(legacyPoll);
+    const legacyPollPayload = getPollFromContent(legacyPoll);
+    const corePollPayload = coreCalls.find((c) => c.type === 'poll' && c.to === 'group-core@g.us')?.payload;
+
+    expect(legacyPollPayload).toBeTruthy();
+    expect(corePollPayload).toBeTruthy();
+    expect(corePollPayload).toEqual(legacyPollPayload);
   });
 
   it('suggest command sends equivalent group response and owner DM', async () => {
@@ -152,31 +180,41 @@ describe('Core group processor parity (WhatsApp)', () => {
     const { handleGroupMessage } = await import('../src/bot/group-handler.js');
     const { processGroupMessage } = await import('../src/core/process-group-message.js');
 
-    const legacyCalls: Array<{ to: string; content: any }> = [];
-    const sock: any = {
+    const legacyCalls: Array<{ to: string; content: unknown }> = [];
+    const sock = {
       user: { id: 'bot@s.whatsapp.net', lid: 'bot@lid' },
-      sendMessage: vi.fn(async (to: string, content: any) => {
+      sendMessage: vi.fn(async (to: string, content: unknown) => {
         legacyCalls.push({ to, content });
         return { key: { id: 'sent1', remoteJid: to } };
       }),
     };
 
-    const msg: any = { key: { id: 'm2' } };
+    const msg = { key: { id: 'm2' } } as unknown as WAMessage;
     const text = '!suggest Add a better onboarding guide to the README please';
-    await handleGroupMessage(sock, msg, 'group@g.us', 'user@s.whatsapp.net', text, undefined, false);
+    await handleGroupMessage(sock as never, msg, 'group@g.us', 'user@s.whatsapp.net', text, undefined, false);
 
-    const coreCalls: Array<{ type: string; to: string; payload: any }> = [];
-    const messenger: any = {
+    const coreCalls: Array<{ type: 'text' | 'textRef' | 'poll'; to: string; payload: unknown }> = [];
+    const messenger: PlatformMessenger = {
       platform: 'whatsapp',
-      sendText: vi.fn(async (to: string, t: string) => coreCalls.push({ type: 'text', to, payload: t })),
-      sendTextWithRef: vi.fn(async (to: string, t: string) => {
+      async sendText(to: string, t: string): Promise<void> {
+        coreCalls.push({ type: 'text', to, payload: t });
+      },
+      async sendTextWithRef(to: string, t: string): Promise<unknown> {
         coreCalls.push({ type: 'textRef', to, payload: t });
         return { key: { id: 'sent2', remoteJid: to } };
-      }),
-      sendPoll: vi.fn(async (to: string, poll: any) => coreCalls.push({ type: 'poll', to, payload: poll })),
-      sendDocument: vi.fn(async () => ({ key: { id: 'doc1' } })),
-      sendAudio: vi.fn(async () => undefined),
-      deleteMessage: vi.fn(async () => undefined),
+      },
+      async sendPoll(to: string, poll: unknown): Promise<void> {
+        coreCalls.push({ type: 'poll', to, payload: poll });
+      },
+      async sendDocument(): Promise<unknown> {
+        return { key: { id: 'doc1' } };
+      },
+      async sendAudio(): Promise<void> {
+        // not used
+      },
+      async deleteMessage(): Promise<void> {
+        // not used
+      },
     };
 
     await processGroupMessage({
@@ -185,21 +223,22 @@ describe('Core group processor parity (WhatsApp)', () => {
       senderId: 'user@s.whatsapp.net',
       groupName: 'General',
       query: text,
+      isFeatureEnabled: () => true,
       replyTo: msg,
     });
 
-    const legacyGroupText = legacyCalls.find((c) => c.to === 'group@g.us')?.content?.text;
-    const legacyOwnerText = legacyCalls.find((c) => c.to === 'owner@s.whatsapp.net')?.content?.text;
+    const legacyGroupText = legacyCalls.find((c) => c.to === 'group@g.us')?.content;
+    const legacyOwnerText = legacyCalls.find((c) => c.to === 'owner@s.whatsapp.net')?.content;
 
     const coreGroupText = coreCalls.find((c) => c.to === 'group@g.us')?.payload;
     const coreOwnerText = coreCalls.find((c) => c.to === 'owner@s.whatsapp.net')?.payload;
 
-    expect(legacyGroupText).toBeTruthy();
-    expect(coreGroupText).toBeTruthy();
-    expect(coreGroupText).toEqual(legacyGroupText);
+    expect(getTextFromContent(legacyGroupText)).toBeTruthy();
+    expect(typeof coreGroupText).toBe('string');
+    expect(coreGroupText).toEqual(getTextFromContent(legacyGroupText));
 
-    expect(legacyOwnerText).toBeTruthy();
-    expect(coreOwnerText).toBeTruthy();
-    expect(coreOwnerText).toEqual(legacyOwnerText);
+    expect(getTextFromContent(legacyOwnerText)).toBeTruthy();
+    expect(typeof coreOwnerText).toBe('string');
+    expect(coreOwnerText).toEqual(getTextFromContent(legacyOwnerText));
   });
 });
