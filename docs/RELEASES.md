@@ -80,4 +80,9 @@ APP_VERSION=0.1.1 docker compose up -d
 
 ## Manual Workflow Dispatch
 
-You can run `Release Docker Image` manually from Actions with an explicit version input (e.g., `v0.2.0`).
+You can run workflows manually from Actions:
+
+- `Release Docker Image` with explicit version input (e.g., `v0.2.0`)
+- `Release Native Binaries` with optional `git_ref` input (tag/branch/SHA)
+
+This is useful for rerunning release asset generation without creating a new tag.
