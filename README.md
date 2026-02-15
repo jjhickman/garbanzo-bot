@@ -199,6 +199,10 @@ curl http://127.0.0.1:3001/health
 curl http://127.0.0.1:3001/health/ready
 ```
 
+Ops monitoring (Uptime Kuma):
+
+<img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
+
 ## Features
 
 ### AI Chat
