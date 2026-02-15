@@ -19,11 +19,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  // Comma-separated provider priority order, eg: "openrouter,anthropic,openai"
+  GEMINI_API_KEY: z.string().optional(),
+  // Comma-separated provider priority order, eg: "openrouter,anthropic,openai,gemini"
   AI_PROVIDER_ORDER: z.string().default('openrouter,anthropic,openai'),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-5-20250514'),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
   OPENAI_MODEL: z.string().default('gpt-4.1'),
+  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
 
   // Ollama (local, optional)
   OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
@@ -72,21 +74,21 @@ if (!parsed.success) {
 }
 
 // Ensure at least one AI provider is configured
-if (!parsed.data.ANTHROPIC_API_KEY && !parsed.data.OPENROUTER_API_KEY && !parsed.data.OPENAI_API_KEY) {
+if (!parsed.data.ANTHROPIC_API_KEY && !parsed.data.OPENROUTER_API_KEY && !parsed.data.OPENAI_API_KEY && !parsed.data.GEMINI_API_KEY) {
   console.error(
-    '❌ At least one AI provider key is required (ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY)',
+    '❌ At least one AI provider key is required (ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)',
   );
   process.exit(1);
 }
 
-const ALLOWED_PROVIDERS = ['openrouter', 'anthropic', 'openai'] as const;
+const ALLOWED_PROVIDERS = ['openrouter', 'anthropic', 'openai', 'gemini'] as const;
 const requestedProviderOrder = parsed.data.AI_PROVIDER_ORDER
   .split(',')
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
 
 if (requestedProviderOrder.length === 0) {
-  console.error('❌ AI_PROVIDER_ORDER must include at least one provider (openrouter, anthropic, openai)');
+  console.error('❌ AI_PROVIDER_ORDER must include at least one provider (openrouter, anthropic, openai, gemini)');
   process.exit(1);
 }
 
@@ -96,7 +98,7 @@ const invalidProviders = requestedProviderOrder.filter(
 
 if (invalidProviders.length > 0) {
   console.error(`❌ AI_PROVIDER_ORDER contains invalid providers: ${invalidProviders.join(', ')}`);
-  console.error('   Valid providers: openrouter, anthropic, openai');
+  console.error('   Valid providers: openrouter, anthropic, openai, gemini');
   process.exit(1);
 }
 

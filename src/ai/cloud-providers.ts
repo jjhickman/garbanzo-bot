@@ -3,7 +3,7 @@ import { config } from '../utils/config.js';
 import type { VisionImage } from '../features/media.js';
 
 /** Cloud providers supported for fallback chain. */
-export type CloudProvider = 'openrouter' | 'anthropic' | 'openai';
+export type CloudProvider = 'openrouter' | 'anthropic' | 'openai' | 'gemini';
 
 /** Normalized cloud AI response metadata. */
 export interface CloudResponse {
@@ -63,6 +63,16 @@ const AnthropicResponseSchema = z.object({
   })),
 });
 
+const GeminiResponseSchema = z.object({
+  candidates: z.array(z.object({
+    content: z.object({
+      parts: z.array(z.object({
+        text: z.string().optional(),
+      })),
+    }),
+  })).optional(),
+});
+
 /** Build a provider-specific request if that provider is configured. */
 export function buildProviderRequest(
   provider: CloudProvider,
@@ -114,6 +124,33 @@ export function buildProviderRequest(
     };
   }
 
+  if (provider === 'gemini') {
+    if (!config.GEMINI_API_KEY) return null;
+    return {
+      provider: 'gemini',
+      model: config.GEMINI_MODEL,
+      endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent`,
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': config.GEMINI_API_KEY,
+      },
+      body: {
+        systemInstruction: {
+          role: 'system',
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [{
+          role: 'user',
+          parts: buildGeminiUserParts(userMessage, visionImages),
+        }],
+        generationConfig: {
+          maxOutputTokens: 1024,
+        },
+      },
+      parser: parseGeminiResponse,
+    };
+  }
+
   if (!config.OPENAI_API_KEY) return null;
   return {
     provider: 'openai',
@@ -148,6 +185,15 @@ function parseAnthropicResponse(data: unknown): string {
   const parsed = AnthropicResponseSchema.safeParse(data);
   if (!parsed.success) return 'No response generated.';
   return parsed.data.content.map((block) => block.text ?? '').join('').trim() || 'No response generated.';
+}
+
+function parseGeminiResponse(data: unknown): string {
+  const parsed = GeminiResponseSchema.safeParse(data);
+  if (!parsed.success) return 'No response generated.';
+
+  const parts = parsed.data.candidates?.[0]?.content.parts;
+  if (!parts || parts.length === 0) return 'No response generated.';
+  return parts.map((p) => p.text ?? '').join('').trim() || 'No response generated.';
 }
 
 function buildAnthropicUserContent(
@@ -192,4 +238,26 @@ function buildOpenAICompatibleUserContent(
   const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
   blocks.push({ type: 'text', text: textPrompt });
   return blocks;
+}
+
+function buildGeminiUserParts(
+  text: string,
+  images: VisionImage[] | undefined,
+): Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> {
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+  if (images && images.length > 0) {
+    for (const img of images) {
+      parts.push({
+        inlineData: {
+          mimeType: img.mediaType,
+          data: img.base64,
+        },
+      });
+    }
+  }
+
+  const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
+  parts.push({ text: textPrompt });
+  return parts;
 }
