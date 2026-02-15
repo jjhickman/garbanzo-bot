@@ -32,5 +32,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.30.0
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run quality checks
         run: npm run check
