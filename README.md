@@ -402,7 +402,6 @@ Cross-platform portable binaries are published on version tags (`v*`) as release
 - `garbanzo-linux-x64.tar.gz`
 - `garbanzo-linux-arm64.tar.gz`
 - `garbanzo-macos-arm64.tar.gz`
-- `garbanzo-macos-x64.tar.gz`
 - `garbanzo-windows-x64.zip`
 
 Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
