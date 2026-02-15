@@ -12,6 +12,8 @@ import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
 async function main(): Promise<void> {
   logger.info('🫘 Garbanzo starting...');
 
+  const healthOnlyMode = process.env.HEALTH_ONLY?.toLowerCase() === 'true';
+
   if (config.MESSAGING_PLATFORM !== 'whatsapp') {
     logger.fatal({
       messagingPlatform: config.MESSAGING_PLATFORM,
@@ -28,6 +30,7 @@ async function main(): Promise<void> {
   logger.info({
     cloudProviders,
     messagingPlatform: config.MESSAGING_PLATFORM,
+    healthOnlyMode,
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');
@@ -41,6 +44,11 @@ async function main(): Promise<void> {
 
   // Schedule daily database maintenance (prune old messages + VACUUM at 4 AM)
   scheduleMaintenance();
+
+  if (healthOnlyMode) {
+    logger.warn('HEALTH_ONLY=true enabled — skipping WhatsApp connection for smoke test mode');
+    return;
+  }
 
   await startConnection((sock) => {
     registerHandlers(sock);
