@@ -83,7 +83,7 @@ const INJECTION_PATTERNS = [
   /\bjailbreak\b/i,
 ];
 
-export interface InjectionCheck {
+interface InjectionCheck {
   isInjection: boolean;
   pattern?: string;
 }
@@ -137,31 +137,11 @@ export function isValidJid(jid: string): boolean {
   );
 }
 
-/**
- * Sanitize a bare JID component (the part before @).
- * Only allows digits, colons, and hyphens.
- */
-export function sanitizeBareJid(bare: string): string {
-  return bare.replace(/[^\d:.-]/g, '');
-}
-
 // ── Command argument sanitization ───────────────────────────────────
-
-/**
- * Sanitize command arguments. Truncates to max length and strips
- * potentially dangerous characters.
- */
-export function sanitizeCommandArg(arg: string): string {
-  const cleaned = stripControlChars(arg);
-  if (cleaned.length > MAX_COMMAND_ARG_LENGTH) {
-    return cleaned.slice(0, MAX_COMMAND_ARG_LENGTH);
-  }
-  return cleaned;
-}
 
 // ── Combined sanitization pipeline ──────────────────────────────────
 
-export interface SanitizeResult {
+interface SanitizeResult {
   text: string;
   rejected: boolean;
   rejectionReason?: string;

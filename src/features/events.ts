@@ -221,7 +221,7 @@ export async function enrichEvent(
       const weatherLines = weather.split('\n').filter((l) => l.trim()).slice(0, 3);
       parts.push(`${bold('Weather')}: ${weatherLines.join(' | ')}`);
     } catch (err) {
-      logger.warn({ err }, 'Weather enrichment failed for event');
+      logger.warn({ err, weatherQuery, groupJid, senderJid }, 'Weather enrichment failed for event');
     }
   }
 
@@ -233,7 +233,7 @@ export async function enrichEvent(
       const transitLines = transit.split('\n').filter((l) => l.trim()).slice(0, 3);
       parts.push(`${bold('Transit')}: ${transitLines.join(' | ')}`);
     } catch (err) {
-      logger.warn({ err }, 'Transit enrichment failed for event');
+      logger.warn({ err, where, groupJid, senderJid }, 'Transit enrichment failed for event');
     }
   }
 
@@ -250,7 +250,7 @@ export async function enrichEvent(
       parts.push(aiResponse);
     }
   } catch (err) {
-    logger.warn({ err }, 'AI enrichment failed for event');
+    logger.warn({ err, groupJid, senderJid }, 'AI enrichment failed for event');
   }
 
   return parts.join('\n');

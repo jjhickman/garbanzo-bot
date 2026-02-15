@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import { bold } from '../utils/formatting.js';
@@ -11,62 +12,50 @@ import { bold } from '../utils/formatting.js';
 
 const WEATHER_BASE = 'https://weather.googleapis.com/v1';
 const GEOCODING_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
+const TIMEOUT_MS = 10_000;
 
 // Boston, MA — default location
 const BOSTON = { lat: 42.3601, lng: -71.0589, name: 'Boston' };
 
-// ── Types ────────────────────────────────────────────────────────────
+// ── Zod schemas (runtime validation for external API responses) ─────
 
-interface Coords {
-  lat: number;
-  lng: number;
-  name: string;
-}
+interface Coords { lat: number; lng: number; name: string }
 
-interface Temperature {
-  degrees: number;
-  unit: string;
-}
+const TemperatureSchema = z.object({ degrees: z.number(), unit: z.string() });
+const WeatherConditionSchema = z.object({ description: z.object({ text: z.string() }), type: z.string() });
+const WindSchema = z.object({
+  direction: z.object({ cardinal: z.string() }),
+  speed: z.object({ value: z.number(), unit: z.string() }),
+  gust: z.object({ value: z.number(), unit: z.string() }).optional(),
+});
+const PrecipitationSchema = z.object({ probability: z.object({ percent: z.number(), type: z.string() }) });
 
-interface WeatherCondition {
-  description: { text: string };
-  type: string;
-}
+const CurrentConditionsSchema = z.object({
+  temperature: TemperatureSchema,
+  feelsLikeTemperature: TemperatureSchema,
+  weatherCondition: WeatherConditionSchema,
+  relativeHumidity: z.number(),
+  wind: WindSchema,
+  precipitation: PrecipitationSchema,
+  uvIndex: z.number(),
+  isDaytime: z.boolean(),
+});
+const ForecastDaySchema = z.object({
+  displayDate: z.object({ year: z.number(), month: z.number(), day: z.number() }),
+  maxTemperature: TemperatureSchema,
+  minTemperature: TemperatureSchema,
+  daytimeForecast: z.object({ weatherCondition: WeatherConditionSchema, precipitation: PrecipitationSchema }),
+});
 
-interface Wind {
-  direction: { cardinal: string };
-  speed: { value: number; unit: string };
-  gust?: { value: number; unit: string };
-}
+const ForecastResponseSchema = z.object({ forecastDays: z.array(ForecastDaySchema) });
 
-interface Precipitation {
-  probability: { percent: number; type: string };
-}
-
-interface CurrentConditions {
-  temperature: Temperature;
-  feelsLikeTemperature: Temperature;
-  weatherCondition: WeatherCondition;
-  relativeHumidity: number;
-  wind: Wind;
-  precipitation: Precipitation;
-  uvIndex: number;
-  isDaytime: boolean;
-}
-
-interface ForecastDay {
-  displayDate: { year: number; month: number; day: number };
-  maxTemperature: Temperature;
-  minTemperature: Temperature;
-  daytimeForecast: {
-    weatherCondition: WeatherCondition;
-    precipitation: Precipitation;
-  };
-}
-
-interface ForecastResponse {
-  forecastDays: ForecastDay[];
-}
+const GeocodingResponseSchema = z.object({
+  status: z.string(),
+  results: z.array(z.object({
+    formatted_address: z.string(),
+    geometry: z.object({ location: z.object({ lat: z.number(), lng: z.number() }) }),
+  })),
+});
 
 // ── Condition emoji mapping ──────────────────────────────────────────
 
@@ -142,18 +131,12 @@ async function resolveLocation(query: string): Promise<Coords> {
 async function geocode(address: string): Promise<Coords> {
   const url = `${GEOCODING_BASE}?address=${encodeURIComponent(address)}&key=${config.GOOGLE_API_KEY}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     throw new Error(`Geocoding API error: ${res.status}`);
   }
 
-  const data = await res.json() as {
-    status: string;
-    results: Array<{
-      formatted_address: string;
-      geometry: { location: { lat: number; lng: number } };
-    }>;
-  };
+  const data = GeocodingResponseSchema.parse(await res.json());
 
   if (data.status !== 'OK' || !data.results.length) {
     logger.warn({ address, status: data.status }, 'Geocoding failed');
@@ -177,13 +160,13 @@ async function getCurrentConditions(location: Coords): Promise<string> {
     + `&location.longitude=${location.lng}`
     + `&unitsSystem=IMPERIAL`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Weather API error ${res.status}: ${errText}`);
   }
 
-  const data = await res.json() as CurrentConditions;
+  const data = CurrentConditionsSchema.parse(await res.json());
 
   const emoji = conditionEmoji(data.weatherCondition.type);
   const condition = data.weatherCondition.description.text;
@@ -225,13 +208,13 @@ async function getForecast(location: Coords): Promise<string> {
     + `&unitsSystem=IMPERIAL`
     + `&days=${days}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Forecast API error ${res.status}: ${errText}`);
   }
 
-  const data = await res.json() as ForecastResponse;
+  const data = ForecastResponseSchema.parse(await res.json());
 
   const lines = [`📅 ${bold(`${days}-Day Forecast for ${location.name}`)}`, ''];
 

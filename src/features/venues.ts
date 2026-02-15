@@ -10,6 +10,7 @@
  *   !venue bowling alleys boston   — specific search
  */
 
+import { z } from 'zod';
 import { logger } from '../middleware/logger.js';
 import { bold } from '../utils/formatting.js';
 import { config } from '../utils/config.js';
@@ -22,31 +23,45 @@ const TIMEOUT_MS = 8_000;
 const BOSTON_LAT = 42.3601;
 const BOSTON_LNG = -71.0589;
 
-interface PlaceResult {
-  name: string;
-  formatted_address: string;
-  rating?: number;
-  user_ratings_total?: number;
-  price_level?: number;
-  opening_hours?: { open_now?: boolean };
-  place_id: string;
-  business_status?: string;
-}
+// ── Zod schemas ─────────────────────────────────────────────────────
 
-interface PlaceDetails {
-  name: string;
-  formatted_address: string;
-  formatted_phone_number?: string;
-  website?: string;
-  rating?: number;
-  user_ratings_total?: number;
-  price_level?: number;
-  opening_hours?: {
-    open_now?: boolean;
-    weekday_text?: string[];
-  };
-  url?: string; // Google Maps link
-}
+const PlaceResultSchema = z.object({
+  name: z.string(),
+  formatted_address: z.string(),
+  rating: z.number().optional(),
+  user_ratings_total: z.number().optional(),
+  price_level: z.number().optional(),
+  opening_hours: z.object({ open_now: z.boolean().optional() }).optional(),
+  place_id: z.string(),
+  business_status: z.string().optional(),
+});
+type PlaceResult = z.infer<typeof PlaceResultSchema>;
+
+const PlaceSearchResponseSchema = z.object({
+  results: z.array(PlaceResultSchema),
+  status: z.string(),
+});
+
+const PlaceDetailsSchema = z.object({
+  name: z.string(),
+  formatted_address: z.string(),
+  formatted_phone_number: z.string().optional(),
+  website: z.string().optional(),
+  rating: z.number().optional(),
+  user_ratings_total: z.number().optional(),
+  price_level: z.number().optional(),
+  opening_hours: z.object({
+    open_now: z.boolean().optional(),
+    weekday_text: z.array(z.string()).optional(),
+  }).optional(),
+  url: z.string().optional(),
+});
+type PlaceDetails = z.infer<typeof PlaceDetailsSchema>;
+
+const PlaceDetailsResponseSchema = z.object({
+  result: PlaceDetailsSchema,
+  status: z.string(),
+});
 
 // ── Google Places API ───────────────────────────────────────────────
 
@@ -73,7 +88,7 @@ async function searchPlaces(query: string): Promise<PlaceResult[]> {
     });
     if (!response.ok) return [];
 
-    const data = await response.json() as { results: PlaceResult[]; status: string };
+    const data = PlaceSearchResponseSchema.parse(await response.json());
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
       logger.error({ status: data.status }, 'Google Places API error');
       return [];
@@ -81,7 +96,7 @@ async function searchPlaces(query: string): Promise<PlaceResult[]> {
 
     return data.results.slice(0, 5);
   } catch (err) {
-    logger.error({ err }, 'Google Places search failed');
+    logger.error({ err, query: searchQuery }, 'Google Places search failed');
     return [];
   }
 }
@@ -101,12 +116,12 @@ async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
     });
     if (!response.ok) return null;
 
-    const data = await response.json() as { result: PlaceDetails; status: string };
+    const data = PlaceDetailsResponseSchema.parse(await response.json());
     if (data.status !== 'OK') return null;
 
     return data.result;
   } catch (err) {
-    logger.error({ err }, 'Google Places details failed');
+    logger.error({ err, placeId }, 'Google Places details failed');
     return null;
   }
 }
@@ -179,6 +194,7 @@ function formatPlaceDetails(place: PlaceDetails): string {
 
 // ── Public handler ──────────────────────────────────────────────────
 
+/** Handle `!venue` commands (search + details lookup) with Boston bias. */
 export async function handleVenues(query: string): Promise<string> {
   const trimmed = query.trim();
   if (!trimmed) return getVenueHelp();
