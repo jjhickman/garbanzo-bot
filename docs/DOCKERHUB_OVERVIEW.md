@@ -31,6 +31,12 @@ Health check:
 curl http://127.0.0.1:3001/health
 ```
 
+Readiness (non-200 when disconnected/stale):
+
+```bash
+curl -i http://127.0.0.1:3001/health/ready
+```
+
 ## Tags
 
 This repo publishes both GHCR and Docker Hub tags.

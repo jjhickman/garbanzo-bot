@@ -411,6 +411,17 @@ Then configure an HTTP monitor in Kuma to check:
 http://<garbanzo-host>:3001/health
 ```
 
+Optional (recommended) second monitor — alert when WhatsApp is disconnected or "connected but deaf":
+
+```text
+http://<garbanzo-host>:3001/health/ready
+```
+
+`/health/ready` returns:
+
+- `200` when connected and not stale
+- `503` when disconnected/connecting or stale
+
 Recommended Kuma monitor settings:
 
 - **Monitor type:** HTTP(s)
