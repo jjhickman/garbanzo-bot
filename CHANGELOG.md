@@ -24,7 +24,19 @@ All notable changes to Garbanzo are documented here.
 - **Core/platform refactor** — core inbound and group processing lives under `src/core/*`; WhatsApp runtime and platform-specific helpers live under `src/platforms/whatsapp/*`
 - **Docs** — README and architecture docs updated to match current layout; Docker Hub overview updated with troubleshooting notes
 
-## [0.4.0] — 2026-02-13
+## [0.1.1] — 2026-02-14
+
+### Added
+
+- Initial tagged release of Garbanzo.
+
+### Notes
+
+- The feature set that existed prior to the first tag is captured under "Historical Milestones" below.
+
+## Historical Milestones (pre-tag)
+
+### Phase 4 milestone — 2026-02-13
 
 ### Added — Phase 4: Growth Features
 - **D&D 5e** — `!roll` dice rolling (any notation), `!dnd spell/monster/class/item` SRD lookups via dnd5eapi.co
@@ -35,7 +47,7 @@ All notable changes to Garbanzo are documented here.
 - **Fun features** — `!trivia`, `!fact`, `!today`, `!icebreaker` (40 Boston-themed icebreakers)
 - **Feedback system** — `!suggest`, `!bug`, `!upvote` for member submissions; `!feedback` owner review
 
-## [0.3.0] — 2026-02-13
+### Phase 3 milestone — 2026-02-13
 
 ### Added — Phase 3: Intelligence Layer
 - **Ollama routing** — simple queries routed to local qwen3:8b, complex to Claude; auto-fallback
@@ -46,7 +58,7 @@ All notable changes to Garbanzo are documented here.
 - **Persistent storage** — SQLite (`data/garbanzo.db`) for messages, moderation logs, daily stats
 - **Strike tracking** — per-user strikes from moderation, soft-mute at 3+ strikes (30 min)
 
-## [0.2.0] — 2026-02-13
+### Phase 2 milestone — 2026-02-13
 
 ### Added — Phase 2: Core Features
 - **Weather** — current conditions + 5-day forecast via Google Weather API, Boston default + geocoding
@@ -58,7 +70,7 @@ All notable changes to Garbanzo are documented here.
 - **Emoji reactions** — reacts with bean emoji to short acknowledgments instead of full AI response
 - **Event detection** — passive in Events group, composes weather + transit + Claude summary
 
-## [0.1.0] — 2026-02-13
+### Phase 1 milestone — 2026-02-13
 
 ### Added — Phase 1: Minimum Viable Bot
 - Baileys v6 WhatsApp connection with multi-device auth
