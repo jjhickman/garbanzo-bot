@@ -1,16 +1,17 @@
 import type { WASocket } from '@whiskeysockets/baileys';
-import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
-import { getHelpMessage, getOwnerHelpMessage } from '../features/help.js';
-import { triggerIntroCatchUp } from '../features/introductions.js';
-import { previewDigest } from '../features/digest.js';
-import { formatStrikesReport } from '../features/moderation.js';
-import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../features/feedback.js';
-import { handleRelease } from '../features/release.js';
-import { handleMemory } from '../features/memory.js';
-import { recordOwnerDM } from '../middleware/stats.js';
-import { GROUP_IDS } from './groups.js';
-import { getResponse } from './response-router.js';
+
+import { logger } from '../../middleware/logger.js';
+import { config } from '../../utils/config.js';
+import { getHelpMessage, getOwnerHelpMessage } from '../../features/help.js';
+import { triggerIntroCatchUp } from '../../features/introductions.js';
+import { previewDigest } from '../../features/digest.js';
+import { formatStrikesReport } from '../../features/moderation.js';
+import { handleFeedbackOwner, createGitHubIssueFromFeedback } from '../../features/feedback.js';
+import { handleRelease } from '../../features/release.js';
+import { handleMemory } from '../../features/memory.js';
+import { recordOwnerDM } from '../../middleware/stats.js';
+import { GROUP_IDS } from '../../bot/groups.js';
+import { getResponse } from '../../bot/response-router.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [

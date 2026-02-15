@@ -52,7 +52,7 @@ describe('owner support commands', () => {
 
   it('returns false for non-owner sender', async () => {
     mockOwnerDeps();
-    const { handleOwnerDM } = await import('../src/bot/owner-commands.js');
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
     const sock = { sendMessage: vi.fn(async () => undefined) };
 
     const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'user@s.whatsapp.net', '!support');
@@ -62,7 +62,7 @@ describe('owner support commands', () => {
 
   it('sends support links on !support', async () => {
     mockOwnerDeps();
-    const { handleOwnerDM } = await import('../src/bot/owner-commands.js');
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
     const sock = { sendMessage: vi.fn(async () => undefined) };
 
     const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'owner@s.whatsapp.net', '!support');
@@ -78,7 +78,7 @@ describe('owner support commands', () => {
 
   it('broadcasts support links to all enabled groups', async () => {
     mockOwnerDeps();
-    const { handleOwnerDM } = await import('../src/bot/owner-commands.js');
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
     const sock = { sendMessage: vi.fn(async () => undefined) };
 
     const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'owner@s.whatsapp.net', '!support broadcast');
@@ -93,7 +93,7 @@ describe('owner support commands', () => {
 
   it('creates GitHub issue from accepted feedback via owner command', async () => {
     mockOwnerDeps();
-    const { handleOwnerDM } = await import('../src/bot/owner-commands.js');
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
     const sock = { sendMessage: vi.fn(async () => undefined) };
 
     const handled = await handleOwnerDM(
