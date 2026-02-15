@@ -180,7 +180,7 @@ describe('registerHandlers wiring and edge branches', () => {
 
   it('registers retry handler and sends retry response through socket', async () => {
     const mocks = mockHandlerDeps();
-    const { registerHandlers } = await import('../src/bot/handlers.js');
+    const { registerWhatsAppHandlers: registerHandlers } = await import('../src/platforms/whatsapp/handlers.js');
 
     const handlers: Record<string, (payload: unknown) => Promise<void>> = {};
     const sock = {
@@ -219,7 +219,7 @@ describe('registerHandlers wiring and edge branches', () => {
 
   it('sends welcome message for enabled groups on participant add', async () => {
     const mocks = mockHandlerDeps();
-    const { registerHandlers } = await import('../src/bot/handlers.js');
+    const { registerWhatsAppHandlers: registerHandlers } = await import('../src/platforms/whatsapp/handlers.js');
 
     const handlers: Record<string, (payload: unknown) => Promise<void>> = {};
     const sock = {
@@ -246,7 +246,7 @@ describe('registerHandlers wiring and edge branches', () => {
 
   it('skips non-notify upserts except for Introductions group catch-up path', async () => {
     const mocks = mockHandlerDeps();
-    const { registerHandlers } = await import('../src/bot/handlers.js');
+    const { registerWhatsAppHandlers: registerHandlers } = await import('../src/platforms/whatsapp/handlers.js');
 
     const handlers: Record<string, (payload: unknown) => Promise<void>> = {};
     const sock = {
