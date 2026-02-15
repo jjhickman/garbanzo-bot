@@ -38,7 +38,7 @@ Resolved: UFW enabled with deny-incoming default, allowing SSH + Tailscale (`100
 
 ~~Ollama and OpenClaw were reachable from any device on the LAN.~~
 
-Resolved: Ollama bound to `127.0.0.1`. All OpenClaw services decommissioned (ports 8085, 8089, 8091, 8092, 18789, 18790 closed).
+Resolved: Ollama bound to `127.0.0.1`. All OpenClaw-inspired services decommissioned (ports 8085, 8089, 8091, 8092, 18789, 18790 closed).
 
 Remaining services on `0.0.0.0` (low risk, no sensitive data):
 
@@ -55,9 +55,9 @@ Remaining services on `0.0.0.0` (low risk, no sensitive data):
 
 ### 4. ✅ Tailscale Funnel — DISABLED
 
-~~OpenClaw gateway and docs server were publicly accessible via Tailscale Funnel.~~
+~~OpenClaw-inspired gateway and docs server were publicly accessible via Tailscale Funnel.~~
 
-Resolved: `tailscale funnel off` — no serve config remains. Funnel can be re-enabled later if webhook ingress is needed for the new bot.
+Resolved: `tailscale funnel off` — no serve config remains. Funnel can be re-enabled later if webhook ingress is needed.
 
 ### 5. ✅ Ollama Bound to All Interfaces — FIXED
 
@@ -71,7 +71,7 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
 
 | Item | Status |
 |------|--------|
-| OpenClaw fully decommissioned (all services stopped + disabled) | ✅ Done |
+| OpenClaw-inspired stack fully decommissioned (all services stopped + disabled) | ✅ Done |
 | ChromaDB bound to localhost (8000) | ✅ Correct |
 | ML services were bound to localhost (now stopped with OpenClaw) | ✅ N/A |
 | Whisper Docker bound to localhost (8090) | ✅ Correct |
@@ -185,7 +185,7 @@ chmod +x .git/hooks/pre-commit
 | 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
 | 4 | Tailscale Funnel exposing OpenClaw | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
 | 5 | Port 18790 on `0.0.0.0` | Stopped + disabled `openclaw-webhooks.service` via `systemctl --user` | ✅ Port closed |
-| — | **Full OpenClaw decommission** | All 10 systemd services stopped + disabled, artifacts preserved to `archive/openclaw/` | ✅ Zero processes, zero ports |
+| — | **Full OpenClaw-inspired stack decommission** | All 10 systemd services stopped + disabled (artifacts preserved out-of-band) | ✅ Zero processes, zero ports |
 
 ### Remaining — Manual Steps
 

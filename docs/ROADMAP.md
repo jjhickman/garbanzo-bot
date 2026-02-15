@@ -335,7 +335,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 
 ## Anti-Patterns to Avoid
 
-These are the mistakes from the OpenClaw setup. Do NOT repeat them:
+These are the mistakes from the earlier OpenClaw-inspired setup. Do NOT repeat them:
 
 1. ❌ **Don't build features for imagined users.** Only add what real members ask for or demonstrably use.
 2. ❌ **Don't add multiple features simultaneously.** One at a time, tested, validated.
