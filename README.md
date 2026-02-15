@@ -387,6 +387,7 @@ Support links are read from:
 Repo guardrails are configured under `.github/`:
 
 - `ci.yml` runs `npm run check` on PRs and pushes to `main`
+- `automation-guard.yml` blocks non-Dependabot PRs when open Dependabot PRs exist (unless `allow-open-dependabot` label is used)
 - `CODEOWNERS` requires owner review coverage
 - `pull_request_template.md` enforces verification checklist discipline
 - `dependabot.yml` keeps npm/docker dependencies updated weekly

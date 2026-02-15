@@ -1,0 +1,61 @@
+name: Automation Guard
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependabot-gate:
+    name: Automation Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check open Dependabot PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const current = context.payload.pull_request;
+            const isCurrentDependabot = current?.user?.login === 'dependabot[bot]' || current?.head?.ref?.startsWith('dependabot/');
+            const hasOverrideLabel = (current?.labels ?? []).some((label) => label.name === 'allow-open-dependabot');
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'open',
+              base: 'main',
+              per_page: 100,
+            });
+
+            const openDependabot = pulls.filter((pr) => {
+              if (current && pr.number === current.number) return false;
+              const botAuthor = pr.user?.login === 'dependabot[bot]';
+              const botBranch = pr.head?.ref?.startsWith('dependabot/');
+              return botAuthor || botBranch;
+            });
+
+            core.info(`Open Dependabot PRs: ${openDependabot.length}`);
+            if (openDependabot.length === 0) return;
+
+            if (isCurrentDependabot) {
+              core.info('Current PR is a Dependabot PR; allowing merge path to clear queue.');
+              return;
+            }
+
+            if (hasOverrideLabel) {
+              core.warning('allow-open-dependabot label present; bypassing guard for this PR.');
+              return;
+            }
+
+            const lines = openDependabot.map((pr) => `- #${pr.number}: ${pr.title} (${pr.html_url})`);
+            core.setFailed(
+              [
+                `Open Dependabot PRs detected (${openDependabot.length}). Review/merge them first or add label \`allow-open-dependabot\` with justification.`,
+                ...lines,
+              ].join('\n'),
+            );
