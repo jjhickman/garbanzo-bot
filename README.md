@@ -583,6 +583,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
 - [OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md) — OpenClaw-style stack comparison and tradeoffs
+- [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions
