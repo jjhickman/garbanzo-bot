@@ -1,4 +1,5 @@
 import type { InboundMessage } from '../../core/inbound-message.js';
+import type { MessageRef } from '../../core/message-ref.js';
 
 /**
  * Slack inbound message (normalized).
@@ -8,5 +9,5 @@ import type { InboundMessage } from '../../core/inbound-message.js';
  */
 export interface SlackInbound extends InboundMessage {
   platform: 'slack';
-  raw: unknown;
+  raw: MessageRef;
 }
