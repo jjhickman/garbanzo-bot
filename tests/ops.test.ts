@@ -71,6 +71,9 @@ describe('Health endpoint — backup status and rate limiting', async () => {
   const {
     startHealthServer,
     stopHealthServer,
+    markConnected,
+    markDisconnected,
+    markMessageReceived,
   } = await import('../src/middleware/health.js');
 
   async function getFreePort(): Promise<number> {
@@ -117,6 +120,46 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     }
 
     expect(lastStatus).toBe(429);
+  });
+
+  it('ready endpoint returns 503 when disconnected', async () => {
+    const port = await getFreePort();
+    markDisconnected();
+    startHealthServer(port);
+
+    const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
+    expect(response.status).toBe(503);
+    const data = await response.json() as { ready: boolean; status: string; stale: boolean };
+    expect(data.ready).toBe(false);
+  });
+
+  it('ready endpoint returns 200 when connected and fresh', async () => {
+    const port = await getFreePort();
+    markConnected();
+    markMessageReceived();
+    startHealthServer(port);
+
+    const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
+    expect(response.status).toBe(200);
+    const data = await response.json() as { ready: boolean; status: string; stale: boolean };
+    expect(data.ready).toBe(true);
+  });
+
+  it('ready endpoint returns 503 when connection is stale', async () => {
+    const port = await getFreePort();
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_700_000_000_000);
+    markConnected();
+    markMessageReceived();
+
+    nowSpy.mockReturnValue(1_700_000_000_000 + 31 * 60 * 1000);
+    startHealthServer(port);
+
+    const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
+    expect(response.status).toBe(503);
+
+    nowSpy.mockRestore();
   });
 });
 
