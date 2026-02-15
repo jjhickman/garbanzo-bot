@@ -19,6 +19,7 @@ npm run test       # Run all tests
 npm run check      # Full pre-commit check (typecheck + lint + test)
 npm run gh:status  # Show authenticated GitHub accounts
 npm run gh:ensure  # Verify owner + author accounts exist locally
+npm run gh:dependabot # List open Dependabot PRs targeting main
 ```
 
 **Always run `npm run check` before submitting a PR.**
