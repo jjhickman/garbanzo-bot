@@ -38,8 +38,8 @@ This is the easiest path that keeps SQLite on a local filesystem and preserves t
 
 Security Group (inbound):
 
-- Allow SSH (`22/tcp`) from your IP only
-- Optional: allow `/health` port (`3001/tcp`) only from your Uptime Kuma host IP
+- Recommended: no inbound ports; use SSM Session Manager for access
+- Optional: allow `/health` port (`3001/tcp`) only from a trusted monitor (and only if the instance is reachable)
 - Do not expose WhatsApp/Baileys ports publicly (Garbanzo initiates outbound connections)
 
 ### 2) Install Docker
@@ -69,6 +69,17 @@ Scan the QR code from the logs on first run.
 
 - Use `GET /health` for informational status
 - Use `GET /health/ready` for alerting (503 when disconnected/stale)
+
+Hardened option (recommended): do not open port 3001 at all. Use SSM port forwarding when needed:
+
+```bash
+aws ssm start-session \
+  --target i-xxxxxxxxxxxxxxxxx \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["3001"],"localPortNumber":["3001"]}'
+
+curl http://127.0.0.1:3001/health
+```
 
 If you publish port `3001` publicly/within a VPC, restrict it to trusted monitors.
 
