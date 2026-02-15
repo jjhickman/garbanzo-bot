@@ -36,8 +36,19 @@ export class GarbanzoEc2Stack extends cdk.Stack {
     const logRetentionDaysRaw = optionalContext(app, 'logRetentionDays');
     const logRetentionDays = logRetentionDaysRaw ? Number.parseInt(logRetentionDaysRaw, 10) : 14;
 
-    // Default VPC keeps this easy to adopt.
-    const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
+    const networkMode = (optionalContext(app, 'networkMode') ?? 'default').toLowerCase();
+
+    const vpc = networkMode === 'private'
+      ? new ec2.Vpc(this, 'GarbanzoVpc', {
+        maxAzs: 2,
+        natGateways: 1,
+        subnetConfiguration: [
+          { name: 'public', subnetType: ec2.SubnetType.PUBLIC },
+          { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        ],
+      })
+      // Default VPC keeps this easy to adopt.
+      : ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
 
     const sg = new ec2.SecurityGroup(this, 'GarbanzoSg', {
       vpc,
@@ -113,7 +124,11 @@ export class GarbanzoEc2Stack extends cdk.Stack {
 
     const instance = new ec2.Instance(this, 'GarbanzoEc2', {
       vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      vpcSubnets: {
+        subnetType: networkMode === 'private'
+          ? ec2.SubnetType.PRIVATE_WITH_EGRESS
+          : ec2.SubnetType.PUBLIC,
+      },
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3A, ec2.InstanceSize.SMALL),
       machineImage,
       securityGroup: sg,
@@ -179,11 +194,20 @@ APP_VERSION="$APP_VERSION" docker compose -f docker-compose.yml -f docker-compos
     );
 
     new cdk.CfnOutput(this, 'InstanceId', { value: instance.instanceId });
-    new cdk.CfnOutput(this, 'PublicIp', { value: instance.instancePublicIp });
     new cdk.CfnOutput(this, 'CloudWatchLogGroup', { value: logGroup.logGroupName });
-    new cdk.CfnOutput(this, 'HealthUrl', {
-      value: `http://${instance.instancePublicIp}:3001/health`,
-      description: 'Only reachable if allowedHealthCidr is set and matches your source IP',
-    });
+
+    if (networkMode === 'private') {
+      new cdk.CfnOutput(this, 'PrivateIp', { value: instance.instancePrivateIp });
+      new cdk.CfnOutput(this, 'HealthUrl', {
+        value: `http://${instance.instancePrivateIp}:3001/health`,
+        description: 'Only reachable from within the VPC (or via SSM port forwarding)',
+      });
+    } else {
+      new cdk.CfnOutput(this, 'PublicIp', { value: instance.instancePublicIp });
+      new cdk.CfnOutput(this, 'HealthUrl', {
+        value: `http://${instance.instancePublicIp}:3001/health`,
+        description: 'Only reachable if allowedHealthCidr is set and matches your source IP',
+      });
+    }
   }
 }
