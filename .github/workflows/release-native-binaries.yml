@@ -39,7 +39,7 @@ jobs:
             binary_name: garbanzo
             pkg_target: node22-macos-arm64
             archive_ext: tar.gz
-          - os: macos-14
+          - os: macos-13
             bundle_name: garbanzo-macos-x64
             binary_name: garbanzo
             pkg_target: node22-macos-x64
