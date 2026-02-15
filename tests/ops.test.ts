@@ -67,6 +67,22 @@ describe('Health — connection state tracking', async () => {
     markConnected();
     expect(getConnectionState().reconnectCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('resets lastMessageAt on reconnect so readiness does not stick stale', () => {
+    markConnected();
+    markMessageReceived();
+    expect(getConnectionState().lastMessageAt).toBeTypeOf('number');
+
+    const baselineReconnects = getConnectionState().reconnectCount;
+
+    markDisconnected();
+    markConnected();
+
+    const state = getConnectionState();
+    expect(state.lastMessageAt).toBe(null);
+    expect(state.reconnectCount).toBe(baselineReconnects + 1);
+    expect(isConnectionStale()).toBe(false);
+  });
 });
 
 describe('Health endpoint — backup status and rate limiting', async () => {

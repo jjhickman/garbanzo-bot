@@ -38,12 +38,18 @@ const state: ConnectionState = {
 
 /** Call when WhatsApp connection opens */
 export function markConnected(): void {
-  if (state.status === 'connected' && state.connectedAt !== null) {
-    // Reconnection — increment counter
+  // Count reconnects when we have previously been connected in this process.
+  if (state.connectedAt !== null) {
     state.reconnectCount++;
   }
+
   state.status = 'connected';
   state.connectedAt = Date.now();
+
+  // Reset message freshness on reconnect.
+  // Otherwise, a stale `lastMessageAt` from a prior connection can cause `/health/ready`
+  // to remain 503 until a new message arrives.
+  state.lastMessageAt = null;
 }
 
 /** Call when WhatsApp connection closes */
