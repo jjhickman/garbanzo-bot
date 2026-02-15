@@ -352,6 +352,7 @@ npm run typecheck   # Type-check only
 npm run test        # Run all tests
 npm run lint        # ESLint
 npm run check       # Full pre-commit: secrets + typecheck + lint + test
+npm run release:plan # Dry-run release validation before tagging
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```

@@ -90,6 +90,9 @@ npm run start
 # Full pre-commit check (secrets + typecheck + lint + test)
 npm run check
 
+# Release dry-run validation before tagging
+npm run release:plan
+
 # GitHub account workflow helpers
 npm run gh:status
 npm run gh:dependabot

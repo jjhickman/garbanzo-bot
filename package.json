@@ -24,7 +24,8 @@
     "gh:ensure": "bash scripts/gh-workflow.sh ensure",
     "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
-    "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh"
+    "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh",
+    "release:plan": "node scripts/release-plan.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
