@@ -1,6 +1,7 @@
 import { bold } from '../utils/formatting.js';
 import { logger } from '../middleware/logger.js';
 import { getGroupName } from '../bot/groups.js';
+import { config } from '../utils/config.js';
 import {
   submitFeedback,
   getOpenFeedback,
@@ -8,6 +9,7 @@ import {
   getFeedbackById,
   setFeedbackStatus,
   upvoteFeedback,
+  linkFeedbackToGitHubIssue,
   type FeedbackEntry,
 } from '../utils/db.js';
 
@@ -95,6 +97,7 @@ export function handleFeedbackSubmit(
     `${bold('Description:')} ${trimmed}`,
     '',
     `Reply with: !feedback accept ${entry.id} / reject ${entry.id} / done ${entry.id}`,
+    `(After accept) !feedback issue ${entry.id} to open a GitHub issue`,
   ].join('\n');
 
   return { response, ownerAlert };
@@ -170,7 +173,87 @@ export function handleFeedbackOwner(args: string): string {
     '  !feedback accept <id> — accept an item',
     '  !feedback reject <id> — reject an item',
     '  !feedback done <id> — mark as completed',
+    '  !feedback issue <id> — create GitHub issue (accepted items only)',
   ].join('\n');
+}
+
+/**
+ * Create and link a GitHub issue from an accepted feedback item.
+ */
+export async function createGitHubIssueFromFeedback(id: number): Promise<string> {
+  const entry = getFeedbackById(id);
+  if (!entry) {
+    return `No feedback item found with ID #${id}.`;
+  }
+
+  if (entry.status !== 'accepted') {
+    return `Item #${id} must be ${bold('accepted')} before creating a GitHub issue. Use: !feedback accept ${id}`;
+  }
+
+  if (entry.github_issue_url) {
+    return `🔗 Item #${id} is already linked: ${entry.github_issue_url}`;
+  }
+
+  if (!config.GITHUB_ISSUES_TOKEN) {
+    return '❌ GITHUB_ISSUES_TOKEN is not configured in .env.';
+  }
+
+  const [owner, repo] = config.GITHUB_ISSUES_REPO.split('/');
+  const issueTitle = `${entry.type === 'bug' ? 'Bug' : 'Feature'}: ${truncateText(entry.text, 80)}`;
+  const groupName = entry.group_jid ? getGroupName(entry.group_jid) : 'DM';
+
+  const issueBody = [
+    `Imported from Garbanzo feedback item #${entry.id}.`,
+    '',
+    `${bold('Type')}: ${entry.type}`,
+    `${bold('From')}: ${entry.sender}`,
+    `${bold('Group')}: ${groupName}`,
+    `${bold('Upvotes')}: ${entry.upvotes}`,
+    '',
+    `${bold('Description')}:`,
+    entry.text,
+  ].join('\n');
+
+  try {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${config.GITHUB_ISSUES_TOKEN}`,
+        'content-type': 'application/json',
+        accept: 'application/vnd.github+json',
+        'user-agent': 'garbanzo-feedback-bot',
+      },
+      body: JSON.stringify({
+        title: issueTitle,
+        body: issueBody,
+        labels: ['feedback', entry.type],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error({
+        status: response.status,
+        repo: config.GITHUB_ISSUES_REPO,
+        feedbackId: id,
+        errorText,
+      }, 'Failed to create GitHub issue from feedback');
+      return `❌ Failed to create issue: GitHub API ${response.status}`;
+    }
+
+    const data = await response.json() as { number: number; html_url: string };
+    const linked = linkFeedbackToGitHubIssue(id, data.number, data.html_url);
+    if (!linked) {
+      return `⚠️ Created issue ${data.html_url} but failed to store local link.`;
+    }
+
+    logger.info({ feedbackId: id, issueNumber: data.number, issueUrl: data.html_url }, 'Created GitHub issue from feedback');
+    return `✅ Created GitHub issue for #${id}: ${data.html_url}`;
+  } catch (err) {
+    logger.error({ err, feedbackId: id, repo: config.GITHUB_ISSUES_REPO }, 'Error creating GitHub issue from feedback');
+    return '❌ Failed to create issue due to network/auth error.';
+  }
 }
 
 // ── Formatting helpers ──────────────────────────────────────────────
@@ -195,7 +278,10 @@ function handleStatusChange(
 
   const emoji = { accepted: '✅', rejected: '❌', done: '🏁' }[status];
   const label = entry.type === 'suggestion' ? 'Suggestion' : 'Bug';
-  return `${emoji} ${label} #${id} marked as ${bold(status)}.\n"${truncateText(entry.text, 100)}"`;
+  const issueHint = status === 'accepted'
+    ? `\nUse !feedback issue ${id} to create a GitHub issue.`
+    : '';
+  return `${emoji} ${label} #${id} marked as ${bold(status)}.\n"${truncateText(entry.text, 100)}"${issueHint}`;
 }
 
 function formatFeedbackList(
@@ -221,7 +307,8 @@ function formatFeedbackList(
       month: 'short',
       day: 'numeric',
     });
-    return `${emoji} #${item.id}${statusBadge}${votes} — ${truncateText(item.text, 80)}\n   _${item.sender} · ${group} · ${date}_`;
+    const issueLink = item.github_issue_url ? `\n   🔗 ${item.github_issue_url}` : '';
+    return `${emoji} #${item.id}${statusBadge}${votes} — ${truncateText(item.text, 80)}\n   _${item.sender} · ${group} · ${date}_${issueLink}`;
   });
 
   return [header, '', ...lines].join('\n');
