@@ -95,7 +95,7 @@ function mockHandlerDeps(): HandlerMocks {
   vi.doMock('../src/middleware/health.js', () => ({ markMessageReceived }));
   vi.doMock('../src/platforms/whatsapp/owner-commands.js', () => ({ handleOwnerDM }));
   vi.doMock('../src/platforms/whatsapp/group-handler.js', () => ({ handleGroupMessage: vi.fn(async () => undefined) }));
-  vi.doMock('../src/bot/reactions.js', () => ({
+  vi.doMock('../src/platforms/whatsapp/reactions.js', () => ({
     isReplyToBot: vi.fn(() => false),
     isAcknowledgment: vi.fn(() => false),
   }));
