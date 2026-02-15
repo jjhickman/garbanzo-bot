@@ -1,5 +1,4 @@
 import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
 import { matchFeature } from '../features/router.js';
 import { handlePoll, isDuplicatePoll, recordPoll } from '../features/polls.js';
 import { handleCharacter } from '../features/character.js';
@@ -20,6 +19,7 @@ export interface ProcessGroupMessageParams {
   chatId: string;
   senderId: string;
   groupName: string;
+  ownerId: string;
 
   /** Mention-stripped query string (optionally enriched, e.g. with URL context). */
   query: string;
@@ -46,6 +46,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     chatId,
     senderId,
     groupName,
+    ownerId,
     query,
     quotedText,
     messageId,
@@ -76,6 +77,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
       messenger,
       chatId,
       senderId,
+      ownerId,
       query,
       replyTo,
     });
@@ -99,6 +101,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     await handleCharacterCommand({
       messenger,
       chatId,
+      ownerId,
       featureQuery: featureCheck.query,
       replyTo,
     });
@@ -159,10 +162,11 @@ async function handleFeedbackCommand(params: {
   messenger: PlatformMessenger;
   chatId: string;
   senderId: string;
+  ownerId: string;
   query: string;
   replyTo?: unknown;
 }): Promise<void> {
-  const { messenger, chatId, senderId, query, replyTo } = params;
+  const { messenger, chatId, senderId, ownerId, query, replyTo } = params;
 
   const bangWord = query.trim().split(/\s+/)[0].toLowerCase().replace('!', '');
   const feedbackArgs = query.trim().slice(query.trim().indexOf(' ') + 1).trim();
@@ -173,9 +177,9 @@ async function handleFeedbackCommand(params: {
     await messenger.sendText(chatId, result.response, { replyTo });
     if (result.ownerAlert) {
       try {
-        await messenger.sendText(config.OWNER_JID, result.ownerAlert);
+        await messenger.sendText(ownerId, result.ownerAlert);
       } catch (err) {
-        logger.error({ err, ownerJid: config.OWNER_JID, senderId, chatId, type: 'suggestion' }, 'Failed to forward feedback to owner');
+        logger.error({ err, ownerId, senderId, chatId, type: 'suggestion' }, 'Failed to forward feedback to owner');
       }
     }
     recordBotResponse(chatId);
@@ -188,9 +192,9 @@ async function handleFeedbackCommand(params: {
     await messenger.sendText(chatId, result.response, { replyTo });
     if (result.ownerAlert) {
       try {
-        await messenger.sendText(config.OWNER_JID, result.ownerAlert);
+        await messenger.sendText(ownerId, result.ownerAlert);
       } catch (err) {
-        logger.error({ err, ownerJid: config.OWNER_JID, senderId, chatId, type: 'bug' }, 'Failed to forward feedback to owner');
+        logger.error({ err, ownerId, senderId, chatId, type: 'bug' }, 'Failed to forward feedback to owner');
       }
     }
     recordBotResponse(chatId);
@@ -245,10 +249,11 @@ async function handlePollCommand(params: {
 async function handleCharacterCommand(params: {
   messenger: PlatformMessenger;
   chatId: string;
+  ownerId: string;
   featureQuery: string;
   replyTo?: unknown;
 }): Promise<void> {
-  const { messenger, chatId, featureQuery, replyTo } = params;
+  const { messenger, chatId, ownerId, featureQuery, replyTo } = params;
 
   const charResult = await handleCharacter(featureQuery);
   if (typeof charResult === 'string') {
@@ -283,7 +288,7 @@ async function handleCharacterCommand(params: {
   }
 
   recordBotResponse(chatId);
-  recordResponse(config.OWNER_JID, chatId);
+  recordResponse(ownerId, chatId);
 }
 
 async function handleVoiceFeature(params: {
