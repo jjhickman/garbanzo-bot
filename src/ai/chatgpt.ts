@@ -1,7 +1,5 @@
 /**
- * Claude-family cloud caller with timeout and circuit breaker.
- *
- * Handles OpenRouter Claude and Anthropic direct Claude.
+ * OpenAI chat caller with timeout and circuit breaker.
  */
 
 import { logger } from '../middleware/logger.js';
@@ -15,30 +13,25 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
 
-let consecutiveClaudeFailures = 0;
+let consecutiveOpenAIFailures = 0;
 let circuitOpenUntil = 0;
 
-export type ClaudeProvider = 'openrouter' | 'anthropic';
-
 /**
- * Call Claude providers with failover.
- *
- * Order: OpenRouter Claude -> Anthropic Claude.
+ * Call OpenAI chat completion as cloud fallback.
  */
-export async function callClaude(
-  provider: ClaudeProvider,
+export async function callChatGPT(
   systemPrompt: string,
   userMessage: string,
   visionImages?: VisionImage[],
 ): Promise<CloudResponse> {
   if (Date.now() < circuitOpenUntil) {
     const secondsRemaining = Math.ceil((circuitOpenUntil - Date.now()) / 1000);
-    throw new Error(`Claude circuit breaker open (${secondsRemaining}s remaining)`);
+    throw new Error(`OpenAI circuit breaker open (${secondsRemaining}s remaining)`);
   }
 
-  const req = buildProviderRequest(provider, systemPrompt, userMessage, visionImages);
+  const req = buildProviderRequest('openai', systemPrompt, userMessage, visionImages);
   if (!req) {
-    throw new Error(`${provider} provider not configured`);
+    throw new Error('OPENAI_API_KEY not configured');
   }
 
   const controller = new AbortController();
@@ -51,7 +44,7 @@ export async function callClaude(
       endpoint: req.endpoint,
       hasVision: !!visionImages?.length,
       imageCount: visionImages?.length ?? 0,
-    }, 'Calling Claude provider');
+    }, 'Calling OpenAI provider');
 
     const response = await fetch(req.endpoint, {
       method: 'POST',
@@ -62,35 +55,35 @@ export async function callClaude(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
+      throw new Error(`openai API error ${response.status}: ${errorText}`);
     }
 
     const data: unknown = await response.json();
     const text = req.parser(data).trim();
-    if (!text) throw new Error(`${req.provider} returned empty response`);
+    if (!text) throw new Error('openai returned empty response');
 
-    consecutiveClaudeFailures = 0;
+    consecutiveOpenAIFailures = 0;
     circuitOpenUntil = 0;
-    return { text, provider: req.provider, model: req.model };
+    return { text, provider: 'openai', model: req.model };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    consecutiveOpenAIFailures += 1;
+
+    if (consecutiveOpenAIFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+      logger.warn({
+        consecutiveOpenAIFailures,
+        cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
+      }, 'OpenAI circuit breaker opened after repeated failures');
+    }
+
     logger.warn({
       provider: req.provider,
       model: req.model,
       endpoint: req.endpoint,
       timeoutMs: REQUEST_TIMEOUT_MS,
       err: error,
-    }, 'Claude provider failed');
-
-    consecutiveClaudeFailures += 1;
-    if (consecutiveClaudeFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
-      logger.warn({
-        consecutiveClaudeFailures,
-        cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
-      }, 'Claude circuit breaker opened after repeated failures');
-    }
-
+    }, 'OpenAI provider failed');
     throw error;
   } finally {
     clearTimeout(timeout);
