@@ -59,6 +59,8 @@ After deploy, overwrite both parameters with real values using the AWS CLI.
 
 ## Deploy
 
+Public subnet (default VPC; easiest to start):
+
 ```bash
 cd infra/cdk
 
@@ -68,7 +70,19 @@ cdk deploy \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
 
-Optionally restrict health endpoint:
+Hardened (private subnets + NAT; no public IP; access via SSM):
+
+```bash
+cdk deploy \
+  -c networkMode=private \
+  -c appVersion=0.1.1 \
+  -c envParamName=/garbanzo/prod/env \
+  -c groupsParamName=/garbanzo/prod/groups_json
+```
+
+Note: private mode creates a new VPC and a NAT gateway (ongoing cost).
+
+Optionally restrict health endpoint (only useful if you have VPC connectivity to the instance):
 
 ```bash
 cdk deploy \
