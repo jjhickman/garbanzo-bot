@@ -7,12 +7,12 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
   return {
     platform: 'whatsapp',
 
-    async sendText(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<void> {
+    async sendText(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       const replyTo = options?.replyTo as WAMessage | undefined;
       await sock.sendMessage(chatId, { text }, replyTo ? { quoted: replyTo } : undefined);
     },
 
-    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<MessageRef> {
+    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<MessageRef> {
       const replyTo = options?.replyTo as WAMessage | undefined;
       return await sock.sendMessage(chatId, { text }, replyTo ? { quoted: replyTo } : undefined);
     },
@@ -30,7 +30,7 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
       });
     },
 
-    async sendAudio(chatId: string, audio: { bytes: Uint8Array; mimetype: string; ptt?: boolean }, options?: { replyTo?: unknown }): Promise<void> {
+    async sendAudio(chatId: string, audio: { bytes: Uint8Array; mimetype: string; ptt?: boolean }, options?: { replyTo?: MessageRef }): Promise<void> {
       const replyTo = options?.replyTo as WAMessage | undefined;
       await sock.sendMessage(chatId, {
         audio: Buffer.from(audio.bytes),

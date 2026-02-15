@@ -24,12 +24,12 @@ export interface PlatformMessenger extends MessagingAdapter {
   sendPoll(chatId: string, poll: PollPayload): Promise<void>;
 
   /** Returns a platform-specific message ref for optional deletes. */
-  sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<MessageRef>;
+  sendTextWithRef(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<MessageRef>;
 
   /** Returns a platform-specific message ref for optional deletes. */
   sendDocument(chatId: string, doc: DocumentPayload): Promise<MessageRef>;
 
-  sendAudio(chatId: string, audio: AudioPayload, options?: { replyTo?: unknown }): Promise<void>;
+  sendAudio(chatId: string, audio: AudioPayload, options?: { replyTo?: MessageRef }): Promise<void>;
 
   deleteMessage(chatId: string, messageRef: MessageRef): Promise<void>;
 }

@@ -67,7 +67,7 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
   const adapter: PlatformMessenger = {
     platform: 'slack',
 
-    async sendText(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<void> {
+    async sendText(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       outbox.push({
         type: 'text',
         chatId,
@@ -83,7 +83,7 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
       });
     },
 
-    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: unknown }): Promise<MessageRef> {
+    async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<MessageRef> {
       const ref = nextRef(chatId);
       outbox.push({
         type: 'text',
@@ -103,7 +103,7 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
       return ref;
     },
 
-    async sendAudio(chatId: string, audio: AudioPayload, options?: { replyTo?: unknown }): Promise<void> {
+    async sendAudio(chatId: string, audio: AudioPayload, options?: { replyTo?: MessageRef }): Promise<void> {
       outbox.push({
         type: 'audio',
         chatId,

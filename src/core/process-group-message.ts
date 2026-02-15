@@ -11,6 +11,7 @@ import { recordBotResponse } from '../middleware/stats.js';
 import { queueRetry } from '../middleware/retry.js';
 import type { MessageContext } from '../ai/persona.js';
 import type { VisionImage } from './vision.js';
+import type { MessageRef } from './message-ref.js';
 import type { PlatformMessenger } from './platform-messenger.js';
 
 export interface ProcessGroupMessageParams {
@@ -34,7 +35,7 @@ export interface ProcessGroupMessageParams {
 
   quotedText?: string;
   messageId?: string;
-  replyTo?: unknown;
+  replyTo?: MessageRef;
 
   visionImages?: VisionImage[];
 }
