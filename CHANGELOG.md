@@ -4,48 +4,25 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
-### Added — Multimedia
-- **Image/sticker/GIF understanding** — send media with @mention or reply to media, bot describes and responds via Claude Vision API
-- **Video understanding** — extracts frames via ffmpeg, sends to Claude Vision for analysis
-- **Voice message transcription** — incoming voice notes auto-transcribed via local Whisper (Speaches API on port 8090)
-- **Voice replies** (`!voice`) — bot speaks text aloud using Piper TTS, 6 voices across 5 languages (English US/UK, Spanish, French, German, Portuguese), auto-selects voice based on detected language
-- **YouTube transcription** — shared YouTube links auto-transcribed via yt-dlp + Whisper, summarized by Claude
-- **URL understanding** — shared links fetched, content extracted, and summarized in AI context
+- (no entries yet)
 
-### Added — Phase 6: Advanced Intelligence
-- **Member profiles** (`!profile`) — opt-in interest tracking, display names, activity stats, `!profile delete` for data removal
-- **Event recommendations** (`!recommend`, `!recs`) — Claude-powered suggestions based on member interests
-- **Conversation summaries** (`!summary`, `!catchup`, `!missed`) — AI-generated summaries of recent group chat
-- **Multi-language support** — detects 11 languages (Spanish, Portuguese, French, Italian, German, Chinese, Japanese, Korean, Arabic, Hindi, Russian), instructs Claude to respond in kind
-- **Garbanzo memory** (`!memory`) — owner stores long-term community facts (venues, traditions, events) that persist in AI context
-- **Custom per-group personas** — each WhatsApp group gets tailored bot personality via `config/groups.json`
-- **Security hardening** — input sanitization middleware: control char stripping, 4096-char limit, prompt injection detection + defanging, JID validation
-- **Context compression** — two-tier system: last 5 messages verbatim, older 25 extractively compressed with per-group caching (10-min TTL)
+> Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
-### Added — Phase 5: Operations & Reliability
-- **Health check HTTP endpoint** — `GET http://127.0.0.1:3001/health` returns JSON status (connection, uptime, memory, staleness)
-- **Connection staleness detection** — auto-reconnect if no messages for 30+ minutes
-- **Ollama warm-up ping** — keep-alive every 10 minutes prevents model unload
-- **SQLite auto-vacuum** — daily at 4 AM: prune messages >30 days + VACUUM
-- **Cost tracking** — token estimation per Claude call, daily spend tracking, $1/day alert threshold
-- **Feature flags per group** — optional `enabledFeatures` array in groups.json
-- **Dead letter retry** — failed AI responses retried once after 30s (in-memory queue, max 50)
-- **Automated SQLite backup** — nightly VACUUM INTO to `data/backups/`, 7-day retention
-- **Memory watchdog** — warns at 500MB RSS, exits at 1GB (systemd restarts)
-- **Graceful shutdown** — SIGTERM handler: clears retry queue, stops warmup/health/db timers
+## [0.1.2] — 2026-02-15
 
-### Added — Phase 4 (completion)
-- **Release notes** (`!release`) — owner broadcasts "what's new" to all groups or specific group
+### Added
+
+- **Slack demo runtime (local-only)** — run `MESSAGING_PLATFORM=slack` with `SLACK_DEMO=true` to exercise the core pipeline without Slack APIs (HTTP `/slack/demo` endpoint)
 
 ### Fixed
-- **Introductions bug** — rewrote `looksLikeIntroduction()` from naive 40-char length check to signal-based classifier with strong/weak intro signals and negative filters
-- **Japanese language detection** — reordered CJK script patterns so hiragana/katakana checked before Chinese characters (which overlap in Unicode range)
-- **Empty interests edge case** — `!profile interests` with no arguments now shows error instead of blank profile
-- **Memory add edge case** — `!memory add` with no arguments now shows usage instead of generic help
+
+- **Readiness sticking stale after reconnect** — `/health/ready` no longer returns 503 with `stale=true` immediately after a successful WhatsApp reconnect
+- **CI sqlite flakiness** — Vitest workers now use per-process sqlite DB paths under `os.tmpdir()` to avoid `SQLITE_BUSY` / WAL contention
 
 ### Changed
-- **PERSONA.md** — added "Bot Identity (Anti-Uncanny-Valley)" section: no fake experiences, no performative empathy, slight mechanical edge preferred
-- **Help command** — updated with all Phase 6 commands, added separate owner help (`!help admin`)
+
+- **Core/platform refactor** — core inbound and group processing lives under `src/core/*`; WhatsApp runtime and platform-specific helpers live under `src/platforms/whatsapp/*`
+- **Docs** — README and architecture docs updated to match current layout; Docker Hub overview updated with troubleshooting notes
 
 ## [0.4.0] — 2026-02-13
 

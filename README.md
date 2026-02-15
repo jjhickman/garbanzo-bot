@@ -464,15 +464,15 @@ By default, `docker compose up -d` runs the published `latest` image.
 To deploy a specific release image:
 
 ```bash
-APP_VERSION=0.1.1 docker compose pull garbanzo
-APP_VERSION=0.1.1 docker compose up -d
+APP_VERSION=0.1.2 docker compose pull garbanzo
+APP_VERSION=0.1.2 docker compose up -d
 ```
 
 Recommended (production) — pin a version and force pulls (prevents accidentally running a stale cached image):
 
 ```bash
-APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development (build from source):
