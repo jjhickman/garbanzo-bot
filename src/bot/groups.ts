@@ -14,7 +14,8 @@ const GroupConfigSchema = z.object({
 });
 
 const GroupsConfigSchema = z.object({
-  groups: z.record(GroupConfigSchema),
+  // Zod v4 requires both key and value schemas for records.
+  groups: z.record(z.string(), GroupConfigSchema),
   mentionPatterns: z.array(z.string()),
   admins: z.object({
     owner: z.object({ name: z.string(), jid: z.string() }),
