@@ -14,7 +14,7 @@
 import { logger } from '../middleware/logger.js';
 import { getMessages, type DbMessage } from '../utils/db.js';
 import { getAIResponse } from '../ai/router.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 
 const DEFAULT_MESSAGE_COUNT = 50;
 const MAX_MESSAGE_COUNT = 200;

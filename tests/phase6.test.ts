@@ -325,7 +325,7 @@ describe('Router — new Phase 6 bang commands', async () => {
 // ── Feature flags — group-level control ─────────────────────────────
 
 describe('Feature flags — per-group persona', async () => {
-  const { getGroupPersona } = await import('../src/bot/groups.js');
+  const { getGroupPersona } = await import('../src/core/groups-config.js');
 
   it('returns persona for configured groups', () => {
     const generalJid = '120363423357339667@g.us';

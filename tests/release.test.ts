@@ -7,7 +7,7 @@ describe('release notes helper', () => {
   });
 
   function mockReleaseDeps() {
-    vi.doMock('../src/bot/groups.js', () => ({
+    vi.doMock('../src/core/groups-config.js', () => ({
       GROUP_IDS: {
         'general@g.us': { name: 'General', enabled: true },
         'events@g.us': { name: 'Events', enabled: true },

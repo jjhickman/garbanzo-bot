@@ -30,7 +30,7 @@ describe('Formatted output snapshots', () => {
       })),
     }));
 
-    vi.doMock('../src/bot/groups.js', () => ({
+    vi.doMock('../src/core/groups-config.js', () => ({
       getGroupName: vi.fn((jid: string) => {
         if (jid === 'general@g.us') return 'General';
         if (jid === 'events@g.us') return 'Events';

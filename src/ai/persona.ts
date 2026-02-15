@@ -4,7 +4,7 @@ import { logger } from '../middleware/logger.js';
 import { PROJECT_ROOT, config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import { INTRO_SYSTEM_ADDENDUM } from '../features/introductions.js';
-import { getGroupPersona, getEnabledGroupJidByName } from '../bot/groups.js';
+import { getGroupPersona, getEnabledGroupJidByName } from '../core/groups-config.js';
 import { formatContext } from '../middleware/context.js';
 import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPrompt } from '../utils/db.js';

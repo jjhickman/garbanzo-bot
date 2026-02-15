@@ -22,7 +22,7 @@ import {
   deleteProfileData,
   type MemberProfile,
 } from '../utils/db.js';
-import { getGroupName } from '../bot/groups.js';
+import { getGroupName } from '../core/groups-config.js';
 
 /**
  * Handle !profile commands. Returns a response string.
