@@ -5,7 +5,7 @@
  */
 
 import { logger } from '../middleware/logger.js';
-import type { VisionImage } from '../features/media.js';
+import type { VisionImage } from '../core/vision.js';
 import {
   buildProviderRequest,
   type CloudResponse,

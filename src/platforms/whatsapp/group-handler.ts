@@ -3,7 +3,8 @@ import type { WASocket, WAMessage, WAMessageContent } from '@whiskeysockets/bail
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import { requiresMention, isMentioned, stripMention, getGroupName, isFeatureEnabled } from '../../bot/groups.js';
-import { extractMedia, prepareForVision, type VisionImage } from '../../features/media.js';
+import { prepareForVision, type VisionImage } from '../../core/vision.js';
+import { extractMedia } from './media.js';
 import {
   extractWhatsAppMentionedJids as extractMentionedJids,
   extractWhatsAppQuotedText as extractQuotedText,

@@ -16,7 +16,7 @@ import { handleCharacter } from '../features/character.js';
 import { handleProfile } from '../features/profiles.js';
 import { handleSummary } from '../features/summary.js';
 import { handleRecommendations } from '../features/recommendations.js';
-import type { VisionImage } from '../features/media.js';
+import type { VisionImage } from '../core/vision.js';
 
 /**
  * Try feature-specific handlers first, then fall back to general AI.

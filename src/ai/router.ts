@@ -17,7 +17,7 @@ import { callClaude } from './claude.js';
 import { callChatGPT } from './chatgpt.js';
 import { callGemini } from './gemini.js';
 import type { CloudProvider, CloudResponse } from './cloud-providers.js';
-import type { VisionImage } from '../features/media.js';
+import type { VisionImage } from '../core/vision.js';
 
 /**
  * Route a user query to the appropriate AI model and return the response.
