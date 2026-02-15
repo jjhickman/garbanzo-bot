@@ -375,6 +375,8 @@ docker compose logs -f garbanzo
 curl http://127.0.0.1:3001/health
 ```
 
+By default, `docker compose up -d` runs the published `latest` image.
+
 To deploy a specific release image:
 
 ```bash
@@ -382,10 +384,25 @@ APP_VERSION=0.1.1 docker compose pull garbanzo
 APP_VERSION=0.1.1 docker compose up -d
 ```
 
+Recommended (production) — pin a version and force pulls (prevents accidentally running a stale cached image):
+
+```bash
+APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Local development (build from source):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
 Cross-platform portable binaries are published on version tags (`v*`) as release assets:
 
 - `garbanzo-linux-x64.tar.gz`
-- `garbanzo-macos.tar.gz`
+- `garbanzo-linux-arm64.tar.gz`
+- `garbanzo-macos-arm64.tar.gz`
+- `garbanzo-macos-x64.tar.gz`
 - `garbanzo-windows-x64.zip`
 
 Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
