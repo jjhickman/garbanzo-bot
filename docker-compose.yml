@@ -31,9 +31,9 @@ services:
       - HEALTH_PORT=${HEALTH_PORT:-3001}
       - HEALTH_BIND_HOST=0.0.0.0
 
-    # Health check port (internal only by default)
+    # Health check port (reachable on LAN for external monitoring)
     ports:
-      - "127.0.0.1:3001:3001"
+      - "0.0.0.0:3001:3001"
 
     # Persistent data volumes
     volumes:
