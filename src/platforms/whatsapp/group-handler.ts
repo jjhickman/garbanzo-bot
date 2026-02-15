@@ -10,7 +10,7 @@ import {
   extractWhatsAppQuotedText as extractQuotedText,
 } from './inbound.js';
 import { processGroupMessage } from '../../core/process-group-message.js';
-import { getResponse } from '../../bot/response-router.js';
+import { getResponse } from '../../core/response-router.js';
 import { createWhatsAppAdapter } from './adapter.js';
 
 /**

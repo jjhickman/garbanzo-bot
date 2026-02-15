@@ -1,5 +1,4 @@
 import { logger } from '../middleware/logger.js';
-import { isFeatureEnabled } from './groups.js';
 import { getAIResponse } from '../ai/router.js';
 import { matchFeature } from '../features/router.js';
 import { handleWeather } from '../features/weather.js';
@@ -16,15 +15,17 @@ import { handleCharacter } from '../features/character.js';
 import { handleProfile } from '../features/profiles.js';
 import { handleSummary } from '../features/summary.js';
 import { handleRecommendations } from '../features/recommendations.js';
-import type { VisionImage } from '../core/vision.js';
+import type { VisionImage } from './vision.js';
+import type { MessageContext } from '../ai/persona.js';
 
 /**
  * Try feature-specific handlers first, then fall back to general AI.
- * Features are matched by keyword; if no feature matches, Claude handles it.
+ * Features are matched by keyword; if no feature matches, the AI handles it.
  */
 export async function getResponse(
   query: string,
-  ctx: import('../ai/persona.js').MessageContext,
+  ctx: MessageContext,
+  isFeatureEnabled: (chatId: string, feature: string) => boolean,
   visionImages?: VisionImage[],
 ): Promise<string | null> {
   const feature = matchFeature(query);
@@ -36,25 +37,27 @@ export async function getResponse(
       case 'help':
         return getHelpMessage();
       case 'weather':
-        return await handleWeather(feature.query);
+        return handleWeather(feature.query);
       case 'transit':
-        return await handleTransit(feature.query);
+        return handleTransit(feature.query);
       case 'news':
-        return await handleNews(feature.query);
+        return handleNews(feature.query);
       case 'events':
-        return await handleEvent(feature.query, ctx.senderJid, ctx.groupJid);
+        return handleEvent(feature.query, ctx.senderJid, ctx.groupJid);
       case 'roll':
       case 'dnd':
-        return await handleDnd(feature.query);
+        return handleDnd(feature.query);
       case 'books':
-        return await handleBooks(feature.query);
+        return handleBooks(feature.query);
       case 'venues':
-        return await handleVenues(feature.query);
-      case 'poll':
-        // Polls return string errors only — actual polls handled above
-        return typeof handlePoll(feature.query) === 'string' ? handlePoll(feature.query) as string : null;
+        return handleVenues(feature.query);
+      case 'poll': {
+        // Polls return string errors only — actual polls handled in group processor
+        const result = handlePoll(feature.query);
+        return typeof result === 'string' ? result : null;
+      }
       case 'fun':
-        return await handleFun(feature.query);
+        return handleFun(feature.query);
       case 'character': {
         // In getResponse (DM path), return text summary only — no PDF upload here
         const charResult = await handleCharacter(feature.query);
@@ -63,12 +66,12 @@ export async function getResponse(
       case 'profile':
         return handleProfile(feature.query, ctx.senderJid);
       case 'summary':
-        return await handleSummary(feature.query, ctx.groupJid, ctx.senderJid);
+        return handleSummary(feature.query, ctx.groupJid, ctx.senderJid);
       case 'recommend':
-        return await handleRecommendations(feature.query, ctx.senderJid, ctx.groupJid);
+        return handleRecommendations(feature.query, ctx.senderJid, ctx.groupJid);
     }
   }
 
   // No feature matched — general AI response (with optional vision)
-  return await getAIResponse(query, ctx, visionImages);
+  return getAIResponse(query, ctx, visionImages);
 }

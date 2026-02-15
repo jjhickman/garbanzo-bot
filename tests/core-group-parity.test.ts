@@ -90,7 +90,7 @@ function setupMocks() {
     prepareForVision: vi.fn(async () => []),
   }));
 
-  vi.doMock('../src/bot/response-router.js', () => ({
+  vi.doMock('../src/core/response-router.js', () => ({
     getResponse: vi.fn(async () => 'ai response'),
   }));
 

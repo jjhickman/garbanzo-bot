@@ -25,7 +25,12 @@ export interface ProcessGroupMessageParams {
   query: string;
 
   isFeatureEnabled: (chatId: string, feature: string) => boolean;
-  getResponse: (query: string, ctx: MessageContext, visionImages?: VisionImage[]) => Promise<string | null>;
+  getResponse: (
+    query: string,
+    ctx: MessageContext,
+    isFeatureEnabled: (chatId: string, feature: string) => boolean,
+    visionImages?: VisionImage[],
+  ) => Promise<string | null>;
 
   quotedText?: string;
   messageId?: string;
@@ -132,12 +137,17 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
 
   const enrichedQuery = urlContext ? query + urlContext : query;
 
-  const response = await getResponse(enrichedQuery, {
-    groupName,
-    groupJid: chatId,
-    senderJid: senderId,
-    quotedText,
-  }, visionImages);
+  const response = await getResponse(
+    enrichedQuery,
+    {
+      groupName,
+      groupJid: chatId,
+      senderJid: senderId,
+      quotedText,
+    },
+    isFeatureEnabled,
+    visionImages,
+  );
 
   if (response) {
     // If AI returned the error fallback, queue for retry instead of sending error
