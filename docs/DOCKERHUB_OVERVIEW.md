@@ -59,6 +59,10 @@ All tags are multi-arch where available:
 - This container persists WhatsApp auth state and SQLite data via Docker volumes.
 - Exposing the health port on your LAN is useful for Uptime Kuma, but you should restrict access to trusted hosts (firewall or reverse proxy).
 
+## License
+
+Garbanzo is source-available under the Prosperity Public License 3.0.0 (see `LICENSE` in the source repository). Noncommercial use is free; commercial use beyond the trial period requires a commercial license.
+
 Source code and docs: https://github.com/jjhickman/garbanzo-bot
 
 Docker Hub note: repository categories are set in the Docker Hub UI (the release workflow syncs overview + short description).

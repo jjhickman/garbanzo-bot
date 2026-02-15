@@ -37,6 +37,7 @@ FROM node:25-alpine
 ARG APP_VERSION=0.0.0
 LABEL org.opencontainers.image.title="Garbanzo"
 LABEL org.opencontainers.image.version="$APP_VERSION"
+LABEL org.opencontainers.image.licenses="https://prosperitylicense.com/versions/3.0.0.html"
 
 # dumb-init: proper PID 1 signal handling (SIGTERM → graceful shutdown)
 # ffmpeg: video frame extraction for Claude Vision
