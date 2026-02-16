@@ -1,4 +1,4 @@
-name: Deploy Support Site
+name: Deploy Website
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       siteDomainName:
-        description: 'Optional custom domain (example: garbanzobot.com)'
+        description: 'Optional custom domain (example: example.com)'
         required: false
       siteHostedZoneId:
         description: 'Optional Route53 hosted zone ID (required with custom domain)'
@@ -27,12 +27,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-support-site
+  group: deploy-website
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy GarbanzoSiteStack
+    name: Deploy website stack
     runs-on: ubuntu-latest
 
     steps:
@@ -114,7 +114,7 @@ jobs:
         run: npm run build
         working-directory: infra/cdk
 
-      - name: Deploy support site stack
+      - name: Deploy website stack
         shell: bash
         working-directory: infra/cdk
         env:
@@ -148,7 +148,7 @@ jobs:
           cloudfront_url="$(echo "$outputs_json" | jq -r '.[] | select(.OutputKey=="CloudFrontUrl") | .OutputValue // empty')"
 
           {
-            echo "## Support Site Deployment"
+            echo "## Website Deployment"
             echo ""
             if [[ -n "$website_url" ]]; then
               echo "- Website URL: $website_url"
