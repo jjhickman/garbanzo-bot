@@ -37,6 +37,10 @@ git push origin main --follow-tags
 
 4. GitHub Actions publish release artifacts:
 
+Notes:
+
+- The GitHub Release page is created/updated by the release workflows (not by a manual `gh release create`). It may take a few minutes after pushing the tag for the Release to appear and for assets to attach.
+
 - `ghcr.io/jjhickman/garbanzo:vX.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:X.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:latest` (only for non-prerelease tags)
