@@ -157,6 +157,14 @@ chmod +x .git/hooks/pre-commit
 3. Add the new credential to `.env` only
 4. If already pushed, consider using `git filter-repo` or BFG Repo-Cleaner to remove from history
 
+## Dependency Vulnerability Scanning
+
+**Added:** 2026-02-16 — powered by `npm audit` (built-in)
+
+- `npm run check` now includes `npm run audit:deps` (`npm audit --audit-level=high`)
+- Goal: fail fast on high/critical CVEs without adding new tooling or services
+- For ongoing automation, GitHub Dependabot alerts/updates are still recommended (separate from local checks)
+
 ## Runtime Hardening Updates
 
 **Added:** 2026-02-14 (Phase 7.8 partial)

@@ -260,7 +260,7 @@ Completed as part of 7.1 file splits:
 
 Research and adopt established, free, trustworthy tools for automated security. Don't hand-roll — use proven open-source solutions.
 
-1. [ ] **Dependency vulnerability scanning** — evaluate `npm audit`, Snyk (free tier), or Socket.dev for automated CVE detection on every `npm install`. Wire into `npm run check` or CI.
+1. [x] **Dependency vulnerability scanning** — evaluated `npm audit` vs Snyk/Socket.dev and wired `npm audit --audit-level=high` into `npm run check` (fast, zero new dependencies).
 2. [ ] **Host hardening audit** — evaluate [Lynis](https://github.com/CISOfy/lynis) (GPL, 13k+ stars) for automated CIS-style system audits on Terra. Run periodically, track score improvements.
 3. [ ] **Intrusion prevention** — evaluate [fail2ban](https://github.com/fail2ban/fail2ban) (GPL, 12k+ stars) for SSH brute-force protection. May already be partially configured via UFW.
 4. [ ] **Container security** — if Docker usage grows beyond Piper/Whisper, evaluate [Trivy](https://github.com/aquasecurity/trivy) (Apache 2.0, 24k+ stars) for image vulnerability scanning.
