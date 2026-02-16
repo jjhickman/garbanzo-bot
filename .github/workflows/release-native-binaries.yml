@@ -134,6 +134,21 @@ jobs:
 
           echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure GitHub Release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_tag.outputs.value }}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+
+          gh release create "$TAG" --title "$TAG" --generate-notes
+
       - name: Download built artifacts
         uses: actions/download-artifact@v4
         with:
