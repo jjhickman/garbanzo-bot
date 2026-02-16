@@ -18,8 +18,14 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
     },
 
     async sendPoll(chatId: string, poll: PollPayload): Promise<void> {
-      // Accept the core's opaque poll object and assert to Baileys poll payload.
-      await sock.sendMessage(chatId, { poll: poll as PollMessageOptions });
+      // Map the core poll payload into the Baileys poll message shape.
+      const payload: PollMessageOptions = {
+        name: poll.name,
+        values: poll.values,
+        selectableCount: poll.selectableCount,
+      };
+
+      await sock.sendMessage(chatId, { poll: payload });
     },
 
     async sendDocument(chatId: string, doc: { bytes: Uint8Array; mimetype: string; fileName: string }): Promise<MessageRef> {
