@@ -64,7 +64,11 @@ Notes:
   - `garbanzo-macos-arm64.tar.gz`
   - `garbanzo-windows-x64.zip`
 
-5. Open a release checklist issue from `.github/ISSUE_TEMPLATE/release-checklist.yml` and track deploy verification.
+5. Create a release checklist issue and track deploy verification:
+
+```bash
+npm run release:checklist -- --version=0.1.6
+```
 
 ## Version Injection Behavior
 
