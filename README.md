@@ -13,12 +13,6 @@
 
 A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and multi-provider AI routing (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
 
-## Current Status
-
-- Production runtime: WhatsApp (Slack local demo mode available for pipeline testing)
-- Latest tagged release: `v0.1.6`
-- Delivery state: Phases 1-7 complete, Phase 8 (platform expansion) queued
-
 ## Why Garbanzo
 
 - Turn busy group chats into actionable community coordination (events, plans, recs, summaries)
