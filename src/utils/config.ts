@@ -41,7 +41,7 @@ const envSchema = z.object({
   NEWSAPI_KEY: z.string().optional(),
   BRAVE_SEARCH_API_KEY: z.string().optional(),
 
-  // Optional support / patronage links
+  // Optional external links for owner messaging
   GITHUB_SPONSORS_URL: z.string().url().optional(),
   PATREON_URL: z.string().url().optional(),
   KOFI_URL: z.string().url().optional(),
@@ -50,7 +50,7 @@ const envSchema = z.object({
 
   // Optional GitHub issue automation for owner-approved feedback
   GITHUB_ISSUES_TOKEN: z.string().optional(),
-  GITHUB_ISSUES_REPO: z.string().default('jjhickman/garbanzo-bot'),
+  GITHUB_ISSUES_REPO: z.string().default('owner/repo'),
 
   // Infrastructure
   HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
