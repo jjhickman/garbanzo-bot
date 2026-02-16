@@ -29,4 +29,27 @@ describe('Slack demo runtime', () => {
     expect(payload.replyToId).toBe(inbound.raw.id);
     expect(payload.threadId).toBe(null);
   });
+
+  it('propagates inbound threadId into the outbox payload', async () => {
+    const outbox: Array<{ type: string; chatId: string; payload: unknown }> = [];
+    const messenger = createSlackDemoAdapter(outbox);
+
+    const inbound = normalizeSlackDemoInbound({
+      chatId: 'C123',
+      senderId: 'U123',
+      text: '@garbanzo !help',
+      isGroupChat: true,
+      threadId: 'th-1',
+    });
+
+    await processSlackDemoInbound(messenger, inbound, { ownerId: 'owner@s.whatsapp.net' });
+
+    expect(outbox.length).toBeGreaterThan(0);
+    const first = outbox[0];
+    expect(first.type).toBe('text');
+
+    const payload = first.payload as { replyToId?: unknown; threadId?: unknown };
+    expect(payload.replyToId).toBe(inbound.raw.id);
+    expect(payload.threadId).toBe('th-1');
+  });
 });
