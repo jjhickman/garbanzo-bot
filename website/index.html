@@ -6,45 +6,86 @@
     <title>Garbanzo</title>
     <meta
       name="description"
-      content="Garbanzo is an AI community bot for WhatsApp groups: events, recs, summaries, moderation signals, and owner operations."
+      content="Garbanzo is a multi-platform chat operations bot for communities and small teams."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="container">
       <section class="hero">
+        <p class="eyebrow">Multi-platform chat operations</p>
         <h1 id="title">Garbanzo</h1>
-        <p id="tagline"></p>
-        <p id="description"></p>
+        <p id="tagline" class="tagline"></p>
+        <p id="description" class="description"></p>
         <div class="actions">
-          <a id="ctaPrimary" class="button button-primary" href="#" target="_blank" rel="noreferrer">Support</a>
-          <a id="ctaSecondary" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Repository</a>
+          <a id="ctaPrimary" class="button button-primary" href="#" target="_blank" rel="noreferrer">Get Started</a>
+          <a id="ctaSecondary" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Support</a>
         </div>
       </section>
 
       <section class="grid" aria-label="Core strengths">
         <article class="card">
-          <h3>Community-first workflows</h3>
-          <p>Events, weather, transit, intros, summaries, polls, and owner-ready release broadcasts.</p>
+          <h3>Operator-first workflows</h3>
+          <p>Designed for real group operations: introductions, summaries, event planning, moderation signals, and owner controls.</p>
         </article>
         <article class="card">
-          <h3>Reliable operations</h3>
-          <p>Health and readiness checks, nightly SQLite backups, release automation, and rollback playbooks.</p>
+          <h3>Reliable release and deployment</h3>
+          <p>Health and readiness checks, rollback-friendly deployment flow, and predictable release tooling for stable operations.</p>
         </article>
         <article class="card">
-          <h3>Cost-aware AI routing</h3>
-          <p>Configurable provider ordering with local-routing options to balance quality, speed, and spend.</p>
+          <h3>AI routing with cost control</h3>
+          <p>Route across Claude, OpenAI, Gemini, and optional local Ollama to balance quality, latency, and spend.</p>
         </article>
+      </section>
+
+      <section class="platforms" aria-label="Platform posture">
+        <h2>Platform posture</h2>
+        <div class="platform-grid">
+          <article class="platform-card">
+            <h3>WhatsApp</h3>
+            <p><strong>Status:</strong> Production runtime</p>
+            <p>Best for community and self-hosted group operations.</p>
+          </article>
+          <article class="platform-card">
+            <h3>Slack</h3>
+            <p><strong>Status:</strong> Demo adapter runtime</p>
+            <p>Useful for pipeline verification and adapter development.</p>
+          </article>
+          <article class="platform-card">
+            <h3>Discord</h3>
+            <p><strong>Status:</strong> Demo adapter runtime</p>
+            <p>Available for local testing while production parity evolves.</p>
+          </article>
+          <article class="platform-card">
+            <h3>Teams</h3>
+            <p><strong>Status:</strong> Adapter target</p>
+            <p>Planned through the shared adapter architecture.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="release-policy" aria-label="Release communication policy">
+        <h2>Member-safe release updates</h2>
+        <p>
+          Garbanzo release updates in group chats are intentionally scoped to member-facing changes. Internal engineering changes stay in operator channels.
+        </p>
+        <ul>
+          <li>Broadcast only member-relevant updates.</li>
+          <li>Preview and lint release notes before sending.</li>
+          <li>Keep internal changes out of member chat by default.</li>
+        </ul>
       </section>
 
       <section class="support" id="support">
         <h2>Support Garbanzo</h2>
-        <p>If Garbanzo is useful to your community, sponsorship helps fund uptime, development, and support.</p>
+        <p id="supportBlurb">Support keeps maintenance, releases, and support response sustainable.</p>
         <ul id="supportLinks"></ul>
+
+        <div id="tierGrid" class="tier-grid" aria-label="Support tiers"></div>
       </section>
 
       <footer>
-        Built for real communities. Deployed via AWS + Docker. Open source with commercial licensing options.
+        Built for communities and small teams. Docker-first deployment. Source-available with commercial licensing options.
       </footer>
     </main>
 
@@ -83,14 +124,43 @@
         list.appendChild(li);
       }
 
+      function renderSupportTiers(tiers) {
+        const container = document.getElementById('tierGrid');
+        if (!container || !Array.isArray(tiers) || tiers.length === 0) return;
+
+        for (const tier of tiers) {
+          if (!tier || typeof tier !== 'object') continue;
+
+          const article = document.createElement('article');
+          article.className = 'tier-card';
+
+          const name = document.createElement('h3');
+          name.textContent = typeof tier.name === 'string' ? tier.name : 'Support Tier';
+
+          const summary = document.createElement('p');
+          summary.textContent = typeof tier.summary === 'string' ? tier.summary : '';
+
+          const fit = document.createElement('p');
+          fit.className = 'tier-fit';
+          fit.textContent = typeof tier.fit === 'string' ? tier.fit : '';
+
+          article.appendChild(name);
+          if (summary.textContent) article.appendChild(summary);
+          if (fit.textContent) article.appendChild(fit);
+
+          container.appendChild(article);
+        }
+      }
+
       loadConfig()
         .then((cfg) => {
           setText('title', cfg.title);
           setText('tagline', cfg.tagline);
           setText('description', cfg.description);
+          setText('supportBlurb', cfg.supportBlurb);
 
-          setLink('ctaPrimary', cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaPrimaryLabel || 'Support');
-          setLink('ctaSecondary', cfg.githubRepoUrl, cfg.ctaSecondaryLabel || 'Repository');
+          setLink('ctaPrimary', cfg.ctaPrimaryUrl || cfg.githubRepoUrl, cfg.ctaPrimaryLabel || 'Get Started');
+          setLink('ctaSecondary', cfg.ctaSecondaryUrl || cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaSecondaryLabel || 'Support');
 
           const list = document.getElementById('supportLinks');
           addSupportLink(list, 'GitHub Sponsors', cfg.githubSponsorsUrl);
@@ -102,6 +172,8 @@
             li.textContent = 'Support links are not configured yet.';
             list.appendChild(li);
           }
+
+          renderSupportTiers(cfg.supportTiers);
         })
         .catch((err) => {
           const list = document.getElementById('supportLinks');

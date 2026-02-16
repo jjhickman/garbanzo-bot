@@ -4,6 +4,16 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+- No unreleased changes yet.
+
+## [0.1.7] — 2026-02-16
+
+### Added
+
+- Added member-safe release communication controls with `!release rules`, preview-first send flow, operator-only internal notes, and force override support in `!release` command handling.
+- Added release checklist requirements for website deployment verification and release-preview approval before member broadcasts.
+- Added support tier messaging and CTA structure updates to website configuration for Patreon/Sponsors alignment.
+
 ### Changed
 
 - Setup wizard now supports Slack demo mode configuration (`--platform=slack --slack-demo=true`) and writes `SLACK_DEMO*` env settings.
@@ -18,7 +28,9 @@ All notable changes to Garbanzo are documented here.
 - Added explicit Gemini integration coverage tests (`tests/gemini.test.ts`) and updated README provider docs to include Gemini configuration and pricing fields.
 - Added optional custom-domain support to the static-site stack (`siteDomainName` + `siteHostedZoneId`).
 - Added GitHub Actions static-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
-- Updated website theme colors to match the Garbanzo logo palette.
+- Updated website content and README positioning to reflect multi-platform chat operations posture and sustainable support options.
+- Updated release docs and owner help text to use preview-before-send defaults for member updates.
+- Updated product roadmap/docs messaging to keep public guidance reusable and internal strategy private.
 - Hardened GitHub Actions AWS deploy role assumptions to least privilege for static-site automation.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.

@@ -1,11 +1,31 @@
 {
   "title": "Garbanzo",
-  "tagline": "AI community coordination for real group chats",
-  "description": "Garbanzo helps active communities organize events, answer questions, and keep momentum without burning out moderators.",
+  "tagline": "AI chat operations for communities and small teams",
+  "description": "Garbanzo helps operators run healthier group chats with summaries, moderation signals, release-safe communication, and deployable reliability.",
   "githubRepoUrl": "https://github.com/jjhickman/garbanzo-bot",
   "githubSponsorsUrl": "https://github.com/sponsors/jjhickman",
   "patreonUrl": "https://www.patreon.com/c/garbanzobot",
   "kofiUrl": "",
-  "ctaPrimaryLabel": "Support on Patreon",
-  "ctaSecondaryLabel": "View on GitHub"
+  "ctaPrimaryLabel": "Get Started",
+  "ctaPrimaryUrl": "https://github.com/jjhickman/garbanzo-bot",
+  "ctaSecondaryLabel": "Support Garbanzo",
+  "ctaSecondaryUrl": "https://www.patreon.com/c/garbanzobot",
+  "supportBlurb": "Choose the support level that matches your team and keeps the project sustainably maintained.",
+  "supportTiers": [
+    {
+      "name": "Bean Sprout",
+      "summary": "Roadmap updates and supporter shout-outs.",
+      "fit": "Best for individual supporters"
+    },
+    {
+      "name": "Steady Simmer",
+      "summary": "Priority issue triage and monthly maintainer notes.",
+      "fit": "Best for active community operators"
+    },
+    {
+      "name": "Kitchen Crew",
+      "summary": "Onboarding review queue and release planning input.",
+      "fit": "Best for teams running production deployments"
+    }
+  ]
 }

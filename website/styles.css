@@ -1,11 +1,13 @@
 :root {
-  --bg: #fdf6e3;
-  --card: #fff9ed;
-  --text: #3a2a18;
-  --muted: #6f5332;
-  --accent: #b88942;
-  --accent-2: #d8b16e;
-  --border: #e5d3af;
+  --bg: #f7efe2;
+  --surface: #fffaf1;
+  --surface-strong: #fff4df;
+  --text: #2d2519;
+  --muted: #5f4a2d;
+  --accent: #af7a2a;
+  --accent-strong: #8f5f16;
+  --border: #e4cfab;
+  --shadow: rgba(93, 64, 22, 0.18);
 }
 
 * {
@@ -14,43 +16,63 @@
 
 body {
   margin: 0;
-  font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
-  background: radial-gradient(circle at 14% 8%, #fffdf5 0%, var(--bg) 48%), linear-gradient(160deg, #fdf6e3, #f5e7c6 85%);
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
   color: var(--text);
+  background:
+    radial-gradient(circle at 14% 10%, #fffdf8 0%, transparent 45%),
+    radial-gradient(circle at 88% 0%, #f5e2be 0%, transparent 35%),
+    linear-gradient(160deg, var(--bg), #f2e1bf 84%);
 }
 
 .container {
-  max-width: 960px;
+  max-width: 1024px;
   margin: 0 auto;
   padding: 24px;
 }
 
 .hero {
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: 14px;
+  padding: 28px;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  background: linear-gradient(140deg, #fffdf7, #f5e7c6 70%);
-  box-shadow: 0 10px 28px rgba(122, 90, 43, 0.16);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #fffdf8, #f8e9cb 78%);
+  box-shadow: 0 12px 28px var(--shadow);
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--accent-strong);
+  font-weight: 700;
 }
 
 .hero h1 {
   margin: 0;
-  line-height: 1.1;
-  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1;
+  font-size: clamp(2rem, 5vw, 3.25rem);
 }
 
-.hero p {
+.tagline {
   margin: 0;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.description {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .actions {
+  margin-top: 4px;
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 12px;
 }
 
 .button {
@@ -60,23 +82,23 @@ body {
   padding: 12px 18px;
   font-weight: 700;
   border: 1px solid transparent;
-  transition: transform 140ms ease, box-shadow 140ms ease;
+  transition: transform 130ms ease, box-shadow 130ms ease;
 }
 
 .button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 16px rgba(122, 90, 43, 0.22);
+  box-shadow: 0 8px 16px var(--shadow);
 }
 
 .button-primary {
-  background: linear-gradient(135deg, #d8b16e, #b88942);
-  color: #2e2013;
+  background: linear-gradient(135deg, #d9ad62, var(--accent));
+  color: #2b1d10;
 }
 
 .button-secondary {
-  background: #fffaf0;
+  background: #fff6e6;
   color: var(--text);
-  border-color: #b88942;
+  border-color: var(--accent);
 }
 
 .grid {
@@ -90,12 +112,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
-  background: var(--card);
+  background: var(--surface);
 }
 
 .card h3 {
   margin: 0 0 8px;
-  font-size: 1.05rem;
+  font-size: 1.06rem;
 }
 
 .card p {
@@ -104,16 +126,59 @@ body {
   line-height: 1.45;
 }
 
+.platforms,
+.release-policy,
 .support {
   margin-top: 24px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 16px;
-  background: #fffaf0;
+  padding: 18px;
+  background: var(--surface-strong);
+}
+
+.platforms h2,
+.release-policy h2,
+.support h2 {
+  margin: 0 0 10px;
+}
+
+.platform-grid,
+.tier-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.platform-card,
+.tier-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.platform-card h3,
+.tier-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.platform-card p,
+.tier-card p,
+.release-policy p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.release-policy ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
 }
 
 .support ul {
-  margin: 10px 0 0;
+  margin: 0 0 14px;
   padding-left: 18px;
 }
 
@@ -122,11 +187,26 @@ body {
 }
 
 .support a {
-  color: #8b5e2b;
+  color: #7b4e18;
+}
+
+.tier-fit {
+  font-weight: 600;
+  color: #704716;
 }
 
 footer {
   color: var(--muted);
   margin: 24px 0 12px;
   font-size: 0.95rem;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 16px;
+  }
+
+  .hero {
+    padding: 20px;
+  }
 }

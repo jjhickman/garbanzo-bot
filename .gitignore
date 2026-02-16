@@ -8,3 +8,5 @@ data/
 .DS_Store
 release/
 infra/cdk/cdk.out/
+/ROADMAP.md
+/ROADMAP_EXECUTION.md
