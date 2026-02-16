@@ -86,6 +86,9 @@ describe('Media pipeline integration (mocked)', () => {
     expect(media?.type).toBe('image');
     expect(media?.caption).toBe('quoted caption');
     expect(downloadMediaMessage).toHaveBeenCalledTimes(1);
+
+    const firstArg = downloadMediaMessage.mock.calls[0]?.[0] as { key?: { remoteJid?: unknown } };
+    expect(firstArg.key?.remoteJid).toBe('test@g.us');
   });
 });
 
