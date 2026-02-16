@@ -63,7 +63,18 @@ npm run setup -- --non-interactive \
   --owner-jid=your_number@s.whatsapp.net
 ```
 
-## 6) After setup
+## 6) Slack demo mode (local dev only)
+
+```bash
+npm run setup -- --non-interactive --dry-run \
+  --platform=slack \
+  --slack-demo=true \
+  --providers=openai \
+  --openai-key=$OPENAI_API_KEY \
+  --owner-jid=your_number@s.whatsapp.net
+```
+
+## 7) After setup
 
 Default deployment (Docker Compose):
 
