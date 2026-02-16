@@ -1,0 +1,132 @@
+:root {
+  --bg: #f7f8fb;
+  --card: #ffffff;
+  --text: #162033;
+  --muted: #5b667a;
+  --accent: #0f8b8d;
+  --accent-2: #ff6b35;
+  --border: #dbe2ee;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Nunito", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 15% 10%, #e7f7f8 0%, var(--bg) 45%);
+  color: var(--text);
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(140deg, #ffffff, #f5fbff 65%);
+  box-shadow: 0 10px 28px rgba(18, 36, 60, 0.08);
+}
+
+.hero h1 {
+  margin: 0;
+  line-height: 1.1;
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.button {
+  display: inline-block;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(15, 139, 141, 0.18);
+}
+
+.button-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.button-secondary {
+  background: white;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.grid {
+  margin-top: 24px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--card);
+}
+
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.support {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+}
+
+.support ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.support li {
+  margin: 8px 0;
+}
+
+.support a {
+  color: var(--accent-2);
+}
+
+footer {
+  color: var(--muted);
+  margin: 24px 0 12px;
+  font-size: 0.95rem;
+}

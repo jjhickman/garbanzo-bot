@@ -59,6 +59,8 @@ After deploy, overwrite both parameters with real values using the AWS CLI.
 
 ## Deploy
 
+### Deploy Garbanzo app (EC2)
+
 Public subnet (default VPC; easiest to start):
 
 ```bash
@@ -91,6 +93,25 @@ cdk deploy \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
+
+## Deploy the support website (S3 + CloudFront)
+
+The same CDK app can deploy a simple static support/marketing site from `website/`.
+
+```bash
+cd infra/cdk
+
+cdk deploy GarbanzoSiteStack \
+  -c deployEc2=false \
+  -c deploySite=true
+```
+
+Optional context:
+
+- `-c siteBucketName=your-unique-bucket-name`
+- `-c sitePriceClass=100|200|all` (default `100`)
+
+After deploy, use the `WebsiteUrl` output as your public landing page URL.
 
 ## QR Linking
 
