@@ -111,6 +111,7 @@ gh repo edit --homepage "https://<website-url>"
 4. (Recommended) configure automatic website deploys from GitHub Actions:
 
 - Add `AWS_ROLE_TO_ASSUME` (secret or repo variable) with OIDC trust for this repo
+- Prefer least privilege: allow the GitHub role to assume CDK bootstrap roles + read stack outputs (instead of full `AdministratorAccess`)
 - Optional repo variables:
   - `AWS_REGION` (default `us-east-1`)
   - `SITE_DOMAIN_NAME` (e.g., `garbanzobot.com`)
