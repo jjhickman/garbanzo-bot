@@ -2,7 +2,7 @@
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
-A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and cloud AI routing. Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and multi-provider AI routing (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
 
 ## Current Status
 
@@ -30,7 +30,7 @@ Garbanzo is opinionated around community operations, not just message transport.
 
 - **Compared to API platforms (e.g. Twilio WhatsApp):** Twilio provides messaging primitives and sender onboarding APIs; Garbanzo ships community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage). Source: [Twilio WhatsApp docs](https://www.twilio.com/docs/whatsapp).
 - **Compared to WhatsApp client libraries (e.g. `whatsapp-web.js`, `@open-wa/wa-automate`):** those are foundational SDKs; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included. Sources: [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), [open-wa](https://github.com/open-wa/wa-automate-nodejs).
-- **AI cost/reliability posture:** configurable cloud provider ordering plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
+- **AI cost/reliability posture:** configurable cloud provider ordering across Claude/OpenAI/Gemini, plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
 - **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows.
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
@@ -313,11 +313,14 @@ Copy `.env.example` to `.env` and configure:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `MESSAGING_PLATFORM` | No | Messaging app target (`whatsapp` default; `slack` scaffold; `discord`/`teams` placeholder) |
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI failover) |
-| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `openai,openrouter,anthropic`) |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI/Gemini failover) |
+| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
 | `OPENAI_MODEL` | No | OpenAI fallback model override (default: `gpt-4.1`) |
+| `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
+| `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
+| `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
@@ -428,7 +431,7 @@ tests/
 
 - **Runtime:** Node.js 20+ / TypeScript (ES Modules, strict mode)
 - **WhatsApp:** @whiskeysockets/baileys v6 (multi-device)
-- **AI:** Ollama qwen3:8b (simple local queries) + configurable cloud failover chain (`AI_PROVIDER_ORDER`)
+- **AI:** Flexible multi-provider routing with configurable cloud priority (`AI_PROVIDER_ORDER`), per-provider model overrides, and optional local Ollama for low-cost/simple traffic
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
