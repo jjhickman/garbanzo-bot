@@ -191,6 +191,7 @@ async function main() {
     output.write('  npm run setup\n\n');
     output.write('Non-interactive examples:\n');
     output.write('  npm run setup -- --non-interactive --platform=whatsapp --deploy=docker --providers=openrouter,openai --provider-order=openai,openrouter\n');
+    output.write('  npm run setup -- --non-interactive --platform=slack --slack-demo=true --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('  npm run setup -- --non-interactive --providers=gemini --gemini-key=$GEMINI_API_KEY --gemini-model=gemini-1.5-flash --gemini-pricing-input-per-m=0.15 --gemini-pricing-output-per-m=0.60\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
@@ -261,6 +262,18 @@ async function main() {
           : platformIndex === 3
             ? 'discord'
             : 'whatsapp';
+    }
+
+    let slackDemo = false;
+    if (messagingPlatform === 'slack') {
+      if (nonInteractive) {
+        slackDemo = parseBoolean(cli.options['slack-demo'], parseBoolean(existing.SLACK_DEMO, true));
+      } else {
+        slackDemo = yn(
+          await rl.question('Enable local Slack demo mode? [Y/n] (required for Slack right now): '),
+          true,
+        );
+      }
     }
 
     let deployTarget = 'docker';
@@ -520,6 +533,9 @@ async function main() {
       APP_VERSION: (appVersion || existing.APP_VERSION || DEFAULT_APP_VERSION).trim(),
       HEALTH_PORT: (healthPort || existing.HEALTH_PORT || '3001').trim(),
       HEALTH_BIND_HOST: (healthBindHost || existing.HEALTH_BIND_HOST || '127.0.0.1').trim(),
+      SLACK_DEMO: (messagingPlatform === 'slack' ? String(slackDemo) : (existing.SLACK_DEMO || 'false')).trim(),
+      SLACK_DEMO_PORT: (existing.SLACK_DEMO_PORT || '3002').trim(),
+      SLACK_DEMO_BIND_HOST: (existing.SLACK_DEMO_BIND_HOST || '127.0.0.1').trim(),
       OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
     };
 
@@ -565,6 +581,9 @@ async function main() {
       `APP_VERSION=${finalEnv.APP_VERSION}`,
       `HEALTH_PORT=${finalEnv.HEALTH_PORT}`,
       `HEALTH_BIND_HOST=${finalEnv.HEALTH_BIND_HOST}`,
+      `SLACK_DEMO=${finalEnv.SLACK_DEMO}`,
+      `SLACK_DEMO_PORT=${finalEnv.SLACK_DEMO_PORT}`,
+      `SLACK_DEMO_BIND_HOST=${finalEnv.SLACK_DEMO_BIND_HOST}`,
       '',
     ].join('\n');
 
@@ -657,9 +676,18 @@ async function main() {
     output.write(`- Deploy target: ${deployTarget === 'docker' ? 'docker compose' : 'native node'}\n`);
     output.write(`- Write mode: ${dryRun ? 'preview only' : 'write files'}\n`);
 
-    if (messagingPlatform === 'discord') {
-      output.write('\n⚠️ Discord runtime support is planned but not implemented yet.\n');
-      output.write('   Current runtime supports WhatsApp only.\n');
+    if (messagingPlatform === 'discord' || messagingPlatform === 'teams') {
+      output.write(`\n⚠️ ${messagingPlatform.charAt(0).toUpperCase()}${messagingPlatform.slice(1)} runtime support is planned but not implemented yet.\n`);
+      output.write('   Current runtime support is WhatsApp, with local Slack demo mode for development.\n');
+    }
+
+    if (messagingPlatform === 'slack') {
+      output.write(`- Slack demo mode: ${finalEnv.SLACK_DEMO}\n`);
+      if (finalEnv.SLACK_DEMO !== 'true') {
+        output.write('\n⚠️ Slack runtime currently requires SLACK_DEMO=true.\n');
+      } else {
+        output.write('\nℹ️ Slack demo mode is local-only and does not connect to Slack APIs.\n');
+      }
     }
 
     if (deployTarget === 'docker') {
