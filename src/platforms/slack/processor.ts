@@ -26,6 +26,9 @@ const SlackDemoMessageSchema = z.object({
   text: z.string().default(''),
   isGroupChat: z.coerce.boolean().default(true),
   groupName: z.string().optional(),
+
+  // demo-only; used to simulate Slack thread replies
+  threadId: z.string().min(1).optional(),
 });
 
 export type SlackDemoMessage = z.infer<typeof SlackDemoMessageSchema>;
@@ -43,7 +46,15 @@ export function normalizeSlackDemoInbound(message: SlackDemoMessage): SlackInbou
     timestampMs: Date.now(),
     text: message.text,
     hasVisualMedia: false,
-    raw: createMessageRef({ platform: 'slack', chatId: message.chatId, id: messageId, ref: message }),
+    raw: createMessageRef({
+      platform: 'slack',
+      chatId: message.chatId,
+      id: messageId,
+      ref: {
+        kind: 'slack-demo-inbound',
+        threadId: message.threadId ?? null,
+      },
+    }),
   };
 }
 
