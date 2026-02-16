@@ -7,10 +7,17 @@ import {
 import { hasVisualMedia } from './media.js';
 import { getSenderJid, isGroupJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
+import { createMessageRef, type MessageRef } from '../../core/message-ref.js';
 
 export interface WhatsAppInbound extends InboundMessage {
   platform: 'whatsapp';
-  raw: WAMessage;
+
+  /** Native Baileys message, for WhatsApp-specific handling. */
+  waMessage: WAMessage;
+
+  /** Platform/core seam reference. */
+  raw: MessageRef;
+
   content: WAMessageContent | undefined;
 }
 
@@ -68,6 +75,8 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     ? msg.messageTimestamp
     : Number(msg.messageTimestamp ?? 0);
 
+  const messageId = msg.key.id ?? `wa-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
   return {
     platform: 'whatsapp',
     chatId,
@@ -81,7 +90,8 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     quotedText: extractWhatsAppQuotedText(content),
     mentionedIds: extractWhatsAppMentionedJids(content),
     hasVisualMedia: hasVisualMedia(msg),
-    raw: msg,
+    waMessage: msg,
+    raw: createMessageRef({ platform: 'whatsapp', chatId, id: messageId, ref: msg }),
     content,
   };
 }

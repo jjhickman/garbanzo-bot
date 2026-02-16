@@ -1,5 +1,5 @@
 import type { MessagingAdapter } from '../../core/messaging-adapter.js';
-import type { MessageRef } from '../../core/message-ref.js';
+import { createMessageRef, type MessageRef } from '../../core/message-ref.js';
 import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, DocumentPayload, AudioPayload } from '../../core/platform-messenger.js';
 
@@ -58,10 +58,11 @@ export function createSlackAdapter(): PlatformMessenger {
  * This is intended for local development only ("demo mode"), not for production.
  */
 export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): PlatformMessenger {
-  const nextRef = (chatId: string): MessageRef => ({
-    platform: 'slack-demo',
+  const nextRef = (chatId: string): MessageRef => createMessageRef({
+    platform: 'slack',
     chatId,
-    id: `demo-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: `slack-demo-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ref: { kind: 'slack-demo' },
   });
 
   const adapter: PlatformMessenger = {

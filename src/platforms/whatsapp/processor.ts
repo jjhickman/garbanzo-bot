@@ -54,12 +54,12 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
 
     sendAcknowledgmentReaction: async (m) => {
       const wa = m as WhatsAppInbound;
-      await sock.sendMessage(wa.chatId, { react: { text: '🫘', key: wa.raw.key } });
+      await sock.sendMessage(wa.chatId, { react: { text: '🫘', key: wa.waMessage.key } });
     },
 
     handleGroupMessage: async ({ inbound: m, text, hasMedia }) => {
       const wa = m as WhatsAppInbound;
-      await handleGroupMessage(sock, wa.raw, wa.chatId, wa.senderId, text, wa.content, hasMedia);
+      await handleGroupMessage(sock, wa.waMessage, wa.chatId, wa.senderId, text, wa.content, hasMedia);
     },
 
     handleOwnerDM: async ({ inbound: m, text }) => {
