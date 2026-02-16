@@ -11,6 +11,7 @@ All notable changes to Garbanzo are documented here.
 - Added script-level coverage for Slack setup dry-run behavior to keep setup output deterministic and regression-safe.
 - Added `npm run release:checklist` helper to create and assign release checklist issues using the protected-`main` workflow.
 - Added a rollback playbook to `docs/RELEASES.md` and linked it from the release checklist template.
+- Added `npm run release:deploy:verify` helper to deploy a target tag, verify health/readiness, and optionally auto-rollback.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 

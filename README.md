@@ -431,6 +431,7 @@ npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run release:plan # Dry-run release validation before tagging
 # add -- --clean-artifacts to remove local release artifact folders
 npm run release:checklist -- --version=0.1.6 # Open release checklist issue
+npm run release:deploy:verify -- --version=0.1.6 --rollback-version=0.1.5
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```

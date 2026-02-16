@@ -43,7 +43,7 @@ body:
     attributes:
       label: Deploy and verify
       options:
-        - label: Deploy image with `APP_VERSION`
+        - label: "Deploy image with `APP_VERSION` (or `npm run release:deploy:verify` helper)"
         - label: Health endpoint responds after deploy
         - label: Owner DM `!release` broadcast sent with expected version
         - label: "Rollback plan prepared/documented (see docs/RELEASES.md Rollback Playbook)"

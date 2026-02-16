@@ -70,6 +70,12 @@ Notes:
 npm run release:checklist -- --version=X.Y.Z
 ```
 
+6. Deploy and verify in one command (optional helper):
+
+```bash
+npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
+```
+
 ## Version Injection Behavior
 
 - Docker build uses `APP_VERSION` build arg.
@@ -109,6 +115,12 @@ APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.ym
 ```
 
 `docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
+
+Automated deploy+verify helper (same compose defaults, with optional rollback):
+
+```bash
+npm run release:deploy:verify -- --version=0.1.6 --rollback-version=0.1.5
+```
 
 ## Rollback Playbook
 
