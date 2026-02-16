@@ -1,4 +1,4 @@
-import type { WASocket, PollMessageOptions, WAMessageKey } from '@whiskeysockets/baileys';
+import type { WASocket, PollMessageOptions } from '@whiskeysockets/baileys';
 import type { MessageRef } from '../../core/message-ref.js';
 import { createWhatsAppSentMessageRef, getDeleteKey, getQuotedWAMessage } from './message-ref.js';
 import type { PollPayload } from '../../core/poll-payload.js';
@@ -53,7 +53,7 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
     async deleteMessage(chatId: string, messageRef: MessageRef): Promise<void> {
       const key = getDeleteKey(messageRef);
       if (!key) return;
-      await sock.sendMessage(chatId, { delete: key as WAMessageKey });
+      await sock.sendMessage(chatId, { delete: key });
     },
   };
 }
