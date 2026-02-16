@@ -89,7 +89,7 @@
           setText('tagline', cfg.tagline);
           setText('description', cfg.description);
 
-          setLink('ctaPrimary', cfg.githubSponsorsUrl || cfg.patreonUrl, cfg.ctaPrimaryLabel || 'Support');
+          setLink('ctaPrimary', cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaPrimaryLabel || 'Support');
           setLink('ctaSecondary', cfg.githubRepoUrl, cfg.ctaSecondaryLabel || 'Repository');
 
           const list = document.getElementById('supportLinks');

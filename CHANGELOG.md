@@ -15,6 +15,7 @@ All notable changes to Garbanzo are documented here.
 - `release:deploy:verify` now accepts both `--flag value` and `--flag=value` forms for safer CLI usage in scripts.
 - Added an AWS CDK support-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
 - Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
+- Added custom-domain support to the AWS support-site stack (`siteDomainName` + `siteHostedZoneId`) and wired Patreon support links into site/repo funding metadata.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
