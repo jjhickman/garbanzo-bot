@@ -268,7 +268,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 6. [x] **Rate limiting on health endpoint** — basic per-IP rate limiting added to `/health`.
 7. [x] **Credential rotation workflow** — monthly GitHub Action reminder (`credential-rotation-reminder.yml`) + local helper for rotating Actions secrets from env (`npm run rotate:gh-secrets`).
 8. [x] **Release automation + version metadata** — tag-driven GHCR/native publishing workflows + version injection into release notes / Docker runtime (`APP_VERSION`, `GARBANZO_VERSION`) + dry-run release validator (`npm run release:plan`).
-7. [ ] **Log monitoring/alerting** — evaluate lightweight solutions (e.g., Logwatch, simple Pino log grep script) to surface error spikes or unusual patterns without a full observability stack.
+9. [x] **Log monitoring/alerting** — added lightweight log scan helpers (`npm run logs:scan`, `npm run logs:journal`) to surface error spikes without a full observability stack.
 
 ### Gate
 - [x] No file in `src/` exceeds 350 lines (largest: `character/class-race-data.ts` at 338)

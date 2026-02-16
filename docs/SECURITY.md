@@ -172,6 +172,13 @@ chmod +x .git/hooks/pre-commit
 - Docker release workflow scans the published GHCR image for `CRITICAL,HIGH` vulnerabilities (OS + library)
 - Scan is currently non-blocking (report-only) to avoid interrupting releases; report is attached as a workflow artifact
 
+## Log Monitoring Helpers
+
+**Added:** 2026-02-16 — lightweight, local-only scripts (no new deps)
+
+- `npm run logs:scan -- <path>` parses Pino JSON logs and summarizes WARN/ERROR/FATAL counts + top messages
+- `npm run logs:journal -- --unit garbanzo.service --since "24 hours ago"` prints recent systemd user logs (if `journalctl` exists)
+
 ## Runtime Hardening Updates
 
 **Added:** 2026-02-14 (Phase 7.8 partial)

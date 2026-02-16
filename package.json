@@ -27,6 +27,8 @@
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
     "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh",
     "release:plan": "node scripts/release-plan.mjs",
+    "logs:scan": "node scripts/log-scan.mjs",
+    "logs:journal": "bash scripts/journal-scan.sh",
     "chime:ready": "tsx scripts/chime.ts ready",
     "chime:error": "tsx scripts/chime.ts error",
     "chime:test": "tsx scripts/chime.ts test"
