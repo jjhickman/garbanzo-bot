@@ -8,6 +8,23 @@ All notable changes to Garbanzo are documented here.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
+## [0.1.4] — 2026-02-16
+
+### Added
+
+- Release workflows now auto-create GitHub Release pages with generated notes before attaching assets (Docker + native binaries)
+- Slack demo runtime outbox now includes `replyToId` and `threadId` to inspect reply/thread behavior
+
+### Changed
+
+- `MessageRef` is now a structured wrapper and WhatsApp stores minimal ref data (key + optional message) instead of full Baileys message objects
+- Poll payload is typed (`PollPayload`) and explicitly mapped into the Baileys poll message shape
+
+### Fixed
+
+- Release flow documentation/tooling now reflects protected `main` behavior (merge via PR; tag `main`; push tag)
+- Added tests to cover WhatsApp quote/delete behavior and Slack demo thread propagation
+
 ## [0.1.3] — 2026-02-16
 
 ### Removed
