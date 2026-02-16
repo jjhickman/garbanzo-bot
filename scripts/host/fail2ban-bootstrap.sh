@@ -19,6 +19,22 @@ FINDTIME="10m"
 BANTIME="1h"
 BACKEND="systemd"
 
+ensure_sudo() {
+  if sudo -n true >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    echo "Sudo privileges are required; prompting for password..."
+    sudo -v
+    return 0
+  fi
+
+  echo "Sudo privileges are required, but no interactive TTY is available." >&2
+  echo "Run this command in an interactive shell, then retry." >&2
+  exit 3
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)
@@ -84,6 +100,7 @@ if ! command -v apt-get >/dev/null 2>&1; then
   exit 2
 fi
 
+ensure_sudo
 sudo apt-get update
 sudo apt-get install -y fail2ban
 
