@@ -110,6 +110,18 @@ Optional context:
 
 - `-c siteBucketName=your-unique-bucket-name`
 - `-c sitePriceClass=100|200|all` (default `100`)
+- `-c siteDomainName=garbanzobot.com`
+- `-c siteHostedZoneId=<route53-hosted-zone-id>`
+
+Example with custom domain + Route 53 aliases:
+
+```bash
+cdk deploy GarbanzoSiteStack \
+  -c deployEc2=false \
+  -c deploySite=true \
+  -c siteDomainName=garbanzobot.com \
+  -c siteHostedZoneId=Z065585312QAJF1P6J0UL
+```
 
 After deploy, use the `WebsiteUrl` output as your public landing page URL.
 
