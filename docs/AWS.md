@@ -105,10 +105,20 @@ cdk deploy GarbanzoSiteStack \
 3. Copy the `WebsiteUrl` output and set it as repo homepage:
 
 ```bash
-gh repo edit --homepage "https://<cloudfront-domain>"
+gh repo edit --homepage "https://<website-url>"
 ```
 
-4. Update your support links:
+4. (Recommended) configure automatic website deploys from GitHub Actions:
+
+- Add `AWS_ROLE_TO_ASSUME` (secret or repo variable) with OIDC trust for this repo
+- Optional repo variables:
+  - `AWS_REGION` (default `us-east-1`)
+  - `SITE_DOMAIN_NAME` (e.g., `garbanzobot.com`)
+  - `SITE_HOSTED_ZONE_ID` (Route53 zone id)
+  - `SITE_PRICE_CLASS` (`100`, `200`, `all`)
+- Workflow: `.github/workflows/deploy-support-site.yml`
+
+5. Update your support links:
 
 - Set `PATREON_URL` in your runtime `.env` (e.g., `https://www.patreon.com/c/garbanzobot`)
 - Keep Patreon handle in `.github/FUNDING.yml` in sync

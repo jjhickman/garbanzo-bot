@@ -16,6 +16,8 @@ All notable changes to Garbanzo are documented here.
 - Added an AWS CDK support-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
 - Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
 - Added custom-domain support to the AWS support-site stack (`siteDomainName` + `siteHostedZoneId`) and wired Patreon support links into site/repo funding metadata.
+- Added GitHub Actions support-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
+- Added sponsorship strategy documentation (`docs/SUPPORT.md`) including Patreon tier guidance aligned with licensing boundaries.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 

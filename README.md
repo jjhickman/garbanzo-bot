@@ -440,7 +440,7 @@ tests/
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (467+ tests)
+- **Testing:** Vitest (469+ tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -598,8 +598,9 @@ Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant 
 - GitHub Sponsors: https://github.com/sponsors/jjhickman
 - Patreon: https://www.patreon.com/c/garbanzobot
 - (Optional) Configure Ko-fi/custom links in `.env`
-- Public support site: https://d1qesoxr778xh2.cloudfront.net (custom domain migration to `garbanzobot.com` in progress)
+- Public support site: https://garbanzobot.com
 - Optional AWS website deployment via `infra/cdk` (`GarbanzoSiteStack`)
+- Patreon tier strategy + licensing boundaries: `docs/SUPPORT.md`
 
 Owner-side support messaging:
 
@@ -631,6 +632,7 @@ Repo guardrails are configured under `.github/`:
 - `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
 - `release-docker.yml` builds and publishes versioned Docker images to GHCR (and optional Docker Hub) on `v*` tags
 - `release-native-binaries.yml` builds and attaches cross-platform native bundles on `v*` tags
+- `deploy-support-site.yml` publishes `GarbanzoSiteStack` (website/CDK site changes) via OIDC role
 - release Docker workflow runs a smoke test against published image health endpoint
 - `FUNDING.yml` enables sponsorship links in GitHub UI
 
@@ -678,6 +680,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
+- [SUPPORT.md](docs/SUPPORT.md) — Sponsorship strategy, Patreon tiers, and licensing boundaries
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions

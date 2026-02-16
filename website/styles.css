@@ -112,6 +112,21 @@ body {
   background: #fff;
 }
 
+.tiers {
+  margin-top: 24px;
+}
+
+.tier-price {
+  color: var(--accent);
+  font-size: 0.9em;
+}
+
+.footnote {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .support ul {
   margin: 10px 0 0;
   padding-left: 18px;

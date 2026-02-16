@@ -1,0 +1,159 @@
+name: Deploy Support Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'infra/cdk/bin/garbanzo.ts'
+      - 'infra/cdk/lib/garbanzo-site-stack.ts'
+      - 'infra/cdk/package.json'
+      - 'infra/cdk/package-lock.json'
+      - '.github/workflows/deploy-support-site.yml'
+  workflow_dispatch:
+    inputs:
+      siteDomainName:
+        description: 'Optional custom domain (example: garbanzobot.com)'
+        required: false
+      siteHostedZoneId:
+        description: 'Optional Route53 hosted zone ID (required with custom domain)'
+        required: false
+      sitePriceClass:
+        description: 'Optional CloudFront price class: 100, 200, all'
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-support-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy GarbanzoSiteStack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve deployment settings
+        id: settings
+        shell: bash
+        env:
+          INPUT_DOMAIN: ${{ github.event.inputs.siteDomainName }}
+          INPUT_ZONE: ${{ github.event.inputs.siteHostedZoneId }}
+          INPUT_PRICE_CLASS: ${{ github.event.inputs.sitePriceClass }}
+          VAR_DOMAIN: ${{ vars.SITE_DOMAIN_NAME }}
+          VAR_ZONE: ${{ vars.SITE_HOSTED_ZONE_ID }}
+          VAR_PRICE_CLASS: ${{ vars.SITE_PRICE_CLASS }}
+          VAR_REGION: ${{ vars.AWS_REGION }}
+          SECRET_ROLE: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          VAR_ROLE: ${{ vars.AWS_ROLE_TO_ASSUME }}
+        run: |
+          set -euo pipefail
+
+          ROLE="$SECRET_ROLE"
+          if [[ -z "$ROLE" ]]; then
+            ROLE="$VAR_ROLE"
+          fi
+          if [[ -z "$ROLE" ]]; then
+            echo "AWS_ROLE_TO_ASSUME is required (secret or repo variable)." >&2
+            exit 1
+          fi
+
+          REGION="$VAR_REGION"
+          if [[ -z "$REGION" ]]; then
+            REGION="us-east-1"
+          fi
+
+          DOMAIN="$INPUT_DOMAIN"
+          if [[ -z "$DOMAIN" ]]; then
+            DOMAIN="$VAR_DOMAIN"
+          fi
+
+          ZONE="$INPUT_ZONE"
+          if [[ -z "$ZONE" ]]; then
+            ZONE="$VAR_ZONE"
+          fi
+
+          PRICE_CLASS="$INPUT_PRICE_CLASS"
+          if [[ -z "$PRICE_CLASS" ]]; then
+            PRICE_CLASS="$VAR_PRICE_CLASS"
+          fi
+
+          if [[ -n "$DOMAIN" && -z "$ZONE" ]]; then
+            echo "siteHostedZoneId is required when siteDomainName is set" >&2
+            exit 1
+          fi
+
+          echo "role=$ROLE" >> "$GITHUB_OUTPUT"
+          echo "region=$REGION" >> "$GITHUB_OUTPUT"
+          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "zone=$ZONE" >> "$GITHUB_OUTPUT"
+          echo "priceClass=$PRICE_CLASS" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.settings.outputs.role }}
+          aws-region: ${{ steps.settings.outputs.region }}
+
+      - name: Install CDK dependencies
+        run: npm ci
+        working-directory: infra/cdk
+
+      - name: Build CDK app
+        run: npm run build
+        working-directory: infra/cdk
+
+      - name: Deploy support site stack
+        shell: bash
+        working-directory: infra/cdk
+        env:
+          SITE_DOMAIN: ${{ steps.settings.outputs.domain }}
+          SITE_ZONE: ${{ steps.settings.outputs.zone }}
+          SITE_PRICE_CLASS: ${{ steps.settings.outputs.priceClass }}
+        run: |
+          set -euo pipefail
+
+          cmd=(npx cdk deploy GarbanzoSiteStack -c deployEc2=false -c deploySite=true --require-approval never)
+
+          if [[ -n "$SITE_DOMAIN" ]]; then
+            cmd+=(-c "siteDomainName=$SITE_DOMAIN")
+            cmd+=(-c "siteHostedZoneId=$SITE_ZONE")
+          fi
+
+          if [[ -n "$SITE_PRICE_CLASS" ]]; then
+            cmd+=(-c "sitePriceClass=$SITE_PRICE_CLASS")
+          fi
+
+          printf 'Running: %q ' "${cmd[@]}"
+          echo
+          "${cmd[@]}"
+
+      - name: Summarize outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          outputs_json="$(aws cloudformation describe-stacks --stack-name GarbanzoSiteStack --query 'Stacks[0].Outputs' --output json)"
+          website_url="$(echo "$outputs_json" | jq -r '.[] | select(.OutputKey=="WebsiteUrl") | .OutputValue // empty')"
+          cloudfront_url="$(echo "$outputs_json" | jq -r '.[] | select(.OutputKey=="CloudFrontUrl") | .OutputValue // empty')"
+
+          {
+            echo "## Support Site Deployment"
+            echo ""
+            if [[ -n "$website_url" ]]; then
+              echo "- Website URL: $website_url"
+            fi
+            if [[ -n "$cloudfront_url" ]]; then
+              echo "- CloudFront URL: $cloudfront_url"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
