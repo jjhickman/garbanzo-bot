@@ -85,6 +85,33 @@ curl http://127.0.0.1:3001/health
 
 If you publish port `3001` publicly/within a VPC, restrict it to trusted monitors.
 
+## Revenue Website on AWS (S3 + CloudFront)
+
+To stand up a public support/marketing page quickly, use the website stack in `infra/cdk`.
+
+1. Ensure AWS CLI auth is active (`aws sts get-caller-identity`).
+2. Deploy the site stack:
+
+```bash
+cd infra/cdk
+npm install
+cdk deploy GarbanzoSiteStack \
+  -c deployEc2=false \
+  -c deploySite=true
+```
+
+3. Copy the `WebsiteUrl` output and set it as repo homepage:
+
+```bash
+gh repo edit --homepage "https://<cloudfront-domain>"
+```
+
+4. Update your support links:
+
+- Set `PATREON_URL` in your runtime `.env`
+- Optionally add Patreon handle in `.github/FUNDING.yml`
+- Run owner command `!support broadcast` after links are updated
+
 ## Option: ECS Fargate + EFS (More Portable, More Moving Parts)
 
 If you want this managed path in the future, we recommend doing EC2 first to prove stability, then migrating once you know your steady-state CPU/memory and data retention needs.

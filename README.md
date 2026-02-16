@@ -580,6 +580,7 @@ Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant 
 
 - GitHub Sponsors: https://github.com/sponsors/jjhickman
 - (Optional) Configure Patreon/Ko-fi/custom links in `.env`
+- Optional public support site can be deployed on AWS via `infra/cdk` (`GarbanzoSiteStack`)
 
 Owner-side support messaging:
 
