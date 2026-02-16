@@ -110,6 +110,27 @@ APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.ym
 
 `docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
 
+## Rollback Playbook
+
+If a deploy introduces problems, roll back to the last known-good release tag.
+
+1. Identify the prior healthy version (example: `0.1.5`).
+2. Redeploy with that version:
+
+```bash
+APP_VERSION=0.1.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+3. Verify health and readiness:
+
+```bash
+curl -fsS http://127.0.0.1:3001/health
+curl -fsS http://127.0.0.1:3001/health/ready
+```
+
+4. Post rollback notes in the active release checklist issue (what failed, rollback version, follow-up PR/issue links).
+
 ## Manual Workflow Dispatch
 
 You can run workflows manually from Actions:
