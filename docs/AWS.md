@@ -85,46 +85,6 @@ curl http://127.0.0.1:3001/health
 
 If you publish port `3001` publicly/within a VPC, restrict it to trusted monitors.
 
-## Revenue Website on AWS (S3 + CloudFront)
-
-To stand up a public support/marketing page quickly, use the website stack in `infra/cdk`.
-
-1. Ensure AWS CLI auth is active (`aws sts get-caller-identity`).
-2. Deploy the site stack (with optional custom domain):
-
-```bash
-cd infra/cdk
-npm install
-cdk deploy GarbanzoSiteStack \
-  -c deployEc2=false \
-  -c deploySite=true \
-  -c siteDomainName=garbanzobot.com \
-  -c siteHostedZoneId=Z065585312QAJF1P6J0UL
-```
-
-3. Copy the `WebsiteUrl` output and set it as repo homepage:
-
-```bash
-gh repo edit --homepage "https://<website-url>"
-```
-
-4. (Recommended) configure automatic website deploys from GitHub Actions:
-
-- Add `AWS_ROLE_TO_ASSUME` (secret or repo variable) with OIDC trust for this repo
-- Prefer least privilege: allow the GitHub role to assume CDK bootstrap roles + read stack outputs (instead of full `AdministratorAccess`)
-- Optional repo variables:
-  - `AWS_REGION` (default `us-east-1`)
-  - `SITE_DOMAIN_NAME` (e.g., `garbanzobot.com`)
-  - `SITE_HOSTED_ZONE_ID` (Route53 zone id)
-  - `SITE_PRICE_CLASS` (`100`, `200`, `all`)
-- Workflow: `.github/workflows/deploy-support-site.yml`
-
-5. Update your support links:
-
-- Set support links in runtime `.env` (`GITHUB_SPONSORS_URL`, `PATREON_URL`, `KOFI_URL`, `SUPPORT_CUSTOM_URL`, `SUPPORT_MESSAGE`)
-- Keep `.github/FUNDING.yml` in sync with public support links
-- Run owner command `!support broadcast` after links are updated
-
 ## Option: ECS Fargate + EFS (More Portable, More Moving Parts)
 
 If you want this managed path in the future, we recommend doing EC2 first to prove stability, then migrating once you know your steady-state CPU/memory and data retention needs.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-13
 **Auditor:** Pre-build infrastructure assessment
-**Host:** Terra (primary)
+**Host:** Primary production host (self-managed)
 
 ---
 
@@ -29,9 +29,9 @@
 
 ### 2. ✅ UFW Firewall Inactive — FIXED
 
-~~Terra had no host firewall running.~~
+~~Primary host had no host firewall running.~~
 
-Resolved: UFW enabled with deny-incoming default, allowing SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`). 4 rules active.
+Resolved: UFW enabled with deny-incoming default, allowing SSH and trusted network CIDRs.
 
 ### 3. ✅ Services Bound to 0.0.0.0 — FIXED
 
@@ -74,11 +74,11 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
 | ChromaDB bound to localhost (8000) | ✅ Correct |
 | ML services were bound to localhost (now stopped) | ✅ N/A |
 | Whisper Docker bound to localhost (8090) | ✅ Correct |
-| Tailscale mesh active across 5+ devices | ✅ Solid |
+| Tailscale mesh active across multiple devices | ✅ Solid |
 | SSH running (key auth recommended) | ✅ Normal |
 | Credential files have 600 permissions | ✅ Correct |
 | Docker containers use bridge networking | ✅ Reasonable |
-| Encrypted backups to NAS | ✅ Good practice |
+| Encrypted backups to external storage | ✅ Good practice |
 
 ---
 
@@ -184,7 +184,7 @@ chmod +x .git/hooks/pre-commit
 **Added:** 2026-02-16 — evaluation + helper script
 
 - Lynis is a CIS-style host auditing tool that produces actionable remediation suggestions
-- Run on Terra:
+- Run on your primary host:
   - `npm run host:lynis`
   - If not installed yet: `npm run host:lynis -- --install`
 - Requires sudo (script now reports clearly when no interactive TTY is available)

@@ -31,7 +31,7 @@ Garbanzo is opinionated around community operations, not just message transport.
 - **Compared to API platforms (e.g. Twilio WhatsApp):** Twilio provides messaging primitives and sender onboarding APIs; Garbanzo ships community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage). Source: [Twilio WhatsApp docs](https://www.twilio.com/docs/whatsapp).
 - **Compared to WhatsApp client libraries (e.g. `whatsapp-web.js`, `@open-wa/wa-automate`):** those are foundational SDKs; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included. Sources: [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), [open-wa](https://github.com/open-wa/wa-automate-nodejs).
 - **AI cost/reliability posture:** configurable cloud provider ordering plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
-- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows (`!feedback issue <id>`).
+- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows.
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
 ## Personas
@@ -298,7 +298,6 @@ curl http://127.0.0.1:3001/health/ready
 ### Owner Commands (DM only)
 - `!memory add/delete/search` — manage long-term community facts injected into AI context
 - `!feedback` — review pending suggestions and bug reports
-- `!feedback issue <id>` — create GitHub issue from accepted feedback item
 - `!release <notes>` — broadcast release notes to all groups
 - `!release changelog` — broadcast latest changelog section with version header
 - `!strikes` — view moderation strike counts
@@ -322,13 +321,6 @@ Copy `.env.example` to `.env` and configure:
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
-| `GITHUB_SPONSORS_URL` | No | Support link shown by owner `!support` command |
-| `PATREON_URL` | No | Optional Patreon support link |
-| `KOFI_URL` | No | Optional Ko-fi support link |
-| `SUPPORT_CUSTOM_URL` | No | Optional custom support URL |
-| `SUPPORT_MESSAGE` | No | Optional custom support intro message |
-| `GITHUB_ISSUES_TOKEN` | No | Token used to create GitHub issues from owner-approved feedback |
-| `GITHUB_ISSUES_REPO` | No | Target repo for issue creation (`owner/repo`) |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
@@ -587,38 +579,9 @@ sudo apt-get install -y iptables-persistent
 sudo netfilter-persistent save
 ```
 
-## Support Garbanzo
+## Commercial Licensing
 
-[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Support-pink?logo=githubsponsors)](https://github.com/sponsors/jjhickman)
-
-If Garbanzo is useful for your community, you can support development and operating costs.
-
-Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant a commercial license. For commercial licensing, see `COMMERCIAL_LICENSE.md`.
-
-- GitHub Sponsors: https://github.com/sponsors/jjhickman
-- Patreon: https://www.patreon.com/c/garbanzobot
-- (Optional) Configure Ko-fi/custom links in `.env`
-- Public support site: https://garbanzobot.com
-- Optional AWS website deployment via `infra/cdk` (`GarbanzoSiteStack`)
-- Support policy + licensing boundaries: `docs/SUPPORT.md`
-
-Owner-side support messaging:
-
-- `!support` — preview the support message in owner DM
-- `!support broadcast` — send support message to all enabled groups
-
-Support links are read from:
-
-- `GITHUB_SPONSORS_URL`
-- `PATREON_URL`
-- `KOFI_URL`
-- `SUPPORT_CUSTOM_URL`
-- `SUPPORT_MESSAGE` (optional custom intro text)
-
-Feedback-to-issue automation (owner approved):
-
-- `!feedback issue <id>` creates a GitHub issue for an accepted item
-- Requires `GITHUB_ISSUES_TOKEN` and optional `GITHUB_ISSUES_REPO`
+Garbanzo is source-available for noncommercial use. For commercial usage terms and licensing options, see `COMMERCIAL_LICENSE.md`.
 
 ## Main Branch Stability
 
@@ -632,7 +595,6 @@ Repo guardrails are configured under `.github/`:
 - `credential-rotation-reminder.yml` opens a monthly credential rotation checklist issue
 - `release-docker.yml` builds and publishes versioned Docker images to GHCR (and optional Docker Hub) on `v*` tags
 - `release-native-binaries.yml` builds and attaches cross-platform native bundles on `v*` tags
-- `deploy-support-site.yml` publishes `GarbanzoSiteStack` (website/CDK site changes) via OIDC role
 - release Docker workflow runs a smoke test against published image health endpoint
 - `FUNDING.yml` enables sponsorship links in GitHub UI
 
@@ -679,7 +641,6 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
-- [SUPPORT.md](docs/SUPPORT.md) — Sponsorship links and licensing boundaries
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions
