@@ -29,6 +29,8 @@
     "release:plan": "node scripts/release-plan.mjs",
     "logs:scan": "node scripts/log-scan.mjs",
     "logs:journal": "bash scripts/journal-scan.sh",
+    "host:lynis": "bash scripts/host/lynis-audit.sh",
+    "host:fail2ban": "bash scripts/host/fail2ban-bootstrap.sh",
     "chime:ready": "tsx scripts/chime.ts ready",
     "chime:error": "tsx scripts/chime.ts error",
     "chime:test": "tsx scripts/chime.ts test"

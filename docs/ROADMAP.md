@@ -261,8 +261,8 @@ Completed as part of 7.1 file splits:
 Research and adopt established, free, trustworthy tools for automated security. Don't hand-roll — use proven open-source solutions.
 
 1. [x] **Dependency vulnerability scanning** — evaluated `npm audit` vs Snyk/Socket.dev and wired `npm audit --audit-level=high` into `npm run check` (fast, zero new dependencies).
-2. [ ] **Host hardening audit** — evaluate [Lynis](https://github.com/CISOfy/lynis) (GPL, 13k+ stars) for automated CIS-style system audits on Terra. Run periodically, track score improvements.
-3. [ ] **Intrusion prevention** — evaluate [fail2ban](https://github.com/fail2ban/fail2ban) (GPL, 12k+ stars) for SSH brute-force protection. May already be partially configured via UFW.
+2. [x] **Host hardening audit** — evaluated [Lynis](https://github.com/CISOfy/lynis) and added `npm run host:lynis` helper to run/capture audits on Terra.
+3. [x] **Intrusion prevention** — evaluated [fail2ban](https://github.com/fail2ban/fail2ban) and added `npm run host:fail2ban` helper to bootstrap an SSH jail (dry-run by default).
 4. [x] **Container security** — evaluated Trivy and added a non-blocking image vulnerability scan to the Docker release workflow (artifact report attached on tag builds).
 5. [x] **Automated backups verification** — health check now reports latest nightly backup integrity (`verifyLatestBackupIntegrity` + SQLite `PRAGMA integrity_check`).
 6. [x] **Rate limiting on health endpoint** — basic per-IP rate limiting added to `/health`.
