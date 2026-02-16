@@ -51,14 +51,14 @@ export async function extractMedia(msg: WAMessage): Promise<VisionMedia | null> 
       };
     }
 
-    return extractQuotedMedia(content);
+    return extractQuotedMedia(content, msg.key.remoteJid ?? undefined);
   } catch (err) {
     logger.error({ err, msgId: msg.key.id, remoteJid: msg.key.remoteJid }, 'Failed to extract media from message');
     return null;
   }
 }
 
-async function extractQuotedMedia(content: WAMessageContent): Promise<VisionMedia | null> {
+async function extractQuotedMedia(content: WAMessageContent, remoteJid: string | undefined): Promise<VisionMedia | null> {
   const contextInfo =
     content.extendedTextMessage?.contextInfo
     ?? content.imageMessage?.contextInfo
@@ -71,7 +71,10 @@ async function extractQuotedMedia(content: WAMessageContent): Promise<VisionMedi
 
   const quotedType = getContentType(quoted);
   const fakeMsg = {
-    key: { id: contextInfo.stanzaId },
+    key: {
+      id: contextInfo.stanzaId,
+      remoteJid,
+    },
     message: contextInfo.quotedMessage,
   } as WAMessage;
 
