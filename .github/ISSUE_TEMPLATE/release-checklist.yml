@@ -46,7 +46,7 @@ body:
         - label: Deploy image with `APP_VERSION`
         - label: Health endpoint responds after deploy
         - label: Owner DM `!release` broadcast sent with expected version
-        - label: Rollback plan prepared/documented
+        - label: "Rollback plan prepared/documented (see docs/RELEASES.md Rollback Playbook)"
 
   - type: textarea
     id: notes
