@@ -40,6 +40,7 @@ git push origin main --follow-tags
 Notes:
 
 - The GitHub Release page is created/updated by the release workflows (not by a manual `gh release create`). It may take a few minutes after pushing the tag for the Release to appear and for assets to attach.
+- Release notes are generated automatically when a Release is created by CI.
 
 - `ghcr.io/jjhickman/garbanzo:vX.Y.Z`
 - `ghcr.io/jjhickman/garbanzo:X.Y.Z`
