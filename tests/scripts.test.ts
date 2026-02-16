@@ -24,6 +24,7 @@ describe('ops scripts', () => {
   const journalScanPath = join(root, 'scripts/journal-scan.sh');
   const setupPath = join(root, 'scripts/setup.mjs');
   const releaseChecklistPath = join(root, 'scripts/release-checklist.mjs');
+  const releaseDeployVerifyPath = join(root, 'scripts/release-deploy-verify.sh');
   const lynisPath = join(root, 'scripts/host/lynis-audit.sh');
   const fail2banPath = join(root, 'scripts/host/fail2ban-bootstrap.sh');
 
@@ -85,6 +86,12 @@ describe('ops scripts', () => {
     const out = runNodeScript(releaseChecklistPath, ['--help']);
     expect(out).toContain('Garbanzo release checklist helper');
     expect(out).toContain('npm run release:checklist');
+  });
+
+  it('release-deploy-verify script shows usage with --help', () => {
+    const out = runBashScript(releaseDeployVerifyPath, ['--help']);
+    expect(out).toContain('bash scripts/release-deploy-verify.sh --version <X.Y.Z>');
+    expect(out).toContain('--rollback-version <X.Y.Z>');
   });
 
   it('host hardening scripts show usage with --help', () => {
