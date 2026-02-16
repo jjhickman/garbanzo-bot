@@ -179,6 +179,26 @@ chmod +x .git/hooks/pre-commit
 - `npm run logs:scan -- <path>` parses Pino JSON logs and summarizes WARN/ERROR/FATAL counts + top messages
 - `npm run logs:journal -- --unit garbanzo.service --since "24 hours ago"` prints recent systemd user logs (if `journalctl` exists)
 
+## Host Hardening Audit (Lynis)
+
+**Added:** 2026-02-16 — evaluation + helper script
+
+- Lynis is a CIS-style host auditing tool that produces actionable remediation suggestions
+- Run on Terra:
+  - `npm run host:lynis`
+  - If not installed yet: `npm run host:lynis -- --install`
+- Output is captured to `data/host-audits/` (gitignored)
+
+## Intrusion Prevention (fail2ban)
+
+**Added:** 2026-02-16 — evaluation + helper script
+
+- fail2ban blocks repeated SSH brute-force attempts by banning offending IPs
+- Dry-run (prints recommended config): `npm run host:fail2ban`
+- Apply (installs + writes `/etc/fail2ban/jail.d/garbanzo-sshd.local` + enables service):
+  - `npm run host:fail2ban -- --apply`
+  - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 100.64.0.0/10 192.168.50.0/24"`
+
 ## Runtime Hardening Updates
 
 **Added:** 2026-02-14 (Phase 7.8 partial)
