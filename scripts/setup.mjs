@@ -195,7 +195,7 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --providers=gemini --gemini-key=$GEMINI_API_KEY --gemini-model=gemini-1.5-flash --gemini-pricing-input-per-m=0.15 --gemini-pricing-output-per-m=0.60\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
-    output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=jjhickman/garbanzo-bot --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
+    output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=owner/repo --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     process.exit(0);
   }
@@ -429,8 +429,8 @@ async function main() {
       ? (cli.options['github-issues-token'] ?? existing.GITHUB_ISSUES_TOKEN ?? '')
       : await rl.question(`GITHUB_ISSUES_TOKEN [${existing.GITHUB_ISSUES_TOKEN ?? ''}]: `);
     const githubIssuesRepo = nonInteractive
-      ? (cli.options['github-issues-repo'] ?? existing.GITHUB_ISSUES_REPO ?? 'jjhickman/garbanzo-bot')
-      : await rl.question(`GITHUB_ISSUES_REPO [${existing.GITHUB_ISSUES_REPO ?? 'jjhickman/garbanzo-bot'}]: `);
+      ? (cli.options['github-issues-repo'] ?? existing.GITHUB_ISSUES_REPO ?? 'owner/repo')
+      : await rl.question(`GITHUB_ISSUES_REPO [${existing.GITHUB_ISSUES_REPO ?? 'owner/repo'}]: `);
 
     const profileKeys = Object.keys(FEATURE_PROFILES);
     const profileLabels = profileKeys.map((key) => `${FEATURE_PROFILES[key].label} — ${FEATURE_PROFILES[key].description}`);
@@ -527,7 +527,7 @@ async function main() {
       SUPPORT_CUSTOM_URL: (supportCustomUrl || existing.SUPPORT_CUSTOM_URL || '').trim(),
       SUPPORT_MESSAGE: (supportMessage || existing.SUPPORT_MESSAGE || '').trim(),
       GITHUB_ISSUES_TOKEN: (githubIssuesToken || existing.GITHUB_ISSUES_TOKEN || '').trim(),
-      GITHUB_ISSUES_REPO: (githubIssuesRepo || existing.GITHUB_ISSUES_REPO || 'jjhickman/garbanzo-bot').trim(),
+      GITHUB_ISSUES_REPO: (githubIssuesRepo || existing.GITHUB_ISSUES_REPO || 'owner/repo').trim(),
       OLLAMA_BASE_URL: (ollamaBaseUrl || existing.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim(),
       LOG_LEVEL: (existing.LOG_LEVEL || 'info').trim(),
       APP_VERSION: (appVersion || existing.APP_VERSION || DEFAULT_APP_VERSION).trim(),
