@@ -8,6 +8,17 @@ All notable changes to Garbanzo are documented here.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
+## [0.1.3] — 2026-02-16
+
+### Removed
+
+- Archived legacy stack artifacts and external comparison docs (repo is now fully self-contained and brand-consistent)
+
+### Changed
+
+- Docs reframed to focus on Garbanzo's own operational posture (smaller surface area, curated features, explicit health semantics, local-first state, CI guardrails)
+- Release tooling no longer treats `archive/` as a release artifact directory
+
 ## [0.1.2] — 2026-02-15
 
 ### Added
