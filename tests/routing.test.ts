@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 function must<T>(value: T | null | undefined, message: string = 'expected value'): T {
   if (value === null || value === undefined) throw new Error(message);
@@ -662,12 +662,28 @@ describe('Fun — handleFun routing', async () => {
   });
 
   it('routes category name directly as trivia', async () => {
-    // "science" should be recognized as a trivia category
-    // This makes a network call to OpenTDB, so it may fail in CI
-    // But the routing logic should at least not return help
-    const result = await handleFun('science');
-    // Should either return trivia or an error from the API — NOT help
-    expect(result).not.toContain('Fun Commands');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        response_code: 0,
+        results: [
+          {
+            category: 'Science & Nature',
+            difficulty: 'easy',
+            question: 'What is H2O commonly called?',
+            correct_answer: 'Water',
+            incorrect_answers: ['Fire', 'Earth', 'Air'],
+          },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    try {
+      const result = await handleFun('science');
+      expect(result).toContain('Trivia');
+      expect(result).not.toContain('Fun Commands');
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('returns help for unrecognized subcommands', async () => {

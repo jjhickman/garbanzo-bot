@@ -65,7 +65,7 @@ Public subnet (default VPC; easiest to start):
 cd infra/cdk
 
 cdk deploy \
-  -c appVersion=0.1.5 \
+  -c appVersion=0.1.6 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
@@ -75,7 +75,7 @@ Hardened (private subnets + NAT; no public IP; access via SSM):
 ```bash
 cdk deploy \
   -c networkMode=private \
-  -c appVersion=0.1.5 \
+  -c appVersion=0.1.6 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
@@ -87,7 +87,7 @@ Optionally restrict health endpoint (only useful if you have VPC connectivity to
 ```bash
 cdk deploy \
   -c allowedHealthCidr=203.0.113.4/32 \
-  -c appVersion=0.1.5 \
+  -c appVersion=0.1.6 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
