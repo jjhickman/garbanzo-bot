@@ -15,6 +15,14 @@ export interface SlackDemoOutboxEntry {
   payload: unknown;
 }
 
+function getThreadIdFromReplyTo(replyTo: MessageRef | undefined): string | null {
+  if (!replyTo) return null;
+  if (replyTo.platform !== 'slack') return null;
+  if (!replyTo.ref || typeof replyTo.ref !== 'object') return null;
+  const r = replyTo.ref as Record<string, unknown>;
+  return typeof r.threadId === 'string' ? r.threadId : null;
+}
+
 export function createSlackAdapter(): PlatformMessenger {
   const err = () => new Error('Slack platform is not implemented');
 
@@ -72,7 +80,11 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
       outbox.push({
         type: 'text',
         chatId,
-        payload: { text, replyTo: options?.replyTo ?? null },
+        payload: {
+          text,
+          replyToId: options?.replyTo?.id ?? null,
+          threadId: getThreadIdFromReplyTo(options?.replyTo),
+        },
       });
     },
 
@@ -89,7 +101,12 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
       outbox.push({
         type: 'text',
         chatId,
-        payload: { text, replyTo: options?.replyTo ?? null, ref },
+        payload: {
+          text,
+          replyToId: options?.replyTo?.id ?? null,
+          threadId: getThreadIdFromReplyTo(options?.replyTo),
+          ref,
+        },
       });
       return ref;
     },
@@ -108,7 +125,13 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
       outbox.push({
         type: 'audio',
         chatId,
-        payload: { mimetype: audio.mimetype, ptt: audio.ptt ?? false, bytesLength: audio.bytes.length, replyTo: options?.replyTo ?? null },
+        payload: {
+          mimetype: audio.mimetype,
+          ptt: audio.ptt ?? false,
+          bytesLength: audio.bytes.length,
+          replyToId: options?.replyTo?.id ?? null,
+          threadId: getThreadIdFromReplyTo(options?.replyTo),
+        },
       });
     },
 
