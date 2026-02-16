@@ -1,31 +1,32 @@
-# Commercial License
+# Commercial Use and Services
 
-Garbanzo is available under the Prosperity Public License 3.0.0 for noncommercial use and a limited commercial trial.
+Garbanzo is licensed under Apache License 2.0.
 
-If you want to use Garbanzo for commercial purposes beyond the trial period, you need a separate commercial license from the contributor.
+That means commercial use is allowed without purchasing a separate commercial software license.
 
-## What counts as commercial?
+## What this means in practice
 
-Commercial purposes include using Garbanzo:
+- You can use Garbanzo inside a for-profit company.
+- You can build products and services with Garbanzo.
+- You can offer paid setup, hosting, and integrations using Garbanzo.
 
-- inside a for-profit company (internal use counts)
-- as part of a paid product or service
-- to provide consulting, managed hosting, or integrations for clients
-- in any context primarily intended for commercial advantage or private monetary compensation
+You are still responsible for complying with Apache-2.0 terms, especially preserving license and notice requirements when redistributing modified versions.
 
-## How to get a commercial license
+## Paid services (optional)
+
+If you want help beyond community support, contact for:
+
+- onboarding and deployment assistance
+- implementation and integration help
+- priority troubleshooting and advisory support
 
 Contact:
 
 - Email: jjhickman@pm.me
-- GitHub: https://github.com/jjhickman/garbanzo-bot (open an issue with subject "Commercial license")
+- GitHub: https://github.com/jjhickman/garbanzo-bot
 
-Include:
+## Trademarks and branding
 
-- your company name
-- how you plan to use Garbanzo (which platform, expected users/tenants)
-- whether you need priority support / SLA
+Apache-2.0 covers code rights. Brand names and logos are handled separately.
 
-## Patents and trademarks
-
-A commercial license may include additional terms for support, warranties, or branding. The Garbanzo name and logos may be subject to trademark-style restrictions even when the code is licensed.
+See `TRADEMARK.md` for current branding guidance.

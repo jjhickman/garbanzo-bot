@@ -1,6 +1,6 @@
 {
   "name": "garbanzo",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Garbanzo Bean — multi-platform chat operations bot for communities and small teams",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
     "node": ">=20.0.0"
   },
   "author": "Josh Hickman",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "Apache-2.0",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.16",

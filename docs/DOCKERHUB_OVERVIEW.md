@@ -23,8 +23,8 @@ cp .env.example .env
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -48,9 +48,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `0.1.6`
+- `0.1.7`
   - Semver tag without the leading `v`
-- `v0.1.6`
+- `v0.1.7`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:
@@ -66,7 +66,7 @@ All tags are multi-arch where available:
 
 ## License
 
-Garbanzo is source-available under the Prosperity Public License 3.0.0 (see `LICENSE` in the source repository). Noncommercial use is free; commercial use beyond the trial period requires a commercial license.
+Garbanzo is licensed under Apache License 2.0 (see `LICENSE` in the source repository).
 
 Source code and docs: https://github.com/jjhickman/garbanzo-bot
 

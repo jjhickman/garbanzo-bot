@@ -615,9 +615,11 @@ sudo apt-get install -y iptables-persistent
 sudo netfilter-persistent save
 ```
 
-## Commercial Licensing
+## Commercial Use and Support
 
-Garbanzo is source-available for noncommercial use. For commercial usage terms and licensing options, see `COMMERCIAL_LICENSE.md`.
+Garbanzo is licensed under Apache-2.0, so commercial use is allowed.
+
+If you want paid onboarding, implementation help, or priority support, see `COMMERCIAL_LICENSE.md`.
 
 ## Main Branch Stability
 
@@ -651,10 +653,10 @@ Repo guardrails are configured under `.github/`:
 
 ## License
 
-Garbanzo is source-available under the [Prosperity Public License 3.0.0](LICENSE):
+Garbanzo is licensed under [Apache License 2.0](LICENSE).
 
-- Free for noncommercial use (personal + qualifying noncommercial organizations)
-- Commercial use is allowed for a limited 30-day trial
-- Ongoing commercial use requires a commercial license (see `COMMERCIAL_LICENSE.md`)
+- Commercial use is allowed
+- Modification and redistribution are allowed under Apache-2.0 terms
+- Trademark and branding rights are covered separately (see `TRADEMARK.md`)
 
-See `LICENSE_FAQ.md` for examples.
+See `LICENSE_FAQ.md` for a quick guide.
