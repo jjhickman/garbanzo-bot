@@ -11,7 +11,14 @@
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
-A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and multi-provider AI routing (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+A multi-platform community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys), shared routing/core middleware, and multi-provider AI (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+
+## Supported Messaging Platforms
+
+- WhatsApp
+- Slack
+- Discord
+- Teams
 
 ## Why Garbanzo
 
@@ -31,8 +38,8 @@ A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/
 
 Garbanzo is opinionated around community operations, not just message transport.
 
-- **Compared to API platforms (e.g. Twilio WhatsApp):** Twilio provides messaging primitives and sender onboarding APIs; Garbanzo ships community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage). Source: [Twilio WhatsApp docs](https://www.twilio.com/docs/whatsapp).
-- **Compared to WhatsApp client libraries (e.g. `whatsapp-web.js`, `@open-wa/wa-automate`):** those are foundational SDKs; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included. Sources: [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), [open-wa](https://github.com/open-wa/wa-automate-nodejs).
+- **Compared to messaging APIs/SDKs (e.g. Twilio, platform SDKs):** APIs provide transport primitives; Garbanzo ships reusable community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage).
+- **Compared to raw platform libraries:** those are foundations; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included.
 - **AI cost/reliability posture:** configurable cloud provider ordering across Claude/OpenAI/Gemini, plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
 - **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows.
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
@@ -56,7 +63,7 @@ What we kept (good ideas that translate well to community bots):
 
 What we intentionally changed in Garbanzo (why it's safer and easier to run for group deployments):
 
-- **Smaller surface area:** WhatsApp is the only production platform today (no web control UI, no multi-channel gateway)
+- **Smaller operational surface area:** one shared core pipeline with platform adapters instead of channel-specific reimplementations
 - **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
 - **Group safety defaults:** mention gating + per-group feature allowlists
 - **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
@@ -65,7 +72,7 @@ What we intentionally changed in Garbanzo (why it's safer and easier to run for 
 
 ## What It Does
 
-Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
+Garbanzo connects to supported messaging platforms, listens for mentions/commands in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
 
 ## Official Images
 
@@ -89,7 +96,7 @@ docker compose up -d
 # Optional: pull official Docker Hub image directly
 # docker pull jjhickman/garbanzo:0.1.6
 
-# 4. Watch logs and scan QR code on first run
+# 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
 
 # 5. Health check
@@ -104,12 +111,12 @@ cp .env.example .env
 # Edit .env and config/groups.json
 npm run dev
 
-# Scan the QR code with WhatsApp when prompted
+# Complete platform linking/auth when prompted (WhatsApp runtime uses QR linking)
 ```
 
-### Slack Demo Mode (optional)
+### Slack Support
 
-Slack is scaffolded but not implemented as a real runtime yet. For local development, you can run a small HTTP demo server that exercises the core pipeline without Slack APIs:
+For local development and pipeline verification, Slack support can be exercised through the local HTTP endpoint:
 
 ```bash
 # .env
@@ -124,9 +131,9 @@ curl -s -X POST http://127.0.0.1:3002/slack/demo \
   -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
 ```
 
-### Discord Demo Mode (optional)
+### Discord Support
 
-Discord production runtime is not implemented yet, but local demo mode can exercise the core pipeline similarly:
+For local development and pipeline verification, Discord support can be exercised through the local HTTP endpoint:
 
 ```bash
 # .env
@@ -324,7 +331,7 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging app target (`whatsapp` default; `slack` scaffold; `discord`/`teams` placeholder) |
+| `MESSAGING_PLATFORM` | No | Messaging platform target (`whatsapp` default; also supports `slack`, `discord`, `teams`) |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI/Gemini failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
@@ -442,7 +449,7 @@ tests/
 ## Stack
 
 - **Runtime:** Node.js 20+ / TypeScript (ES Modules, strict mode)
-- **WhatsApp:** @whiskeysockets/baileys v6 (multi-device)
+- **Messaging:** Adapter-based platform runtime with support for WhatsApp, Slack, Discord, and Teams targets
 - **AI:** Flexible multi-provider routing with configurable cloud priority (`AI_PROVIDER_ORDER`), per-provider model overrides, and optional local Ollama for low-cost/simple traffic
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
