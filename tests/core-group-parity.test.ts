@@ -2,6 +2,7 @@ import type { WAMessage } from '@whiskeysockets/baileys';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
+import type { PollPayload } from '../src/core/poll-payload.js';
 
 function setupMocks() {
   const isFeatureEnabled = vi.fn((_jid: string, feature: string) => feature !== 'poll');
@@ -145,7 +146,7 @@ describe('Core group processor parity (WhatsApp)', () => {
         coreCalls.push({ type: 'textRef', to, payload: text });
         return { key: { id: 'sent2', remoteJid: to } };
       },
-      async sendPoll(to: string, poll: unknown): Promise<void> {
+      async sendPoll(to: string, poll: PollPayload): Promise<void> {
         coreCalls.push({ type: 'poll', to, payload: poll });
       },
       async sendDocument(): Promise<unknown> {
@@ -212,7 +213,7 @@ describe('Core group processor parity (WhatsApp)', () => {
         coreCalls.push({ type: 'textRef', to, payload: t });
         return { key: { id: 'sent2', remoteJid: to } };
       },
-      async sendPoll(to: string, poll: unknown): Promise<void> {
+      async sendPoll(to: string, poll: PollPayload): Promise<void> {
         coreCalls.push({ type: 'poll', to, payload: poll });
       },
       async sendDocument(): Promise<unknown> {
