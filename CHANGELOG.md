@@ -4,6 +4,12 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+- (no entries yet)
+
+> Note: older changelog sections include internal phase milestones that predate the current tagged release series.
+
+## [0.1.6] — 2026-02-16
+
 ### Added
 
 - Docker release workflow now includes a report-only Trivy image scan artifact (`trivy-image-report`) for published GHCR images.
@@ -19,8 +25,6 @@ All notable changes to Garbanzo are documented here.
 - `npm run check` now includes dependency vulnerability scanning via `npm audit --audit-level=high`.
 - Host hardening helper scripts now provide clearer sudo messaging in non-interactive shells.
 - ROADMAP test-suite references were refreshed to align with current suite size.
-
-> Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
 ## [0.1.5] — 2026-02-16
 
