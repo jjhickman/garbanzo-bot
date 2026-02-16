@@ -256,7 +256,7 @@ Completed as part of 7.1 file splits:
 3. [x] Document multimedia pipeline (Whisper, Piper, Claude/OpenAI Vision payloads, yt-dlp, ffmpeg)
 4. [x] Add inline architecture comments in `handlers.ts` explaining routing stages
 
-### 7.8 — Security & environment hardening
+### 7.8 — Security & environment hardening ✅
 
 Research and adopt established, free, trustworthy tools for automated security. Don't hand-roll — use proven open-source solutions.
 
