@@ -14,7 +14,7 @@ on:
         required: false
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -59,6 +59,21 @@ jobs:
           VERSION="${RAW_VERSION#v}"
           echo "raw=${RAW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure GitHub Release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.raw }}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+
+          gh release create "$TAG" --title "$TAG" --generate-notes
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
