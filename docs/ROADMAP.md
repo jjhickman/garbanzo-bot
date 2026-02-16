@@ -240,7 +240,7 @@ Completed as part of 7.1 file splits:
 3. [x] Added integration tests for link processing (mocked fetch + yt-dlp + YouTube transcript path)
 4. [x] Increased branch coverage for `handlers.ts` edge cases (helper extraction, upsert/wiring branches)
 5. [x] Added snapshot tests for formatted outputs (`help`, `profiles`, `memory`)
-6. [x] Test suite increased significantly (currently 16 files / 463 tests)
+6. [x] Test suite increased significantly (currently 16 files / 467 tests)
 
 ### 7.6 — Error handling audit ✅
 
