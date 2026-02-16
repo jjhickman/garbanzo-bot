@@ -94,6 +94,17 @@ describe('ops scripts', () => {
     expect(out).toContain('--rollback-version <X.Y.Z>');
   });
 
+  it('release-deploy-verify supports equals-style flags in dry-run mode', () => {
+    const out = runBashScript(releaseDeployVerifyPath, [
+      '--version=0.1.6',
+      '--rollback-version=0.1.5',
+      '--dry-run',
+    ]);
+
+    expect(out).toContain('Deploying version 0.1.6');
+    expect(out).toContain('Dry run complete. No changes applied.');
+  });
+
   it('host hardening scripts show usage with --help', () => {
     const lynisOut = runBashScript(lynisPath, ['--help']);
     const fail2banOut = runBashScript(fail2banPath, ['--help']);

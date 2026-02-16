@@ -46,33 +46,65 @@ while [[ $# -gt 0 ]]; do
       VERSION="${2:-}"
       shift 2
       ;;
+    --version=*)
+      VERSION="${1#--version=}"
+      shift
+      ;;
     --rollback-version)
       ROLLBACK_VERSION="${2:-}"
       shift 2
+      ;;
+    --rollback-version=*)
+      ROLLBACK_VERSION="${1#--rollback-version=}"
+      shift
       ;;
     --compose-files)
       COMPOSE_FILES="${2:-}"
       shift 2
       ;;
+    --compose-files=*)
+      COMPOSE_FILES="${1#--compose-files=}"
+      shift
+      ;;
     --service)
       SERVICE="${2:-}"
       shift 2
+      ;;
+    --service=*)
+      SERVICE="${1#--service=}"
+      shift
       ;;
     --health-url)
       HEALTH_URL="${2:-}"
       shift 2
       ;;
+    --health-url=*)
+      HEALTH_URL="${1#--health-url=}"
+      shift
+      ;;
     --ready-url)
       READY_URL="${2:-}"
       shift 2
+      ;;
+    --ready-url=*)
+      READY_URL="${1#--ready-url=}"
+      shift
       ;;
     --retries)
       RETRIES="${2:-}"
       shift 2
       ;;
+    --retries=*)
+      RETRIES="${1#--retries=}"
+      shift
+      ;;
     --sleep)
       SLEEP_SECONDS="${2:-}"
       shift 2
+      ;;
+    --sleep=*)
+      SLEEP_SECONDS="${1#--sleep=}"
+      shift
       ;;
     --dry-run)
       DRY_RUN=true
@@ -106,14 +138,16 @@ if [[ -n "$ROLLBACK_VERSION" ]] && ! [[ "$ROLLBACK_VERSION" =~ ^[0-9]+\.[0-9]+\.
   exit 1
 fi
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "docker is required but not found in PATH" >&2
-  exit 2
-fi
+if [[ "$DRY_RUN" != "true" ]]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is required but not found in PATH" >&2
+    exit 2
+  fi
 
-if ! command -v curl >/dev/null 2>&1; then
-  echo "curl is required but not found in PATH" >&2
-  exit 2
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required but not found in PATH" >&2
+    exit 2
+  fi
 fi
 
 if ! [[ "$RETRIES" =~ ^[0-9]+$ ]] || [[ "$RETRIES" -lt 1 ]]; then
