@@ -417,7 +417,7 @@ tests/
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (450+ tests)
+- **Testing:** Vitest (460+ tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -430,6 +430,7 @@ npm run lint        # ESLint
 npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run release:plan # Dry-run release validation before tagging
 # add -- --clean-artifacts to remove local release artifact folders
+npm run release:checklist -- --version=0.1.6 # Open release checklist issue
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```
