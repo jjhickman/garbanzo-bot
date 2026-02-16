@@ -13,13 +13,12 @@ All notable changes to Garbanzo are documented here.
 - Added a rollback playbook to `docs/RELEASES.md` and linked it from the release checklist template.
 - Added `npm run release:deploy:verify` helper to deploy a target tag, verify health/readiness, and optionally auto-rollback.
 - `release:deploy:verify` now accepts both `--flag value` and `--flag=value` forms for safer CLI usage in scripts.
-- Added an AWS CDK support-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
+- Added an AWS CDK static-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
 - Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
-- Added custom-domain support to the AWS support-site stack (`siteDomainName` + `siteHostedZoneId`) and wired Patreon support links into site/repo funding metadata.
-- Added GitHub Actions support-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
-- Added sponsorship strategy documentation (`docs/SUPPORT.md`) including Patreon tier guidance aligned with licensing boundaries.
-- Updated website theme colors to match the Garbanzo logo palette and simplified support docs to project-reusable guidance only.
-- Hardened GitHub Actions AWS deploy role to least-privilege assumptions for support-site automation.
+- Added optional custom-domain support to the static-site stack (`siteDomainName` + `siteHostedZoneId`).
+- Added GitHub Actions static-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
+- Updated website theme colors to match the Garbanzo logo palette.
+- Hardened GitHub Actions AWS deploy role assumptions to least privilege for static-site automation.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 

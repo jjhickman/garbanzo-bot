@@ -1,53 +1,36 @@
 # Infrastructure Reference
 
-> Hardware and network available to Garbanzo.
+> Reusable deployment reference for Garbanzo operators.
 
-## Fleet
+## Deployment Targets
 
-| Machine | Specs | Tailscale IP | Role |
-|---------|-------|-------------|------|
-| **Terra** | Ryzen 7 7700X, 96 GB RAM, RTX 4060 Ti 16 GB, Ubuntu 24.04 | 100.102.168.128 | Primary host — runs the bot, Ollama, ML services |
-| **MacBook Pro** | M2 Pro, 32 GB, macOS 15.6 | 100.103.40.102 | Secondary Ollama node (qwen3:30b-a3b, 55 tok/s) |
-| **Desktop** | i9-14900K, RTX 5070 Ti 16 GB | 100.118.81.88 / 100.125.169.9 | On-demand ML training/inference |
-| **NAS** | UGREEN DXP4800+, 64 GB RAM, 40+ TB | 100.89.15.22 | Backups, model storage (NFS) |
-| **Pi 5** | BCM2712, 8 GB | 100.89.254.126 | Home Assistant (separate concern) |
+Garbanzo is designed to run on a single primary host and can be adapted to many environments:
 
-## Terra Services (Bot Host)
+- Linux VM or bare-metal host
+- Docker Compose deployment (default)
+- Optional managed cloud runtime (EC2/ECS)
 
-| Service | Port | Binding | Notes |
-|---------|------|---------|-------|
-| **Garbanzo** | 3001 (configurable) | `127.0.0.1` default, configurable via `HEALTH_BIND_HOST` | Health check endpoint (`/health`) — JSON: connection status, uptime, memory, staleness, reconnect count, backup integrity status. If published on LAN for Kuma, restrict to the monitor host (iptables `DOCKER-USER` allowlist). |
-| Ollama | 11434 | localhost | 98.8 tok/s, qwen3:8b default |
-| ChromaDB | 8000 | localhost | RAG embeddings |
-| Whisper STT | 8090 | localhost | Speech-to-text (Docker) |
-| Piper TTS | 10200 | 0.0.0.0 | Text-to-speech (Docker) |
-| OpenWakeWord | 10400 | 0.0.0.0 | Wake word detection (Docker) |
+## Baseline Services
 
-> **Note:** A prior multi-service assistant stack (gateway, classifiers, webhooks, docs server, etc.) was decommissioned 2026-02-13.
+| Service | Default Port | Binding | Notes |
+|---------|--------------|---------|-------|
+| **Garbanzo** | `3001` (configurable) | `127.0.0.1` default (`HEALTH_BIND_HOST` configurable) | Health endpoints: `/health`, `/health/ready` |
+| Ollama (optional) | `11434` | localhost | Local model routing for simple queries |
+| Whisper STT (optional) | `8090` | localhost | Speech-to-text pipeline |
+| Piper TTS (optional) | `10200` | configurable | Text-to-speech pipeline |
 
-## Network
+## Network Guidance
 
-- **Tailscale mesh VPN** connects all machines
-- **Tailscale Funnel** disabled (was exposing the prior stack; can be re-enabled later for webhook ingress)
-- LAN: `192.168.50.0/24`
-- NAS NFS: model storage at `/volume2/models/`
-- Backups: encrypted (age) to NAS `/volume1/backups/`
+- Prefer private networking and outbound-only defaults where possible.
+- If exposing health endpoints, restrict access to trusted monitors.
+- Keep AI/provider endpoints outbound and avoid exposing internal helper services publicly.
 
-## Ollama Model Routing
+## Docker Reference
 
-| Priority | Host | Model | Speed | Cost |
-|----------|------|-------|-------|------|
-| 1 | Terra | qwen3:8b | 98.8 tok/s | Free |
-| 2 | MacBook | qwen3:30b-a3b | 55.3 tok/s | Free |
-| 3 | Desktop | (on-demand) | TBD | Free |
+Garbanzo ships with a production-oriented Docker setup:
 
-## Docker Support
-
-The bot can also run as a Docker container for portable deployments:
-
-- **Dockerfile** — multi-stage build (node:22-alpine), `dumb-init` for PID 1, non-root `garbanzo` user, ffmpeg + yt-dlp bundled, HEALTHCHECK on port 3001
-- **docker-compose.yml** — named volumes for `baileys_auth` and `data`, env_file, 1 GB memory limit, log rotation, restart unless-stopped
-- **Native deps** — `better-sqlite3` requires `python3 make g++` in the builder stage
+- `Dockerfile` — multi-stage build, non-root runtime, healthcheck support
+- `docker-compose.yml` — persisted volumes for auth/database state, restart policy, log rotation
 
 ```bash
 # Build and run
@@ -60,11 +43,24 @@ curl http://127.0.0.1:3001/health
 docker compose logs -f garbanzo
 ```
 
-> **Note:** Docker Compose is the default deployment method. A systemd user service is still supported for native Node deployments.
+## Storage & Backups
 
-## Known Quirks
+- Runtime data lives in `data/` (SQLite by default)
+- Auth state lives in `baileys_auth/`
+- Nightly backups are written to `data/backups/`
+- Backups should be copied to external storage with encryption in production
 
-- Terra: system Python is 3.14 — ChromaDB may need a dedicated venv (3.12 compatible)
-- MacBook: needs `caffeinate` daemon to prevent lid-close sleep
-- NAS: `scp`/`rsync` broken on UGOS Pro — use `cat | ssh cat >` for transfers
-- Desktop: dual-boot, not always-on
+## Capacity Planning (Pragmatic)
+
+Start simple and scale based on measured usage:
+
+- Increase CPU/RAM vertically before adding architecture complexity.
+- Keep persistent state local and backed up.
+- For multi-instance scaling, plan a migration path from SQLite to Postgres first.
+
+## Operator Checklist
+
+- [ ] Health endpoint reachable only by trusted monitors
+- [ ] Backup retention and restore test documented
+- [ ] Secrets managed outside git (`.env`, SSM, or Secrets Manager)
+- [ ] Release rollback command tested (`npm run release:deploy:verify`)

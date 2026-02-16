@@ -94,37 +94,6 @@ cdk deploy \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
 
-## Deploy the support website (S3 + CloudFront)
-
-The same CDK app can deploy a simple static support/marketing site from `website/`.
-
-```bash
-cd infra/cdk
-
-cdk deploy GarbanzoSiteStack \
-  -c deployEc2=false \
-  -c deploySite=true
-```
-
-Optional context:
-
-- `-c siteBucketName=your-unique-bucket-name`
-- `-c sitePriceClass=100|200|all` (default `100`)
-- `-c siteDomainName=garbanzobot.com`
-- `-c siteHostedZoneId=<route53-hosted-zone-id>`
-
-Example with custom domain + Route 53 aliases:
-
-```bash
-cdk deploy GarbanzoSiteStack \
-  -c deployEc2=false \
-  -c deploySite=true \
-  -c siteDomainName=garbanzobot.com \
-  -c siteHostedZoneId=Z065585312QAJF1P6J0UL
-```
-
-After deploy, use the `WebsiteUrl` output as your public landing page URL.
-
 ## QR Linking
 
 On first boot, you need to read logs and scan the QR code.

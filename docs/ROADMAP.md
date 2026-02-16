@@ -261,7 +261,7 @@ Completed as part of 7.1 file splits:
 Research and adopt established, free, trustworthy tools for automated security. Don't hand-roll — use proven open-source solutions.
 
 1. [x] **Dependency vulnerability scanning** — evaluated `npm audit` vs Snyk/Socket.dev and wired `npm audit --audit-level=high` into `npm run check` (fast, zero new dependencies).
-2. [x] **Host hardening audit** — evaluated [Lynis](https://github.com/CISOfy/lynis) and added `npm run host:lynis` helper to run/capture audits on Terra.
+2. [x] **Host hardening audit** — evaluated [Lynis](https://github.com/CISOfy/lynis) and added `npm run host:lynis` helper for host audit capture.
 3. [x] **Intrusion prevention** — evaluated [fail2ban](https://github.com/fail2ban/fail2ban) and added `npm run host:fail2ban` helper to bootstrap an SSH jail (dry-run by default).
 4. [x] **Container security** — evaluated Trivy and added a non-blocking image vulnerability scan to the Docker release workflow (artifact report attached on tag builds).
 5. [x] **Automated backups verification** — health check now reports latest nightly backup integrity (`verifyLatestBackupIntegrity` + SQLite `PRAGMA integrity_check`).
@@ -324,14 +324,12 @@ Research and adopt established, free, trustworthy tools for automated security. 
 2. [ ] **Wizard follow-ups**
    - [ ] Add true Discord config generation once Discord runtime is implemented (bot token, guild/channel mapping)
    - [x] Add optional dry-run mode that previews file output without writing
-3. [x] **Project sustainability / patronage UX**
-   - Added sponsor/contribution section in `README.md`
-   - Added funding metadata file (`.github/FUNDING.yml`)
-   - Added owner support commands (`!support`, `!support broadcast`) and optional support link env vars
-4. [x] **Owner-approved feedback issue workflow**
-   - Added `!feedback issue <id>` command (accepted items only)
-   - Added optional GitHub issue automation env vars (`GITHUB_ISSUES_TOKEN`, `GITHUB_ISSUES_REPO`)
-   - Feedback entries now store linked issue number/URL metadata
+3. [x] **Owner workflow enhancements**
+   - Added owner broadcast tooling for release updates
+   - Added feedback triage workflow with optional issue-link metadata
+4. [x] **Project documentation cleanup**
+   - Kept repository docs focused on reusable project operations
+   - Removed contributor-specific setup docs from tracked documentation
 
 ---
 
