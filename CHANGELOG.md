@@ -8,6 +8,17 @@ All notable changes to Garbanzo are documented here.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
+## [0.1.5] — 2026-02-16
+
+### Fixed
+
+- Native-binary release workflow now checks out the repo before running `gh release create --generate-notes` (prevents "not a git repository" failures)
+- Quoted-media extraction now includes `remoteJid` when downloading quoted media via Baileys
+
+### Changed
+
+- Small WhatsApp adapter cleanup (drop redundant delete key cast)
+
 ## [0.1.4] — 2026-02-16
 
 ### Added
