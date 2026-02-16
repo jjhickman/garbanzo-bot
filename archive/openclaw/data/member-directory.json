@@ -1,6 +1,0 @@
-{
-  "members": [],
-  "comment": "This file will be populated by member introductions. Structure: {name, age, location, interests: [], looking_for: string, joined_date, phone_number (optional)}",
-  "hobbies_index": {},
-  "comment2": "hobbies_index maps hobby keywords to arrays of member names who have that interest"
-}

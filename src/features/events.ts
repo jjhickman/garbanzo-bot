@@ -24,7 +24,7 @@ const MIN_EVENT_TEXT_LENGTH = 15;
 export const EVENTS_JID = getEnabledGroupJidByName('Events');
 
 // ── Event detection patterns ────────────────────────────────────────
-// Adapted from archive/openclaw/hooks/whatsapp-event-enrichment.js
+// Adapted from a prior event-enrichment hook in a legacy stack.
 
 /** Patterns that indicate someone is proposing or discussing an event */
 const EVENT_PATTERNS: RegExp[] = [

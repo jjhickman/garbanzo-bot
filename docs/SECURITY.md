@@ -10,21 +10,20 @@
 
 ### 1. API Keys in Plaintext Config Files
 
-**Risk: HIGH** — Keys are exposed in `~/.openclaw/openclaw.json` and `~/.openclaw/.env`
+**Risk: HIGH** — Keys were historically stored in plaintext config files under a user home directory
 
 | Key | File | Action Needed |
 |-----|------|---------------|
 | `ANTHROPIC_API_KEY` (sk-ant-oat01-...) | .env | Rotate after migration |
-| `GOOGLE_API_KEY` (AIzaSy...) | .env + openclaw.json | Rotate |
-| `NEWSAPI_KEY` | .env + openclaw.json | Rotate |
-| `MBTA_API_KEY` | .env + openclaw.json | Rotate |
+| `GOOGLE_API_KEY` (AIzaSy...) | .env + legacy config | Rotate |
+| `NEWSAPI_KEY` | .env + legacy config | Rotate |
+| `MBTA_API_KEY` | .env + legacy config | Rotate |
 | `OPENAI_API_KEY` | .env | Rotate |
 | `BRAVE_SEARCH_API_KEY` | .env | Rotate |
-| `OPENCLAW_GATEWAY_TOKEN` | .env | ✅ Decommissioned — OpenClaw stopped |
 | `PUBSUB_VERIFICATION_TOKEN` | .env | Rotate |
 | `CALENDAR_CHANNEL_TOKEN` | .env | Rotate |
 
-**These keys have been visible to any agent with file read access for the entire lifetime of the OpenClaw setup.**
+**These keys have been visible to any agent with file read access for the entire lifetime of the prior stack.**
 
 **Recommendation:** Rotate ALL keys once the new bot is live. Use `.env` only (gitignored), never commit keys to config files. For production, consider using a secrets manager or encrypted env files.
 
@@ -36,9 +35,9 @@ Resolved: UFW enabled with deny-incoming default, allowing SSH + Tailscale (`100
 
 ### 3. ✅ Services Bound to 0.0.0.0 — FIXED
 
-~~Ollama and OpenClaw were reachable from any device on the LAN.~~
+~~Ollama and legacy services were reachable from any device on the LAN.~~
 
-Resolved: Ollama bound to `127.0.0.1`. All OpenClaw-inspired services decommissioned (ports 8085, 8089, 8091, 8092, 18789, 18790 closed).
+Resolved: Ollama bound to `127.0.0.1`. All legacy auxiliary services were decommissioned (ports 8085, 8089, 8091, 8092, 18789, 18790 closed).
 
 Remaining services on `0.0.0.0` (low risk, no sensitive data):
 
@@ -55,7 +54,7 @@ Remaining services on `0.0.0.0` (low risk, no sensitive data):
 
 ### 4. ✅ Tailscale Funnel — DISABLED
 
-~~OpenClaw-inspired gateway and docs server were publicly accessible via Tailscale Funnel.~~
+~~Legacy gateway and docs server were publicly accessible via Tailscale Funnel.~~
 
 Resolved: `tailscale funnel off` — no serve config remains. Funnel can be re-enabled later if webhook ingress is needed.
 
@@ -71,14 +70,13 @@ Resolved: Bound to `127.0.0.1` via systemd override (`/etc/systemd/system/ollama
 
 | Item | Status |
 |------|--------|
-| OpenClaw-inspired stack fully decommissioned (all services stopped + disabled) | ✅ Done |
+| Legacy assistant stack fully decommissioned (all services stopped + disabled) | ✅ Done |
 | ChromaDB bound to localhost (8000) | ✅ Correct |
-| ML services were bound to localhost (now stopped with OpenClaw) | ✅ N/A |
+| ML services were bound to localhost (now stopped) | ✅ N/A |
 | Whisper Docker bound to localhost (8090) | ✅ Correct |
 | Tailscale mesh active across 5+ devices | ✅ Solid |
 | SSH running (key auth recommended) | ✅ Normal |
 | Credential files have 600 permissions | ✅ Correct |
-| .openclaw directory has 700 permissions | ✅ Correct |
 | Docker containers use bridge networking | ✅ Reasonable |
 | Encrypted backups to NAS | ✅ Good practice |
 
@@ -183,13 +181,13 @@ chmod +x .git/hooks/pre-commit
 |---|---------|-------------|----------|
 | 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`) | ✅ 4 rules active |
 | 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
-| 4 | Tailscale Funnel exposing OpenClaw | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
-| 5 | Port 18790 on `0.0.0.0` | Stopped + disabled `openclaw-webhooks.service` via `systemctl --user` | ✅ Port closed |
-| — | **Full OpenClaw-inspired stack decommission** | All 10 systemd services stopped + disabled (artifacts preserved out-of-band) | ✅ Zero processes, zero ports |
+| 4 | Tailscale Funnel exposing legacy services | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
+| 5 | Port 18790 on `0.0.0.0` | Stopped + disabled legacy webhooks service via `systemctl --user` | ✅ Port closed |
+| — | **Full legacy stack decommission** | All systemd services stopped + disabled (artifacts preserved out-of-band) | ✅ Zero processes, zero ports |
 
 ### Remaining — Manual Steps
 
-1. **[ ] Rotate all API keys** — old keys were exposed to AI agents with file read access in `~/.openclaw/.env` and `~/.openclaw/openclaw.json`
+1. **[ ] Rotate all API keys** — old keys may have been exposed to AI agents with file read access in legacy plaintext config files
 
    | Key | Where to rotate |
    |-----|----------------|

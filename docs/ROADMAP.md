@@ -11,7 +11,7 @@
 
 ### Tasks
 - [x] `npm install` and resolve dependency issues
-- [x] Create `.env` with API keys (rotated from old OpenClaw ones)
+- [x] Create `.env` with API keys (rotate any legacy keys during migration)
 - [x] Fix TypeScript errors (unused import, `unknown` type assertions in AI router)
 - [x] Fix QR code display (`printQRInTerminal` deprecated in Baileys v6.7 — added `qrcode-terminal`)
 - [x] Configure AI router to prefer OpenRouter with Sonnet 4
@@ -335,7 +335,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 
 ## Anti-Patterns to Avoid
 
-These are the mistakes from the earlier OpenClaw-inspired setup. Do NOT repeat them:
+These are mistakes from an earlier tool-heavy assistant setup. Do NOT repeat them:
 
 1. ❌ **Don't build features for imagined users.** Only add what real members ask for or demonstrably use.
 2. ❌ **Don't add multiple features simultaneously.** One at a time, tested, validated.
