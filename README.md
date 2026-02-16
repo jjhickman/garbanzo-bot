@@ -112,6 +112,23 @@ curl -s -X POST http://127.0.0.1:3002/slack/demo \
   -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
 ```
 
+### Discord Demo Mode (optional)
+
+Discord production runtime is not implemented yet, but local demo mode can exercise the core pipeline similarly:
+
+```bash
+# .env
+MESSAGING_PLATFORM=discord
+DISCORD_DEMO=true
+
+npm run dev
+
+# In another terminal
+curl -s -X POST http://127.0.0.1:3003/discord/demo \
+  -H 'content-type: application/json' \
+  -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
+```
+
 ### Automated / Non-Interactive Setup
 
 Use non-interactive mode for reproducible setup in scripts or CI-like environments:
