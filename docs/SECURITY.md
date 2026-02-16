@@ -187,6 +187,7 @@ chmod +x .git/hooks/pre-commit
 - Run on Terra:
   - `npm run host:lynis`
   - If not installed yet: `npm run host:lynis -- --install`
+- Requires sudo (script now reports clearly when no interactive TTY is available)
 - Output is captured to `data/host-audits/` (gitignored)
 
 ## Intrusion Prevention (fail2ban)
@@ -198,6 +199,7 @@ chmod +x .git/hooks/pre-commit
 - Apply (installs + writes `/etc/fail2ban/jail.d/garbanzo-sshd.local` + enables service):
   - `npm run host:fail2ban -- --apply`
   - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 100.64.0.0/10 192.168.50.0/24"`
+- Requires sudo (script now reports clearly when no interactive TTY is available)
 
 ## Runtime Hardening Updates
 
