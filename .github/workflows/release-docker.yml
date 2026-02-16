@@ -162,6 +162,37 @@ jobs:
           short-description: WhatsApp community bot with AI routing and ops tooling.
           readme-filepath: ./docs/DOCKERHUB_OVERVIEW.md
 
+  scan-image:
+    name: Scan Published Image (Trivy)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    timeout-minutes: 15
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.34.0
+        with:
+          image-ref: "${{ needs.build-and-push.outputs.image_ref }}"
+          format: table
+          output: trivy-image-report.txt
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Upload Trivy report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-report
+          path: trivy-image-report.txt
+
   smoke-test:
     name: Smoke Test Published Image
     runs-on: ubuntu-latest
