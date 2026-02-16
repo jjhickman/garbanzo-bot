@@ -15,6 +15,7 @@ All notable changes to Garbanzo are documented here.
 - `release:deploy:verify` now accepts both `--flag value` and `--flag=value` forms for safer CLI usage in scripts.
 - Added an AWS CDK static-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
 - Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
+- Added explicit Gemini integration coverage tests (`tests/gemini.test.ts`) and updated README provider docs to include Gemini configuration and pricing fields.
 - Added optional custom-domain support to the static-site stack (`siteDomainName` + `siteHostedZoneId`).
 - Added GitHub Actions static-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
 - Updated website theme colors to match the Garbanzo logo palette.
