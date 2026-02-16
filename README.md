@@ -596,8 +596,10 @@ If Garbanzo is useful for your community, you can support development and operat
 Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant a commercial license. For commercial licensing, see `COMMERCIAL_LICENSE.md`.
 
 - GitHub Sponsors: https://github.com/sponsors/jjhickman
-- (Optional) Configure Patreon/Ko-fi/custom links in `.env`
-- Optional public support site can be deployed on AWS via `infra/cdk` (`GarbanzoSiteStack`)
+- Patreon: https://www.patreon.com/c/garbanzobot
+- (Optional) Configure Ko-fi/custom links in `.env`
+- Public support site: https://d1qesoxr778xh2.cloudfront.net (custom domain migration to `garbanzobot.com` in progress)
+- Optional AWS website deployment via `infra/cdk` (`GarbanzoSiteStack`)
 
 Owner-side support messaging:
 

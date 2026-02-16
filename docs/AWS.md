@@ -90,14 +90,16 @@ If you publish port `3001` publicly/within a VPC, restrict it to trusted monitor
 To stand up a public support/marketing page quickly, use the website stack in `infra/cdk`.
 
 1. Ensure AWS CLI auth is active (`aws sts get-caller-identity`).
-2. Deploy the site stack:
+2. Deploy the site stack (with optional custom domain):
 
 ```bash
 cd infra/cdk
 npm install
 cdk deploy GarbanzoSiteStack \
   -c deployEc2=false \
-  -c deploySite=true
+  -c deploySite=true \
+  -c siteDomainName=garbanzobot.com \
+  -c siteHostedZoneId=Z065585312QAJF1P6J0UL
 ```
 
 3. Copy the `WebsiteUrl` output and set it as repo homepage:
@@ -108,8 +110,8 @@ gh repo edit --homepage "https://<cloudfront-domain>"
 
 4. Update your support links:
 
-- Set `PATREON_URL` in your runtime `.env`
-- Optionally add Patreon handle in `.github/FUNDING.yml`
+- Set `PATREON_URL` in your runtime `.env` (e.g., `https://www.patreon.com/c/garbanzobot`)
+- Keep Patreon handle in `.github/FUNDING.yml` in sync
 - Run owner command `!support broadcast` after links are updated
 
 ## Option: ECS Fargate + EFS (More Portable, More Moving Parts)
