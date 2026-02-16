@@ -11,7 +11,7 @@
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
-A multi-platform community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys), shared routing/core middleware, and multi-provider AI (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+A multi-platform chat operations bot with shared routing/core middleware and multi-provider AI (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
 
 ## Supported Messaging Platforms
 
@@ -32,7 +32,7 @@ A multi-platform community bot built with [Baileys](https://github.com/WhiskeySo
 - Meetup/community organizers running active group chats who want structure without killing vibe
 - Hobby groups (book clubs, tabletop groups, local interest communities) needing quick planning tools
 - Small teams that want an AI chat ops assistant with local-first data and low infra overhead
-- Builders who need a reusable WhatsApp bot base with clear extension points and production guardrails
+- Builders who need a reusable multi-platform bot base with clear extension points and production guardrails
 
 ## What Makes Garbanzo Different
 
@@ -41,7 +41,7 @@ Garbanzo is opinionated around community operations, not just message transport.
 - **Compared to messaging APIs/SDKs (e.g. Twilio, platform SDKs):** APIs provide transport primitives; Garbanzo ships reusable community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage).
 - **Compared to raw platform libraries:** those are foundations; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included.
 - **AI cost/reliability posture:** configurable cloud provider ordering across Claude/OpenAI/Gemini, plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
-- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, credential rotation reminders, and owner-safe approval workflows.
+- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, and owner-safe approval workflows.
 - **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
 
 ## Personas
@@ -79,6 +79,16 @@ Garbanzo connects to supported messaging platforms, listens for mentions/command
 - Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 - GHCR: `ghcr.io/jjhickman/garbanzo`
 - Release tags are published as `vX.Y.Z`, `X.Y.Z`, and `latest` (stable only)
+
+## Support Options
+
+If Garbanzo helps your community, support keeps releases, maintenance, and support response sustainable:
+
+- Patreon: https://www.patreon.com/c/garbanzobot
+  - `Bean Sprout` - project updates and roadmap votes
+  - `Steady Simmer` - priority issue triage and monthly office-hours notes
+  - `Kitchen Crew` - onboarding review queue and release planning input
+- GitHub Sponsors: https://github.com/sponsors/jjhickman
 
 ## Quick Start
 
@@ -317,8 +327,12 @@ curl http://127.0.0.1:3001/health/ready
 ### Owner Commands (DM only)
 - `!memory add/delete/search` — manage long-term community facts injected into AI context
 - `!feedback` — review pending suggestions and bug reports
-- `!release <notes>` — broadcast release notes to all groups
-- `!release changelog` — broadcast latest changelog section with version header
+- `!release rules` — show member-facing release update rules
+- `!release preview <notes>` — lint + preview release notes without sending
+- `!release send <notes>` — broadcast release notes to all enabled groups
+- `!release send <group> <notes>` — broadcast release notes to one group
+- `!release send changelog [lines]` — broadcast latest changelog snippet
+- `!release internal <notes>` — keep update operator-only (no broadcast)
 - `!strikes` — view moderation strike counts
 - `!digest` — preview daily activity summary
 - `!catchup intros` — recent introduction summaries
@@ -331,7 +345,7 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging platform target (`whatsapp` default; also supports `slack`, `discord`, `teams`) |
+| `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp` production; `slack`/`discord` demo runtimes; `teams` adapter target) |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI/Gemini failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
@@ -622,7 +636,7 @@ Repo guardrails are configured under `.github/`:
 ## Docs
 
 - [PERSONA.md](docs/PERSONA.md) — Bot personality and voice guidelines
-- [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-7 complete; Phase 8 expansion track queued)
+- [ROADMAP.md](docs/ROADMAP.md) — Product milestones and release direction
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline

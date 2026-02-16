@@ -45,7 +45,9 @@ body:
       options:
         - label: "Deploy image with `APP_VERSION` (or `npm run release:deploy:verify` helper)"
         - label: Health endpoint responds after deploy
-        - label: Owner DM `!release` broadcast sent with expected version
+        - label: "If `website/**` changed, run Deploy Website workflow and verify live URL"
+        - label: Owner DM `!release preview ...` reviewed and approved
+        - label: Owner DM `!release send ...` broadcast sent to affected groups only
         - label: "Rollback plan prepared/documented (see docs/RELEASES.md Rollback Playbook)"
 
   - type: textarea

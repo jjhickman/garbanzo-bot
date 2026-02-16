@@ -76,6 +76,27 @@ npm run release:checklist -- --version=X.Y.Z
 npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
 ```
 
+7. If website content changed (`website/**`), run the website deployment workflow and verify the live site before closing the release checklist issue.
+
+## Member Release Communication Rules
+
+Use owner DM release commands in a way that avoids member confusion:
+
+- `!release preview <notes>` before every broadcast.
+- Only send member-facing updates (new behavior, bug fix members notice, outage/maintenance requiring member action).
+- Keep member updates short and plain-language.
+- Keep internal updates in operator channels with `!release internal <notes>`.
+- Use `!release send --force <notes>` only when intentional and documented.
+
+Command quick reference:
+
+- `!release rules`
+- `!release preview <message>`
+- `!release send <message>`
+- `!release send <group> <message>`
+- `!release send changelog [lines]`
+- `!release internal <message>`
+
 ## Version Injection Behavior
 
 - Docker build uses `APP_VERSION` build arg.
@@ -83,7 +104,8 @@ npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
 - `!release` message header auto-includes version from:
   1. `GARBANZO_VERSION`, else
   2. `package.json` version.
-- `!release changelog` broadcasts the latest changelog section with version header.
+- `!release send changelog [lines]` broadcasts the latest changelog section snippet with version header.
+- Bare `!release <notes>` now defaults to preview mode (no broadcast) to prevent accidental member spam.
 
 ## Native Binary Strategy
 
