@@ -8,7 +8,7 @@ All notable changes to Garbanzo are documented here.
 
 - Switched project licensing to Apache License 2.0 and updated package metadata accordingly.
 - Reworked licensing docs to reflect Apache-2.0 commercial-use permissions and optional paid support/services.
-- Updated README, website footer, and Docker Hub overview copy to remove source-available/commercial-trial wording.
+- Updated README, website footer, and Docker Hub overview copy for Apache-2.0 licensing language.
 
 ## [0.1.7] — 2026-02-16
 
