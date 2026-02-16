@@ -22,6 +22,7 @@ describe('ops scripts', () => {
   const root = process.cwd();
   const logScanPath = join(root, 'scripts/log-scan.mjs');
   const journalScanPath = join(root, 'scripts/journal-scan.sh');
+  const setupPath = join(root, 'scripts/setup.mjs');
   const lynisPath = join(root, 'scripts/host/lynis-audit.sh');
   const fail2banPath = join(root, 'scripts/host/fail2ban-bootstrap.sh');
 
@@ -61,6 +62,22 @@ describe('ops scripts', () => {
   it('journal-scan shows usage with --help', () => {
     const out = runBashScript(journalScanPath, ['--help']);
     expect(out).toContain('Usage: bash scripts/journal-scan.sh');
+  });
+
+  it('setup dry-run can configure Slack demo mode', () => {
+    const out = runNodeScript(setupPath, [
+      '--non-interactive',
+      '--dry-run',
+      '--platform=slack',
+      '--slack-demo=true',
+      '--providers=openai',
+      '--openai-key=test_key_setup',
+      '--owner-jid=test_owner@s.whatsapp.net',
+    ]);
+
+    expect(out).toContain('MESSAGING_PLATFORM=slack');
+    expect(out).toContain('SLACK_DEMO=true');
+    expect(out).toContain('Slack demo mode: true');
   });
 
   it('host hardening scripts show usage with --help', () => {
