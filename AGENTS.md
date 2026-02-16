@@ -179,8 +179,6 @@ garbanzo-bot/
 ├── .env                      # Secrets (gitignored)
 ├── .env.example              # Template for .env
 ├── .gitleaks.toml            # Secret scanning config (gitleaks)
-├── opencode.json             # OpenCode AI agent config (gitignored — has secrets)
-├── opencode.json.example     # Template for opencode.json
 ├── package.json
 ├── tsconfig.json
 └── AGENTS.md                 # This file
