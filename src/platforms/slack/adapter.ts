@@ -66,11 +66,11 @@ export function createSlackAdapter(): PlatformMessenger {
  * This is intended for local development only ("demo mode"), not for production.
  */
 export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): PlatformMessenger {
-  const nextRef = (chatId: string): MessageRef => createMessageRef({
+  const nextRef = (chatId: string, threadId: string | null): MessageRef => createMessageRef({
     platform: 'slack',
     chatId,
     id: `slack-demo-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    ref: { kind: 'slack-demo' },
+    ref: { kind: 'slack-demo', threadId },
   });
 
   const adapter: PlatformMessenger = {
@@ -97,7 +97,8 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
     },
 
     async sendTextWithRef(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<MessageRef> {
-      const ref = nextRef(chatId);
+      const threadId = getThreadIdFromReplyTo(options?.replyTo);
+      const ref = nextRef(chatId, threadId);
       outbox.push({
         type: 'text',
         chatId,
@@ -112,7 +113,7 @@ export function createSlackDemoAdapter(outbox: SlackDemoOutboxEntry[]): Platform
     },
 
     async sendDocument(chatId: string, doc: DocumentPayload): Promise<MessageRef> {
-      const ref = nextRef(chatId);
+      const ref = nextRef(chatId, null);
       outbox.push({
         type: 'document',
         chatId,
