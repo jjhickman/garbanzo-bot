@@ -1,43 +1,39 @@
 # License FAQ
 
-Garbanzo is licensed under the Prosperity Public License 3.0.0.
-
-This is a source-available license that:
-
-- allows free use for noncommercial purposes
-- allows a limited commercial trial period (30 days per company)
-- requires a commercial license for ongoing commercial use
+Garbanzo is licensed under Apache License 2.0.
 
 This FAQ is a plain-English guide and is not legal advice. The license text in `LICENSE` controls.
 
-## Can I use Garbanzo for personal projects?
+## Can I use Garbanzo commercially?
 
-Yes. Personal use for hobby projects, private entertainment, research, and learning is noncommercial under the license.
-
-## Can I use Garbanzo for a community group or nonprofit?
-
-Yes. The license explicitly permits use by charitable organizations, educational institutions, public research, public safety/health, environmental protection, and government institutions.
-
-## Can my company use Garbanzo internally?
-
-A short trial is permitted.
-
-Ongoing use inside a for-profit company is commercial use and requires a commercial license.
-
-## Can I offer Garbanzo as a hosted service for clients?
-
-No, not without a commercial license.
+Yes. Apache-2.0 allows commercial use.
 
 ## Can I modify Garbanzo?
 
-Yes. You can modify and share changes under the same license terms. If you contribute changes back under a standard public software license (MIT/Apache/Blue Oak/BSD-2), that contribution activity does not count as commercial use.
+Yes. Apache-2.0 allows modification and redistribution.
 
-## What about contractors/consultants?
+## Do I need to open-source my changes?
 
-If you are paid to set up or run Garbanzo for someone else, that is commercial use.
+No. Apache-2.0 does not require you to publish your source.
 
-## Why this license?
+If you redistribute binaries or source, you must preserve required notices and include the Apache-2.0 license text.
 
-The goal is to keep Garbanzo accessible to individuals and community organizers while preventing free-riding commercial usage.
+## Can I offer Garbanzo as a hosted service?
 
-If you're building a business on top of Garbanzo, please contact for licensing.
+Yes. Apache-2.0 allows hosted and managed use.
+
+## What about patents?
+
+Apache-2.0 includes a patent grant from contributors, with termination conditions described in the license.
+
+## Are Garbanzo name and logos covered by Apache-2.0?
+
+No. Trademark and branding rights are separate.
+
+See `TRADEMARK.md`.
+
+## Is paid support still available?
+
+Yes. Paid support and implementation help are optional services, not separate software license permissions.
+
+See `COMMERCIAL_LICENSE.md`.
