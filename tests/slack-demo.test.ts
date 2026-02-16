@@ -21,8 +21,12 @@ describe('Slack demo runtime', () => {
     const first = outbox[0];
     expect(first.type).toBe('text');
 
-    const payload = first.payload as { text?: unknown };
+    const payload = first.payload as { text?: unknown; replyToId?: unknown; threadId?: unknown };
     expect(typeof payload.text).toBe('string');
     expect(String(payload.text)).toContain('Garbanzo Bean');
+
+    // Demo adapter should treat responses as replies to the inbound message.
+    expect(payload.replyToId).toBe(inbound.raw.id);
+    expect(payload.threadId).toBe(null);
   });
 });
