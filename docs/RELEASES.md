@@ -67,7 +67,7 @@ Notes:
 5. Create a release checklist issue and track deploy verification:
 
 ```bash
-npm run release:checklist -- --version=0.1.6
+npm run release:checklist -- --version=X.Y.Z
 ```
 
 ## Version Injection Behavior
