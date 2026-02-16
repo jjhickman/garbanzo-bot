@@ -20,19 +20,28 @@ If local artifact folders exist from prior packaging runs, use:
 npm run release:plan -- --clean-artifacts
 ```
 
-2. Bump version in `package.json` and create git tag:
+2. Bump version in `package.json` and merge via PR:
 
 ```bash
 # patch/minor/major as needed
-npm version patch
+# (use --no-git-tag-version so the tag is created on main after merge)
+npm version patch --no-git-tag-version
+
+git push -u origin <your-branch>
+# open PR, ensure checks pass, merge into main
 ```
 
-This creates a commit and tag like `v0.1.3`.
-
-3. Push commit + tag:
+3. Tag `main` and push the tag:
 
 ```bash
-git push origin main --follow-tags
+git checkout main
+git pull --ff-only
+
+# create annotated tag on the merge commit
+git tag -a vX.Y.Z -m "vX.Y.Z"
+
+# push tag only (main is protected)
+git push origin vX.Y.Z
 ```
 
 4. GitHub Actions publish release artifacts:
