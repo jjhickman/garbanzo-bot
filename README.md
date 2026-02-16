@@ -4,6 +4,12 @@
 
 A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and cloud AI routing. Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
 
+## Current Status
+
+- Production runtime: WhatsApp (Slack local demo mode available for pipeline testing)
+- Latest tagged release: `v0.1.6`
+- Delivery state: Phases 1-7 complete, Phase 8 (platform expansion) queued
+
 ## Why Garbanzo
 
 - Turn busy group chats into actionable community coordination (events, plans, recs, summaries)
@@ -417,7 +423,7 @@ tests/
 - **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (460+ tests)
+- **Testing:** Vitest (467+ tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -430,8 +436,12 @@ npm run lint        # ESLint
 npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run release:plan # Dry-run release validation before tagging
 # add -- --clean-artifacts to remove local release artifact folders
-npm run release:checklist -- --version=0.1.6 # Open release checklist issue
-npm run release:deploy:verify -- --version=0.1.6 --rollback-version=0.1.5
+npm run release:checklist -- --version=X.Y.Z # Open release checklist issue
+npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
+npm run logs:scan -- ./logs/garbanzo.log --min-level warn
+npm run logs:journal -- --unit garbanzo.service --since "24 hours ago"
+npm run host:lynis -- --install
+npm run host:fail2ban -- --apply
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```
@@ -638,7 +648,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 ## Docs
 
 - [PERSONA.md](docs/PERSONA.md) — Bot personality and voice guidelines
-- [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-6 complete, Phase 7 in progress)
+- [ROADMAP.md](docs/ROADMAP.md) — Phased implementation plan (Phases 1-7 complete; Phase 8 expansion track queued)
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
