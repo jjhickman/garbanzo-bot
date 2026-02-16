@@ -27,6 +27,7 @@
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
     "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh",
     "release:plan": "node scripts/release-plan.mjs",
+    "release:checklist": "node scripts/release-checklist.mjs",
     "logs:scan": "node scripts/log-scan.mjs",
     "logs:journal": "bash scripts/journal-scan.sh",
     "host:lynis": "bash scripts/host/lynis-audit.sh",

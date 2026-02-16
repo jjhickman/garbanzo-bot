@@ -9,6 +9,7 @@ All notable changes to Garbanzo are documented here.
 - Setup wizard now supports Slack demo mode configuration (`--platform=slack --slack-demo=true`) and writes `SLACK_DEMO*` env settings.
 - Setup completion messaging now explicitly clarifies platform status (WhatsApp support, Slack demo local-only, Discord/Teams pending).
 - Added script-level coverage for Slack setup dry-run behavior to keep setup output deterministic and regression-safe.
+- Added `npm run release:checklist` helper to create and assign release checklist issues using the protected-`main` workflow.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 

@@ -23,6 +23,7 @@ describe('ops scripts', () => {
   const logScanPath = join(root, 'scripts/log-scan.mjs');
   const journalScanPath = join(root, 'scripts/journal-scan.sh');
   const setupPath = join(root, 'scripts/setup.mjs');
+  const releaseChecklistPath = join(root, 'scripts/release-checklist.mjs');
   const lynisPath = join(root, 'scripts/host/lynis-audit.sh');
   const fail2banPath = join(root, 'scripts/host/fail2ban-bootstrap.sh');
 
@@ -78,6 +79,12 @@ describe('ops scripts', () => {
     expect(out).toContain('MESSAGING_PLATFORM=slack');
     expect(out).toContain('SLACK_DEMO=true');
     expect(out).toContain('Slack demo mode: true');
+  });
+
+  it('release-checklist script shows usage with --help', () => {
+    const out = runNodeScript(releaseChecklistPath, ['--help']);
+    expect(out).toContain('Garbanzo release checklist helper');
+    expect(out).toContain('npm run release:checklist');
   });
 
   it('host hardening scripts show usage with --help', () => {
