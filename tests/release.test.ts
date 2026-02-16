@@ -23,21 +23,34 @@ describe('release notes helper', () => {
     }));
   }
 
-  it('shows changelog usage in help text', async () => {
+  it('shows send/preview usage in help text', async () => {
     mockReleaseDeps();
     const { handleRelease } = await import('../src/features/release.js');
     const sendText = vi.fn(async () => undefined);
 
     const result = await handleRelease('', sendText);
-    expect(result).toContain('!release changelog');
+    expect(result).toContain('!release send <message>');
+    expect(result).toContain('!release preview <message>');
   });
 
-  it('broadcasts changelog snippet to all enabled groups', async () => {
+  it('defaults to preview mode when no verb is provided', async () => {
     mockReleaseDeps();
     const { handleRelease } = await import('../src/features/release.js');
     const sendText = vi.fn(async () => undefined);
 
     const result = await handleRelease('changelog', sendText);
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(result).toContain('No messages were sent.');
+    expect(result).toContain('What\'s New with Garbanzo');
+  });
+
+  it('broadcasts changelog snippet to all enabled groups with explicit send', async () => {
+    mockReleaseDeps();
+    const { handleRelease } = await import('../src/features/release.js');
+    const sendText = vi.fn(async () => undefined);
+
+    const result = await handleRelease('send changelog', sendText);
     expect(result).toContain('Release notes sent to 2 groups');
 
     const calls = sendText.mock.calls as unknown as Array<[string, string]>;
@@ -51,11 +64,34 @@ describe('release notes helper', () => {
     const { handleRelease } = await import('../src/features/release.js');
     const sendText = vi.fn(async () => undefined);
 
-    const result = await handleRelease('general changelog', sendText);
+    const result = await handleRelease('send general changelog', sendText);
     expect(result).toContain('Release notes sent to 1 group');
 
     const calls = sendText.mock.calls as unknown as Array<[string, string]>;
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe('general@g.us');
+  });
+
+  it('blocks internal-only updates unless force is provided', async () => {
+    mockReleaseDeps();
+    const { handleRelease } = await import('../src/features/release.js');
+    const sendText = vi.fn(async () => undefined);
+
+    const result = await handleRelease('send refactor ci pipeline cleanup', sendText);
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(result).toContain('Release note not sent');
+    expect(result).toContain('internal/operator change');
+  });
+
+  it('allows send with force override', async () => {
+    mockReleaseDeps();
+    const { handleRelease } = await import('../src/features/release.js');
+    const sendText = vi.fn(async () => undefined);
+
+    const result = await handleRelease('send --force refactor ci pipeline cleanup', sendText);
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(result).toContain('force override');
   });
 });

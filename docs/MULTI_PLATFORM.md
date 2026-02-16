@@ -1,6 +1,6 @@
 # Multi-Platform Roadmap (Design)
 
-Garbanzo is WhatsApp-first today.
+Garbanzo currently ships a production WhatsApp runtime and local demo runtimes for Slack/Discord adapter verification.
 
 This doc captures the intended architecture for supporting multiple messaging platforms while:
 
@@ -10,9 +10,9 @@ This doc captures the intended architecture for supporting multiple messaging pl
 
 ## Goals
 
-- Add official-platform adapters first (Slack/Teams) for enterprise viability.
-- Treat WhatsApp via Baileys as community/self-hosted best-effort.
-- Make platform adapters pluggable without rewriting features.
+- Keep platform adapters explicit and pluggable without rewriting feature handlers.
+- Prioritize official-platform adapter paths (Slack/Teams) for commercial use-cases.
+- Treat WhatsApp via Baileys as community/self-hosted best-effort unless and until an official WhatsApp platform adapter is added.
 
 ## Unified Identity Mapping (Design)
 

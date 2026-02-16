@@ -111,9 +111,12 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
   !catchup intros — recent introductions summary
 
 *Releases*
-  !release <notes> — broadcast release notes to all groups
-  !release <group> <notes> — broadcast to specific group
-  !release changelog — broadcast latest changelog snippet
+  !release rules — show member-facing release update rules
+  !release preview <notes> — lint + format only (no send)
+  !release send <notes> — broadcast to all enabled groups
+  !release send <group> <notes> — broadcast to one group
+  !release send changelog [lines] — send latest changelog snippet
+  !release internal <notes> — keep update operator-only
 
 *Support*
   !support — preview support links message
