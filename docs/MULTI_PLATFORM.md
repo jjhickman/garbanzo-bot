@@ -14,6 +14,46 @@ This doc captures the intended architecture for supporting multiple messaging pl
 - Treat WhatsApp via Baileys as community/self-hosted best-effort.
 - Make platform adapters pluggable without rewriting features.
 
+## Unified Identity Mapping (Design)
+
+Before building any WhatsApp<->Discord relay, implement a stable identity map keyed by platform+user IDs.
+
+Proposed model:
+
+- `member_identity_map` table (or equivalent service)
+- columns:
+  - `canonical_member_id` (internal stable id)
+  - `platform` (`whatsapp` | `discord` | `slack`)
+  - `platform_user_id`
+  - `verified_at` (nullable)
+  - `link_method` (`owner_verified` | `self_claim_code`)
+
+Guardrails:
+
+- Never auto-link users solely by display name.
+- Require owner approval or explicit user proof flow.
+- Keep an audit trail for links/unlinks.
+
+## Bridge Safety Primitives (Required Before Relay)
+
+Define these as core invariants before enabling any WA<->Discord message forwarding:
+
+1. **Loop prevention**
+   - every bridged message carries `bridge_origin` metadata
+   - adapters ignore messages whose origin matches destination bridge pair
+
+2. **Idempotency and dedupe**
+   - store `(bridge_pair_id, source_message_id)` with TTL
+   - skip duplicates on retries/reconnects
+
+3. **Attribution format**
+   - normalized sender label: `<display_name> [platform]`
+   - include source deep-link/reference when supported
+
+4. **Rate and failure controls**
+   - per-bridge send rate limits
+   - dead-letter queue + owner-visible failure summaries
+
 ## Transport Adapter Interface
 
 Each platform adapter should implement a small surface:

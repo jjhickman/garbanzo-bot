@@ -285,6 +285,8 @@ Research and adopt established, free, trustworthy tools for automated security. 
 
 ### Discord-Specific Features
 1. [ ] **Discord bot scaffold** — Discord.js v14, slash commands, guild setup, role-based permissions
+   - [x] Local Discord demo runtime scaffold (`DISCORD_DEMO`) + parity tests
+   - [ ] Official Discord API runtime integration (bot token, guild/channel wiring)
 2. [ ] **WhatsApp ↔ Discord bridge** — relay messages between paired channels (e.g., WA General ↔ Discord #general), media forwarding, sender attribution
 3. [ ] **Discord rich embeds** — leverage Discord's embed system for weather, transit, venue, book results (richer than WhatsApp text)
 4. [ ] **Discord voice channel integration** — announce events, post join links for meetup voice chats
