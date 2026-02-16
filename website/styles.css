@@ -1,11 +1,11 @@
 :root {
-  --bg: #f7f8fb;
-  --card: #ffffff;
-  --text: #162033;
-  --muted: #5b667a;
-  --accent: #0f8b8d;
-  --accent-2: #ff6b35;
-  --border: #dbe2ee;
+  --bg: #fdf6e3;
+  --card: #fff9ed;
+  --text: #3a2a18;
+  --muted: #6f5332;
+  --accent: #b88942;
+  --accent-2: #d8b16e;
+  --border: #e5d3af;
 }
 
 * {
@@ -14,8 +14,8 @@
 
 body {
   margin: 0;
-  font-family: "Avenir Next", "Nunito", "Segoe UI", sans-serif;
-  background: radial-gradient(circle at 15% 10%, #e7f7f8 0%, var(--bg) 45%);
+  font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 14% 8%, #fffdf5 0%, var(--bg) 48%), linear-gradient(160deg, #fdf6e3, #f5e7c6 85%);
   color: var(--text);
 }
 
@@ -31,8 +31,8 @@ body {
   padding: 24px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: linear-gradient(140deg, #ffffff, #f5fbff 65%);
-  box-shadow: 0 10px 28px rgba(18, 36, 60, 0.08);
+  background: linear-gradient(140deg, #fffdf7, #f5e7c6 70%);
+  box-shadow: 0 10px 28px rgba(122, 90, 43, 0.16);
 }
 
 .hero h1 {
@@ -65,18 +65,18 @@ body {
 
 .button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 16px rgba(15, 139, 141, 0.18);
+  box-shadow: 0 8px 16px rgba(122, 90, 43, 0.22);
 }
 
 .button-primary {
-  background: var(--accent);
-  color: white;
+  background: linear-gradient(135deg, #d8b16e, #b88942);
+  color: #2e2013;
 }
 
 .button-secondary {
-  background: white;
-  color: var(--accent);
-  border-color: var(--accent);
+  background: #fffaf0;
+  color: var(--text);
+  border-color: #b88942;
 }
 
 .grid {
@@ -109,7 +109,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
-  background: #fff;
+  background: #fffaf0;
 }
 
 .tiers {
@@ -137,7 +137,7 @@ body {
 }
 
 .support a {
-  color: var(--accent-2);
+  color: #8b5e2b;
 }
 
 footer {

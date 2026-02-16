@@ -681,6 +681,7 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
 - [SUPPORT.md](docs/SUPPORT.md) — Sponsorship strategy, Patreon tiers, and licensing boundaries
+- [PATREON_SETUP.md](docs/PATREON_SETUP.md) — Ready-to-publish Patreon profile/tier copy
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions

@@ -10,6 +10,8 @@ Garbanzo is sustained by community sponsorship and commercial licensing.
 
 ## Patreon Tier Strategy
 
+See `docs/PATREON_SETUP.md` for copy/paste profile text, welcome message, goals, and FAQ snippets.
+
 These tiers are designed to convert community support while staying aligned with the project license model.
 
 1. **Bean Backer** (`$5/month`)
