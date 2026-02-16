@@ -62,6 +62,11 @@ const envSchema = z.object({
   SLACK_DEMO_PORT: z.coerce.number().int().min(1).max(65535).default(3002),
   SLACK_DEMO_BIND_HOST: z.string().min(1).default('127.0.0.1'),
 
+  // Discord demo runtime (non-production)
+  DISCORD_DEMO: z.coerce.boolean().default(false),
+  DISCORD_DEMO_PORT: z.coerce.number().int().min(1).max(65535).default(3003),
+  DISCORD_DEMO_BIND_HOST: z.string().min(1).default('127.0.0.1'),
+
   // Database
   DB_DIALECT: z.enum(['sqlite', 'postgres']).default('sqlite'),
   DATABASE_URL: z.string().optional(),

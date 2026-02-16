@@ -14,6 +14,7 @@ All notable changes to Garbanzo are documented here.
 - Added `npm run release:deploy:verify` helper to deploy a target tag, verify health/readiness, and optionally auto-rollback.
 - `release:deploy:verify` now accepts both `--flag value` and `--flag=value` forms for safer CLI usage in scripts.
 - Added an AWS CDK support-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
+- Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
