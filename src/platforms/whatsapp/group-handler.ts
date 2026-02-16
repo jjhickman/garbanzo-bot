@@ -11,6 +11,7 @@ import {
   extractWhatsAppQuotedText as extractQuotedText,
 } from './inbound.js';
 import { processGroupMessage } from '../../core/process-group-message.js';
+import { createMessageRef } from '../../core/message-ref.js';
 import { getResponse } from '../../core/response-router.js';
 import { createWhatsAppAdapter } from './adapter.js';
 
@@ -81,7 +82,12 @@ export async function handleGroupMessage(
     getResponse,
     quotedText: extractQuotedText(content),
     messageId: msg.key.id ?? undefined,
-    replyTo: msg,
+    replyTo: createMessageRef({
+      platform: 'whatsapp',
+      chatId: remoteJid,
+      id: msg.key.id ?? `wa-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ref: msg,
+    }),
     visionImages,
   });
 }

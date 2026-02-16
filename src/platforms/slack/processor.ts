@@ -5,6 +5,7 @@ import { processInboundMessage } from '../../core/process-inbound-message.js';
 import { processGroupMessage } from '../../core/process-group-message.js';
 import { getResponse } from '../../core/response-router.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
+import { createMessageRef } from '../../core/message-ref.js';
 import type { SlackInbound } from './inbound.js';
 import { isFeatureEnabled } from '../../core/groups-config.js';
 
@@ -30,18 +31,19 @@ const SlackDemoMessageSchema = z.object({
 export type SlackDemoMessage = z.infer<typeof SlackDemoMessageSchema>;
 
 export function normalizeSlackDemoInbound(message: SlackDemoMessage): SlackInbound {
+  const messageId = `slack-demo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return {
     platform: 'slack',
     chatId: message.chatId,
     senderId: message.senderId,
-    messageId: `slack-demo-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    messageId,
     fromSelf: false,
     isStatusBroadcast: false,
     isGroupChat: message.isGroupChat,
     timestampMs: Date.now(),
     text: message.text,
     hasVisualMedia: false,
-    raw: message,
+    raw: createMessageRef({ platform: 'slack', chatId: message.chatId, id: messageId, ref: message }),
   };
 }
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 import type { PollPayload } from '../src/core/poll-payload.js';
+import { createMessageRef } from '../src/core/message-ref.js';
 
 function setupMocks() {
   const isFeatureEnabled = vi.fn((_jid: string, feature: string) => feature !== 'poll');
@@ -169,7 +170,7 @@ describe('Core group processor parity (WhatsApp)', () => {
       query: '!poll What day? / Fri / Sat',
       isFeatureEnabled: () => true,
       getResponse: async () => 'ai response',
-      replyTo: msg,
+      replyTo: createMessageRef({ platform: 'whatsapp', chatId: 'group-core@g.us', id: 'm1', ref: msg }),
     });
 
     const legacyPoll = legacyCalls
@@ -236,7 +237,7 @@ describe('Core group processor parity (WhatsApp)', () => {
       query: text,
       isFeatureEnabled: () => true,
       getResponse: async () => 'ai response',
-      replyTo: msg,
+      replyTo: createMessageRef({ platform: 'whatsapp', chatId: 'group@g.us', id: 'm2', ref: msg }),
     });
 
     const legacyGroupText = legacyCalls.find((c) => c.to === 'group@g.us')?.content;
