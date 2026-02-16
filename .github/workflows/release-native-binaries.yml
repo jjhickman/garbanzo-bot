@@ -134,6 +134,11 @@ jobs:
 
           echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout (for release notes generation)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release_tag.outputs.value }}
+
       - name: Ensure GitHub Release exists
         shell: bash
         env:
