@@ -189,7 +189,9 @@ function main() {
   process.stdout.write('\n✅ Release dry-run checks passed\n');
   process.stdout.write('\nSuggested next steps:\n');
   process.stdout.write(`  npm version patch   # or minor/major (current ${packageVersion})\n`);
-  process.stdout.write('  git push origin main --follow-tags\n');
+  process.stdout.write('  # main is protected; merge via PR, then tag main\n');
+  process.stdout.write('  git tag -a v' + targetVersion + ' -m "v' + targetVersion + '"\n');
+  process.stdout.write('  git push origin v' + targetVersion + '\n');
   process.stdout.write('  # verify Release Docker Image + Release Native Binaries workflows\n');
 }
 
