@@ -1,8 +1,0 @@
-# Vettly Content Moderation Configuration
-# Policy IDs for different use cases
-
-policies:
-  whatsapp-community: whatsapp-community  # Primary moderation policy for WhatsApp community groups
-  
-# Note: Policy details and thresholds are managed in the Vettly dashboard
-# Dashboard: https://vettly.dev

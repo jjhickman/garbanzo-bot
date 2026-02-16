@@ -33,36 +33,26 @@ Garbanzo is opinionated around community operations, not just message transport.
 - Default persona: `docs/PERSONA.md`
 - Optional per-platform persona override: `docs/personas/<platform>.md` (example: `docs/personas/whatsapp.md`)
 
-## Lessons From Our OpenClaw-Inspired Stack (Trust & Maturity)
+## Lessons From a Prior Tool-Heavy Assistant Stack (Trust & Maturity)
 
-Before Garbanzo, we ran a more ambitious OpenClaw-inspired setup (many services, lots of automation, and a bigger "agent surface area"). That project taught a key lesson:
+Before Garbanzo, we ran a more ambitious multi-service assistant setup (more services, more automation, and a bigger tool surface). That experience taught a key lesson:
 
 Reliability comes from fewer moving parts and explicit guardrails, not from more integrations.
 
-Important clarification: this section is about our previous deployment and migration learnings, not a critique of the upstream OpenClaw project.
-
-What we kept (inspiration from OpenClaw-style systems):
+What we kept (good ideas that translate well to community bots):
 
 - A bias toward useful "skills" (weather/transit/events/summaries) rather than generic chat
 - Tooling that makes the bot operationally observable (health endpoints, backups, logs)
 - Cost discipline: explicit routing and fallbacks instead of "just use the biggest model"
 
-What we intentionally changed in Garbanzo (why it's safer for group deployments):
+What we intentionally changed in Garbanzo (why it's safer and easier to run for group deployments):
 
-- **Smaller surface area:** WhatsApp is the only production platform today (no web control UI, no multi-channel gateway); other platforms have scaffolds but are not implemented
+- **Smaller surface area:** WhatsApp is the only production platform today (no web control UI, no multi-channel gateway)
 - **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
 - **Group safety defaults:** mention gating + per-group feature allowlists
 - **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
 - **Local-first, inspectable state:** SQLite + explicit backups; health reports backup integrity
 - **Security guardrails in CI:** secrets scan + typecheck + lint + tests (`npm run check`)
-
-Upstream OpenClaw is explicitly designed as a general personal assistant with a large tool and channel surface, a skills ecosystem, and optional web surfaces. That power is great for single-user assistants, but it increases the amount you must secure.
-
-OpenClaw itself warns its web interface is intended for local use and should not be exposed directly to the public internet:
-
-- https://github.com/openclaw/openclaw/blob/main/SECURITY.md
-
-For a more explicit comparison, see `docs/OPENCLAW_COMPARISON.md`.
 
 ## What It Does
 
@@ -439,7 +429,7 @@ npm run test        # Run all tests
 npm run lint        # ESLint
 npm run check       # Full pre-commit: secrets + typecheck + lint + test
 npm run release:plan # Dry-run release validation before tagging
-# add -- --clean-artifacts to remove local release/archive folders
+# add -- --clean-artifacts to remove local release artifact folders
 npm run build       # Compile to dist/
 npm run start       # Production (from dist/)
 ```
@@ -655,7 +645,6 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
-- [OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md) — OpenClaw-style stack comparison and tradeoffs
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute

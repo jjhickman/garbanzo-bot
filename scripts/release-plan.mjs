@@ -59,12 +59,12 @@ function printHelp() {
     '  --version <semver>  Target release version (must match package.json)',
     '  --skip-check        Skip running npm run check',
     '  --allow-dirty       Allow dirty git working tree',
-    '  --clean-artifacts   Remove local release/archive folders before checks',
+    '  --clean-artifacts   Remove local release folders before checks',
   ].join('\n'));
 }
 
 function cleanupArtifacts(enabled) {
-  const artifactDirs = ['release', 'archive'];
+  const artifactDirs = ['release'];
   const found = artifactDirs
     .map((dir) => ({ dir, path: resolve(PROJECT_ROOT, dir) }))
     .filter((entry) => existsSync(entry.path));
