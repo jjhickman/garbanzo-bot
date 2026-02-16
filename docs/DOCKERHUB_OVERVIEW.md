@@ -1,11 +1,12 @@
 # Garbanzo Bot
 
-Garbanzo is a WhatsApp community bot (Baileys-based) that routes group mentions and commands to AI providers (configurable failover + optional local Ollama).
+Garbanzo is a WhatsApp community bot (Baileys-based) that routes group mentions and commands through configurable AI providers (Claude/OpenAI/Gemini via provider order + optional local Ollama).
 
 This image is built for small-to-medium community groups that want:
 
 - Mention-driven responses (no surprise spam)
-- Operations-friendly health endpoint (`/health`)
+- Configurable multi-provider AI routing with graceful fallback
+- Operations-friendly health + readiness endpoints (`/health`, `/health/ready`)
 - Docker-first deployment with persistent auth + SQLite state
 
 ## Quick Start (Docker Compose)
@@ -41,7 +42,7 @@ Troubleshooting: if `/health` reports `status=connected` but `/health/ready` is 
 
 ## Tags
 
-This repo publishes both GHCR and Docker Hub tags.
+This repository publishes both GHCR and Docker Hub tags from the same release workflow.
 
 - `latest`
   - Most recent stable release
@@ -60,6 +61,7 @@ All tags are multi-arch where available:
 
 - This container persists WhatsApp auth state and SQLite data via Docker volumes.
 - Exposing the health port on your LAN is useful for Uptime Kuma, but you should restrict access to trusted hosts (firewall or reverse proxy).
+- Security checks are part of release workflow: smoke-test + vulnerability scan (Trivy report artifact).
 
 ## License
 

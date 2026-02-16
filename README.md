@@ -1,5 +1,14 @@
 # Garbanzo
 
+[![Quality Gate](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml)
+[![Automation Guard](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml)
+[![Release Docker](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-docker.yml/badge.svg)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-docker.yml)
+[![Release Native Binaries](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-native-binaries.yml/badge.svg)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-native-binaries.yml)
+[![Docker Hub](https://img.shields.io/docker/v/jjhickman/garbanzo?label=dockerhub)](https://hub.docker.com/r/jjhickman/garbanzo)
+[![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
+[![Secrets Scan](https://img.shields.io/badge/secrets-gitleaks%20enforced-success)](scripts/audit-secrets.sh)
+[![Dependency Audit](https://img.shields.io/badge/dependencies-npm%20audit%20in%20check-success)](package.json)
+
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
 A WhatsApp community bot built with [Baileys](https://github.com/WhiskeySockets/Baileys) and multi-provider AI routing (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
@@ -64,6 +73,12 @@ What we intentionally changed in Garbanzo (why it's safer and easier to run for 
 
 Garbanzo connects to WhatsApp via the multi-device Web API, listens for @mentions in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
 
+## Official Images
+
+- Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+- GHCR: `ghcr.io/jjhickman/garbanzo`
+- Release tags are published as `vX.Y.Z`, `X.Y.Z`, and `latest` (stable only)
+
 ## Quick Start
 
 ```bash
@@ -76,6 +91,9 @@ npm run setup
 
 # 3. Start default deployment (Docker Compose)
 docker compose up -d
+
+# Optional: pull official Docker Hub image directly
+# docker pull jjhickman/garbanzo:0.1.6
 
 # 4. Watch logs and scan QR code on first run
 docker compose logs -f garbanzo
