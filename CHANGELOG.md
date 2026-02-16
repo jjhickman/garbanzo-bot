@@ -18,6 +18,8 @@ All notable changes to Garbanzo are documented here.
 - Added custom-domain support to the AWS support-site stack (`siteDomainName` + `siteHostedZoneId`) and wired Patreon support links into site/repo funding metadata.
 - Added GitHub Actions support-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.
 - Added sponsorship strategy documentation (`docs/SUPPORT.md`) including Patreon tier guidance aligned with licensing boundaries.
+- Added `docs/PATREON_SETUP.md` with ready-to-publish Patreon profile/tier/goals copy and updated website theme colors to match the Garbanzo logo palette.
+- Hardened GitHub Actions AWS deploy role to least-privilege assumptions for support-site automation.
 
 > Note: older changelog sections include internal phase milestones that predate the current tagged release series.
 
