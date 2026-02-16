@@ -263,7 +263,7 @@ Research and adopt established, free, trustworthy tools for automated security. 
 1. [x] **Dependency vulnerability scanning** — evaluated `npm audit` vs Snyk/Socket.dev and wired `npm audit --audit-level=high` into `npm run check` (fast, zero new dependencies).
 2. [ ] **Host hardening audit** — evaluate [Lynis](https://github.com/CISOfy/lynis) (GPL, 13k+ stars) for automated CIS-style system audits on Terra. Run periodically, track score improvements.
 3. [ ] **Intrusion prevention** — evaluate [fail2ban](https://github.com/fail2ban/fail2ban) (GPL, 12k+ stars) for SSH brute-force protection. May already be partially configured via UFW.
-4. [ ] **Container security** — if Docker usage grows beyond Piper/Whisper, evaluate [Trivy](https://github.com/aquasecurity/trivy) (Apache 2.0, 24k+ stars) for image vulnerability scanning.
+4. [x] **Container security** — evaluated Trivy and added a non-blocking image vulnerability scan to the Docker release workflow (artifact report attached on tag builds).
 5. [x] **Automated backups verification** — health check now reports latest nightly backup integrity (`verifyLatestBackupIntegrity` + SQLite `PRAGMA integrity_check`).
 6. [x] **Rate limiting on health endpoint** — basic per-IP rate limiting added to `/health`.
 7. [x] **Credential rotation workflow** — monthly GitHub Action reminder (`credential-rotation-reminder.yml`) + local helper for rotating Actions secrets from env (`npm run rotate:gh-secrets`).

@@ -165,6 +165,13 @@ chmod +x .git/hooks/pre-commit
 - Goal: fail fast on high/critical CVEs without adding new tooling or services
 - For ongoing automation, GitHub Dependabot alerts/updates are still recommended (separate from local checks)
 
+## Container Image Vulnerability Scanning
+
+**Added:** 2026-02-16 — powered by [Trivy](https://github.com/aquasecurity/trivy)
+
+- Docker release workflow scans the published GHCR image for `CRITICAL,HIGH` vulnerabilities (OS + library)
+- Scan is currently non-blocking (report-only) to avoid interrupting releases; report is attached as a workflow artifact
+
 ## Runtime Hardening Updates
 
 **Added:** 2026-02-14 (Phase 7.8 partial)
