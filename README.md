@@ -600,7 +600,7 @@ Note: Donations (Sponsors/Patreon/Ko-fi) help fund development but do not grant 
 - (Optional) Configure Ko-fi/custom links in `.env`
 - Public support site: https://garbanzobot.com
 - Optional AWS website deployment via `infra/cdk` (`GarbanzoSiteStack`)
-- Patreon tier strategy + licensing boundaries: `docs/SUPPORT.md`
+- Support policy + licensing boundaries: `docs/SUPPORT.md`
 
 Owner-side support messaging:
 
@@ -678,10 +678,8 @@ Use `bash scripts/rotate-gh-secrets.sh --help` for full options.
 - [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
 - [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
-- [AWS_MCP.md](docs/AWS_MCP.md) — AWS MCP notes (development/ops tool, not required)
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
-- [SUPPORT.md](docs/SUPPORT.md) — Sponsorship strategy, Patreon tiers, and licensing boundaries
-- [PATREON_SETUP.md](docs/PATREON_SETUP.md) — Ready-to-publish Patreon profile/tier copy
+- [SUPPORT.md](docs/SUPPORT.md) — Sponsorship links and licensing boundaries
 - [CHANGELOG.md](CHANGELOG.md) — Full release history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 - [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions

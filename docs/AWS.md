@@ -121,8 +121,8 @@ gh repo edit --homepage "https://<website-url>"
 
 5. Update your support links:
 
-- Set `PATREON_URL` in your runtime `.env` (e.g., `https://www.patreon.com/c/garbanzobot`)
-- Keep Patreon handle in `.github/FUNDING.yml` in sync
+- Set support links in runtime `.env` (`GITHUB_SPONSORS_URL`, `PATREON_URL`, `KOFI_URL`, `SUPPORT_CUSTOM_URL`, `SUPPORT_MESSAGE`)
+- Keep `.github/FUNDING.yml` in sync with public support links
 - Run owner command `!support broadcast` after links are updated
 
 ## Option: ECS Fargate + EFS (More Portable, More Moving Parts)
