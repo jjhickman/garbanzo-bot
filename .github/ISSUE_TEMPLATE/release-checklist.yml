@@ -33,8 +33,8 @@ body:
     attributes:
       label: Tag and publish
       options:
-        - label: "Bump version (`npm version patch|minor|major`)"
-        - label: "Push commit + tags (`git push origin main --follow-tags`)"
+        - label: "Bump version (`npm version patch|minor|major --no-git-tag-version`)"
+        - label: "Merge version PR into `main`, then push release tag (`git push origin vX.Y.Z`)"
         - label: Confirm `Release Docker Image` workflow success
         - label: Confirm `Release Native Binaries` workflow success
 
