@@ -65,6 +65,9 @@ COPY --chown=garbanzo:garbanzo docs/PERSONA.md ./docs/PERSONA.md
 # Copy D&D PDF template (needed by character feature)
 COPY --chown=garbanzo:garbanzo templates/ ./templates/
 
+# Copy Postgres schema SQL used for runtime DB bootstrap/validation
+COPY --from=builder --chown=garbanzo:garbanzo /app/src/utils/postgres-schema.sql ./src/utils/postgres-schema.sql
+
 # Create directories for runtime data (will be mounted as volumes)
 RUN mkdir -p data data/backups data/voices baileys_auth \
     && chown -R garbanzo:garbanzo data baileys_auth

@@ -102,6 +102,7 @@ The CDK stack (`infra/cdk/lib/garbanzo-ecs-stack.ts`) provisions:
 Deploy docs and context flags are in `infra/cdk/README.md`.
 Run `npm run aws:ecs:preflight` from repo root before deploy to validate AWS account/zone/cert/secret readiness.
 Run `npm run aws:ecs:audit` to synth-audit ECS IAM/task-definition wiring before deploy.
+Run `npx vitest run tests/dockerfile-runtime-assets.test.ts` to verify Postgres schema SQL is bundled into runtime images.
 
 Notes:
 
