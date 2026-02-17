@@ -15,6 +15,7 @@ export type {
   MemoryEntry,
   ModerationEntry,
   StrikeSummary,
+  SessionSummaryHit,
 } from './db-types.js';
 
 const backend: DbBackend = await (async () => {
@@ -47,6 +48,7 @@ export const stopMaintenance = backend.stopMaintenance;
 export const storeMessage = backend.storeMessage;
 export const getMessages = backend.getMessages;
 export const searchRelevantMessages = backend.searchRelevantMessages;
+export const searchRelevantSessionSummaries = backend.searchRelevantSessionSummaries;
 
 // Moderation
 export const logModeration = backend.logModeration;

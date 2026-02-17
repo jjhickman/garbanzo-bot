@@ -94,12 +94,24 @@ export class GarbanzoEcsStack extends cdk.Stack {
     const demoAiProviderOrder = optionalContext(app, 'demoAiProviderOrder') ?? 'bedrock';
     const cloudMaxTokens = contextNumber(app, 'cloudMaxTokens', 1024);
     const cloudRequestTimeoutMs = contextNumber(app, 'cloudRequestTimeoutMs', 30000);
+    const vectorEmbeddingProvider = optionalContext(app, 'vectorEmbeddingProvider') ?? 'deterministic';
+    const vectorEmbeddingModel = optionalContext(app, 'vectorEmbeddingModel') ?? 'text-embedding-3-small';
+    const vectorEmbeddingTimeoutMs = contextNumber(app, 'vectorEmbeddingTimeoutMs', 12000);
+    const vectorEmbeddingMaxChars = contextNumber(app, 'vectorEmbeddingMaxChars', 4000);
     const logLevel = optionalContext(app, 'logLevel') ?? 'info';
 
+    const demoOpenRouterModel = optionalContext(app, 'demoOpenRouterModel') ?? 'openai/gpt-4.1-mini';
+    const demoVectorEmbeddingProvider = optionalContext(app, 'demoVectorEmbeddingProvider') ?? 'openai';
+    const demoVectorEmbeddingModel = optionalContext(app, 'demoVectorEmbeddingModel') ?? vectorEmbeddingModel;
+    const demoOpenAiModel = optionalContext(app, 'demoOpenAiModel') ?? 'gpt-4.1-mini';
+    const demoAnthropicModel = optionalContext(app, 'demoAnthropicModel') ?? 'claude-3-5-haiku-20241022';
+    const demoGeminiModel = optionalContext(app, 'demoGeminiModel') ?? 'gemini-1.5-flash';
     const demoBedrockModelId = optionalContext(app, 'demoBedrockModelId') ?? bedrockModelId;
     const demoBedrockMaxTokens = contextNumber(app, 'demoBedrockMaxTokens', 256);
     const demoCloudMaxTokens = contextNumber(app, 'demoCloudMaxTokens', 384);
     const demoRequestTimeoutMs = contextNumber(app, 'demoRequestTimeoutMs', 12000);
+    const demoVectorEmbeddingTimeoutMs = contextNumber(app, 'demoVectorEmbeddingTimeoutMs', vectorEmbeddingTimeoutMs);
+    const demoVectorEmbeddingMaxChars = contextNumber(app, 'demoVectorEmbeddingMaxChars', vectorEmbeddingMaxChars);
 
     const serviceCpu = contextNumber(app, 'serviceCpu', 512);
     const serviceMemoryMiB = contextNumber(app, 'serviceMemoryMiB', 1024);
@@ -120,6 +132,7 @@ export class GarbanzoEcsStack extends cdk.Stack {
     const demoCertificateArn = optionalContext(app, 'demoCertificateArn');
     const demoSecretArn = optionalContext(app, 'demoSecretArn');
     const aiSecretArn = optionalContext(app, 'aiSecretArn');
+    const featureSecretArn = optionalContext(app, 'featureSecretArn') ?? aiSecretArn;
     const demoTurnstileEnabled = contextBoolean(app, 'demoTurnstileEnabled', true);
     const demoWafRateLimit = contextNumber(app, 'demoWafRateLimit', 300);
 
@@ -219,6 +232,10 @@ export class GarbanzoEcsStack extends cdk.Stack {
       BEDROCK_MAX_TOKENS: String(bedrockMaxTokens),
       BEDROCK_PRICING_INPUT_PER_M: bedrockPricingInputPerM,
       BEDROCK_PRICING_OUTPUT_PER_M: bedrockPricingOutputPerM,
+      VECTOR_EMBEDDING_PROVIDER: vectorEmbeddingProvider,
+      VECTOR_EMBEDDING_MODEL: vectorEmbeddingModel,
+      VECTOR_EMBEDDING_TIMEOUT_MS: String(vectorEmbeddingTimeoutMs),
+      VECTOR_EMBEDDING_MAX_CHARS: String(vectorEmbeddingMaxChars),
       LOG_LEVEL: logLevel,
     };
 
@@ -236,6 +253,12 @@ export class GarbanzoEcsStack extends cdk.Stack {
       ? (aiSecretArn.startsWith('arn:')
         ? secretsmanager.Secret.fromSecretPartialArn(this, 'AiRuntimeSecret', aiSecretArn)
         : secretsmanager.Secret.fromSecretNameV2(this, 'AiRuntimeSecret', aiSecretArn))
+      : undefined;
+
+    const featureRuntimeSecret = featureSecretArn
+      ? (featureSecretArn.startsWith('arn:')
+        ? secretsmanager.Secret.fromSecretPartialArn(this, 'FeatureRuntimeSecret', featureSecretArn)
+        : secretsmanager.Secret.fromSecretNameV2(this, 'FeatureRuntimeSecret', featureSecretArn))
       : undefined;
 
     const services: Array<{ platform: string; service: ecs.FargateService }> = [];
@@ -273,6 +296,14 @@ export class GarbanzoEcsStack extends cdk.Stack {
         aiProviderSecrets.OPENROUTER_API_KEY = ecs.Secret.fromSecretsManager(aiRuntimeSecret, 'OPENROUTER_API_KEY');
         aiProviderSecrets.ANTHROPIC_API_KEY = ecs.Secret.fromSecretsManager(aiRuntimeSecret, 'ANTHROPIC_API_KEY');
         aiProviderSecrets.OPENAI_API_KEY = ecs.Secret.fromSecretsManager(aiRuntimeSecret, 'OPENAI_API_KEY');
+      }
+
+      const featureSecrets: Record<string, ecs.Secret> = {};
+      if (featureRuntimeSecret) {
+        featureSecrets.GOOGLE_API_KEY = ecs.Secret.fromSecretsManager(featureRuntimeSecret, 'GOOGLE_API_KEY');
+        featureSecrets.MBTA_API_KEY = ecs.Secret.fromSecretsManager(featureRuntimeSecret, 'MBTA_API_KEY');
+        featureSecrets.NEWSAPI_KEY = ecs.Secret.fromSecretsManager(featureRuntimeSecret, 'NEWSAPI_KEY');
+        featureSecrets.BRAVE_SEARCH_API_KEY = ecs.Secret.fromSecretsManager(featureRuntimeSecret, 'BRAVE_SEARCH_API_KEY');
       }
 
       const platformSecrets: Record<string, ecs.Secret> = {};
@@ -339,11 +370,19 @@ export class GarbanzoEcsStack extends cdk.Stack {
 
       if (cfg.mode === 'demo') {
         environment.AI_PROVIDER_ORDER = demoAiProviderOrder;
+        environment.OPENROUTER_MODEL = demoOpenRouterModel;
+        environment.OPENAI_MODEL = demoOpenAiModel;
+        environment.ANTHROPIC_MODEL = demoAnthropicModel;
+        environment.GEMINI_MODEL = demoGeminiModel;
         environment.BEDROCK_MODEL_ID = demoBedrockModelId;
         environment.BEDROCK_MAX_TOKENS = String(demoBedrockMaxTokens);
         environment.CLOUD_MAX_TOKENS = String(demoCloudMaxTokens);
         environment.CLOUD_REQUEST_TIMEOUT_MS = String(demoRequestTimeoutMs);
         environment.DEMO_TURNSTILE_ENABLED = String(demoTurnstileEnabled);
+        environment.VECTOR_EMBEDDING_PROVIDER = demoVectorEmbeddingProvider;
+        environment.VECTOR_EMBEDDING_MODEL = demoVectorEmbeddingModel;
+        environment.VECTOR_EMBEDDING_TIMEOUT_MS = String(demoVectorEmbeddingTimeoutMs);
+        environment.VECTOR_EMBEDDING_MAX_CHARS = String(demoVectorEmbeddingMaxChars);
 
         if (demoTurnstileEnabled && !runtimeSecret) {
           throw new Error('Demo runtime requires demoSecretArn with DEMO_TURNSTILE_SITE_KEY and DEMO_TURNSTILE_SECRET_KEY');
@@ -365,7 +404,7 @@ export class GarbanzoEcsStack extends cdk.Stack {
           streamPrefix: cfg.id,
         }),
         environment,
-        secrets: { ...baseSecrets, ...aiProviderSecrets, ...platformSecrets },
+        secrets: { ...baseSecrets, ...aiProviderSecrets, ...featureSecrets, ...platformSecrets },
         essential: true,
       }).addPortMappings(
         { containerPort: cfg.containerPort, protocol: ecs.Protocol.TCP },
@@ -377,6 +416,9 @@ export class GarbanzoEcsStack extends cdk.Stack {
       }
       if (aiRuntimeSecret) {
         aiRuntimeSecret.grantRead(taskDefinition.executionRole!);
+      }
+      if (featureRuntimeSecret) {
+        featureRuntimeSecret.grantRead(taskDefinition.executionRole!);
       }
       if (ecrRepository) {
         taskDefinition.addToExecutionRolePolicy(new iam.PolicyStatement({

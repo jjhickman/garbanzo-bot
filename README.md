@@ -58,6 +58,7 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 - **WhatsApp:** Baileys runtime (community/experimental transport)
 - **Slack:** official Events API runtime (with demo mode fallback)
 - **Discord:** official interactions runtime (with demo mode fallback)
+- **Unified demo:** single-service app at `demo.garbanzobot.com` serving both Slack and Discord behavior modes with platform switcher, model transparency UI, and Turnstile protection
 - **Teams:** adapter target (roadmap)
 
 ## Who This Is For
@@ -77,8 +78,9 @@ Garbanzo is built as an AI operations layer, not just a transport wrapper.
 
 ## Personas
 
-- Default persona: `docs/PERSONA.md`
-- Optional per-platform persona override: `docs/personas/<platform>.md` (example: `docs/personas/whatsapp.md`)
+- Default persona: `docs/PERSONA.md` (Garbanzo Bean — warm, direct, Boston-savvy)
+- Slack professional persona: `docs/personas/slack.md` (professional coworker tone for workspace contexts)
+- Optional per-platform persona override: `docs/personas/<platform>.md`
 
 ## Lessons From a Prior Tool-Heavy Assistant Stack (Trust & Maturity)
 
@@ -148,7 +150,7 @@ curl http://127.0.0.1:3001/health
 # @garbanzo plan dinner in somerville this friday
 ```
 
-If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/slack/demo`.
+If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/demo/chat`.
 
 ## Local Development (without Docker)
 
@@ -189,9 +191,9 @@ SLACK_DEMO=true
 npm run dev
 
 # In another terminal
-curl -s -X POST http://127.0.0.1:3002/slack/demo \
+curl -s -X POST http://127.0.0.1:3002/demo/chat \
   -H 'content-type: application/json' \
-  -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
+  -d '{"platform":"slack","text":"@garbanzo !help"}'
 ```
 
 ### Discord Support
@@ -356,10 +358,13 @@ curl http://127.0.0.1:3001/health/ready
 ### AI Chat Capabilities
 - Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
 - Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
-- Conversation context from SQLite — remembers recent messages per group
+- Conversation context from SQLite or Postgres — remembers recent messages per group
+- **Session memory** — conversations are sessionized by inactivity gap, extractively summarized, and stored with vector embeddings for long-horizon recall (e.g., "what did we decide about trivia last week?")
+- **Semantic retrieval** — session summaries and message hits are merged and reranked with a unified scoring model (recency decay, token overlap, coverage deduplication) before injection into the AI prompt
+- **Embedding provider routing** — deterministic hash embeddings by default, OpenAI `text-embedding-3-small` available with automatic fallback
 - Multi-language detection (14 languages) — responds in the user's language
 - Custom per-group persona — different tone per group (casual in General, structured in Events)
-- Context compression — recent messages verbatim, older messages extractively compressed
+- Context compression — recent messages verbatim, older messages extractively compressed, session summaries for long-range context
 
 ### Community Workflows
 - **Introductions** — AI-powered personal welcomes for new member introductions (no @mention needed)
@@ -434,6 +439,7 @@ Copy `.env.example` to `.env` and configure:
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
+| `BRAVE_SEARCH_API_KEY` | No | Brave Search API (venue/web search fallback) |
 | `SLACK_BOT_TOKEN` | Slack only | Official Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack only | Slack Events API signing secret (Basic Information -> App Credentials) |
 | `SLACK_BOT_USER_ID` | Optional | Bot user id for mention matching (`U...`) |
@@ -445,6 +451,24 @@ Copy `.env.example` to `.env` and configure:
 | `DISCORD_BOT_TOKEN` | Discord only | Official Discord bot token |
 | `DISCORD_PUBLIC_KEY` | Discord only | Discord interactions signature public key |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
+| `DB_DIALECT` | No | Database backend: `sqlite` (default) or `postgres` |
+| `DATABASE_URL` | Postgres only | Full Postgres connection string (alternative to individual `POSTGRES_*` vars) |
+| `POSTGRES_HOST` | Postgres only | Postgres hostname |
+| `POSTGRES_PORT` | Postgres only | Postgres port (default: `5432`) |
+| `POSTGRES_DB` | Postgres only | Postgres database name |
+| `POSTGRES_USER` | Postgres only | Postgres user |
+| `POSTGRES_PASSWORD` | Postgres only | Postgres password |
+| `POSTGRES_SSL` | Postgres only | Enable SSL for Postgres connection (default: `false`) |
+| `POSTGRES_SSL_REJECT_UNAUTHORIZED` | Postgres only | Reject unauthorized SSL certs (default: `false`) |
+| `CONTEXT_SESSION_MEMORY_ENABLED` | No | Enable session memory pipeline (default: `true`) |
+| `CONTEXT_SESSION_GAP_MINUTES` | No | Inactivity gap to close a session (default: `30`) |
+| `CONTEXT_SESSION_MIN_MESSAGES` | No | Minimum messages to summarize a session (default: `4`) |
+| `CONTEXT_SESSION_MAX_RETRIEVED` | No | Max session summaries injected into prompt context (default: `3`) |
+| `CONTEXT_SESSION_SUMMARY_VERSION` | No | Summary algorithm version for cache invalidation (default: `1`) |
+| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `deterministic` (default) or `openai` |
+| `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
+| `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
+| `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
@@ -577,10 +601,10 @@ tests/
 - **Runtime:** Node.js 20+ / TypeScript (ES Modules, strict mode)
 - **Messaging:** Adapter-based platform runtime with support for WhatsApp, Slack, Discord, and Teams targets
 - **AI:** Flexible multi-provider routing with configurable cloud priority (`AI_PROVIDER_ORDER`), per-provider model overrides, and optional local Ollama for low-cost/simple traffic
-- **Storage:** SQLite via better-sqlite3 (WAL mode, auto-vacuum, nightly backups)
+- **Storage:** SQLite (better-sqlite3, WAL mode, auto-vacuum, nightly backups) or Postgres with pgvector for semantic session retrieval
 - **Validation:** Zod
 - **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (469+ tests)
+- **Testing:** Vitest (509+ tests)
 - **PDF:** pdf-lib (D&D character sheets)
 
 ## Development
@@ -756,6 +780,8 @@ Repo guardrails are configured under `.github/`:
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
 - [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
 - [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
+- [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md) — Session memory and vector retrieval phased implementation spec
+- [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md) — pgvector/Qdrant migration plan
 - [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
 - [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
 - [CHANGELOG.md](CHANGELOG.md) — Full release history

@@ -1,7 +1,7 @@
 {
   "title": "Garbanzo Bean",
   "tagline": "Multi-provider AI chat operations for communities and small teams",
-  "description": "Garbanzo routes prompts across Claude, OpenAI, Gemini, and optional local Ollama, then powers group workflows with integrations, summaries, moderation signals, and deployment-safe operations.",
+  "description": "Garbanzo routes prompts across Claude, OpenAI, Gemini, Bedrock, and optional local Ollama. Session memory with vector retrieval gives the bot durable recall across conversations. Practical workflows for summaries, events, moderation, and integrations ship out of the box.",
   "githubRepoUrl": "https://github.com/jjhickman/garbanzo-bot",
   "githubSponsorsUrl": "https://github.com/sponsors/jjhickman",
   "patreonUrl": "https://www.patreon.com/c/garbanzobot",

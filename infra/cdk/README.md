@@ -142,6 +142,7 @@ This stack deploys:
 -c slackSecretArn=<secret arn or secret name>
 -c discordSecretArn=<secret arn or secret name>
 -c aiSecretArn=<secret arn or secret name>
+-c featureSecretArn=<secret arn or secret name>  # defaults to aiSecretArn when omitted
 ```
 
 `slackSecretArn` secret JSON must include:
@@ -160,6 +161,13 @@ This stack deploys:
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 
+`featureSecretArn` secret JSON must include:
+
+- `GOOGLE_API_KEY`
+- `MBTA_API_KEY`
+- `NEWSAPI_KEY`
+- `BRAVE_SEARCH_API_KEY`
+
 ### Optional contexts
 
 ```bash
@@ -167,6 +175,10 @@ This stack deploys:
 -c imageRepo=jjhickman/garbanzo
 -c imageTag=0.1.8
 -c aiProviderOrder=openrouter,anthropic,openai,gemini
+-c vectorEmbeddingProvider=deterministic
+-c vectorEmbeddingModel=text-embedding-3-small
+-c vectorEmbeddingTimeoutMs=12000
+-c vectorEmbeddingMaxChars=4000
 -c bedrockRegion=us-east-1
 -c bedrockModelId=anthropic.claude-3-5-haiku-20241022-v1:0
 -c dbDeletionProtection=false
@@ -186,11 +198,19 @@ This stack deploys:
 -c demoPort=3004
 -c demoSecretArn=garbanzo/demo
 -c demoTurnstileEnabled=true
--c demoAiProviderOrder=openrouter
+-c demoAiProviderOrder=openrouter,openai,anthropic
+-c demoOpenRouterModel=openai/gpt-4.1-mini
+-c demoOpenAiModel=gpt-4.1-mini
+-c demoVectorEmbeddingProvider=deterministic
+-c demoVectorEmbeddingModel=text-embedding-3-small
+-c demoAnthropicModel=claude-3-5-haiku-20241022
+-c demoGeminiModel=gemini-1.5-flash
 -c demoBedrockModelId=anthropic.claude-3-5-haiku-20241022-v1:0
 -c demoBedrockMaxTokens=256
 -c demoCloudMaxTokens=384
 -c demoRequestTimeoutMs=12000
+-c demoVectorEmbeddingTimeoutMs=12000
+-c demoVectorEmbeddingMaxChars=4000
 -c domainName=bot.garbanzobot.com
 -c demoDomainName=demo.garbanzobot.com
 -c hostedZoneName=garbanzobot.com
@@ -223,6 +243,7 @@ cdk deploy GarbanzoEcsStack \
   -c slackSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/slack-abc123 \
   -c discordSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/discord-def456 \
   -c aiSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/ai-ghi789 \
+  -c featureSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/features-jkl012 \
   -c domainName=bot.garbanzobot.com \
   -c hostedZoneName=garbanzobot.com \
   -c hostedZoneId=Z123456789ABC \
@@ -242,12 +263,20 @@ cdk deploy GarbanzoEcsStack \
   -c slackSecretArn=garbanzo/slack \
   -c discordSecretArn=garbanzo/discord \
   -c aiSecretArn=garbanzo/ai \
+  -c featureSecretArn=garbanzo/features \
   -c demoSecretArn=garbanzo/demo \
   -c demoTurnstileEnabled=true \
-  -c demoAiProviderOrder=bedrock \
+  -c demoAiProviderOrder=openrouter,openai,anthropic \
+  -c demoOpenRouterModel=openai/gpt-4.1-mini \
+  -c demoOpenAiModel=gpt-4.1-mini \
+  -c demoVectorEmbeddingProvider=deterministic \
+  -c demoVectorEmbeddingModel=text-embedding-3-small \
+  -c demoAnthropicModel=claude-3-5-haiku-20241022 \
   -c demoBedrockMaxTokens=256 \
   -c demoCloudMaxTokens=384 \
   -c demoRequestTimeoutMs=12000 \
+  -c demoVectorEmbeddingTimeoutMs=12000 \
+  -c demoVectorEmbeddingMaxChars=4000 \
   -c domainName=bot.garbanzobot.com \
   -c demoDomainName=demo.garbanzobot.com \
   -c hostedZoneName=garbanzobot.com \
@@ -259,9 +288,12 @@ cdk deploy GarbanzoEcsStack \
 After deploy, validate demo runtime:
 
 ```bash
-curl -s https://demo.garbanzobot.com/slack/demo \
+curl -s https://demo.garbanzobot.com/slack/demo
+curl -s https://demo.garbanzobot.com/discord/demo
+
+curl -s -X POST https://demo.garbanzobot.com/demo/chat \
   -H 'content-type: application/json' \
-  -d '{"chatId":"public-demo","senderId":"visitor","text":"@garbanzo what can you do?"}'
+  -d '{"platform":"slack","text":"@garbanzo what can you do?","turnstileToken":"<token>"}'
 ```
 
 ## QR Linking

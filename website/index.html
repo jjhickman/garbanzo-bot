@@ -27,7 +27,11 @@
       <section class="grid" aria-label="Core strengths">
         <article class="card">
           <h3>Provider orchestration</h3>
-          <p>Route prompts across Claude, OpenAI, Gemini, and optional local Ollama with configurable failover and model selection.</p>
+          <p>Route prompts across Claude, OpenAI, Gemini, Bedrock, and optional local Ollama with configurable failover and model selection.</p>
+        </article>
+        <article class="card">
+          <h3>Session memory</h3>
+          <p>Conversations are sessionized, summarized, and embedded for semantic retrieval. The bot remembers what was discussed across sessions, not just the last few messages.</p>
         </article>
         <article class="card">
           <h3>AI capabilities and automations</h3>
@@ -80,8 +84,10 @@
           Run one chat runtime with multiple AI backends, practical integrations, and operational guardrails designed for active communities.
         </p>
         <ul>
-          <li>Providers: Claude, OpenAI, Gemini, OpenRouter, and optional local Ollama.</li>
+          <li>Providers: Claude, OpenAI, Gemini, Bedrock, OpenRouter, and optional local Ollama.</li>
           <li>Routing: configurable failover order with per-provider model overrides.</li>
+          <li>Memory: session summarization with vector embeddings (deterministic or OpenAI) for long-horizon recall.</li>
+          <li>Storage: SQLite (default) or Postgres with pgvector for semantic session retrieval.</li>
           <li>Integrations: weather, transit, venues, news, books, and D&amp;D lookup workflows.</li>
           <li>Guardrails: moderation signals, context controls, and member-safe release messaging.</li>
         </ul>
@@ -108,7 +114,7 @@
       </section>
 
       <footer>
-        Built for communities and small teams. Multi-provider AI routing. Docker-first deployment. Apache-2.0 licensed.
+        Built for communities and small teams. Multi-provider AI routing. Session memory with vector retrieval. Docker-first deployment. Apache-2.0 licensed.
       </footer>
     </main>
 

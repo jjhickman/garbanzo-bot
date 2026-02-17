@@ -11,4 +11,10 @@ describe('Docker runtime assets', () => {
     expect(dockerfile).toContain('/app/src/utils/postgres-schema.sql');
     expect(dockerfile).toContain('./src/utils/postgres-schema.sql');
   });
+
+  it('includes platform persona docs in runtime image', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf-8');
+    expect(dockerfile).toContain('docs/personas/');
+    expect(dockerfile).toContain('./docs/personas/');
+  });
 });

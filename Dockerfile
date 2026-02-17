@@ -59,8 +59,9 @@ COPY --from=builder --chown=garbanzo:garbanzo /app/package.json ./
 # Copy runtime config (groups.json is needed at runtime)
 COPY --chown=garbanzo:garbanzo config/ ./config/
 
-# Copy persona doc (loaded at runtime by persona.ts)
+# Copy persona docs (loaded at runtime by persona.ts)
 COPY --chown=garbanzo:garbanzo docs/PERSONA.md ./docs/PERSONA.md
+COPY --chown=garbanzo:garbanzo docs/personas/ ./docs/personas/
 
 # Copy D&D PDF template (needed by character feature)
 COPY --chown=garbanzo:garbanzo templates/ ./templates/
