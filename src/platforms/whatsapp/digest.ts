@@ -31,10 +31,10 @@ export function scheduleDigest(sock: WASocket): void {
 
 async function sendDigest(sock: WASocket): Promise<string> {
   const stats = snapshotAndReset();
-  const text = formatDigest(stats);
+  const text = await formatDigest(stats);
 
-  // Archive to SQLite
-  archiveDailyDigest(stats);
+  // Archive to configured DB backend
+  await archiveDailyDigest(stats);
 
   try {
     await sock.sendMessage(config.OWNER_JID, { text });

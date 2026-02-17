@@ -1,4 +1,6 @@
 # Contributing to Garbanzo
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 Thanks for your interest in contributing! Garbanzo is a community WhatsApp bot built for a Boston-area meetup group, but the codebase is designed to be adaptable for any community.
 

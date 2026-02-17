@@ -1,7 +1,7 @@
 import { logger } from '../middleware/logger.js';
 import { checkMessage, formatModerationAlert, applyStrikeAndMute } from '../features/moderation.js';
 import { sanitizeMessage } from '../middleware/sanitize.js';
-import { touchProfile, updateActiveGroups, logModeration } from '../utils/db.js';
+import { touchProfile, updateActiveGroups, logModeration, getStrikeCount } from '../utils/db.js';
 import { recordMessage } from '../middleware/context.js';
 import { recordGroupMessage, recordModerationFlag } from '../middleware/stats.js';
 import type { InboundMessage } from './inbound-message.js';
@@ -91,11 +91,11 @@ export async function processInboundMessage(
   const text = sanitized.text;
 
   // Record message for conversation context + stats + profile
-  recordMessage(inbound.chatId, inbound.senderId, text);
+  await recordMessage(inbound.chatId, inbound.senderId, text);
   if (inbound.isGroupChat) {
     recordGroupMessage(inbound.chatId, inbound.senderId);
-    touchProfile(inbound.senderId);
-    updateActiveGroups(inbound.senderId, inbound.chatId);
+    await touchProfile(inbound.senderId);
+    await updateActiveGroups(inbound.senderId, inbound.chatId);
   }
 
   // Moderation (runs on ALL enabled group messages)
@@ -103,7 +103,7 @@ export async function processInboundMessage(
     const flag = await checkMessage(text);
     if (flag) {
       recordModerationFlag(inbound.chatId);
-      logModeration({
+      await logModeration({
         chatJid: inbound.chatId,
         sender: inbound.senderId,
         text: text.slice(0, 500),
@@ -115,7 +115,8 @@ export async function processInboundMessage(
 
       logger.warn({ group: inbound.chatId, sender: inbound.senderId, reason: flag.reason, severity: flag.severity, source: flag.source }, 'Moderation flag');
 
-      const alert = formatModerationAlert(flag, text, inbound.senderId, inbound.chatId);
+      const strikeCount = await getStrikeCount(inbound.senderId);
+      const alert = formatModerationAlert(flag, text, inbound.senderId, inbound.chatId, strikeCount);
       try {
         await adapter.sendText(env.ownerId, alert);
       } catch (err) {
@@ -123,7 +124,7 @@ export async function processInboundMessage(
       }
 
       // Apply strike and soft-mute if threshold reached
-      const { muted, dmMessage } = applyStrikeAndMute(inbound.senderId);
+      const { muted, dmMessage } = applyStrikeAndMute(inbound.senderId, strikeCount);
       if (muted && dmMessage) {
         try {
           await adapter.sendText(inbound.senderId, dmMessage);

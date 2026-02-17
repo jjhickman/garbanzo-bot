@@ -4,8 +4,7 @@ import type { MessageRef } from '../../core/message-ref.js';
 /**
  * Slack inbound message (normalized).
  *
- * Slack support is not implemented yet; this type is a placeholder to help
- * build platform-agnostic core logic without committing to a specific Slack SDK.
+ * Used by official Slack Events API runtime and demo runtime.
  */
 export interface SlackInbound extends InboundMessage {
   platform: 'slack';

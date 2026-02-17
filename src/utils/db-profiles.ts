@@ -5,6 +5,7 @@
  * attendance. Created passively via touchProfile() on every message.
  */
 
+import type { MemberProfile } from './db-types.js';
 import { db } from './db-schema.js';
 
 // ── Prepared statements ─────────────────────────────────────────────
@@ -38,19 +39,6 @@ const selectOptedInProfiles = db.prepare(`
 const deleteProfile = db.prepare(`
   DELETE FROM member_profiles WHERE jid = ?
 `);
-
-// ── Types ───────────────────────────────────────────────────────────
-
-export interface MemberProfile {
-  jid: string;
-  name: string | null;
-  interests: string; // JSON array of strings
-  groups_active: string; // JSON array of group JIDs
-  event_count: number;
-  first_seen: number;
-  last_seen: number;
-  opted_in: number; // 0 or 1
-}
 
 // ── Public API ──────────────────────────────────────────────────────
 

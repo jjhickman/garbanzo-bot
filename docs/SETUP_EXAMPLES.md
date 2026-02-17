@@ -1,4 +1,6 @@
 # Setup Examples
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This guide provides reproducible setup commands for common Garbanzo use-cases.
 
@@ -87,6 +89,22 @@ curl http://127.0.0.1:3001/health
 Deploy a specific release image tag (recommended):
 
 ```bash
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+## 8) Postgres migration dry-run + verification
+
+```bash
+# 1) Initialize schema in Postgres
+DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:postgres:init
+
+# 2) Migrate local sqlite data
+DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:sqlite:migrate:postgres
+
+# 3) Verify table row counts match sqlite
+DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:sqlite:verify:postgres
+
+# 4) Run backend parity tests against Postgres
+DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run test:postgres
 ```

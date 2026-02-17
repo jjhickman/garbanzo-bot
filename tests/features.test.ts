@@ -296,7 +296,7 @@ describe('Content moderation — alert formatting', async () => {
       severity: 'alert',
       source: 'regex',
     };
-    const alert = formatModerationAlert(flag, 'some bad message', '15551234567@s.whatsapp.net', '120363423357339667@g.us');
+    const alert = formatModerationAlert(flag, 'some bad message', '15551234567@s.whatsapp.net', '120363423357339667@g.us', 1);
 
     expect(alert).toContain('ALERT');
     expect(alert).toContain('Hate speech / slurs');
@@ -312,7 +312,7 @@ describe('Content moderation — alert formatting', async () => {
       severity: 'warning',
       source: 'regex',
     };
-    const alert = formatModerationAlert(flag, 'buy crypto now', '15559876543@s.whatsapp.net', '120363423357339667@g.us');
+    const alert = formatModerationAlert(flag, 'buy crypto now', '15559876543@s.whatsapp.net', '120363423357339667@g.us', 1);
 
     expect(alert).toContain('Warning');
     expect(alert).not.toContain('ALERT');
@@ -325,7 +325,7 @@ describe('Content moderation — alert formatting', async () => {
       severity: 'alert',
       source: 'openai',
     };
-    const alert = formatModerationAlert(flag, 'some harassing message', '15551234567@s.whatsapp.net', '120363423357339667@g.us');
+    const alert = formatModerationAlert(flag, 'some harassing message', '15551234567@s.whatsapp.net', '120363423357339667@g.us', 1);
 
     expect(alert).toContain('[AI]');
     expect(alert).not.toContain('[Pattern]');
@@ -338,7 +338,7 @@ describe('Content moderation — alert formatting', async () => {
       source: 'regex',
     };
     const longMessage = 'a'.repeat(300);
-    const alert = formatModerationAlert(flag, longMessage, '15551234567@s.whatsapp.net', '120363423357339667@g.us');
+    const alert = formatModerationAlert(flag, longMessage, '15551234567@s.whatsapp.net', '120363423357339667@g.us', 1);
 
     expect(alert).toContain('...');
     expect(alert).not.toContain('a'.repeat(300));
@@ -485,8 +485,8 @@ describe('Introduction detection — INTRO_SYSTEM_ADDENDUM', async () => {
 describe('Persona — intro-specific prompt injection', async () => {
   const { buildSystemPrompt } = await import('../src/ai/persona.js');
 
-  it('includes intro addendum for Introductions group', () => {
-    const prompt = buildSystemPrompt({
+  it('includes intro addendum for Introductions group', async () => {
+    const prompt = await buildSystemPrompt({
       groupName: 'Introductions',
       groupJid: '120363405986870419@g.us',
       senderJid: '15551234567@s.whatsapp.net',
@@ -495,8 +495,8 @@ describe('Persona — intro-specific prompt injection', async () => {
     expect(prompt).toContain('SPECIAL CONTEXT');
   });
 
-  it('does NOT include intro addendum for other groups', () => {
-    const prompt = buildSystemPrompt({
+  it('does NOT include intro addendum for other groups', async () => {
+    const prompt = await buildSystemPrompt({
       groupName: 'General',
       groupJid: '120363423357339667@g.us',
       senderJid: '15551234567@s.whatsapp.net',
@@ -689,8 +689,8 @@ describe('Welcome messages', async () => {
 describe('Feedback — handleFeedbackSubmit', async () => {
   const { handleFeedbackSubmit } = await import('../src/features/feedback.js');
 
-  it('submits a valid suggestion and returns response + owner alert', () => {
-    const result = handleFeedbackSubmit(
+  it('submits a valid suggestion and returns response + owner alert', async () => {
+    const result = await handleFeedbackSubmit(
       'suggestion',
       'Add a music recommendation feature based on group listening habits',
       '15551234567@s.whatsapp.net',
@@ -705,8 +705,8 @@ describe('Feedback — handleFeedbackSubmit', async () => {
     expect(result.ownerAlert).toContain('Hobbies');
   });
 
-  it('submits a valid bug report', () => {
-    const result = handleFeedbackSubmit(
+  it('submits a valid bug report', async () => {
+    const result = await handleFeedbackSubmit(
       'bug',
       'Bot responded to a normal message in Introductions that was not an introduction',
       '15559876543@s.whatsapp.net',
@@ -717,8 +717,8 @@ describe('Feedback — handleFeedbackSubmit', async () => {
     expect(result.ownerAlert).toContain('Introductions');
   });
 
-  it('rejects empty description', () => {
-    const result = handleFeedbackSubmit(
+  it('rejects empty description', async () => {
+    const result = await handleFeedbackSubmit(
       'suggestion',
       '',
       '15551234567@s.whatsapp.net',
@@ -729,8 +729,8 @@ describe('Feedback — handleFeedbackSubmit', async () => {
     expect(result.ownerAlert).toBeNull();
   });
 
-  it('rejects too-short description', () => {
-    const result = handleFeedbackSubmit(
+  it('rejects too-short description', async () => {
+    const result = await handleFeedbackSubmit(
       'bug',
       'broken',
       '15551234567@s.whatsapp.net',
@@ -740,8 +740,8 @@ describe('Feedback — handleFeedbackSubmit', async () => {
     expect(result.ownerAlert).toBeNull();
   });
 
-  it('works from DM (null groupJid)', () => {
-    const result = handleFeedbackSubmit(
+  it('works from DM (null groupJid)', async () => {
+    const result = await handleFeedbackSubmit(
       'suggestion',
       'Let me configure my notification preferences for different groups',
       '15551234567@s.whatsapp.net',
@@ -756,27 +756,27 @@ describe('Feedback — handleUpvote', async () => {
   const { handleUpvote } = await import('../src/features/feedback.js');
   const { submitFeedback, getOpenFeedback: _getOpenFeedback } = await import('../src/utils/db.js');
 
-  it('upvotes an existing open item', () => {
-    const entry = submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Test suggestion for upvoting');
-    const result = handleUpvote(String(entry.id), '15550000002@s.whatsapp.net');
+  it('upvotes an existing open item', async () => {
+    const entry = await submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Test suggestion for upvoting');
+    const result = await handleUpvote(String(entry.id), '15550000002@s.whatsapp.net');
     expect(result).toContain('Upvoted');
     expect(result).toContain(`#${entry.id}`);
   });
 
-  it('prevents duplicate upvotes from same user', () => {
-    const entry = submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Another test suggestion for dedup');
-    handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
-    const result = handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
+  it('prevents duplicate upvotes from same user', async () => {
+    const entry = await submitFeedback('suggestion', '15550000001@s.whatsapp.net', null, 'Another test suggestion for dedup');
+    await handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
+    const result = await handleUpvote(String(entry.id), '15550000003@s.whatsapp.net');
     expect(result).toContain('already upvoted');
   });
 
-  it('rejects invalid ID', () => {
-    const result = handleUpvote('abc', '15551234567@s.whatsapp.net');
+  it('rejects invalid ID', async () => {
+    const result = await handleUpvote('abc', '15551234567@s.whatsapp.net');
     expect(result).toContain('Usage');
   });
 
-  it('rejects nonexistent ID', () => {
-    const result = handleUpvote('99999', '15551234567@s.whatsapp.net');
+  it('rejects nonexistent ID', async () => {
+    const result = await handleUpvote('99999', '15551234567@s.whatsapp.net');
     expect(result).toContain('No feedback item found');
   });
 });
@@ -785,58 +785,58 @@ describe('Feedback — handleFeedbackOwner', async () => {
   const { handleFeedbackOwner, createGitHubIssueFromFeedback } = await import('../src/features/feedback.js');
   const { submitFeedback, setFeedbackStatus: _setFeedbackStatus } = await import('../src/utils/db.js');
 
-  it('lists open items with no args', () => {
+  it('lists open items with no args', async () => {
     // Items submitted in earlier tests should still be open
-    const result = handleFeedbackOwner('');
+    const result = await handleFeedbackOwner('');
     expect(result).toContain('Open feedback');
   });
 
-  it('lists all items with "all" arg', () => {
-    const result = handleFeedbackOwner('all');
+  it('lists all items with "all" arg', async () => {
+    const result = await handleFeedbackOwner('all');
     expect(result).toMatch(/feedback/i);
   });
 
-  it('accepts an item', () => {
-    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Accept test suggestion item');
-    const result = handleFeedbackOwner(`accept ${entry.id}`);
+  it('accepts an item', async () => {
+    const entry = await submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Accept test suggestion item');
+    const result = await handleFeedbackOwner(`accept ${entry.id}`);
     expect(result).toContain('accepted');
     expect(result).toContain(`#${entry.id}`);
   });
 
-  it('rejects an item', () => {
-    const entry = submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Reject test bug report item');
-    const result = handleFeedbackOwner(`reject ${entry.id}`);
+  it('rejects an item', async () => {
+    const entry = await submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Reject test bug report item');
+    const result = await handleFeedbackOwner(`reject ${entry.id}`);
     expect(result).toContain('rejected');
   });
 
-  it('marks an item done', () => {
-    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Done test suggestion item here');
-    const result = handleFeedbackOwner(`done ${entry.id}`);
+  it('marks an item done', async () => {
+    const entry = await submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Done test suggestion item here');
+    const result = await handleFeedbackOwner(`done ${entry.id}`);
     expect(result).toContain('done');
   });
 
-  it('shows help for unknown subcommand', () => {
-    const result = handleFeedbackOwner('foobar');
+  it('shows help for unknown subcommand', async () => {
+    const result = await handleFeedbackOwner('foobar');
     expect(result).toContain('Feedback commands');
     expect(result).toContain('accept');
     expect(result).toContain('reject');
   });
 
-  it('handles nonexistent ID gracefully', () => {
-    const result = handleFeedbackOwner('accept 99999');
+  it('handles nonexistent ID gracefully', async () => {
+    const result = await handleFeedbackOwner('accept 99999');
     expect(result).toContain('No feedback item found');
   });
 
   it('requires accepted status before creating github issue', async () => {
-    const entry = submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Need issue creation approval gate');
+    const entry = await submitFeedback('suggestion', '15550000010@s.whatsapp.net', null, 'Need issue creation approval gate');
     const result = await createGitHubIssueFromFeedback(entry.id);
     expect(result).toContain('must be');
     expect(result).toContain('accepted');
   });
 
   it('requires token config to create github issue', async () => {
-    const entry = submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Token missing should fail safely');
-    _setFeedbackStatus(entry.id, 'accepted');
+    const entry = await submitFeedback('bug', '15550000010@s.whatsapp.net', null, 'Token missing should fail safely');
+    await _setFeedbackStatus(entry.id, 'accepted');
     const result = await createGitHubIssueFromFeedback(entry.id);
     expect(result).toContain('GITHUB_ISSUES_TOKEN');
   });

@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: 'Git ref to build (tag like v0.1.6, branch, or SHA). Default: current ref'
+        description: 'Git ref to build (tag like v0.1.8, branch, or SHA). Default: current ref'
         required: false
       release_tag:
-        description: 'Release tag to publish assets to (e.g., v0.1.6). Required for manual reruns from branches.'
+        description: 'Release tag to publish assets to (e.g., v0.1.8). Required for manual reruns from branches.'
         required: false
 
 permissions:

@@ -4,8 +4,7 @@ import type { MessageRef } from '../../core/message-ref.js';
 /**
  * Discord inbound message (normalized).
  *
- * Discord production runtime is not implemented yet; this type exists for
- * local demo-mode pipeline validation.
+ * Used by official Discord interactions runtime and demo runtime.
  */
 export interface DiscordInbound extends InboundMessage {
   platform: 'discord';

@@ -91,12 +91,16 @@ export async function startConnection(onReady: MessageHandler): Promise<WASocket
         'Connection closed',
       );
 
+      if (staleCheckTimer) {
+        clearInterval(staleCheckTimer);
+        staleCheckTimer = null;
+      }
+
       if (shouldReconnect) {
         logger.info('Reconnecting in 3 seconds...');
         setTimeout(() => startConnection(onReady), 3000);
       } else {
-        logger.error('Logged out — delete baileys_auth/ and re-scan QR code');
-        process.exit(1);
+        logger.error('Logged out — runtime paused until WhatsApp is re-linked (delete baileys_auth/ and re-scan QR). Keeping process alive for health monitoring.');
       }
     }
   });

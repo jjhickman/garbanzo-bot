@@ -97,14 +97,14 @@ export async function handleOwnerDM(
 
   // !digest
   if (trimmedLower === '!digest') {
-    const digest = previewDigest();
+    const digest = await previewDigest();
     await sock.sendMessage(remoteJid, { text: digest });
     return true;
   }
 
   // !strikes
   if (trimmedLower === '!strikes') {
-    const report = formatStrikesReport();
+    const report = await formatStrikesReport();
     await sock.sendMessage(remoteJid, { text: report });
     return true;
   }
@@ -121,7 +121,7 @@ export async function handleOwnerDM(
       return true;
     }
 
-    const result = handleFeedbackOwner(args);
+    const result = await handleFeedbackOwner(args);
     await sock.sendMessage(remoteJid, { text: result });
     return true;
   }
@@ -154,7 +154,7 @@ export async function handleOwnerDM(
   // !memory [args]
   if (trimmedLower.startsWith('!memory')) {
     const args = text.trim().slice('!memory'.length).trim();
-    const result = handleMemory(args);
+    const result = await handleMemory(args);
     await sock.sendMessage(remoteJid, { text: result });
     return true;
   }

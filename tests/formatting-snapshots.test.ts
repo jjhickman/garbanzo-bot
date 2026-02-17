@@ -39,7 +39,7 @@ describe('Formatted output snapshots', () => {
     }));
 
     const { handleProfile } = await import('../src/features/profiles.js');
-    expect(handleProfile('', 'user@s.whatsapp.net')).toMatchSnapshot('profile-view');
+    expect(await handleProfile('', 'user@s.whatsapp.net')).toMatchSnapshot('profile-view');
   });
 
   it('memory list snapshot stays stable', async () => {
@@ -55,6 +55,6 @@ describe('Formatted output snapshots', () => {
     }));
 
     const { handleMemory } = await import('../src/features/memory.js');
-    expect(handleMemory('')).toMatchSnapshot('memory-list');
+    expect(await handleMemory('')).toMatchSnapshot('memory-list');
   });
 });
