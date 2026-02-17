@@ -6,6 +6,34 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-02-17
+
+### Added
+
+- **Session memory (Phase 1)** — 30-minute gap sessionization, extractive summarization, session retrieval in prompt context, ROI metrics in stats/digest, config flags (`CONTEXT_SESSION_*`).
+- **Vector memory (Phase 2)** — contextualized embedding headers, OpenAI `text-embedding-3-small` provider with deterministic fallback, session embedding backfill job, lightweight post-retrieval reranker, offline eval harness with synthetic QA set and recall@K metrics.
+- **Embedding provider router** (`src/utils/embedding-provider.ts`) — graceful fallback from OpenAI to deterministic embeddings; logged once per provider to avoid log spam.
+- **Embedding pipeline metrics** — provider breakdown, latency, fallback counts exposed in stats and digest.
+- **Unified demo server** — single-service app at `demo.garbanzobot.com` with model transparency UI, platform switcher (Slack/Discord), and Turnstile protection.
+- **Slack professional persona** (`docs/personas/slack.md`) loaded at runtime for Slack-mode responses.
+- **CDK demo embedding overrides** — `demoVectorEmbeddingProvider`, `demoVectorEmbeddingModel` stack parameters; demo defaults to OpenAI embeddings.
+- **Feature API key wiring in CDK/preflight** — `featureSecretArn` support for GOOGLE_API_KEY, MBTA_API_KEY, NEWSAPI_KEY, BRAVE_SEARCH_API_KEY in ECS task definitions.
+- 20 new tests across 7 files (reranker, eval harness, session backfill, contextualized embeddings, embedding provider router, unified demo server, Postgres session retrieval); **509 tests total**.
+
+### Fixed
+
+- Postgres runtime schema availability enforced in Docker image (`postgres-schema.sql` copied into runtime).
+- Resolved high-severity `fast-xml-parser` DoS advisory (GHSA-jmr7-xgp7-cmfj) via npm override to `>=5.3.6`.
+
+### Changed
+
+- README updated with session memory features, Postgres/pgvector in Stack section, 19 new env vars, test count 509+, docs index entries, unified demo, and Slack persona.
+- Docker Hub overview updated with session memory, Bedrock provider, Postgres storage, version bumped to 0.1.9.
+- Website updated with session memory card, Bedrock provider, Postgres/pgvector storage.
+- `gitleaks` allowlist now excludes `cdk.out/` to prevent false positives from CDK synth output.
+
+## [0.1.8] — 2026-02-16
+
 ### Changed
 
 - Switched project licensing to Apache License 2.0 and updated package metadata accordingly.
