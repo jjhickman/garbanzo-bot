@@ -60,6 +60,7 @@ const PROVIDER_LABELS = {
   anthropic: 'Anthropic Claude',
   openai: 'OpenAI',
   gemini: 'Google Gemini',
+  bedrock: 'AWS Bedrock',
 };
 
 const ALL_FEATURES = [
@@ -142,6 +143,7 @@ function redactEnvContent(content) {
     'OPENROUTER_API_KEY=',
     'OPENAI_API_KEY=',
     'GEMINI_API_KEY=',
+    'BEDROCK_MODEL_ID=',
     'GITHUB_ISSUES_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
@@ -243,9 +245,9 @@ async function main() {
         'Messaging platform:',
         [
           'WhatsApp (supported now)',
-          'Slack (planned; runtime support pending)',
+          'Slack (official runtime + demo mode)',
           'Teams (planned; runtime support pending)',
-          'Discord (planned; runtime support pending)',
+          'Discord (official runtime + demo mode)',
         ],
         existing.MESSAGING_PLATFORM === 'slack'
           ? 1
@@ -295,6 +297,7 @@ async function main() {
     let useAnthropic = true;
     let useOpenAI = true;
     let useGemini = false;
+    let useBedrock = false;
 
     if (nonInteractive) {
       const providerCsv = cli.options.providers || cli.options.provider || '';
@@ -304,20 +307,23 @@ async function main() {
         useAnthropic = providers.includes('anthropic');
         useOpenAI = providers.includes('openai');
         useGemini = providers.includes('gemini');
+        useBedrock = providers.includes('bedrock');
       } else {
         useOpenRouter = parseBoolean(cli.options['use-openrouter'], !!existing.OPENROUTER_API_KEY);
         useAnthropic = parseBoolean(cli.options['use-anthropic'], !!existing.ANTHROPIC_API_KEY);
         useOpenAI = parseBoolean(cli.options['use-openai'], !!existing.OPENAI_API_KEY);
         useGemini = parseBoolean(cli.options['use-gemini'], !!existing.GEMINI_API_KEY);
+        useBedrock = parseBoolean(cli.options['use-bedrock'], !!existing.BEDROCK_MODEL_ID);
       }
     } else {
       useOpenRouter = yn(await rl.question(`Use OpenRouter Claude? [Y/n] (current: ${existing.OPENROUTER_API_KEY ? 'set' : 'empty'}): `), true);
       useAnthropic = yn(await rl.question(`Use Anthropic direct Claude? [Y/n] (current: ${existing.ANTHROPIC_API_KEY ? 'set' : 'empty'}): `), true);
       useOpenAI = yn(await rl.question(`Use OpenAI? [Y/n] (current: ${existing.OPENAI_API_KEY ? 'set' : 'empty'}): `), true);
       useGemini = yn(await rl.question(`Use Google Gemini? [y/N] (current: ${existing.GEMINI_API_KEY ? 'set' : 'empty'}): `), false);
+      useBedrock = yn(await rl.question(`Use AWS Bedrock? [y/N] (current: ${existing.BEDROCK_MODEL_ID ? 'set' : 'empty'}): `), false);
     }
 
-    if (!useOpenRouter && !useAnthropic && !useOpenAI && !useGemini) {
+    if (!useOpenRouter && !useAnthropic && !useOpenAI && !useGemini && !useBedrock) {
       output.write('⚠️ No provider selected, enabling OpenAI fallback by default.\n');
       useOpenAI = true;
     }
@@ -327,6 +333,7 @@ async function main() {
     if (useAnthropic) selectedProviders.push('anthropic');
     if (useOpenAI) selectedProviders.push('openai');
     if (useGemini) selectedProviders.push('gemini');
+    if (useBedrock) selectedProviders.push('bedrock');
 
     let providerOrder = [...selectedProviders];
     if (cli.options['provider-order']) {
@@ -393,6 +400,22 @@ async function main() {
     const geminiPricingOutputPerM = nonInteractive
       ? (cli.options['gemini-pricing-output-per-m'] ?? existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0')
       : await rl.question(`GEMINI_PRICING_OUTPUT_PER_M (USD per 1M tokens) [${existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0'}]: `);
+
+    const bedrockRegion = nonInteractive
+      ? (cli.options['bedrock-region'] ?? existing.BEDROCK_REGION ?? 'us-east-1')
+      : await rl.question(`BEDROCK_REGION [${existing.BEDROCK_REGION ?? 'us-east-1'}]: `);
+    const bedrockModelId = nonInteractive
+      ? (cli.options['bedrock-model-id'] ?? existing.BEDROCK_MODEL_ID ?? '')
+      : await rl.question(`BEDROCK_MODEL_ID [${existing.BEDROCK_MODEL_ID ?? ''}]: `);
+    const bedrockMaxTokens = nonInteractive
+      ? (cli.options['bedrock-max-tokens'] ?? existing.BEDROCK_MAX_TOKENS ?? '1024')
+      : await rl.question(`BEDROCK_MAX_TOKENS [${existing.BEDROCK_MAX_TOKENS ?? '1024'}]: `);
+    const bedrockPricingInputPerM = nonInteractive
+      ? (cli.options['bedrock-pricing-input-per-m'] ?? existing.BEDROCK_PRICING_INPUT_PER_M ?? '0')
+      : await rl.question(`BEDROCK_PRICING_INPUT_PER_M (USD per 1M tokens) [${existing.BEDROCK_PRICING_INPUT_PER_M ?? '0'}]: `);
+    const bedrockPricingOutputPerM = nonInteractive
+      ? (cli.options['bedrock-pricing-output-per-m'] ?? existing.BEDROCK_PRICING_OUTPUT_PER_M ?? '0')
+      : await rl.question(`BEDROCK_PRICING_OUTPUT_PER_M (USD per 1M tokens) [${existing.BEDROCK_PRICING_OUTPUT_PER_M ?? '0'}]: `);
 
     const ollamaBaseUrl = nonInteractive
       ? (cli.options['ollama-base-url'] ?? existing.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434')
@@ -516,6 +539,11 @@ async function main() {
       GEMINI_MODEL: (geminiModel || existing.GEMINI_MODEL || 'gemini-1.5-flash').trim(),
       GEMINI_PRICING_INPUT_PER_M: String(geminiPricingInputPerM || existing.GEMINI_PRICING_INPUT_PER_M || '0').trim(),
       GEMINI_PRICING_OUTPUT_PER_M: String(geminiPricingOutputPerM || existing.GEMINI_PRICING_OUTPUT_PER_M || '0').trim(),
+      BEDROCK_REGION: (bedrockRegion || existing.BEDROCK_REGION || 'us-east-1').trim(),
+      BEDROCK_MODEL_ID: (bedrockModelId || existing.BEDROCK_MODEL_ID || '').trim(),
+      BEDROCK_MAX_TOKENS: String(bedrockMaxTokens || existing.BEDROCK_MAX_TOKENS || '1024').trim(),
+      BEDROCK_PRICING_INPUT_PER_M: String(bedrockPricingInputPerM || existing.BEDROCK_PRICING_INPUT_PER_M || '0').trim(),
+      BEDROCK_PRICING_OUTPUT_PER_M: String(bedrockPricingOutputPerM || existing.BEDROCK_PRICING_OUTPUT_PER_M || '0').trim(),
       BOT_PHONE_NUMBER: (existing.BOT_PHONE_NUMBER || '').trim(),
       GOOGLE_API_KEY: (existing.GOOGLE_API_KEY || '').trim(),
       MBTA_API_KEY: (existing.MBTA_API_KEY || '').trim(),
@@ -555,6 +583,11 @@ async function main() {
       `GEMINI_MODEL=${finalEnv.GEMINI_MODEL}`,
       `GEMINI_PRICING_INPUT_PER_M=${finalEnv.GEMINI_PRICING_INPUT_PER_M}`,
       `GEMINI_PRICING_OUTPUT_PER_M=${finalEnv.GEMINI_PRICING_OUTPUT_PER_M}`,
+      `BEDROCK_REGION=${finalEnv.BEDROCK_REGION}`,
+      `BEDROCK_MODEL_ID=${finalEnv.BEDROCK_MODEL_ID}`,
+      `BEDROCK_MAX_TOKENS=${finalEnv.BEDROCK_MAX_TOKENS}`,
+      `BEDROCK_PRICING_INPUT_PER_M=${finalEnv.BEDROCK_PRICING_INPUT_PER_M}`,
+      `BEDROCK_PRICING_OUTPUT_PER_M=${finalEnv.BEDROCK_PRICING_OUTPUT_PER_M}`,
       '',
       '# Messaging and bot identity',
       `BOT_PHONE_NUMBER=${finalEnv.BOT_PHONE_NUMBER}`,
@@ -676,17 +709,17 @@ async function main() {
     output.write(`- Deploy target: ${deployTarget === 'docker' ? 'docker compose' : 'native node'}\n`);
     output.write(`- Write mode: ${dryRun ? 'preview only' : 'write files'}\n`);
 
-    if (messagingPlatform === 'discord' || messagingPlatform === 'teams') {
-      output.write(`\n⚠️ ${messagingPlatform.charAt(0).toUpperCase()}${messagingPlatform.slice(1)} runtime support is planned but not implemented yet.\n`);
-      output.write('   Current runtime support is WhatsApp, with local Slack demo mode for development.\n');
+    if (messagingPlatform === 'teams') {
+      output.write('\n⚠️ Teams runtime support is planned but not implemented yet.\n');
+      output.write('   Current runtime support is WhatsApp, Slack, and Discord.\n');
     }
 
     if (messagingPlatform === 'slack') {
       output.write(`- Slack demo mode: ${finalEnv.SLACK_DEMO}\n`);
-      if (finalEnv.SLACK_DEMO !== 'true') {
-        output.write('\n⚠️ Slack runtime currently requires SLACK_DEMO=true.\n');
-      } else {
+      if (finalEnv.SLACK_DEMO === 'true') {
         output.write('\nℹ️ Slack demo mode is local-only and does not connect to Slack APIs.\n');
+      } else {
+        output.write('\nℹ️ Slack official runtime requires SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET in .env.\n');
       }
     }
 

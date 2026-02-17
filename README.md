@@ -1,4 +1,6 @@
 # Garbanzo
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 [![Quality Gate](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml)
 [![Automation Guard](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml)
@@ -11,38 +13,67 @@
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
-A multi-platform chat operations bot with shared routing/core middleware and multi-provider AI (Claude, OpenAI, Gemini, plus local Ollama). Originally built for a 120+ member Boston-area meetup group, designed to be adaptable to any community or locale.
+Garbanzo is an AI chat operations platform for communities and small teams. It combines multi-provider LLM routing, practical automations, and Docker-first deployment so you can run useful AI workflows directly in group chat.
 
-## Supported Messaging Platforms
+## AI Providers and Routing
 
-- WhatsApp
-- Slack
-- Discord
-- Teams
+- **Multi-provider cloud failover:** route across Claude, OpenAI, Gemini, Bedrock, and OpenRouter with configurable priority (`AI_PROVIDER_ORDER`)
+- **Hybrid cloud + local mode:** use Ollama for low-cost/simple requests while reserving cloud models for high-complexity prompts
+- **Per-provider model control:** set explicit model overrides (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `BEDROCK_MODEL_ID`)
+- **Cost-aware operations:** token and pricing fields support practical cost tracking and routing decisions
 
-## Why Garbanzo
+| Provider | Primary Strength | Typical Role in Routing |
+|----------|------------------|-------------------------|
+| Anthropic Claude | nuanced reasoning, long-form quality | quality-first primary or complex fallback |
+| OpenAI | broad capability and tool reliability | balanced primary or secondary |
+| Gemini | speed and cost efficiency | fast primary for high-volume traffic |
+| OpenRouter | model marketplace flexibility | portability/fallback layer |
+| AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
+| Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
 
-- Turn busy group chats into actionable community coordination (events, plans, recs, summaries)
-- Keep group context useful with memory, profiles, moderation alerts, and daily owner digests
-- Blend local + cloud AI routing so quality stays high while costs stay predictable
-- Ship quickly with Docker Compose default deployment and setup wizard onboarding
+## AI Capabilities
+
+- Mention-driven AI responses for group chat (`@garbanzo`) with context continuity
+- Community memory and profile context to keep recommendations personalized and actionable
+- Moderation signals and owner-safe controls so AI behavior stays useful, not noisy
+- Workflow-friendly command layer for summaries, event planning, recommendations, and structured lookups
+
+## Integrations and Automations
+
+- **Community workflows:** introductions, summaries/catch-up, event enrichment, polls, recommendations, and daily owner digests
+- **Data integrations:** weather, transit (MBTA), news, venues, and books with graceful degradation when keys are missing
+- **Specialized workflows:** D&D rolls/lookups plus character sheet PDF generation
+- **Operational tooling:** health/readiness endpoints, backups, retry queue, rate limits, and release-safe group messaging controls
+
+## Top 5 AI Workflows
+
+- **Catch-up in seconds:** `!summary` and `!catchup` compress noisy chat into actionable context
+- **Plan real meetups faster:** event proposals auto-enrich with weather + transit context
+- **Triage moderation risk:** moderation signals route to owner review without auto-punishing users
+- **Personalize recommendations:** profile memory improves recs for venues, events, and interest-based prompts
+- **Publish member-safe updates:** preview/lint release notes before broadcasting to avoid chat confusion
+
+## Supported Messaging Runtimes
+
+- **WhatsApp:** Baileys runtime (community/experimental transport)
+- **Slack:** official Events API runtime (with demo mode fallback)
+- **Discord:** official interactions runtime (with demo mode fallback)
+- **Teams:** adapter target (roadmap)
 
 ## Who This Is For
 
-- Meetup/community organizers running active group chats who want structure without killing vibe
-- Hobby groups (book clubs, tabletop groups, local interest communities) needing quick planning tools
-- Small teams that want an AI chat ops assistant with local-first data and low infra overhead
-- Builders who need a reusable multi-platform bot base with clear extension points and production guardrails
+- Operators who need AI-assisted coordination in busy group chats
+- Small teams that want reliable AI automations without managed-platform lock-in
+- Builders who need an extensible AI bot runtime with real operational guardrails
 
 ## What Makes Garbanzo Different
 
-Garbanzo is opinionated around community operations, not just message transport.
+Garbanzo is built as an AI operations layer, not just a transport wrapper.
 
-- **Compared to messaging APIs/SDKs (e.g. Twilio, platform SDKs):** APIs provide transport primitives; Garbanzo ships reusable community workflows out of the box (introductions, events enrichment, summaries, memory, owner digests, feedback triage).
-- **Compared to raw platform libraries:** those are foundations; Garbanzo is a production-ready app layer with routing, moderation, retries, health checks, setup wizard, and release workflows included.
-- **AI cost/reliability posture:** configurable cloud provider ordering across Claude/OpenAI/Gemini, plus local Ollama routing for simple queries to reduce spend while preserving quality for complex prompts.
-- **Ops-first defaults:** Docker Compose default deploy, branch protections/CI guardrails, and owner-safe approval workflows.
-- **Open and portable roadmap:** tagged Docker releases plus cross-platform native binary bundles as release assets.
+- **Compared to messaging APIs/SDKs:** APIs handle message transport; Garbanzo ships end-to-end AI workflows and operational controls.
+- **Compared to raw bot libraries:** Garbanzo includes routing, moderation, retries, health checks, setup wizard flows, and release tooling.
+- **Compared to single-provider bots:** Garbanzo supports provider orchestration across Claude/OpenAI/Gemini/Bedrock plus local Ollama.
+- **Compared to generic chat assistants:** Garbanzo is tuned for real group operations (events, summaries, moderation, memory, owner controls).
 
 ## Personas
 
@@ -55,7 +86,7 @@ Before Garbanzo, we ran a more ambitious multi-service assistant setup (more ser
 
 Reliability comes from fewer moving parts and explicit guardrails, not from more integrations.
 
-What we kept (good ideas that translate well to community bots):
+What we kept (good ideas that translate well to AI community operations):
 
 - A bias toward useful "skills" (weather/transit/events/summaries) rather than generic chat
 - Tooling that makes the bot operationally observable (health endpoints, backups, logs)
@@ -72,7 +103,7 @@ What we intentionally changed in Garbanzo (why it's safer and easier to run for 
 
 ## What It Does
 
-Garbanzo connects to supported messaging platforms, listens for mentions/commands in group chats, and responds with AI-powered answers, real-time data lookups, and community management tools. The default deployment is Docker Compose with persisted volumes for auth and SQLite data.
+Garbanzo runs an AI operations layer inside group chat: it ingests mentions and commands, routes prompts across configured LLM providers, enriches responses with integrations, and executes community workflows with operational guardrails. The default deployment is Docker Compose with persisted auth/runtime state and SQLite data.
 
 ## Official Images
 
@@ -82,7 +113,7 @@ Garbanzo connects to supported messaging platforms, listens for mentions/command
 
 ## Support Options
 
-If Garbanzo helps your community, support keeps releases, maintenance, and support response sustainable:
+If Garbanzo helps your community, support funds provider integrations, AI workflow improvements, and reliable releases:
 
 - Patreon: https://www.patreon.com/c/garbanzobot
   - `Bean Sprout` - project updates and roadmap votes
@@ -104,14 +135,20 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:0.1.6
+# docker pull jjhickman/garbanzo:0.1.8
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
 
 # 5. Health check
 curl http://127.0.0.1:3001/health
+
+# 6. First AI response test (in chat)
+# @garbanzo !summary
+# @garbanzo plan dinner in somerville this friday
 ```
+
+If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/slack/demo`.
 
 ## Local Development (without Docker)
 
@@ -126,7 +163,23 @@ npm run dev
 
 ### Slack Support
 
-For local development and pipeline verification, Slack support can be exercised through the local HTTP endpoint:
+For official Slack runtime:
+
+```bash
+# .env
+MESSAGING_PLATFORM=slack
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+SLACK_CLIENT_ID=...
+SLACK_CLIENT_SECRET=...
+SLACK_REFRESH_TOKEN=...
+SLACK_EVENTS_BIND_HOST=0.0.0.0
+SLACK_EVENTS_PORT=3002
+
+npm run dev
+```
+
+For local pipeline verification without a Slack app:
 
 ```bash
 # .env
@@ -143,7 +196,20 @@ curl -s -X POST http://127.0.0.1:3002/slack/demo \
 
 ### Discord Support
 
-For local development and pipeline verification, Discord support can be exercised through the local HTTP endpoint:
+For official Discord runtime:
+
+```bash
+# .env
+MESSAGING_PLATFORM=discord
+DISCORD_BOT_TOKEN=...
+DISCORD_PUBLIC_KEY=...
+DISCORD_INTERACTIONS_BIND_HOST=0.0.0.0
+DISCORD_INTERACTIONS_PORT=3003
+
+npm run dev
+```
+
+For local pipeline verification without a Discord app setup:
 
 ```bash
 # .env
@@ -281,7 +347,13 @@ curl http://127.0.0.1:3001/health/ready
 
 ## Features
 
-### AI Chat
+### AI Provider Integrations
+- Claude (Anthropic/OpenRouter), OpenAI, and Gemini with configurable priority order
+- Optional local Ollama for low-cost/local inference on simple prompts
+- Per-provider model overrides and fallback behavior for reliability
+- Provider-aware token/cost accounting hooks
+
+### AI Chat Capabilities
 - Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
 - Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
 - Conversation context from SQLite — remembers recent messages per group
@@ -289,7 +361,7 @@ curl http://127.0.0.1:3001/health/ready
 - Custom per-group persona — different tone per group (casual in General, structured in Events)
 - Context compression — recent messages verbatim, older messages extractively compressed
 
-### Community
+### Community Workflows
 - **Introductions** — AI-powered personal welcomes for new member introductions (no @mention needed)
 - **Welcome messages** — greets new participants when they join a group
 - **Events** — detects event proposals, enriches with weather/transit/AI logistics
@@ -300,7 +372,7 @@ curl http://127.0.0.1:3001/health/ready
 - **Feedback** — `!suggest`, `!bug`, `!upvote` for community-driven improvements
 - **Daily digest** — owner-only summary of daily bot activity
 
-### Information
+### External Integrations
 - **Weather** — `!weather` / `!forecast` via Google Weather API (default: Boston)
 - **MBTA Transit** — `!transit` / `!mbta` for real-time alerts, predictions, schedules
 - **News** — `!news [topic]` via NewsAPI
@@ -345,26 +417,66 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp` production; `slack`/`discord` demo runtimes; `teams` adapter target) |
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` | Yes | Cloud AI responses (Claude/OpenAI/Gemini failover) |
-| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `gemini,openai,openrouter,anthropic`) |
+| `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp`, `slack`, `discord`, `teams`) |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
+| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `bedrock,gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
 | `OPENAI_MODEL` | No | OpenAI fallback model override (default: `gpt-4.1`) |
 | `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
 | `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
 | `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
+| `BEDROCK_REGION` | Bedrock only | AWS region for Bedrock runtime (default: `us-east-1`) |
+| `BEDROCK_MODEL_ID` | Bedrock only | Bedrock model ID used when provider order includes `bedrock` |
+| `BEDROCK_MAX_TOKENS` | Bedrock only | Max output tokens for Bedrock calls (default: `1024`) |
+| `BEDROCK_PRICING_INPUT_PER_M` | Bedrock only | Bedrock input pricing (USD per 1M tokens, for cost tracking) |
+| `BEDROCK_PRICING_OUTPUT_PER_M` | Bedrock only | Bedrock output pricing (USD per 1M tokens, for cost tracking) |
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
+| `SLACK_BOT_TOKEN` | Slack only | Official Slack bot token (`xoxb-...`) |
+| `SLACK_SIGNING_SECRET` | Slack only | Slack Events API signing secret (Basic Information -> App Credentials) |
+| `SLACK_BOT_USER_ID` | Optional | Bot user id for mention matching (`U...`) |
+| `SLACK_CLIENT_ID` | Slack rotation | Required for token refresh flow |
+| `SLACK_CLIENT_SECRET` | Slack rotation | Required for token refresh flow |
+| `SLACK_REFRESH_TOKEN` | Slack rotation | Rotating refresh token from OAuth response |
+| `SLACK_TOKEN_STATE_FILE` | Optional | Local persisted token state path (default `data/slack-token-state.json`) |
+| `SLACK_TOKEN_ROTATE_MIN_BUFFER` | Optional | Minutes before expiry to refresh (default `5`) |
+| `DISCORD_BOT_TOKEN` | Discord only | Official Discord bot token |
+| `DISCORD_PUBLIC_KEY` | Discord only | Discord interactions signature public key |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
-| `OWNER_JID` | Yes | Owner WhatsApp JID for admin features |
+| `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
+
+### AI Routing Profiles (Examples)
+
+Cost-optimized routing (fast + affordable cloud-first):
+
+```bash
+AI_PROVIDER_ORDER=gemini,openrouter,openai,anthropic
+GEMINI_MODEL=gemini-1.5-flash
+OPENROUTER_MODEL=anthropic/claude-sonnet-4-5
+```
+
+Quality-prioritized routing (high-complexity prompts first):
+
+```bash
+AI_PROVIDER_ORDER=anthropic,openai,gemini,openrouter
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250514
+OPENAI_MODEL=gpt-4.1
+```
+
+Hybrid local/cloud routing (keep simple prompts local):
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+AI_PROVIDER_ORDER=openrouter,gemini,openai
+```
 
 ### Group Configuration
 
@@ -511,15 +623,15 @@ By default, `docker compose up -d` runs the published `latest` image.
 To deploy a specific release image:
 
 ```bash
-APP_VERSION=0.1.6 docker compose pull garbanzo
-APP_VERSION=0.1.6 docker compose up -d
+APP_VERSION=0.1.8 docker compose pull garbanzo
+APP_VERSION=0.1.8 docker compose up -d
 ```
 
 Recommended (production) — pin a version and force pulls (prevents accidentally running a stale cached image):
 
 ```bash
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development (build from source):
@@ -615,11 +727,9 @@ sudo apt-get install -y iptables-persistent
 sudo netfilter-persistent save
 ```
 
-## Commercial Use and Support
+## Sponsorship and Support
 
-Garbanzo is licensed under Apache-2.0, so commercial use is allowed.
-
-If you want paid onboarding, implementation help, or priority support, see `COMMERCIAL_LICENSE.md`.
+Garbanzo is Apache-2.0 licensed. If it helps your team or community, support development through Patreon or GitHub Sponsors links in this README.
 
 ## Main Branch Stability
 
@@ -639,6 +749,7 @@ Repo guardrails are configured under `.github/`:
 
 - [PERSONA.md](docs/PERSONA.md) — Bot personality and voice guidelines
 - [ROADMAP.md](docs/ROADMAP.md) — Product milestones and release direction
+- [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md) — Ready-to-post launch and feature snippets
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline

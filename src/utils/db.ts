@@ -1,70 +1,77 @@
 /**
  * Database API — runtime-selected backend.
- *
- * Today, Garbanzo ships with SQLite only.
- * This module is written as a thin wrapper so we can add a Postgres backend
- * later without rewriting all feature imports.
  */
 
 import { config } from './config.js';
+import type { DbBackend } from './db-backend.js';
 
 export type {
+  BackupIntegrityStatus,
+  DailyGroupActivity,
   DbMessage,
+  FeedbackEntry,
+  MaintenanceStats,
+  MemberProfile,
+  MemoryEntry,
   ModerationEntry,
   StrikeSummary,
-  FeedbackEntry,
-  MemoryEntry,
-} from './db-sqlite.js';
+} from './db-types.js';
 
-export type { MemberProfile } from './db-profiles.js';
-export type { BackupIntegrityStatus } from './db-maintenance.js';
+const backend: DbBackend = await (async () => {
+  if (config.DB_DIALECT === 'postgres') {
+    const pg = await import('./db-postgres.js');
+    return pg.createPostgresBackend();
+  }
 
-if (config.DB_DIALECT === 'postgres') {
-  const pg = await import('./db-postgres.js');
-  // Initialize to ensure we fail with a clear error message.
-  pg.createPostgresBackend();
-}
+  const sqlite = await import('./db-sqlite.js');
+  return sqlite.createSqliteBackend();
+})();
 
-const sqlite = await import('./db-sqlite.js');
+// Profiles
+export const touchProfile = backend.touchProfile;
+export const getProfile = backend.getProfile;
+export const setProfileInterests = backend.setProfileInterests;
+export const setProfileName = backend.setProfileName;
+export const updateActiveGroups = backend.updateActiveGroups;
+export const getOptedInProfiles = backend.getOptedInProfiles;
+export const deleteProfileData = backend.deleteProfileData;
 
-// Re-export the current public API by delegating to the sqlite backend.
-// Keep exports explicit so future backends can implement the same surface.
+// Maintenance and backups
+export const backupDatabase = backend.backupDatabase;
+export const runMaintenance = backend.runMaintenance;
+export const verifyLatestBackupIntegrity = backend.verifyLatestBackupIntegrity;
+export const scheduleMaintenance = backend.scheduleMaintenance;
+export const stopMaintenance = backend.stopMaintenance;
 
-export const touchProfile = sqlite.touchProfile;
-export const getProfile = sqlite.getProfile;
-export const setProfileInterests = sqlite.setProfileInterests;
-export const setProfileName = sqlite.setProfileName;
-export const updateActiveGroups = sqlite.updateActiveGroups;
-export const getOptedInProfiles = sqlite.getOptedInProfiles;
-export const deleteProfileData = sqlite.deleteProfileData;
+// Context
+export const storeMessage = backend.storeMessage;
+export const getMessages = backend.getMessages;
+export const searchRelevantMessages = backend.searchRelevantMessages;
 
-export const backupDatabase = sqlite.backupDatabase;
-export const runMaintenance = sqlite.runMaintenance;
-export const verifyLatestBackupIntegrity = sqlite.verifyLatestBackupIntegrity;
-export const scheduleMaintenance = sqlite.scheduleMaintenance;
-export const stopMaintenance = sqlite.stopMaintenance;
+// Moderation
+export const logModeration = backend.logModeration;
+export const getStrikeCount = backend.getStrikeCount;
+export const getRepeatOffenders = backend.getRepeatOffenders;
 
-export const storeMessage = sqlite.storeMessage;
-export const getMessages = sqlite.getMessages;
+// Daily stats
+export const saveDailyStats = backend.saveDailyStats;
+export const getDailyGroupActivity = backend.getDailyGroupActivity;
 
-export const logModeration = sqlite.logModeration;
-export const getStrikeCount = sqlite.getStrikeCount;
-export const getRepeatOffenders = sqlite.getRepeatOffenders;
+// Feedback
+export const submitFeedback = backend.submitFeedback;
+export const getOpenFeedback = backend.getOpenFeedback;
+export const getRecentFeedback = backend.getRecentFeedback;
+export const getFeedbackById = backend.getFeedbackById;
+export const setFeedbackStatus = backend.setFeedbackStatus;
+export const upvoteFeedback = backend.upvoteFeedback;
+export const linkFeedbackToGitHubIssue = backend.linkFeedbackToGitHubIssue;
 
-export const saveDailyStats = sqlite.saveDailyStats;
+// Memory
+export const addMemory = backend.addMemory;
+export const getAllMemories = backend.getAllMemories;
+export const deleteMemory = backend.deleteMemory;
+export const searchMemory = backend.searchMemory;
+export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
 
-export const submitFeedback = sqlite.submitFeedback;
-export const getOpenFeedback = sqlite.getOpenFeedback;
-export const getRecentFeedback = sqlite.getRecentFeedback;
-export const getFeedbackById = sqlite.getFeedbackById;
-export const setFeedbackStatus = sqlite.setFeedbackStatus;
-export const upvoteFeedback = sqlite.upvoteFeedback;
-export const linkFeedbackToGitHubIssue = sqlite.linkFeedbackToGitHubIssue;
-
-export const addMemory = sqlite.addMemory;
-export const getAllMemories = sqlite.getAllMemories;
-export const deleteMemory = sqlite.deleteMemory;
-export const searchMemory = sqlite.searchMemory;
-export const formatMemoriesForPrompt = sqlite.formatMemoriesForPrompt;
-
-export const closeDb = sqlite.closeDb;
+// Lifecycle
+export const closeDb = backend.closeDb;

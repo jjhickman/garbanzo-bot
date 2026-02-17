@@ -1,4 +1,6 @@
 # AWS Deployment Notes
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This document describes pragmatic ways to run Garbanzo on AWS using your own AWS account.
 
@@ -59,8 +61,8 @@ cd garbanzo-bot
 cp .env.example .env
 # edit .env and config/groups.json
 
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 docker compose logs -f garbanzo
 ```
@@ -85,21 +87,30 @@ curl http://127.0.0.1:3001/health
 
 If you publish port `3001` publicly/within a VPC, restrict it to trusted monitors.
 
-## Option: ECS Fargate + EFS (More Portable, More Moving Parts)
+## Option: ECS Fargate + RDS (Phase 2 target)
 
-If you want this managed path in the future, we recommend doing EC2 first to prove stability, then migrating once you know your steady-state CPU/memory and data retention needs.
+For Slack/Discord official runtimes, ECS + RDS is now the preferred managed AWS path.
 
-You can run Garbanzo as an ECS task, but you must solve persistence:
+The CDK stack (`infra/cdk/lib/garbanzo-ecs-stack.ts`) provisions:
 
-- Baileys auth requires persistent storage (EFS works well)
-- SQLite prefers local disk; SQLite on EFS can work but has more risk (latency/locking). For production at scale, consider migrating state to Postgres.
+- ALB ingress with path routing (`/slack/events*`, `/discord/interactions*`)
+- Fargate services (one per platform runtime)
+- RDS Postgres in isolated subnets
+- Secrets Manager wiring for platform tokens and Postgres credentials
+- Bedrock IAM invoke permissions on task roles
 
-If you still want Fargate:
+Deploy docs and context flags are in `infra/cdk/README.md`.
+Run `npm run aws:ecs:preflight` from repo root before deploy to validate AWS account/zone/cert/secret readiness.
+Run `npm run aws:ecs:audit` to synth-audit ECS IAM/task-definition wiring before deploy.
 
-- Use EFS for `/app/baileys_auth` and `/app/data`
-- Send logs to CloudWatch
-- Use ECS Exec for debugging
-- Ensure the task has outbound internet access (NAT gateway if in private subnets)
+Notes:
+
+- This stack targets Slack/Discord runtimes, not Baileys WhatsApp.
+- RDS is the durable store (`DB_DIALECT=postgres`) for multi-service operation.
+- Use Route53 + ACM for `bot.garbanzobot.com` HTTPS termination on ALB.
+- Optional: enable `deployDemo=true` and `demoDomainName=demo.garbanzobot.com` for a public Slack-demo runtime that showcases features without local install.
+- Demo runtime abuse controls include Turnstile challenge keys from `demoSecretArn`, demo-host scoped AWS WAF (rate + managed common/bot rules), CloudWatch alarms, and capped ECS autoscaling.
+- For deterministic synth/deploy in CI, pass both `hostedZoneName` and `hostedZoneId` to avoid Route53 lookup context resolution.
 
 ## Secrets
 

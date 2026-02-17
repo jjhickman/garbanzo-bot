@@ -4,7 +4,7 @@ import { bold } from '../utils/formatting.js';
 import { phoneFromJid } from '../utils/jid.js';
 import { config } from '../utils/config.js';
 import { logger } from '../middleware/logger.js';
-import { getStrikeCount, getRepeatOffenders, type StrikeSummary } from '../utils/db.js';
+import { getRepeatOffenders, type StrikeSummary } from '../utils/db.js';
 import {
   type ModerationFlag,
   CATEGORY_MAP,
@@ -142,13 +142,13 @@ export function formatModerationAlert(
   text: string,
   senderJid: string,
   groupJid: string,
+  strikeCount: number,
 ): string {
   const groupName = getGroupName(groupJid);
   const sender = phoneFromJid(senderJid);
   const severity = flag.severity === 'alert' ? '🚨 ALERT' : '⚠️ Warning';
   const sourceLabel = flag.source === 'openai' ? ' [AI]' : ' [Pattern]';
   const preview = text.length > 200 ? text.slice(0, 200) + '...' : text;
-  const strikeCount = getStrikeCount(senderJid);
 
   const lines = [
     `${severity}: ${bold(flag.reason)}${sourceLabel}`,
@@ -186,9 +186,7 @@ const mutedUsers = new Map<string, number>();
  * Checks their strike count and mutes them if at threshold.
  * Returns a DM message to send to the user, or null if no mute applied.
  */
-export function applyStrikeAndMute(senderJid: string): { muted: boolean; dmMessage: string | null } {
-  const strikes = getStrikeCount(senderJid);
-
+export function applyStrikeAndMute(senderJid: string, strikes: number): { muted: boolean; dmMessage: string | null } {
   if (strikes >= STRIKE_THRESHOLD) {
     const expiresAt = Date.now() + SOFT_MUTE_MINUTES * 60 * 1000;
     mutedUsers.set(senderJid, expiresAt);
@@ -233,8 +231,8 @@ export function isSoftMuted(senderJid: string): boolean {
  * Format the !strikes report for the owner.
  * Shows all users with 2+ strikes, sorted by count.
  */
-export function formatStrikesReport(): string {
-  const offenders = getRepeatOffenders(2);
+export async function formatStrikesReport(): Promise<string> {
+  const offenders = await getRepeatOffenders(2);
 
   if (offenders.length === 0) {
     return '🫘 No repeat offenders found. Community is looking clean.';

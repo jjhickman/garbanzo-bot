@@ -3,7 +3,7 @@ import { config } from '../utils/config.js';
 import type { VisionImage } from '../core/vision.js';
 
 /** Cloud providers supported for fallback chain. */
-export type CloudProvider = 'openrouter' | 'anthropic' | 'openai' | 'gemini';
+export type CloudProvider = 'openrouter' | 'anthropic' | 'openai' | 'gemini' | 'bedrock';
 
 /** Normalized cloud AI response metadata. */
 export interface CloudResponse {
@@ -97,7 +97,7 @@ export function buildProviderRequest(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
         ],
-        max_tokens: 1024,
+        max_tokens: config.CLOUD_MAX_TOKENS,
       },
       parser: parseChatCompletionResponse,
     };
@@ -116,7 +116,7 @@ export function buildProviderRequest(
       },
       body: {
         model: config.ANTHROPIC_MODEL,
-        max_tokens: 1024,
+        max_tokens: config.CLOUD_MAX_TOKENS,
         system: systemPrompt,
         messages: [{ role: 'user', content: buildAnthropicUserContent(userMessage, visionImages) }],
       },
@@ -143,7 +143,7 @@ export function buildProviderRequest(
           parts: buildGeminiUserParts(userMessage, visionImages),
         }],
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: config.CLOUD_MAX_TOKENS,
         },
       },
       parser: parseGeminiResponse,
@@ -165,7 +165,7 @@ export function buildProviderRequest(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
       ],
-      max_tokens: 1024,
+      max_tokens: config.CLOUD_MAX_TOKENS,
     },
     parser: parseChatCompletionResponse,
   };

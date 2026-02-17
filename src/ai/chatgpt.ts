@@ -3,13 +3,14 @@
  */
 
 import { logger } from '../middleware/logger.js';
+import { config } from '../utils/config.js';
 import type { VisionImage } from '../core/vision.js';
 import {
   buildProviderRequest,
   type CloudResponse,
 } from './cloud-providers.js';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = () => config.CLOUD_REQUEST_TIMEOUT_MS;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
 
@@ -35,7 +36,8 @@ export async function callChatGPT(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutMs = REQUEST_TIMEOUT_MS();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     logger.debug({
@@ -81,7 +83,7 @@ export async function callChatGPT(
       provider: req.provider,
       model: req.model,
       endpoint: req.endpoint,
-      timeoutMs: REQUEST_TIMEOUT_MS,
+      timeoutMs,
       err: error,
     }, 'OpenAI provider failed');
     throw error;

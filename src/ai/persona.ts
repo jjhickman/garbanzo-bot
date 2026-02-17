@@ -34,12 +34,12 @@ export interface MessageContext {
  * Includes the complete PERSONA.md and all context.
  * Optionally accepts the user's message text for language detection.
  */
-export function buildSystemPrompt(ctx: MessageContext, userMessage?: string): string {
+export async function buildSystemPrompt(ctx: MessageContext, userMessage?: string): Promise<string> {
   const introductionsChatId = getEnabledGroupJidByName('Introductions');
   const isIntroGroup = !!introductionsChatId && ctx.groupJid === introductionsChatId;
-  const context = formatContext(ctx.groupJid);
+  const context = await formatContext(ctx.groupJid, userMessage ?? '');
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
-  const memories = formatMemoriesForPrompt();
+  const memories = await formatMemoriesForPrompt();
   const groupPersona = getGroupPersona(ctx.groupJid);
 
   return [
@@ -71,8 +71,8 @@ export function buildSystemPrompt(ctx: MessageContext, userMessage?: string): st
  * the core persona in ~15 lines instead of the full PERSONA.md (~76 lines).
  * Only used for simple queries routed to Ollama.
  */
-export function buildOllamaPrompt(ctx: MessageContext): string {
-  const context = formatContext(ctx.groupJid);
+export async function buildOllamaPrompt(ctx: MessageContext, userMessage: string = ''): Promise<string> {
+  const context = await formatContext(ctx.groupJid, userMessage);
 
   return [
     'You are Garbanzo Bean 🫘, a WhatsApp community bot for a 120-member Boston-area meetup group (ages 25-45).',

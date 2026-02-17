@@ -14,7 +14,7 @@
 
 import { createServer, type Server } from 'http';
 import { logger } from './logger.js';
-import { verifyLatestBackupIntegrity, type BackupIntegrityStatus } from '../utils/db-maintenance.js';
+import { verifyLatestBackupIntegrity, type BackupIntegrityStatus } from '../utils/db.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -103,11 +103,11 @@ function isHealthRequestRateLimited(ip: string, now: number): boolean {
   return existing.count > HEALTH_RATE_LIMIT;
 }
 
-function getCachedBackupStatus(now: number): { checkedAt: number; status: BackupIntegrityStatus } {
+async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; status: BackupIntegrityStatus }> {
   if (!backupStatusCache || now - backupStatusCache.checkedAt >= BACKUP_CHECK_CACHE_MS) {
     backupStatusCache = {
       checkedAt: now,
-      status: verifyLatestBackupIntegrity(),
+      status: await verifyLatestBackupIntegrity(),
     };
   }
   return backupStatusCache;
@@ -116,13 +116,13 @@ function getCachedBackupStatus(now: number): { checkedAt: number; status: Backup
 /**
  * Start the local HTTP health endpoint (`/health`) with lightweight abuse protection.
  */
-function renderPrometheusMetrics(now: number): string {
+async function renderPrometheusMetrics(now: number): Promise<string> {
   const stale = isConnectionStale();
   const uptimeSeconds = Math.floor((now - state.startedAt) / 1000);
   const connectedForSeconds = state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : -1;
   const lastMessageAgoSeconds = state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : -1;
   const mem = process.memoryUsage();
-  const backup = getCachedBackupStatus(now);
+  const backup = await getCachedBackupStatus(now);
 
   const statusConnected = state.status === 'connected' ? 1 : 0;
   const statusConnecting = state.status === 'connecting' ? 1 : 0;
@@ -185,63 +185,71 @@ export function startHealthServer(
   const metricsEnabled = options?.metricsEnabled === true;
 
   server = createServer((req, res) => {
-    const path = (req.url ?? '').split('?')[0];
+    void (async () => {
+      const path = (req.url ?? '').split('?')[0];
 
-    if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
-      const now = Date.now();
-      const ip = req.socket.remoteAddress ?? 'unknown';
+      if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
+        const now = Date.now();
+        const ip = req.socket.remoteAddress ?? 'unknown';
 
-      if (isHealthRequestRateLimited(ip, now)) {
-        res.writeHead(429, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'rate_limited', message: 'Too many health requests' }));
+        if (isHealthRequestRateLimited(ip, now)) {
+          res.writeHead(429, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'rate_limited', message: 'Too many health requests' }));
+          return;
+        }
+
+        const stale = isConnectionStale();
+
+        if (path === '/metrics') {
+          res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
+          res.end(await renderPrometheusMetrics(now));
+          return;
+        }
+
+        // `/health` is informational and always 200.
+        // `/health/ready` is actionable: 200 only when connected + not stale.
+        if (path === '/health/ready') {
+          const ready = state.status === 'connected' && !stale;
+          res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ready, status: state.status, stale }));
+          return;
+        }
+
+        const mem = process.memoryUsage();
+        const backup = await getCachedBackupStatus(now);
+
+        const body = JSON.stringify({
+          status: state.status,
+          stale,
+          uptime: Math.floor((now - state.startedAt) / 1000),
+          connectedFor: state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : null,
+          lastMessageAgo: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
+          reconnectCount: state.reconnectCount,
+          memory: {
+            rss: Math.round(mem.rss / 1024 / 1024),
+            heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+            heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+          },
+          backup: {
+            ...backup.status,
+            checkedAt: backup.checkedAt,
+          },
+        });
+
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(body);
         return;
       }
 
-      const stale = isConnectionStale();
-
-      if (path === '/metrics') {
-        res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
-        res.end(renderPrometheusMetrics(now));
-        return;
+      res.writeHead(404);
+      res.end();
+    })().catch((err) => {
+      logger.error({ err }, 'Health request handling failed');
+      if (!res.headersSent) {
+        res.writeHead(500, { 'content-type': 'application/json' });
       }
-
-      // `/health` is informational and always 200.
-      // `/health/ready` is actionable: 200 only when connected + not stale.
-      if (path === '/health/ready') {
-        const ready = state.status === 'connected' && !stale;
-        res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ready, status: state.status, stale }));
-        return;
-      }
-
-      const mem = process.memoryUsage();
-      const backup = getCachedBackupStatus(now);
-
-      const body = JSON.stringify({
-        status: state.status,
-        stale,
-        uptime: Math.floor((now - state.startedAt) / 1000),
-        connectedFor: state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : null,
-        lastMessageAgo: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
-        reconnectCount: state.reconnectCount,
-        memory: {
-          rss: Math.round(mem.rss / 1024 / 1024),
-          heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
-          heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
-        },
-        backup: {
-          ...backup.status,
-          checkedAt: backup.checkedAt,
-        },
-      });
-
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(body);
-      return;
-    }
-
-    res.writeHead(404);
-    res.end();
+      res.end(JSON.stringify({ error: 'health_handler_failed' }));
+    });
   });
 
   server.listen(port, host, () => {

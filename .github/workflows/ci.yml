@@ -47,3 +47,50 @@ jobs:
           OPENROUTER_API_KEY: test_key_ci
           AI_PROVIDER_ORDER: openrouter
         run: npm run check
+
+  postgres-backend:
+    name: Postgres Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: garbanzo
+          POSTGRES_PASSWORD: garbanzo
+          POSTGRES_DB: garbanzo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garbanzo -d garbanzo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Initialize Postgres schema
+        env:
+          DATABASE_URL: postgres://garbanzo:garbanzo@127.0.0.1:5432/garbanzo_test
+        run: npm run db:postgres:init
+
+      - name: Run Postgres backend tests
+        env:
+          MESSAGING_PLATFORM: whatsapp
+          OWNER_JID: test_owner@s.whatsapp.net
+          OPENROUTER_API_KEY: test_key_ci
+          AI_PROVIDER_ORDER: openrouter
+          DATABASE_URL: postgres://garbanzo:garbanzo@127.0.0.1:5432/garbanzo_test
+        run: npm run test:postgres

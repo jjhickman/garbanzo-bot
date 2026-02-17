@@ -1,4 +1,6 @@
 # Garbanzo Product Roadmap
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This roadmap describes the next major product milestones for Garbanzo.
 
@@ -6,7 +8,7 @@ It focuses on user-facing outcomes, platform trust, and sustainable operations.
 
 ## Direction
 
-Garbanzo is a multi-platform chat operations bot for communities and small teams.
+Garbanzo is an AI chat operations platform for communities and small teams.
 
 Priority order:
 

@@ -24,12 +24,12 @@ import {
 /**
  * Handle !memory owner commands. Returns a response string.
  */
-export function handleMemory(args: string): string {
+export async function handleMemory(args: string): Promise<string> {
   const trimmed = args.trim();
 
   // !memory (no args) — list all
   if (!trimmed) {
-    return listMemories();
+    return await listMemories();
   }
 
   // !memory add <category> <fact>
@@ -56,7 +56,7 @@ export function handleMemory(args: string): string {
     const fact = rest.slice(spaceIdx + 1).trim();
     if (!fact) return '❌ No fact provided.';
 
-    const entry = addMemory(fact, category, 'owner');
+    const entry = await addMemory(fact, category, 'owner');
     return `✅ Memory #${entry.id} stored [${category}]: ${fact}`;
   }
 
@@ -66,7 +66,7 @@ export function handleMemory(args: string): string {
     const id = parseInt(idStr, 10);
     if (isNaN(id)) return '❌ Provide a memory ID: `!memory delete 3`';
 
-    const deleted = deleteMemory(id);
+    const deleted = await deleteMemory(id);
     return deleted ? `🗑️ Memory #${id} deleted.` : `❌ Memory #${id} not found.`;
   }
 
@@ -75,7 +75,7 @@ export function handleMemory(args: string): string {
     const keyword = trimmed.slice(7).trim();
     if (!keyword) return '❌ Provide a search term: `!memory search trivia`';
 
-    const results = searchMemory(keyword);
+    const results = await searchMemory(keyword);
     if (results.length === 0) return `🔍 No memories matching "${keyword}".`;
 
     return formatMemoryList(results, `Search: "${keyword}"`);
@@ -94,8 +94,8 @@ export function handleMemory(args: string): string {
   ].join('\n');
 }
 
-function listMemories(): string {
-  const memories = getAllMemories();
+async function listMemories(): Promise<string> {
+  const memories = await getAllMemories();
   if (memories.length === 0) {
     return [
       '🧠 *Garbanzo Memory*',

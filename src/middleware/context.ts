@@ -14,16 +14,24 @@
  * the AI actually needs.
  */
 
-import { storeMessage, getMessages, type DbMessage } from '../utils/db.js';
+import {
+  storeMessage,
+  getMessages,
+  searchRelevantMessages,
+  type DbMessage,
+} from '../utils/db.js';
 import { logger } from './logger.js';
 
 // ── Configuration ───────────────────────────────────────────────────
 
 /** Number of recent messages to include verbatim */
-const RECENT_COUNT = 5;
+const RECENT_COUNT = 8;
 
 /** Number of older messages to fetch for compression */
-const OLDER_COUNT = 25;
+const OLDER_COUNT = 220;
+
+/** Number of semantic/keyword relevant messages to surface */
+const RELEVANT_COUNT = 6;
 
 /** Max age for cached summaries (minutes) */
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -43,34 +51,49 @@ const summaryCache = new Map<string, CacheEntry>();
 /**
  * Record an incoming message. Call for every text message the bot observes.
  */
-export function recordMessage(
+export async function recordMessage(
   chatJid: string,
   sender: string,
   text: string,
-): void {
-  storeMessage(chatJid, sender, text);
+): Promise<void> {
+  await storeMessage(chatJid, sender, text);
 }
 
 /**
  * Format context for AI prompts using the two-tier compression strategy.
  *
  * Returns a string with:
+ * - Query-relevant earlier messages (pgvector in Postgres, keyword fallback otherwise)
  * - A compressed summary of older messages (if available)
- * - The last 5 messages verbatim
+ * - The most recent messages verbatim
  *
  * Returns empty string if no messages exist.
  */
-export function formatContext(chatJid: string): string {
-  const recentMessages = getMessages(chatJid, RECENT_COUNT);
-  if (recentMessages.length === 0) return '';
-
-  const olderMessages = getMessages(chatJid, RECENT_COUNT + OLDER_COUNT);
+export async function formatContext(chatJid: string, queryText: string = ''): Promise<string> {
+  const contextWindow = await getMessages(chatJid, RECENT_COUNT + OLDER_COUNT);
+  if (contextWindow.length === 0) return '';
 
   // Split into recent (verbatim) and older (to compress)
-  const older = olderMessages.slice(0, Math.max(0, olderMessages.length - RECENT_COUNT));
-  const recent = olderMessages.slice(Math.max(0, olderMessages.length - RECENT_COUNT));
+  const older = contextWindow.slice(0, Math.max(0, contextWindow.length - RECENT_COUNT));
+  const recent = contextWindow.slice(Math.max(0, contextWindow.length - RECENT_COUNT));
+
+  const recentKeys = new Set(recent.map((m) => `${m.timestamp}:${m.sender}:${m.text}`));
+
+  const relevantRaw = queryText.trim()
+    ? await searchRelevantMessages(chatJid, queryText, RELEVANT_COUNT)
+    : [];
+  const relevant = relevantRaw.filter((m) => !recentKeys.has(`${m.timestamp}:${m.sender}:${m.text}`));
 
   const parts: string[] = [];
+
+  // Retrieved semantic/keyword-relevant context
+  if (relevant.length > 0) {
+    parts.push('Relevant earlier messages for this question:');
+    for (const m of relevant) {
+      parts.push(`[${m.sender}]: ${m.text}`);
+    }
+    parts.push('');
+  }
 
   // Older messages — compressed summary
   if (older.length >= 3) {

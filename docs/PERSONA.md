@@ -1,4 +1,6 @@
 # Garbanzo Bean 🫘 — Persona Document
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 > This file is loaded at runtime as the AI system prompt foundation.
 > Keep it focused on *who Garbanzo is* and *how he talks*.
