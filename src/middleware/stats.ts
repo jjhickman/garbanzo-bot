@@ -19,6 +19,15 @@ export interface GroupStats {
   bedrockRouted: number;
   moderationFlags: number;
   aiErrors: number;
+  sessionSummariesCreated: number;
+  sessionSummariesSkipped: number;
+  sessionSummariesFailed: number;
+  sessionSummaryRetrievalHits: number;
+  sessionSummaryInjectedChars: number;
+  sessionEmbeddingsDeterministic: number;
+  sessionEmbeddingsOpenai: number;
+  sessionEmbeddingFallbacks: number;
+  sessionEmbeddingLatencyMs: number;
 }
 
 /** Per-call cost entry for tracking spend */
@@ -75,6 +84,15 @@ function getGroupStats(groupJid: string): GroupStats {
       bedrockRouted: 0,
       moderationFlags: 0,
       aiErrors: 0,
+      sessionSummariesCreated: 0,
+      sessionSummariesSkipped: 0,
+      sessionSummariesFailed: 0,
+      sessionSummaryRetrievalHits: 0,
+      sessionSummaryInjectedChars: 0,
+      sessionEmbeddingsDeterministic: 0,
+      sessionEmbeddingsOpenai: 0,
+      sessionEmbeddingFallbacks: 0,
+      sessionEmbeddingLatencyMs: 0,
     };
     current.groups.set(groupJid, stats);
   }
@@ -136,6 +154,42 @@ export function recordOwnerDM(): void {
 export function recordAIError(groupJid: string): void {
   maybeRollover();
   getGroupStats(groupJid).aiErrors++;
+}
+
+export function recordSessionSummaryLifecycle(
+  groupJid: string,
+  outcome: 'created' | 'skipped' | 'failed',
+): void {
+  maybeRollover();
+  const stats = getGroupStats(groupJid);
+  if (outcome === 'created') stats.sessionSummariesCreated++;
+  else if (outcome === 'skipped') stats.sessionSummariesSkipped++;
+  else stats.sessionSummariesFailed++;
+}
+
+export function recordSessionSummaryRetrieval(
+  groupJid: string,
+  hitCount: number,
+  injectedChars: number,
+): void {
+  maybeRollover();
+  const stats = getGroupStats(groupJid);
+  stats.sessionSummaryRetrievalHits += Math.max(0, hitCount);
+  stats.sessionSummaryInjectedChars += Math.max(0, injectedChars);
+}
+
+export function recordSessionEmbedding(
+  groupJid: string,
+  provider: 'deterministic' | 'openai',
+  latencyMs: number,
+  usedFallback: boolean,
+): void {
+  maybeRollover();
+  const stats = getGroupStats(groupJid);
+  if (provider === 'openai') stats.sessionEmbeddingsOpenai += 1;
+  else stats.sessionEmbeddingsDeterministic += 1;
+  if (usedFallback) stats.sessionEmbeddingFallbacks += 1;
+  stats.sessionEmbeddingLatencyMs += Math.max(0, Math.round(latencyMs));
 }
 
 // ── Cost tracking ───────────────────────────────────────────────────

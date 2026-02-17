@@ -11,6 +11,27 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_chat_ts
   ON messages (chat_jid, timestamp DESC);
 
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  chat_jid TEXT NOT NULL,
+  started_at BIGINT NOT NULL,
+  ended_at BIGINT NOT NULL,
+  message_count INTEGER NOT NULL,
+  participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+  summary_text TEXT,
+  topic_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  summary_version INTEGER NOT NULL DEFAULT 1,
+  summary_created_at BIGINT,
+  status TEXT NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open', 'closed', 'summarized', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_chat_end
+  ON conversation_sessions (chat_jid, ended_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_chat_status
+  ON conversation_sessions (chat_jid, status);
+
 CREATE TABLE IF NOT EXISTS moderation_log (
   id BIGSERIAL PRIMARY KEY,
   chat_jid TEXT NOT NULL,

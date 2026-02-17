@@ -14,6 +14,9 @@ Discord runtime supports two modes:
    - Starts HTTP endpoint at `/discord/demo`
    - Accepts synthetic payloads for pipeline verification
 
+Hosted demo note:
+- `https://demo.garbanzobot.com` now uses a single unified demo app with a Slack/Discord mode switch and shared `/demo/chat` endpoint.
+
 Implementation notes:
 
 - Official mode currently processes slash-command interaction payloads and routes query text through core processing.

@@ -36,7 +36,7 @@ describePostgres('Postgres backend parity', () => {
 
   beforeEach(async () => {
     await client.query(
-      'TRUNCATE TABLE feedback, moderation_log, messages, memory, member_profiles, daily_stats RESTART IDENTITY CASCADE',
+      'TRUNCATE TABLE feedback, moderation_log, conversation_sessions, messages, memory, member_profiles, daily_stats RESTART IDENTITY CASCADE',
     );
   });
 
@@ -124,6 +124,26 @@ describePostgres('Postgres backend parity', () => {
     const relevant = await db.searchRelevantMessages(chatJid, 'When is trivia night?', 2);
     expect(relevant.length).toBeGreaterThan(0);
     expect(relevant[0]?.text).toContain('Trivia');
+
+    const now = Math.floor(Date.now() / 1000);
+    await client.query(
+      `INSERT INTO conversation_sessions
+       (chat_jid, started_at, ended_at, message_count, participants, summary_text, topic_tags, status)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, 'summarized')`,
+      [
+        chatJid,
+        now - 3600,
+        now - 1800,
+        12,
+        JSON.stringify(['15550000002', '15550000003']),
+        'Participants discussed trivia scheduling in Cambridge and transit options.',
+        JSON.stringify(['trivia', 'cambridge', 'transit']),
+      ],
+    );
+
+    const sessionHits = await db.searchRelevantSessionSummaries(chatJid, 'Any trivia plans in Cambridge?', 2);
+    expect(sessionHits.length).toBeGreaterThan(0);
+    expect(sessionHits[0]?.summaryText).toContain('trivia');
   });
 
   it('runs maintenance and reports backup integrity status', async () => {

@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { Pool, type PoolConfig } from 'pg';
+import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 import { logger } from '../middleware/logger.js';
+import { recordSessionEmbedding, recordSessionSummaryLifecycle } from '../middleware/stats.js';
 import { PROJECT_ROOT, config } from './config.js';
 import { embedTextDeterministic, toPgvectorLiteral } from './text-embedding.js';
+import { embedTextForVectorSearch } from './embedding-provider.js';
+import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import type { DbBackend } from './db-backend.js';
 import type {
   BackupIntegrityStatus,
@@ -15,6 +18,7 @@ import type {
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  SessionSummaryHit,
   StrikeSummary,
 } from './db-types.js';
 
@@ -23,10 +27,12 @@ const MESSAGE_RETENTION_DAYS = 30;
 const CONTEXT_VECTOR_DIMENSIONS = 256;
 const CONTEXT_RELEVANT_LIMIT = 6;
 const CONTEXT_MIN_EMBED_CHARS = 8;
+const SESSION_FETCH_LIMIT = 160;
 
 const REQUIRED_CORE_TABLES = [
   'member_profiles',
   'messages',
+  'conversation_sessions',
   'moderation_log',
   'daily_stats',
   'feedback',
@@ -43,6 +49,24 @@ interface MessageRow {
   sender: string;
   text: string;
   timestamp: BigintLike;
+}
+
+interface SessionSummaryRow {
+  id: BigintLike;
+  started_at: BigintLike;
+  ended_at: BigintLike;
+  message_count: BigintLike;
+  participants: unknown;
+  summary_text: string;
+  topic_tags: unknown;
+}
+
+interface OpenSessionRow {
+  id: BigintLike;
+  started_at: BigintLike;
+  ended_at: BigintLike;
+  message_count: BigintLike;
+  participants: unknown;
 }
 
 interface StrikeSummaryRow {
@@ -328,12 +352,25 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         )`,
       );
       await pool.query(
+        `CREATE TABLE IF NOT EXISTS conversation_session_vectors (
+          session_id BIGINT PRIMARY KEY REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+          chat_jid TEXT NOT NULL,
+          embedding vector(${CONTEXT_VECTOR_DIMENSIONS}) NOT NULL
+        )`,
+      );
+      await pool.query(
         'CREATE INDEX IF NOT EXISTS idx_message_vectors_chat_ts ON message_vectors (chat_jid, timestamp DESC)',
+      );
+      await pool.query(
+        'CREATE INDEX IF NOT EXISTS idx_session_vectors_chat ON conversation_session_vectors (chat_jid)',
       );
 
       try {
         await pool.query(
           'CREATE INDEX IF NOT EXISTS idx_message_vectors_hnsw_cos ON message_vectors USING hnsw (embedding vector_cosine_ops)',
+        );
+        await pool.query(
+          'CREATE INDEX IF NOT EXISTS idx_session_vectors_hnsw_cos ON conversation_session_vectors USING hnsw (embedding vector_cosine_ops)',
         );
       } catch (err) {
         logger.warn({ err }, 'pgvector HNSW index unavailable; continuing without ANN index');
@@ -348,6 +385,161 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
   await pool.query('SELECT 1');
   logger.info({ pgvectorEnabled, postgresSsl: config.POSTGRES_SSL }, 'Postgres backend initialized');
+
+  const finalizeSessionSummary = async (
+    client: PoolClient,
+    chatJid: string,
+    session: OpenSessionRow,
+  ): Promise<void> => {
+    const sessionId = toNumber(session.id);
+    const startedAt = toNumber(session.started_at);
+    const endedAt = toNumber(session.ended_at);
+    const messageCount = toNumber(session.message_count);
+    const summaryCreatedAt = Math.floor(Date.now() / 1000);
+
+    if (messageCount < config.CONTEXT_SESSION_MIN_MESSAGES) {
+      await client.query(
+        `UPDATE conversation_sessions
+         SET status = 'closed', summary_text = NULL, topic_tags = '[]'::jsonb,
+             summary_version = $1, summary_created_at = $2
+         WHERE id = $3`,
+        [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
+      );
+      recordSessionSummaryLifecycle(chatJid, 'skipped');
+      return;
+    }
+
+    const messagesRes = await client.query<MessageRow>(
+      `SELECT sender, text, timestamp
+       FROM messages
+       WHERE chat_jid = $1 AND timestamp >= $2 AND timestamp <= $3
+       ORDER BY timestamp ASC, id ASC
+       LIMIT $4`,
+      [chatJid, startedAt, endedAt, SESSION_FETCH_LIMIT],
+    );
+
+    if (messagesRes.rows.length < config.CONTEXT_SESSION_MIN_MESSAGES) {
+      await client.query(
+        `UPDATE conversation_sessions
+         SET status = 'closed', summary_text = NULL, topic_tags = '[]'::jsonb,
+             summary_version = $1, summary_created_at = $2
+         WHERE id = $3`,
+        [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
+      );
+      recordSessionSummaryLifecycle(chatJid, 'skipped');
+      return;
+    }
+
+    const participants = toJsonArray(session.participants);
+    const summary = summarizeSession(messagesRes.rows.map(mapMessage), participants);
+
+    await client.query(
+      `UPDATE conversation_sessions
+       SET status = 'summarized', summary_text = $1, topic_tags = $2::jsonb,
+           summary_version = $3, summary_created_at = $4
+       WHERE id = $5`,
+      [
+        summary.summaryText,
+        JSON.stringify(summary.topicTags),
+        config.CONTEXT_SESSION_SUMMARY_VERSION,
+        summaryCreatedAt,
+        sessionId,
+      ],
+    );
+
+    if (pgvectorEnabled && shouldVectorizeText(summary.summaryText)) {
+      const embeddingInput = buildContextualizedEmbeddingInput(summary.summaryText, {
+        chatJid,
+        startedAt,
+        endedAt,
+        participants,
+        topicTags: summary.topicTags,
+      });
+      const embeddingResult = await embedTextForVectorSearch(embeddingInput, CONTEXT_VECTOR_DIMENSIONS);
+      const vectorLiteral = toPgvectorLiteral(embeddingResult.vector);
+      await client.query(
+        `INSERT INTO conversation_session_vectors (session_id, chat_jid, embedding)
+         VALUES ($1, $2, $3::vector)
+         ON CONFLICT (session_id)
+         DO UPDATE SET chat_jid = EXCLUDED.chat_jid, embedding = EXCLUDED.embedding`,
+        [sessionId, chatJid, vectorLiteral],
+      );
+      recordSessionEmbedding(
+        chatJid,
+        embeddingResult.provider,
+        embeddingResult.latencyMs,
+        embeddingResult.usedFallback,
+      );
+    }
+
+    recordSessionSummaryLifecycle(chatJid, 'created');
+  };
+
+  const upsertConversationSession = async (chatJid: string, sender: string, timestamp: number): Promise<void> => {
+    if (!config.CONTEXT_SESSION_MEMORY_ENABLED) return;
+
+    const client = await pool.connect();
+    const gapSeconds = config.CONTEXT_SESSION_GAP_MINUTES * 60;
+
+    try {
+      await client.query('BEGIN');
+
+      const openRes = await client.query<OpenSessionRow>(
+        `SELECT id, started_at, ended_at, message_count, participants
+         FROM conversation_sessions
+         WHERE chat_jid = $1 AND status = 'open'
+         ORDER BY ended_at DESC, id DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [chatJid],
+      );
+
+      const openSession = openRes.rows[0];
+      if (!openSession) {
+        await client.query(
+          `INSERT INTO conversation_sessions
+           (chat_jid, started_at, ended_at, message_count, participants, status)
+           VALUES ($1, $2, $3, $4, $5::jsonb, 'open')`,
+          [chatJid, timestamp, timestamp, 1, JSON.stringify([sender])],
+        );
+        await client.query('COMMIT');
+        return;
+      }
+
+      const openEndedAt = toNumber(openSession.ended_at);
+      const openMessageCount = toNumber(openSession.message_count);
+      const participants = toJsonArray(openSession.participants);
+
+      if (timestamp - openEndedAt <= gapSeconds) {
+        if (!participants.includes(sender)) participants.push(sender);
+        await client.query(
+          `UPDATE conversation_sessions
+           SET ended_at = $1, message_count = $2, participants = $3::jsonb
+           WHERE id = $4`,
+          [timestamp, openMessageCount + 1, JSON.stringify(participants), toNumber(openSession.id)],
+        );
+        await client.query('COMMIT');
+        return;
+      }
+
+      await finalizeSessionSummary(client, chatJid, openSession);
+
+      await client.query(
+        `INSERT INTO conversation_sessions
+         (chat_jid, started_at, ended_at, message_count, participants, status)
+         VALUES ($1, $2, $3, $4, $5::jsonb, 'open')`,
+        [chatJid, timestamp, timestamp, 1, JSON.stringify([sender])],
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      recordSessionSummaryLifecycle(chatJid, 'failed');
+      logger.warn({ err, chatJid }, 'Session summary update failed');
+    } finally {
+      client.release();
+    }
+  };
 
   const backupDatabase = async (): Promise<string> => {
     const marker = `postgres-managed-backup:${new Date().toISOString()}`;
@@ -521,6 +713,8 @@ export async function createPostgresBackend(): Promise<DbBackend> {
           [chatJid, MAX_MESSAGES_PER_CHAT],
         );
       }
+
+      await upsertConversationSession(chatJid, bare, ts);
     },
 
     async getMessages(chatJid: string, limit: number = 15): Promise<DbMessage[]> {
@@ -589,6 +783,76 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       }
 
       return matches;
+    },
+
+    async searchRelevantSessionSummaries(
+      chatJid: string,
+      query: string,
+      limit: number = config.CONTEXT_SESSION_MAX_RETRIEVED,
+    ): Promise<SessionSummaryHit[]> {
+      if (!config.CONTEXT_SESSION_MEMORY_ENABLED) return [];
+
+      const trimmed = query.trim();
+      if (!trimmed) return [];
+
+      if (pgvectorEnabled) {
+        const queryEmbeddingInput = buildContextualizedEmbeddingInput(trimmed, { chatJid });
+        const embeddingResult = await embedTextForVectorSearch(queryEmbeddingInput, CONTEXT_VECTOR_DIMENSIONS);
+        const vectorLiteral = toPgvectorLiteral(embeddingResult.vector);
+
+        const res = await pool.query<SessionSummaryRow>(
+          `SELECT s.id, s.started_at, s.ended_at, s.message_count, s.participants, s.summary_text, s.topic_tags
+           FROM conversation_session_vectors v
+           JOIN conversation_sessions s ON s.id = v.session_id
+           WHERE s.chat_jid = $1 AND s.status = 'summarized' AND s.summary_text IS NOT NULL
+           ORDER BY v.embedding <=> $2::vector, s.ended_at DESC
+           LIMIT $3`,
+          [chatJid, vectorLiteral, limit],
+        );
+
+        return res.rows.map((row) => {
+          const topicTags = toJsonArray(row.topic_tags);
+          const summaryText = row.summary_text;
+          return {
+            sessionId: toNumber(row.id),
+            startedAt: toNumber(row.started_at),
+            endedAt: toNumber(row.ended_at),
+            messageCount: toNumber(row.message_count),
+            participants: toJsonArray(row.participants),
+            topicTags,
+            summaryText,
+            score: scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)),
+          };
+        });
+      }
+
+      const candidates = await pool.query<SessionSummaryRow>(
+        `SELECT id, started_at, ended_at, message_count, participants, summary_text, topic_tags
+         FROM conversation_sessions
+         WHERE chat_jid = $1 AND status = 'summarized' AND summary_text IS NOT NULL
+         ORDER BY ended_at DESC
+         LIMIT $2`,
+        [chatJid, Math.max(limit * 4, 12)],
+      );
+
+      return candidates.rows
+        .map((row) => {
+          const topicTags = toJsonArray(row.topic_tags);
+          const summaryText = row.summary_text;
+          return {
+            sessionId: toNumber(row.id),
+            startedAt: toNumber(row.started_at),
+            endedAt: toNumber(row.ended_at),
+            messageCount: toNumber(row.message_count),
+            participants: toJsonArray(row.participants),
+            topicTags,
+            summaryText,
+            score: scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)),
+          };
+        })
+        .filter((row) => row.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
     },
 
     async logModeration(entry: ModerationEntry): Promise<void> {

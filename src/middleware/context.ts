@@ -18,9 +18,13 @@ import {
   storeMessage,
   getMessages,
   searchRelevantMessages,
+  searchRelevantSessionSummaries,
   type DbMessage,
 } from '../utils/db.js';
+import { rerankCandidates } from '../utils/reranker.js';
 import { logger } from './logger.js';
+import { config } from '../utils/config.js';
+import { recordSessionSummaryRetrieval } from './stats.js';
 
 // ── Configuration ───────────────────────────────────────────────────
 
@@ -32,6 +36,7 @@ const OLDER_COUNT = 220;
 
 /** Number of semantic/keyword relevant messages to surface */
 const RELEVANT_COUNT = 6;
+const SESSION_RELEVANT_COUNT = config.CONTEXT_SESSION_MAX_RETRIEVED;
 
 /** Max age for cached summaries (minutes) */
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -84,15 +89,79 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
     : [];
   const relevant = relevantRaw.filter((m) => !recentKeys.has(`${m.timestamp}:${m.sender}:${m.text}`));
 
+  const sessionHits = queryText.trim()
+    ? await searchRelevantSessionSummaries(chatJid, queryText, SESSION_RELEVANT_COUNT)
+    : [];
+
   const parts: string[] = [];
 
-  // Retrieved semantic/keyword-relevant context
-  if (relevant.length > 0) {
-    parts.push('Relevant earlier messages for this question:');
-    for (const m of relevant) {
-      parts.push(`[${m.sender}]: ${m.text}`);
+  // Rerank merged message + session candidates when both are available
+  if (relevant.length > 0 && sessionHits.length > 0) {
+    const ranked = rerankCandidates(
+      relevant,
+      sessionHits,
+      queryText,
+      RELEVANT_COUNT + SESSION_RELEVANT_COUNT,
+    );
+
+    const messageParts: string[] = [];
+    const sessionParts: string[] = [];
+    let sessionInjectedChars = 0;
+    let sessionCount = 0;
+
+    for (const candidate of ranked) {
+      if (candidate.source === 'message') {
+        messageParts.push(`[${candidate.attribution}]: ${candidate.text}`);
+      } else {
+        const hit = candidate.original as import('../utils/db.js').SessionSummaryHit;
+        const startIso = new Date(hit.startedAt * 1000).toISOString().slice(0, 16).replace('T', ' ');
+        const endIso = new Date(hit.endedAt * 1000).toISOString().slice(0, 16).replace('T', ' ');
+        const summaryText = hit.summaryText.length > 420 ? `${hit.summaryText.slice(0, 417)}...` : hit.summaryText;
+        sessionInjectedChars += summaryText.length;
+        sessionCount += 1;
+        const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
+        sessionParts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        sessionParts.push(`  ${summaryText}`);
+      }
     }
-    parts.push('');
+
+    if (messageParts.length > 0) {
+      parts.push('Relevant earlier messages for this question:');
+      parts.push(...messageParts);
+      parts.push('');
+    }
+
+    if (sessionParts.length > 0) {
+      parts.push('Relevant earlier session summaries:');
+      parts.push(...sessionParts);
+      recordSessionSummaryRetrieval(chatJid, sessionCount, sessionInjectedChars);
+      parts.push('');
+    }
+  } else {
+    // Fallback: render independently when only one source has results
+    if (relevant.length > 0) {
+      parts.push('Relevant earlier messages for this question:');
+      for (const m of relevant) {
+        parts.push(`[${m.sender}]: ${m.text}`);
+      }
+      parts.push('');
+    }
+
+    if (sessionHits.length > 0) {
+      parts.push('Relevant earlier session summaries:');
+      let injectedChars = 0;
+      for (const hit of sessionHits) {
+        const startIso = new Date(hit.startedAt * 1000).toISOString().slice(0, 16).replace('T', ' ');
+        const endIso = new Date(hit.endedAt * 1000).toISOString().slice(0, 16).replace('T', ' ');
+        const summaryText = hit.summaryText.length > 420 ? `${hit.summaryText.slice(0, 417)}...` : hit.summaryText;
+        injectedChars += summaryText.length;
+        const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
+        parts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        parts.push(`  ${summaryText}`);
+      }
+      recordSessionSummaryRetrieval(chatJid, sessionHits.length, injectedChars);
+      parts.push('');
+    }
   }
 
   // Older messages — compressed summary

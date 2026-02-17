@@ -63,6 +63,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_chat_ts
     ON messages (chat_jid, timestamp DESC);
 
+  CREATE TABLE IF NOT EXISTS conversation_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_jid TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    message_count INTEGER NOT NULL,
+    participants TEXT NOT NULL DEFAULT '[]',
+    summary_text TEXT,
+    topic_tags TEXT NOT NULL DEFAULT '[]',
+    summary_version INTEGER NOT NULL DEFAULT 1,
+    summary_created_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'open'
+      CHECK (status IN ('open', 'closed', 'summarized', 'failed'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_chat_end
+    ON conversation_sessions (chat_jid, ended_at DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_chat_status
+    ON conversation_sessions (chat_jid, status);
+
   CREATE TABLE IF NOT EXISTS moderation_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_jid TEXT NOT NULL,

@@ -6,6 +6,10 @@
 
 import { db, closeDbHandle } from './db-schema.js';
 import { stopMaintenance } from './db-maintenance.js';
+import { logger } from '../middleware/logger.js';
+import { config } from './config.js';
+import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
+import { summarizeSession, scoreSessionMatch } from './session-summary.js';
 import type { DbBackend } from './db-backend.js';
 import type {
   DailyGroupActivity,
@@ -13,6 +17,7 @@ import type {
   FeedbackEntry,
   MemoryEntry,
   ModerationEntry,
+  SessionSummaryHit,
   StrikeSummary,
 } from './db-types.js';
 
@@ -61,6 +66,7 @@ export type {
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  SessionSummaryHit,
   StrikeSummary,
 } from './db-types.js';
 
@@ -81,6 +87,41 @@ const selectRelevantMessagesByKeyword = db.prepare(
 );
 const pruneOldMessages = db.prepare(
   `DELETE FROM messages WHERE chat_jid = ? AND id NOT IN (SELECT id FROM messages WHERE chat_jid = ? ORDER BY timestamp DESC, id DESC LIMIT ?)`,
+);
+const selectOpenSession = db.prepare(
+  `SELECT id, started_at, ended_at, message_count, participants
+   FROM conversation_sessions
+   WHERE chat_jid = ? AND status = 'open'
+   ORDER BY ended_at DESC, id DESC
+   LIMIT 1`,
+);
+const insertOpenSession = db.prepare(
+  `INSERT INTO conversation_sessions
+   (chat_jid, started_at, ended_at, message_count, participants, status)
+   VALUES (?, ?, ?, ?, ?, 'open')`,
+);
+const updateOpenSession = db.prepare(
+  `UPDATE conversation_sessions
+   SET ended_at = ?, message_count = ?, participants = ?
+   WHERE id = ?`,
+);
+const updateSessionSummary = db.prepare(
+  `UPDATE conversation_sessions
+   SET status = ?, summary_text = ?, topic_tags = ?, summary_version = ?, summary_created_at = ?
+   WHERE id = ?`,
+);
+const selectMessagesInWindow = db.prepare(
+  `SELECT sender, text, timestamp FROM messages
+   WHERE chat_jid = ? AND timestamp >= ? AND timestamp <= ?
+   ORDER BY timestamp ASC, id ASC
+   LIMIT ?`,
+);
+const selectSessionSummaryCandidates = db.prepare(
+  `SELECT id, started_at, ended_at, message_count, participants, summary_text, topic_tags
+   FROM conversation_sessions
+   WHERE chat_jid = ? AND status = 'summarized' AND summary_text IS NOT NULL
+   ORDER BY ended_at DESC, id DESC
+   LIMIT ?`,
 );
 const insertModerationLog = db.prepare(
   `INSERT INTO moderation_log (chat_jid, sender, text, reason, severity, source, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -127,6 +168,104 @@ const searchMemories = db.prepare(`SELECT * FROM memory WHERE fact LIKE ? ORDER 
 
 /** Max messages kept per chat in the database */
 const MAX_MESSAGES_PER_CHAT = 5000;
+const SESSION_FETCH_LIMIT = 160;
+
+interface OpenSessionRow {
+  id: number;
+  started_at: number;
+  ended_at: number;
+  message_count: number;
+  participants: string;
+}
+
+interface SessionSummaryRow {
+  id: number;
+  started_at: number;
+  ended_at: number;
+  message_count: number;
+  participants: string;
+  summary_text: string;
+  topic_tags: string;
+}
+
+function parseStringArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function mergeParticipants(existing: string, sender: string): string {
+  const participants = parseStringArray(existing);
+  if (!participants.includes(sender)) participants.push(sender);
+  return JSON.stringify(participants);
+}
+
+function finalizeSessionSummary(chatJid: string, session: OpenSessionRow): void {
+  const summaryCreatedAt = Math.floor(Date.now() / 1000);
+
+  if (session.message_count < config.CONTEXT_SESSION_MIN_MESSAGES) {
+    updateSessionSummary.run('closed', null, '[]', config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, session.id);
+    recordSessionSummaryLifecycle(chatJid, 'skipped');
+    return;
+  }
+
+  const sessionMessages = selectMessagesInWindow.all(
+    chatJid,
+    session.started_at,
+    session.ended_at,
+    SESSION_FETCH_LIMIT,
+  ) as DbMessage[];
+
+  if (sessionMessages.length < config.CONTEXT_SESSION_MIN_MESSAGES) {
+    updateSessionSummary.run('closed', null, '[]', config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, session.id);
+    recordSessionSummaryLifecycle(chatJid, 'skipped');
+    return;
+  }
+
+  const participants = parseStringArray(session.participants);
+  const summary = summarizeSession(sessionMessages, participants);
+
+  updateSessionSummary.run(
+    'summarized',
+    summary.summaryText,
+    JSON.stringify(summary.topicTags),
+    config.CONTEXT_SESSION_SUMMARY_VERSION,
+    summaryCreatedAt,
+    session.id,
+  );
+  recordSessionSummaryLifecycle(chatJid, 'created');
+}
+
+function upsertConversationSession(chatJid: string, sender: string, timestamp: number): void {
+  if (!config.CONTEXT_SESSION_MEMORY_ENABLED) return;
+
+  try {
+    const openSession = selectOpenSession.get(chatJid) as OpenSessionRow | undefined;
+    const gapSeconds = config.CONTEXT_SESSION_GAP_MINUTES * 60;
+    const participantsJson = JSON.stringify([sender]);
+
+    if (!openSession) {
+      insertOpenSession.run(chatJid, timestamp, timestamp, 1, participantsJson);
+      return;
+    }
+
+    if (timestamp - openSession.ended_at <= gapSeconds) {
+      const updatedParticipants = mergeParticipants(openSession.participants, sender);
+      updateOpenSession.run(timestamp, openSession.message_count + 1, updatedParticipants, openSession.id);
+      return;
+    }
+
+    finalizeSessionSummary(chatJid, openSession);
+    insertOpenSession.run(chatJid, timestamp, timestamp, 1, participantsJson);
+  } catch (err) {
+    recordSessionSummaryLifecycle(chatJid, 'failed');
+    logger.warn({ err, chatJid }, 'Session summary update failed');
+  }
+}
 
 // ── Public API: Messages ────────────────────────────────────────────
 
@@ -137,6 +276,7 @@ export function storeMessage(chatJid: string, sender: string, text: string): voi
   const ts = Math.floor(Date.now() / 1000);
   insertMessage.run(chatJid, bare, truncated, ts);
   pruneOldMessages.run(chatJid, chatJid, MAX_MESSAGES_PER_CHAT);
+  upsertConversationSession(chatJid, bare, ts);
 }
 
 /** Get recent messages for a chat (returned oldest-first for prompt context). */
@@ -172,6 +312,41 @@ export function searchRelevantMessages(chatJid: string, query: string, limit: nu
   }
 
   return matches;
+}
+
+export function searchRelevantSessionSummaries(
+  chatJid: string,
+  query: string,
+  limit: number = config.CONTEXT_SESSION_MAX_RETRIEVED,
+): SessionSummaryHit[] {
+  if (!config.CONTEXT_SESSION_MEMORY_ENABLED) return [];
+
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const candidates = selectSessionSummaryCandidates.all(chatJid, Math.max(limit * 4, 12)) as SessionSummaryRow[];
+
+  const scored = candidates
+    .map((row) => {
+      const topicTags = parseStringArray(row.topic_tags);
+      const participants = parseStringArray(row.participants);
+      const summaryText = row.summary_text;
+      return {
+        sessionId: row.id,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        messageCount: row.message_count,
+        participants,
+        topicTags,
+        summaryText,
+        score: scoreSessionMatch(summaryText, topicTags, trimmed, row.ended_at),
+      };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return scored;
 }
 
 // ── Public API: Moderation ──────────────────────────────────────────
@@ -371,6 +546,8 @@ export function createSqliteBackend(): DbBackend {
     getMessages: async (chatJid: string, limit?: number) => getMessages(chatJid, limit),
     searchRelevantMessages: async (chatJid: string, query: string, limit?: number) =>
       searchRelevantMessages(chatJid, query, limit),
+    searchRelevantSessionSummaries: async (chatJid: string, query: string, limit?: number) =>
+      searchRelevantSessionSummaries(chatJid, query, limit),
 
     logModeration: async (entry: ModerationEntry): Promise<void> => {
       logModeration(entry);

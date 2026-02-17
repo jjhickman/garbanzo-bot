@@ -31,9 +31,11 @@ Dockerfile
 docker-compose*.yml
 .dockerignore
 
-# Documentation (not needed at runtime, except PERSONA.md which is loaded by the bot)
+# Documentation (not needed at runtime, except persona docs loaded by the bot)
 docs
 !docs/PERSONA.md
+!docs/personas/
+!docs/personas/*.md
 *.md
 LICENSE
 CONTRIBUTING.md
