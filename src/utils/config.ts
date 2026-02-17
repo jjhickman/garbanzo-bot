@@ -123,6 +123,19 @@ const envSchema = z.object({
   POSTGRES_SSL: booleanFromEnv.default(false),
   POSTGRES_SSL_REJECT_UNAUTHORIZED: booleanFromEnv.default(false),
 
+  // Conversation session memory
+  CONTEXT_SESSION_MEMORY_ENABLED: booleanFromEnv.default(true),
+  CONTEXT_SESSION_GAP_MINUTES: z.coerce.number().int().min(5).max(720).default(30),
+  CONTEXT_SESSION_MIN_MESSAGES: z.coerce.number().int().min(2).max(100).default(4),
+  CONTEXT_SESSION_MAX_RETRIEVED: z.coerce.number().int().min(1).max(12).default(3),
+  CONTEXT_SESSION_SUMMARY_VERSION: z.coerce.number().int().min(1).max(20).default(1),
+
+  // Vector embedding pipeline
+  VECTOR_EMBEDDING_PROVIDER: z.enum(['deterministic', 'openai']).default('deterministic'),
+  VECTOR_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  VECTOR_EMBEDDING_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(12000),
+  VECTOR_EMBEDDING_MAX_CHARS: z.coerce.number().int().min(256).max(12000).default(4000),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   OWNER_JID: z.string().min(1, 'OWNER_JID is required — set in .env'),
 });

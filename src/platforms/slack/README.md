@@ -11,7 +11,8 @@ Slack runtime now supports two modes:
 
 2. Demo mode (local testing):
    - Set `SLACK_DEMO=true`
-   - Starts HTTP endpoint at `/slack/demo`
+   - Starts HTTP health endpoints at `/slack/demo` and `/discord/demo`
+   - Starts unified chat endpoint at `/demo/chat` (`{"platform":"slack|discord","text":"..."}`)
    - Accepts synthetic payloads for pipeline verification
 
 Implementation notes:

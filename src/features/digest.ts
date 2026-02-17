@@ -42,6 +42,13 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
   let totalGemini = 0;
   let totalBedrock = 0;
   let totalFlags = 0;
+  let totalSessionSummariesCreated = 0;
+  let totalSessionRetrievalHits = 0;
+  let totalSessionInjectedChars = 0;
+  let totalSessionEmbeddingsDeterministic = 0;
+  let totalSessionEmbeddingsOpenai = 0;
+  let totalSessionEmbeddingFallbacks = 0;
+  let totalSessionEmbeddingLatencyMs = 0;
 
   // Sort groups by message count (most active first)
   const sorted = [...stats.groups.entries()].sort(
@@ -80,6 +87,16 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
       if (g.moderationFlags > 0) {
         lines.push(`  ⚠️ ${g.moderationFlags} moderation flags`);
       }
+      if (g.sessionSummariesCreated > 0 || g.sessionSummaryRetrievalHits > 0) {
+        lines.push(
+          `  🧠 session memory: ${g.sessionSummariesCreated} summaries, ${g.sessionSummaryRetrievalHits} retrieval hits (${g.sessionSummaryInjectedChars} chars injected)`,
+        );
+      }
+      if (g.sessionEmbeddingsDeterministic > 0 || g.sessionEmbeddingsOpenai > 0) {
+        lines.push(
+          `  ↳ embedding writes: ${g.sessionEmbeddingsOpenai} openai, ${g.sessionEmbeddingsDeterministic} deterministic (${g.sessionEmbeddingFallbacks} fallbacks)`,
+        );
+      }
       totalMessages += g.messageCount;
       totalUsers += userCount;
       totalBotResponses += g.botResponses;
@@ -89,6 +106,13 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
       totalGemini += g.geminiRouted;
       totalBedrock += g.bedrockRouted;
       totalFlags += g.moderationFlags;
+      totalSessionSummariesCreated += g.sessionSummariesCreated;
+      totalSessionRetrievalHits += g.sessionSummaryRetrievalHits;
+      totalSessionInjectedChars += g.sessionSummaryInjectedChars;
+      totalSessionEmbeddingsDeterministic += g.sessionEmbeddingsDeterministic;
+      totalSessionEmbeddingsOpenai += g.sessionEmbeddingsOpenai;
+      totalSessionEmbeddingFallbacks += g.sessionEmbeddingFallbacks;
+      totalSessionEmbeddingLatencyMs += g.sessionEmbeddingLatencyMs;
     }
   }
 
@@ -115,6 +139,22 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
     lines.push(`• ⚠️ ${totalFlags} moderation flags`);
   }
 
+  if (totalSessionSummariesCreated > 0 || totalSessionRetrievalHits > 0) {
+    lines.push(
+      `• 🧠 session memory ROI: ${totalSessionSummariesCreated} summaries, ${totalSessionRetrievalHits} retrieval hits, ${totalSessionInjectedChars} chars injected`,
+    );
+  }
+
+  if (totalSessionEmbeddingsDeterministic > 0 || totalSessionEmbeddingsOpenai > 0) {
+    const totalEmbeddingWrites = totalSessionEmbeddingsDeterministic + totalSessionEmbeddingsOpenai;
+    const avgEmbeddingLatency = totalEmbeddingWrites > 0
+      ? Math.round(totalSessionEmbeddingLatencyMs / totalEmbeddingWrites)
+      : 0;
+    lines.push(
+      `• 🧠 embedding pipeline: ${totalSessionEmbeddingsOpenai} openai, ${totalSessionEmbeddingsDeterministic} deterministic, ${totalSessionEmbeddingFallbacks} fallbacks (avg ${avgEmbeddingLatency}ms)`,
+    );
+  }
+
   if (stats.ownerDMs > 0) {
     lines.push(`• ${stats.ownerDMs} owner DM interactions`);
   }
@@ -136,6 +176,15 @@ function serializeStats(stats: DailyStats): string {
       geminiRouted: g.geminiRouted,
       bedrockRouted: g.bedrockRouted,
       moderationFlags: g.moderationFlags,
+      sessionSummariesCreated: g.sessionSummariesCreated,
+      sessionSummariesSkipped: g.sessionSummariesSkipped,
+      sessionSummariesFailed: g.sessionSummariesFailed,
+      sessionSummaryRetrievalHits: g.sessionSummaryRetrievalHits,
+      sessionSummaryInjectedChars: g.sessionSummaryInjectedChars,
+      sessionEmbeddingsDeterministic: g.sessionEmbeddingsDeterministic,
+      sessionEmbeddingsOpenai: g.sessionEmbeddingsOpenai,
+      sessionEmbeddingFallbacks: g.sessionEmbeddingFallbacks,
+      sessionEmbeddingLatencyMs: g.sessionEmbeddingLatencyMs,
     };
   }
   return JSON.stringify({ date: stats.date, groups, ownerDMs: stats.ownerDMs });

@@ -83,3 +83,14 @@ export interface MaintenanceStats {
   beforeCount: number;
   afterCount: number;
 }
+
+export interface SessionSummaryHit {
+  sessionId: number;
+  startedAt: number;
+  endedAt: number;
+  messageCount: number;
+  participants: string[];
+  topicTags: string[];
+  summaryText: string;
+  score: number;
+}

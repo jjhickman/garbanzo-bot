@@ -27,6 +27,8 @@ title = "Garbanzo Bot secret scanning config"
     # OpenCode local config (gitignored; may contain secrets)
     '''opencode\.json$''',
     '''\.opencode/''',
+    # CDK synth output (generated build artifact, not committed)
+    '''cdk\.out/''',
   ]
 
 # ─── Per-file allowlists for expected patterns ─────────────────────────

@@ -21,6 +21,7 @@ SLACK_SECRET_NAME="garbanzo/slack"
 DISCORD_SECRET_NAME="garbanzo/discord"
 DEMO_SECRET_NAME="garbanzo/demo"
 AI_SECRET_NAME="garbanzo/ai"
+FEATURE_SECRET_NAME=""
 OWNER_ID=""
 REGION=""
 DEPLOY_DEMO="false"
@@ -41,6 +42,7 @@ Options:
   --discord-secret <name>      Secrets Manager name for Discord (default: garbanzo/discord)
   --demo-secret <name>         Secrets Manager name for demo challenge keys (default: garbanzo/demo)
   --ai-secret <name>           Secrets Manager name for AI provider keys (default: garbanzo/ai)
+  --feature-secret <name>      Secrets Manager name for feature keys (default: same as --ai-secret)
   --owner-id <id>              Owner ID for platform runtime (optional)
   --region <region>            AWS region override (defaults to AWS CLI config)
   --deploy-demo <true|false>   Enable demo runtime contexts in output (default: false)
@@ -84,6 +86,10 @@ while [[ $# -gt 0 ]]; do
       AI_SECRET_NAME="${2:-}"
       shift 2
       ;;
+    --feature-secret)
+      FEATURE_SECRET_NAME="${2:-}"
+      shift 2
+      ;;
     --owner-id)
       OWNER_ID="${2:-}"
       shift 2
@@ -115,6 +121,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$FEATURE_SECRET_NAME" ]]; then
+  FEATURE_SECRET_NAME="$AI_SECRET_NAME"
+fi
 
 if [[ -z "$REGION" ]]; then
   REGION="$(aws configure get region || true)"
@@ -203,6 +213,8 @@ SLACK_SECRET_OK="false"
 DISCORD_SECRET_OK="false"
 DEMO_SECRET_OK="false"
 AI_SECRET_OK="false"
+FEATURE_SECRET_OK="false"
+FEATURE_SECRET_KEYS_OK="false"
 
 if aws secretsmanager describe-secret --region "$REGION" --secret-id "$SLACK_SECRET_NAME" >/dev/null 2>&1; then
   SLACK_SECRET_OK="true"
@@ -220,14 +232,29 @@ if aws secretsmanager describe-secret --region "$REGION" --secret-id "$AI_SECRET
   AI_SECRET_OK="true"
 fi
 
+if aws secretsmanager describe-secret --region "$REGION" --secret-id "$FEATURE_SECRET_NAME" >/dev/null 2>&1; then
+  FEATURE_SECRET_OK="true"
+fi
+
+if [[ "$FEATURE_SECRET_OK" == "true" ]]; then
+  FEATURE_SECRET_JSON="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$FEATURE_SECRET_NAME" --query 'SecretString' --output text 2>/dev/null || true)"
+  if [[ -n "$FEATURE_SECRET_JSON" && "$FEATURE_SECRET_JSON" != "None" ]]; then
+    if FEATURE_SECRET_JSON="$FEATURE_SECRET_JSON" node -e "const raw=process.env.FEATURE_SECRET_JSON||'';let parsed={};try{parsed=JSON.parse(raw);}catch{process.exit(1);}const required=['GOOGLE_API_KEY','MBTA_API_KEY','NEWSAPI_KEY','BRAVE_SEARCH_API_KEY'];const missing=required.filter((k)=>typeof parsed[k]!=='string'||parsed[k].trim().length===0);if(missing.length>0){console.error(missing.join(','));process.exit(2);}process.exit(0);" >/tmp/garbanzo-feature-secret-check.err 2>&1; then
+      FEATURE_SECRET_KEYS_OK="true"
+    fi
+  fi
+fi
+
 echo "Slack secret:     $SLACK_SECRET_NAME ($SLACK_SECRET_OK)"
 echo "Discord secret:   $DISCORD_SECRET_NAME ($DISCORD_SECRET_OK)"
 echo "AI secret:        $AI_SECRET_NAME ($AI_SECRET_OK)"
+echo "Feature secret:   $FEATURE_SECRET_NAME ($FEATURE_SECRET_OK)"
+echo "Feature keys:     GOOGLE_API_KEY, MBTA_API_KEY, NEWSAPI_KEY, BRAVE_SEARCH_API_KEY ($FEATURE_SECRET_KEYS_OK)"
 if [[ "$DEPLOY_DEMO" == "true" ]]; then
   echo "Demo secret:      $DEMO_SECRET_NAME ($DEMO_SECRET_OK)"
 fi
 
-if [[ "$SLACK_SECRET_OK" != "true" || "$DISCORD_SECRET_OK" != "true" || "$AI_SECRET_OK" != "true" || ( "$DEPLOY_DEMO" == "true" && "$DEMO_SECRET_OK" != "true" ) ]]; then
+if [[ "$SLACK_SECRET_OK" != "true" || "$DISCORD_SECRET_OK" != "true" || "$AI_SECRET_OK" != "true" || "$FEATURE_SECRET_OK" != "true" || "$FEATURE_SECRET_KEYS_OK" != "true" || ( "$DEPLOY_DEMO" == "true" && "$DEMO_SECRET_OK" != "true" ) ]]; then
   echo
   echo "Missing runtime secret(s). Create them with JSON values before deploy:"
   if [[ "$SLACK_SECRET_OK" != "true" ]]; then
@@ -258,6 +285,24 @@ aws secretsmanager create-secret --region $REGION \\
   --secret-string '{"OPENROUTER_API_KEY":"__SET_ME__","ANTHROPIC_API_KEY":"__SET_ME__","OPENAI_API_KEY":"__SET_ME__"}'
 EOF
   fi
+  if [[ "$FEATURE_SECRET_OK" != "true" ]]; then
+    cat <<EOF
+aws secretsmanager create-secret --region $REGION \\
+  --name $FEATURE_SECRET_NAME \\
+  --secret-string '{"GOOGLE_API_KEY":"__SET_ME__","MBTA_API_KEY":"__SET_ME__","NEWSAPI_KEY":"__SET_ME__","BRAVE_SEARCH_API_KEY":"__SET_ME__"}'
+EOF
+  fi
+  if [[ "$FEATURE_SECRET_OK" == "true" && "$FEATURE_SECRET_KEYS_OK" != "true" ]]; then
+    cat <<EOF
+aws secretsmanager update-secret --region $REGION \\
+  --secret-id $FEATURE_SECRET_NAME \\
+  --secret-string '{"GOOGLE_API_KEY":"__SET_ME__","MBTA_API_KEY":"__SET_ME__","NEWSAPI_KEY":"__SET_ME__","BRAVE_SEARCH_API_KEY":"__SET_ME__"}'
+EOF
+    if [[ -s /tmp/garbanzo-feature-secret-check.err ]]; then
+      MISSING_KEYS="$(cat /tmp/garbanzo-feature-secret-check.err)"
+      echo "Current feature secret is missing required keys: $MISSING_KEYS"
+    fi
+  fi
 fi
 
 OWNER_ARG='-c ownerJid=<SET_OWNER_ID>'
@@ -276,6 +321,7 @@ echo "  $OWNER_ARG \\"
 echo "  -c slackSecretArn=$SLACK_SECRET_NAME \\" 
 echo "  -c discordSecretArn=$DISCORD_SECRET_NAME \\" 
 echo "  -c aiSecretArn=$AI_SECRET_NAME \\" 
+echo "  -c featureSecretArn=$FEATURE_SECRET_NAME \\" 
 echo "  -c domainName=$DOMAIN_NAME \\" 
 echo "  -c hostedZoneName=$HOSTED_ZONE_NAME \\" 
 echo "  -c hostedZoneId=$HOSTED_ZONE_ID \\" 
@@ -290,7 +336,7 @@ if [[ "$DEPLOY_DEMO" == "true" ]]; then
 fi
 echo "  -c certificateArn=$CERTIFICATE_ARN"
 
-if [[ "$SLACK_SECRET_OK" == "true" && "$DISCORD_SECRET_OK" == "true" && "$AI_SECRET_OK" == "true" && ( "$DEPLOY_DEMO" != "true" || "$DEMO_SECRET_OK" == "true" ) ]]; then
+if [[ "$SLACK_SECRET_OK" == "true" && "$DISCORD_SECRET_OK" == "true" && "$AI_SECRET_OK" == "true" && "$FEATURE_SECRET_OK" == "true" && "$FEATURE_SECRET_KEYS_OK" == "true" && ( "$DEPLOY_DEMO" != "true" || "$DEMO_SECRET_OK" == "true" ) ]]; then
   echo
   echo "Preflight status: READY"
 else

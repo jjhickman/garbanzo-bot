@@ -8,6 +8,7 @@ import type {
   MemoryEntry,
   ModerationEntry,
   StrikeSummary,
+  SessionSummaryHit,
 } from './db-types.js';
 
 /**
@@ -36,6 +37,7 @@ export interface DbBackend {
   storeMessage(chatJid: string, sender: string, text: string): Promise<void>;
   getMessages(chatJid: string, limit?: number): Promise<DbMessage[]>;
   searchRelevantMessages(chatJid: string, query: string, limit?: number): Promise<DbMessage[]>;
+  searchRelevantSessionSummaries(chatJid: string, query: string, limit?: number): Promise<SessionSummaryHit[]>;
 
   // Moderation
   logModeration(entry: ModerationEntry): Promise<void>;
