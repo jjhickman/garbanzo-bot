@@ -23,6 +23,7 @@ All notable changes to Garbanzo are documented here.
 ### Fixed
 
 - Postgres runtime schema availability enforced in Docker image (`postgres-schema.sql` copied into runtime).
+- Resolved high-severity `fast-xml-parser` DoS advisory (GHSA-jmr7-xgp7-cmfj) via npm override to `>=5.3.6`.
 
 ### Changed
 
