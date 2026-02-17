@@ -9,7 +9,10 @@ import { resolve } from 'path';
 import { mkdirSync, copyFileSync, readdirSync, unlinkSync, statSync } from 'fs';
 import Database from 'better-sqlite3';
 import { logger } from '../middleware/logger.js';
+import type { BackupIntegrityStatus, MaintenanceStats } from './db-types.js';
 import { db, DB_DIR, DB_PATH } from './db-schema.js';
+
+export type { BackupIntegrityStatus, MaintenanceStats } from './db-types.js';
 
 // ── Backup ──────────────────────────────────────────────────────────
 
@@ -73,7 +76,7 @@ const countMessages = db.prepare(`
  * Prune messages older than 30 days, then run VACUUM to reclaim space.
  * Returns stats about what was cleaned.
  */
-export function runMaintenance(): { pruned: number; beforeCount: number; afterCount: number } {
+export function runMaintenance(): MaintenanceStats {
   const beforeCount = (countMessages.get() as { count: number }).count;
   const cutoff = Math.floor(Date.now() / 1000) - (MESSAGE_RETENTION_DAYS * 24 * 60 * 60);
 
@@ -95,16 +98,6 @@ export function runMaintenance(): { pruned: number; beforeCount: number; afterCo
   }, 'Database maintenance complete');
 
   return { pruned, beforeCount, afterCount };
-}
-
-export interface BackupIntegrityStatus {
-  available: boolean;
-  path: string | null;
-  modifiedAt: number | null;
-  ageHours: number | null;
-  sizeBytes: number | null;
-  integrityOk: boolean | null;
-  message: string;
 }
 
 /**

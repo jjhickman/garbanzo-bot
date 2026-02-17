@@ -1,12 +1,15 @@
 # Garbanzo Bot
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
-Garbanzo is a multi-platform chat operations bot with a production-ready WhatsApp runtime plus Slack/Discord demo runtimes for adapter verification. It routes mentions and commands through configurable AI providers (Claude/OpenAI/Gemini via provider order + optional local Ollama).
 
-This image is built for community operators and small teams that want:
+Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers (Claude/OpenAI/Gemini/OpenRouter) with optional local Ollama, then applies community workflows and integrations inside group chat.
 
-- Mention-driven responses (no surprise spam)
-- A clear supported-vs-experimental channel posture
-- Configurable multi-provider AI routing with graceful fallback
+This image is built for operators and small teams that want:
+
+- Multi-provider AI routing with configurable failover order
+- Cloud + local hybrid inference to balance quality, latency, and cost
+- Built-in workflow automations (summaries, events, moderation signals, recommendations)
+- Built-in integrations (weather, transit, venues, news, books, D&D lookups)
 - Operations-friendly health + readiness endpoints (`/health`, `/health/ready`)
 - Docker-first deployment with persistent auth + SQLite state
 
@@ -23,8 +26,8 @@ cp .env.example .env
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -48,9 +51,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `0.1.7`
+- `0.1.8`
   - Semver tag without the leading `v`
-- `v0.1.7`
+- `v0.1.8`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:

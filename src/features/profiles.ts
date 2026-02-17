@@ -27,12 +27,12 @@ import { getGroupName } from '../core/groups-config.js';
 /**
  * Handle !profile commands. Returns a response string.
  */
-export function handleProfile(args: string, senderJid: string): string {
+export async function handleProfile(args: string, senderJid: string): Promise<string> {
   const trimmed = args.trim().toLowerCase();
 
   // !profile delete — opt out and remove all data
   if (trimmed === 'delete' || trimmed === 'optout' || trimmed === 'opt-out') {
-    deleteProfileData(senderJid);
+    await deleteProfileData(senderJid);
     return '🗑️ Your profile data has been deleted.';
   }
 
@@ -47,8 +47,8 @@ export function handleProfile(args: string, senderJid: string): string {
       return '❌ Provide comma-separated interests: `!profile interests hiking, cooking, board games`';
     }
     // Ensure profile exists
-    touchProfile(senderJid);
-    setProfileInterests(senderJid, interests);
+    await touchProfile(senderJid);
+    await setProfileInterests(senderJid, interests);
     return `✅ Interests updated: ${interests.join(', ')}`;
   }
 
@@ -58,13 +58,13 @@ export function handleProfile(args: string, senderJid: string): string {
     if (!name || name.length > 50) {
       return '❌ Provide a name (max 50 chars): `!profile name Alex`';
     }
-    touchProfile(senderJid);
-    setProfileName(senderJid, name);
+    await touchProfile(senderJid);
+    await setProfileName(senderJid, name);
     return `✅ Display name set to: ${name}`;
   }
 
   // !profile (no args) — view profile
-  const profile = getProfile(senderJid);
+  const profile = await getProfile(senderJid);
   if (!profile) {
     return [
       '📋 *Your Profile*',

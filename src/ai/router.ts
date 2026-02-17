@@ -10,12 +10,14 @@ import {
   estimateClaudeCost,
   estimateOpenAICost,
   estimateGeminiCost,
+  estimateBedrockCost,
   getDailyCost,
   DAILY_COST_ALERT_THRESHOLD,
 } from '../middleware/stats.js';
 import { callClaude } from './claude.js';
 import { callChatGPT } from './chatgpt.js';
 import { callGemini } from './gemini.js';
+import { callBedrock } from './bedrock.js';
 import type { CloudProvider, CloudResponse } from './cloud-providers.js';
 import type { VisionImage } from '../core/vision.js';
 
@@ -27,13 +29,13 @@ import type { VisionImage } from '../core/vision.js';
  * - Complex queries (multi-step, persona-heavy, long) → cloud model (API, paid)
  * - If Ollama fails or is unavailable → falls back to cloud model
  *
- * Claude and OpenAI provider logic lives in ai/claude.ts and ai/chatgpt.ts.
+ * Provider-specific logic lives in ai/claude.ts, ai/chatgpt.ts, ai/gemini.ts, and ai/bedrock.ts.
  */
 
 /** Cached Ollama availability check — refreshed on failure */
 let ollamaReachable: boolean | null = null;
 
-const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai', 'gemini'];
+const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock'];
 
 /** Prevent spamming cost alerts — reset on rollover via stats module */
 let costAlertSentToday = false;
@@ -71,6 +73,7 @@ function isProviderConfigured(provider: CloudProvider): boolean {
   if (provider === 'openrouter') return !!config.OPENROUTER_API_KEY;
   if (provider === 'anthropic') return !!config.ANTHROPIC_API_KEY;
   if (provider === 'gemini') return !!config.GEMINI_API_KEY;
+  if (provider === 'bedrock') return !!config.BEDROCK_MODEL_ID;
   return !!config.OPENAI_API_KEY;
 }
 
@@ -92,7 +95,7 @@ export async function getAIResponse(
 
   try {
     if (useOllama) {
-      const ollamaPrompt = buildOllamaPrompt(ctx);
+      const ollamaPrompt = await buildOllamaPrompt(ctx, query);
       logger.info({ query: truncate(query, 80), model: 'ollama/qwen3:8b', complexity }, 'Routing to Ollama');
       recordAIRoute(ctx.groupJid, 'ollama');
       try {
@@ -110,7 +113,7 @@ export async function getAIResponse(
     }
 
     // Cloud model path (primary for complex, fallback for Ollama failures)
-    const systemPrompt = buildSystemPrompt(ctx, query);
+    const systemPrompt = await buildSystemPrompt(ctx, query);
     const providerOrder = getConfiguredProviderOrder();
     logger.info({
       query: truncate(query, 80),
@@ -140,6 +143,8 @@ export async function getAIResponse(
           aiResult = await callChatGPT(systemPrompt, query, visionImages);
         } else if (provider === 'gemini') {
           aiResult = await callGemini(systemPrompt, query, visionImages);
+        } else if (provider === 'bedrock') {
+          aiResult = await callBedrock(systemPrompt, query, visionImages);
         } else {
           aiResult = await callClaude(provider, systemPrompt, query, visionImages);
         }
@@ -161,14 +166,18 @@ export async function getAIResponse(
       ? 'openai'
       : aiResult.provider === 'gemini'
         ? 'gemini'
-        : 'claude';
+        : aiResult.provider === 'bedrock'
+          ? 'bedrock'
+          : 'claude';
     recordAIRoute(ctx.groupJid, routedModel);
 
     const costEntry = routedModel === 'openai'
       ? estimateOpenAICost(systemPrompt, query, aiResult.text)
       : routedModel === 'gemini'
         ? estimateGeminiCost(systemPrompt, query, aiResult.text)
-        : estimateClaudeCost(systemPrompt, query, aiResult.text);
+        : routedModel === 'bedrock'
+          ? estimateBedrockCost(systemPrompt, query, aiResult.text)
+          : estimateClaudeCost(systemPrompt, query, aiResult.text);
     costEntry.latencyMs = latencyMs;
     recordAICost(costEntry);
     logger.info({

@@ -6,36 +6,46 @@
     <title>Garbanzo</title>
     <meta
       name="description"
-      content="Garbanzo is a multi-platform chat operations bot for communities and small teams."
+      content="Garbanzo is an AI chat operations platform with multi-provider model routing, workflow automations, and integration-ready commands."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="container">
       <section class="hero">
-        <p class="eyebrow">Multi-platform chat operations</p>
+        <p class="eyebrow">AI chat operations platform</p>
         <h1 id="title">Garbanzo</h1>
         <p id="tagline" class="tagline"></p>
         <p id="description" class="description"></p>
         <div class="actions">
-          <a id="ctaPrimary" class="button button-primary" href="#" target="_blank" rel="noreferrer">Get Started</a>
-          <a id="ctaSecondary" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Support</a>
+          <a id="ctaPrimary" class="button button-primary" href="#" target="_blank" rel="noreferrer">Start Building</a>
+          <a id="ctaDemo" class="button button-demo" href="https://demo.garbanzobot.com" target="_blank" rel="noreferrer">Try Live Demo</a>
+          <a id="ctaSecondary" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Support the AI roadmap</a>
         </div>
       </section>
 
       <section class="grid" aria-label="Core strengths">
         <article class="card">
-          <h3>Operator-first workflows</h3>
-          <p>Designed for real group operations: introductions, summaries, event planning, moderation signals, and owner controls.</p>
+          <h3>Provider orchestration</h3>
+          <p>Route prompts across Claude, OpenAI, Gemini, and optional local Ollama with configurable failover and model selection.</p>
         </article>
         <article class="card">
-          <h3>Reliable release and deployment</h3>
-          <p>Health and readiness checks, rollback-friendly deployment flow, and predictable release tooling for stable operations.</p>
+          <h3>AI capabilities and automations</h3>
+          <p>Ship useful workflows out of the box: summaries, introductions, event planning, moderation signals, and owner digests.</p>
         </article>
         <article class="card">
-          <h3>AI routing with cost control</h3>
-          <p>Route across Claude, OpenAI, Gemini, and optional local Ollama to balance quality, latency, and spend.</p>
+          <h3>Integration-ready commands</h3>
+          <p>Connect live data workflows for weather, transit, venues, news, books, and game utilities without custom glue code.</p>
         </article>
+      </section>
+
+      <section class="demo-note" aria-label="Live demo">
+        <h2>Live demo</h2>
+        <p>
+          You can test Garbanzo right now at
+          <a href="https://demo.garbanzobot.com" target="_blank" rel="noreferrer">demo.garbanzobot.com</a>
+          without installing anything.
+        </p>
       </section>
 
       <section class="platforms" aria-label="Platform posture">
@@ -48,13 +58,13 @@
           </article>
           <article class="platform-card">
             <h3>Slack</h3>
-            <p><strong>Status:</strong> Demo adapter runtime</p>
-            <p>Useful for pipeline verification and adapter development.</p>
+            <p><strong>Status:</strong> Official API runtime</p>
+            <p>Best for stable channel operations with predictable webhook behavior.</p>
           </article>
           <article class="platform-card">
             <h3>Discord</h3>
-            <p><strong>Status:</strong> Demo adapter runtime</p>
-            <p>Available for local testing while production parity evolves.</p>
+            <p><strong>Status:</strong> Official API runtime</p>
+            <p>Supports production bot interactions with strong server/channel tooling.</p>
           </article>
           <article class="platform-card">
             <h3>Teams</h3>
@@ -64,28 +74,41 @@
         </div>
       </section>
 
-      <section class="release-policy" aria-label="Release communication policy">
-        <h2>Member-safe release updates</h2>
+      <section class="release-policy" aria-label="AI provider and integration stack">
+        <h2>AI provider and integration stack</h2>
         <p>
-          Garbanzo release updates in group chats are intentionally scoped to member-facing changes. Internal engineering changes stay in operator channels.
+          Run one chat runtime with multiple AI backends, practical integrations, and operational guardrails designed for active communities.
         </p>
         <ul>
-          <li>Broadcast only member-relevant updates.</li>
-          <li>Preview and lint release notes before sending.</li>
-          <li>Keep internal changes out of member chat by default.</li>
+          <li>Providers: Claude, OpenAI, Gemini, OpenRouter, and optional local Ollama.</li>
+          <li>Routing: configurable failover order with per-provider model overrides.</li>
+          <li>Integrations: weather, transit, venues, news, books, and D&amp;D lookup workflows.</li>
+          <li>Guardrails: moderation signals, context controls, and member-safe release messaging.</li>
         </ul>
       </section>
 
       <section class="support" id="support">
-        <h2>Support Garbanzo</h2>
+        <h2>Back the AI roadmap</h2>
         <p id="supportBlurb">Support keeps maintenance, releases, and support response sustainable.</p>
         <ul id="supportLinks"></ul>
 
         <div id="tierGrid" class="tier-grid" aria-label="Support tiers"></div>
       </section>
 
+      <section class="trust" aria-label="Business and trust details">
+        <h2>Business and trust details</h2>
+        <p>
+          Garbanzo Bean is operated as an independent software project focused on reliable AI chat operations for communities.
+        </p>
+        <ul class="trust-links">
+          <li>Contact: <a id="contactEmailLink" href="mailto:jjhickman@pm.me">jjhickman@pm.me</a></li>
+          <li><a id="privacyPolicyLink" href="./privacy.html">Privacy Policy</a></li>
+          <li><a id="termsLink" href="./terms.html">Terms of Service</a></li>
+        </ul>
+      </section>
+
       <footer>
-        Built for communities and small teams. Docker-first deployment. Apache-2.0 licensed.
+        Built for communities and small teams. Multi-provider AI routing. Docker-first deployment. Apache-2.0 licensed.
       </footer>
     </main>
 
@@ -109,6 +132,14 @@
           el.href = href;
         } else {
           el.style.display = 'none';
+        }
+      }
+
+      function setHref(id, href) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (typeof href === 'string' && href.trim()) {
+          el.href = href;
         }
       }
 
@@ -159,8 +190,20 @@
           setText('description', cfg.description);
           setText('supportBlurb', cfg.supportBlurb);
 
-          setLink('ctaPrimary', cfg.ctaPrimaryUrl || cfg.githubRepoUrl, cfg.ctaPrimaryLabel || 'Get Started');
-          setLink('ctaSecondary', cfg.ctaSecondaryUrl || cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaSecondaryLabel || 'Support');
+          setLink('ctaPrimary', cfg.ctaPrimaryUrl || cfg.githubRepoUrl, cfg.ctaPrimaryLabel || 'Start Building');
+          setLink('ctaDemo', cfg.demoUrl || 'https://demo.garbanzobot.com', cfg.demoLabel || 'Try Live Demo');
+          setLink('ctaSecondary', cfg.ctaSecondaryUrl || cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaSecondaryLabel || 'Support the AI roadmap');
+
+          if (cfg.contactEmail) {
+            const contact = document.getElementById('contactEmailLink');
+            if (contact) {
+              contact.href = `mailto:${cfg.contactEmail}`;
+              contact.textContent = cfg.contactEmail;
+            }
+          }
+
+          setHref('privacyPolicyLink', cfg.privacyPolicyUrl || './privacy.html');
+          setHref('termsLink', cfg.termsUrl || './terms.html');
 
           const list = document.getElementById('supportLinks');
           addSupportLink(list, 'GitHub Sponsors', cfg.githubSponsorsUrl);

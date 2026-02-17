@@ -1,4 +1,6 @@
 # Garbanzo Architecture
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This document explains runtime data flow, routing decisions, and the major subsystems.
 
@@ -21,7 +23,7 @@ This document explains runtime data flow, routing decisions, and the major subsy
   - `group-handler.ts`, `owner-commands.ts`, `digest.ts`, `introductions-catchup.ts`
 - Slack scaffold (fail-fast, not production): `src/platforms/slack/*`
 - AI routing: `src/ai/router.ts` (local Ollama vs cloud providers)
-- Cloud AI callers: `src/ai/claude.ts`, `src/ai/chatgpt.ts`, `src/ai/gemini.ts` (if enabled)
+- Cloud AI callers: `src/ai/claude.ts`, `src/ai/chatgpt.ts`, `src/ai/gemini.ts`, `src/ai/bedrock.ts` (if enabled)
 - Shared cloud payload/parsing: `src/ai/cloud-providers.ts`
 - Persistence: SQLite via `src/utils/db*.ts`
 - Cross-cutting middleware: sanitize, context, stats, retry, health, logger, rate limiting
@@ -80,6 +82,7 @@ Incoming query (+ optional vision images)
            - `openrouter`/`anthropic` -> Claude-family caller
            - `openai` -> ChatGPT caller
            - `gemini` -> Gemini caller
+           - `bedrock` -> Bedrock caller
          first successful provider returns response
 ```
 

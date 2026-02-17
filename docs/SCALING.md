@@ -1,4 +1,6 @@
 # Scaling Garbanzo
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 Garbanzo is designed first for stable self-hosting and community operations.
 
@@ -47,6 +49,18 @@ SQLite is a deliberate choice for early-stage reliability.
 
 When Postgres becomes necessary:
 
-- introduce a DB backend interface in `src/utils/db-*`
-- migrate state to Postgres with a one-time migration tool
-- maintain a local fallback mode for hobby/community deployments
+- keep a backend interface in `src/utils/db-*` (sqlite + postgres backends)
+- initialize Postgres schema with `npm run db:postgres:init`
+- migrate state with `npm run db:sqlite:migrate:postgres`
+- verify migrated row counts with `npm run db:sqlite:verify:postgres`
+- validate backend behavior with `npm run test:postgres`
+- follow the migration checklist in `docs/POSTGRES_MIGRATION_RUNBOOK.md`
+- keep sqlite local fallback mode for single-machine/community deployments
+
+Current status:
+
+- backend contract abstraction is in place
+- Postgres schema + migration scripts are available
+- runtime Postgres query backend is implemented and selectable via `DB_DIALECT=postgres`
+- CI runs a dedicated Postgres backend test job (`tests/postgres-backend.test.ts`)
+- CDK includes a Phase 2 ECS+RDS stack for Slack/Discord official runtimes (`infra/cdk/lib/garbanzo-ecs-stack.ts`)

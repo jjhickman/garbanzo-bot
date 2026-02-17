@@ -1,4 +1,6 @@
 # Third-Party Notices
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 Garbanzo depends on third-party open source software.
 

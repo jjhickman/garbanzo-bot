@@ -339,8 +339,8 @@ describe('Database — maintenance and backup', async () => {
   const { runMaintenance, storeMessage, getMessages, backupDatabase } = await import('../src/utils/db.js');
   const { existsSync, unlinkSync } = await import('fs');
 
-  it('runMaintenance returns stats object', () => {
-    const result = runMaintenance();
+  it('runMaintenance returns stats object', async () => {
+    const result = await runMaintenance();
     expect(result).toHaveProperty('pruned');
     expect(result).toHaveProperty('beforeCount');
     expect(result).toHaveProperty('afterCount');
@@ -348,18 +348,18 @@ describe('Database — maintenance and backup', async () => {
     expect(result.afterCount).toBeLessThanOrEqual(result.beforeCount);
   });
 
-  it('does not prune recent messages', () => {
+  it('does not prune recent messages', async () => {
     // Store a message (will have current timestamp)
-    storeMessage('maintenance-test@g.us', 'tester@s.whatsapp.net', 'recent message');
-    const before = getMessages('maintenance-test@g.us', 100);
-    runMaintenance();
-    const after = getMessages('maintenance-test@g.us', 100);
+    await storeMessage('maintenance-test@g.us', 'tester@s.whatsapp.net', 'recent message');
+    const before = await getMessages('maintenance-test@g.us', 100);
+    await runMaintenance();
+    const after = await getMessages('maintenance-test@g.us', 100);
     // Recent message should still be there
     expect(after.length).toBe(before.length);
   });
 
-  it('backupDatabase creates a backup file', () => {
-    const backupPath = backupDatabase();
+  it('backupDatabase creates a backup file', async () => {
+    const backupPath = await backupDatabase();
     expect(existsSync(backupPath)).toBe(true);
     // Clean up
     try { unlinkSync(backupPath); } catch { /* ignore */ }

@@ -16,13 +16,14 @@ export interface GroupStats {
   claudeRouted: number;
   openaiRouted: number;
   geminiRouted: number;
+  bedrockRouted: number;
   moderationFlags: number;
   aiErrors: number;
 }
 
 /** Per-call cost entry for tracking spend */
 export interface CostEntry {
-  model: 'claude' | 'openai' | 'gemini' | 'ollama';
+  model: 'claude' | 'openai' | 'gemini' | 'bedrock' | 'ollama';
   inputTokens: number;
   outputTokens: number;
   estimatedCost: number; // USD
@@ -71,6 +72,7 @@ function getGroupStats(groupJid: string): GroupStats {
       claudeRouted: 0,
       openaiRouted: 0,
       geminiRouted: 0,
+      bedrockRouted: 0,
       moderationFlags: 0,
       aiErrors: 0,
     };
@@ -108,12 +110,13 @@ export function recordBotResponse(groupJid: string): void {
 }
 
 /** Record which AI route handled a group response (Ollama/Claude/OpenAI/Gemini). */
-export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai' | 'gemini'): void {
+export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai' | 'gemini' | 'bedrock'): void {
   maybeRollover();
   const stats = getGroupStats(groupJid);
   if (model === 'ollama') stats.ollamaRouted++;
   else if (model === 'openai') stats.openaiRouted++;
   else if (model === 'gemini') stats.geminiRouted++;
+  else if (model === 'bedrock') stats.bedrockRouted++;
   else stats.claudeRouted++;
 }
 
@@ -166,6 +169,12 @@ const OPENAI_PRICING = {
 const GEMINI_PRICING = {
   input: (config.GEMINI_PRICING_INPUT_PER_M ?? 0) / 1_000_000,
   output: (config.GEMINI_PRICING_OUTPUT_PER_M ?? 0) / 1_000_000,
+};
+
+/** Bedrock pricing is model-dependent; defaults to 0 until configured. */
+const BEDROCK_PRICING = {
+  input: (config.BEDROCK_PRICING_INPUT_PER_M ?? 0) / 1_000_000,
+  output: (config.BEDROCK_PRICING_OUTPUT_PER_M ?? 0) / 1_000_000,
 };
 
 /**
@@ -225,6 +234,23 @@ export function estimateGeminiCost(
     inputTokens,
     outputTokens,
     estimatedCost: (inputTokens * GEMINI_PRICING.input) + (outputTokens * GEMINI_PRICING.output),
+    latencyMs: 0,
+  };
+}
+
+/** Estimate cost of a Bedrock call from prompt + response text */
+export function estimateBedrockCost(
+  systemPrompt: string,
+  userMessage: string,
+  response: string,
+): CostEntry {
+  const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userMessage);
+  const outputTokens = estimateTokens(response);
+  return {
+    model: 'bedrock',
+    inputTokens,
+    outputTokens,
+    estimatedCost: (inputTokens * BEDROCK_PRICING.input) + (outputTokens * BEDROCK_PRICING.output),
     latencyMs: 0,
   };
 }

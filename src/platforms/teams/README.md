@@ -1,4 +1,6 @@
 # Teams (planned)
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This directory is reserved for the future Microsoft Teams adapter/runtime.
 

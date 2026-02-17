@@ -64,7 +64,7 @@ export async function getResponse(
         return typeof charResult === 'string' ? charResult : charResult.summary;
       }
       case 'profile':
-        return handleProfile(feature.query, ctx.senderJid);
+        return await handleProfile(feature.query, ctx.senderJid);
       case 'summary':
         return handleSummary(feature.query, ctx.groupJid, ctx.senderJid);
       case 'recommend':

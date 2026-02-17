@@ -1,4 +1,6 @@
 # Releases
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 This project uses semantic versioning and tag-driven Docker image releases.
 
@@ -125,15 +127,15 @@ Notes:
 Set `APP_VERSION` in your `.env` before deploy, then pull and restart:
 
 ```bash
-APP_VERSION=0.1.6 docker compose pull garbanzo
-APP_VERSION=0.1.6 docker compose up -d
+APP_VERSION=0.1.8 docker compose pull garbanzo
+APP_VERSION=0.1.8 docker compose up -d
 ```
 
 Recommended (production) — use `docker-compose.prod.yml` to disable local builds:
 
 ```bash
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 `docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
@@ -141,19 +143,19 @@ APP_VERSION=0.1.6 docker compose -f docker-compose.yml -f docker-compose.prod.ym
 Automated deploy+verify helper (same compose defaults, with optional rollback):
 
 ```bash
-npm run release:deploy:verify -- --version=0.1.6 --rollback-version=0.1.5
+npm run release:deploy:verify -- --version=0.1.8 --rollback-version=0.1.7
 ```
 
 ## Rollback Playbook
 
 If a deploy introduces problems, roll back to the last known-good release tag.
 
-1. Identify the prior healthy version (example: `0.1.5`).
+1. Identify the prior healthy version (example: `0.1.7`).
 2. Redeploy with that version:
 
 ```bash
-APP_VERSION=0.1.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.1.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 3. Verify health and readiness:

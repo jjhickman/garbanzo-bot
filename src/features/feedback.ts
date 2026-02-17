@@ -45,12 +45,12 @@ interface FeedbackResult {
  * Handle a !suggest or !bug command from a member.
  * Returns the response to send and an optional owner DM alert.
  */
-export function handleFeedbackSubmit(
+export async function handleFeedbackSubmit(
   type: 'suggestion' | 'bug',
   description: string,
   senderJid: string,
   groupJid: string | null,
-): FeedbackResult {
+): Promise<FeedbackResult> {
   const trimmed = description.trim();
   if (!trimmed) {
     const example = type === 'suggestion'
@@ -69,7 +69,7 @@ export function handleFeedbackSubmit(
     };
   }
 
-  const entry = submitFeedback(type, senderJid, groupJid, trimmed);
+  const entry = await submitFeedback(type, senderJid, groupJid, trimmed);
   const label = type === 'suggestion' ? 'Feature suggestion' : 'Bug report';
   const emoji = type === 'suggestion' ? '💡' : '🐛';
   const groupName = groupJid ? getGroupName(groupJid) : 'DM';
@@ -106,16 +106,16 @@ export function handleFeedbackSubmit(
 /**
  * Handle !upvote <id> from a member.
  */
-export function handleUpvote(
+export async function handleUpvote(
   args: string,
   senderJid: string,
-): string {
+): Promise<string> {
   const id = parseInt(args.trim(), 10);
   if (isNaN(id)) {
     return 'Usage: !upvote <id>\nExample: !upvote 3';
   }
 
-  const entry = getFeedbackById(id);
+  const entry = await getFeedbackById(id);
   if (!entry) {
     return `No feedback item found with ID #${id}.`;
   }
@@ -124,12 +124,12 @@ export function handleUpvote(
     return `Item #${id} is already ${entry.status}.`;
   }
 
-  const success = upvoteFeedback(id, senderJid);
+  const success = await upvoteFeedback(id, senderJid);
   if (!success) {
     return `You've already upvoted #${id}.`;
   }
 
-  const updated = getFeedbackById(id);
+  const updated = await getFeedbackById(id);
   const emoji = entry.type === 'suggestion' ? '💡' : '🐛';
   return `${emoji} Upvoted #${id}! (${updated?.upvotes ?? 1} vote${(updated?.upvotes ?? 1) !== 1 ? 's' : ''})`;
 }
@@ -140,17 +140,17 @@ export function handleUpvote(
  * Handle owner !feedback commands.
  * Returns the response to send to the owner DM.
  */
-export function handleFeedbackOwner(args: string): string {
+export async function handleFeedbackOwner(args: string): Promise<string> {
   const trimmed = args.trim().toLowerCase();
 
   // !feedback (no args) — list open items
   if (!trimmed || trimmed === 'open') {
-    return formatFeedbackList(getOpenFeedback(), 'open');
+    return formatFeedbackList(await getOpenFeedback(), 'open');
   }
 
   // !feedback all — list recent items regardless of status
   if (trimmed === 'all') {
-    return formatFeedbackList(getRecentFeedback(25), 'all');
+    return formatFeedbackList(await getRecentFeedback(25), 'all');
   }
 
   // !feedback accept/reject/done <id>
@@ -163,7 +163,7 @@ export function handleFeedbackOwner(args: string): string {
       done: 'done',
     };
     const id = parseInt(actionMatch[2], 10);
-    return handleStatusChange(id, statusMap[verb]);
+    return await handleStatusChange(id, statusMap[verb]);
   }
 
   return [
@@ -181,7 +181,7 @@ export function handleFeedbackOwner(args: string): string {
  * Create and link a GitHub issue from an accepted feedback item.
  */
 export async function createGitHubIssueFromFeedback(id: number): Promise<string> {
-  const entry = getFeedbackById(id);
+  const entry = await getFeedbackById(id);
   if (!entry) {
     return `No feedback item found with ID #${id}.`;
   }
@@ -243,7 +243,7 @@ export async function createGitHubIssueFromFeedback(id: number): Promise<string>
     }
 
     const data = await response.json() as { number: number; html_url: string };
-    const linked = linkFeedbackToGitHubIssue(id, data.number, data.html_url);
+    const linked = await linkFeedbackToGitHubIssue(id, data.number, data.html_url);
     if (!linked) {
       return `⚠️ Created issue ${data.html_url} but failed to store local link.`;
     }
@@ -258,11 +258,11 @@ export async function createGitHubIssueFromFeedback(id: number): Promise<string>
 
 // ── Formatting helpers ──────────────────────────────────────────────
 
-function handleStatusChange(
+async function handleStatusChange(
   id: number,
   status: 'accepted' | 'rejected' | 'done',
-): string {
-  const entry = getFeedbackById(id);
+): Promise<string> {
+  const entry = await getFeedbackById(id);
   if (!entry) {
     return `No feedback item found with ID #${id}.`;
   }
@@ -271,7 +271,7 @@ function handleStatusChange(
     return `Item #${id} is already ${status}.`;
   }
 
-  const success = setFeedbackStatus(id, status);
+  const success = await setFeedbackStatus(id, status);
   if (!success) {
     return `Failed to update item #${id}.`;
   }

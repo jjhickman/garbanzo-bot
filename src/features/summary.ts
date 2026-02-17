@@ -35,7 +35,7 @@ export async function handleSummary(
     if (count < 5) count = 5;
   }
 
-  const messages = getMessages(groupJid, count);
+  const messages = await getMessages(groupJid, count);
   if (messages.length < 3) {
     return '📝 Not enough messages to summarize yet.';
   }

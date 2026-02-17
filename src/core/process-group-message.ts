@@ -184,7 +184,7 @@ async function handleFeedbackCommand(params: {
   const isBareCommand = !query.trim().includes(' ');
 
   if (bangWord === 'suggest' || bangWord === 'suggestion') {
-    const result = handleFeedbackSubmit('suggestion', isBareCommand ? '' : feedbackArgs, senderId, chatId);
+    const result = await handleFeedbackSubmit('suggestion', isBareCommand ? '' : feedbackArgs, senderId, chatId);
     await messenger.sendText(chatId, result.response, { replyTo });
     if (result.ownerAlert) {
       try {
@@ -199,7 +199,7 @@ async function handleFeedbackCommand(params: {
   }
 
   if (bangWord === 'bug') {
-    const result = handleFeedbackSubmit('bug', isBareCommand ? '' : feedbackArgs, senderId, chatId);
+    const result = await handleFeedbackSubmit('bug', isBareCommand ? '' : feedbackArgs, senderId, chatId);
     await messenger.sendText(chatId, result.response, { replyTo });
     if (result.ownerAlert) {
       try {
@@ -214,7 +214,7 @@ async function handleFeedbackCommand(params: {
   }
 
   if (bangWord === 'upvote') {
-    const response = handleUpvote(isBareCommand ? '' : feedbackArgs, senderId);
+    const response = await handleUpvote(isBareCommand ? '' : feedbackArgs, senderId);
     await messenger.sendText(chatId, response, { replyTo });
     recordBotResponse(chatId);
     recordResponse(senderId, chatId);

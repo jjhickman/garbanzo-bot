@@ -12,26 +12,26 @@ describe('Profiles — member profile management', async () => {
 
   const testJid = '15551234567@s.whatsapp.net';
 
-  it('shows empty profile for unknown user', () => {
-    const response = handleProfile('', 'unknown999@s.whatsapp.net');
+  it('shows empty profile for unknown user', async () => {
+    const response = await handleProfile('', 'unknown999@s.whatsapp.net');
     expect(response).toContain('No profile yet');
     expect(response).toContain('!profile interests');
   });
 
-  it('creates profile on touch', () => {
-    touchProfile(testJid);
-    const profile = getProfile(testJid);
+  it('creates profile on touch', async () => {
+    await touchProfile(testJid);
+    const profile = await getProfile(testJid);
     if (!profile) throw new Error('expected profile');
     expect(profile.jid).toBe('15551234567');
   });
 
-  it('sets interests via command', () => {
-    touchProfile(testJid);
-    const response = handleProfile('interests hiking, cooking, board games', testJid);
+  it('sets interests via command', async () => {
+    await touchProfile(testJid);
+    const response = await handleProfile('interests hiking, cooking, board games', testJid);
     expect(response).toContain('Interests updated');
     expect(response).toContain('hiking');
 
-    const profile = getProfile(testJid);
+    const profile = await getProfile(testJid);
     if (!profile) throw new Error('expected profile');
     const interests = JSON.parse(profile.interests);
     expect(interests).toContain('hiking');
@@ -39,31 +39,31 @@ describe('Profiles — member profile management', async () => {
     expect(interests).toContain('board games');
   });
 
-  it('sets name via command', () => {
-    touchProfile(testJid);
-    const response = handleProfile('name TestUser', testJid);
+  it('sets name via command', async () => {
+    await touchProfile(testJid);
+    const response = await handleProfile('name TestUser', testJid);
     expect(response).toContain('Display name set');
     expect(response).toContain('TestUser');
   });
 
-  it('shows populated profile', () => {
-    touchProfile(testJid);
-    setProfileInterests(testJid, ['hiking', 'cooking']);
-    const response = handleProfile('', testJid);
+  it('shows populated profile', async () => {
+    await touchProfile(testJid);
+    await setProfileInterests(testJid, ['hiking', 'cooking']);
+    const response = await handleProfile('', testJid);
     expect(response).toContain('Your Profile');
     expect(response).toContain('hiking, cooking');
   });
 
-  it('deletes profile on opt-out', () => {
-    touchProfile(testJid);
-    const response = handleProfile('delete', testJid);
+  it('deletes profile on opt-out', async () => {
+    await touchProfile(testJid);
+    const response = await handleProfile('delete', testJid);
     expect(response).toContain('deleted');
-    expect(getProfile(testJid)).toBeUndefined();
+    expect(await getProfile(testJid)).toBeUndefined();
   });
 
-  it('rejects empty interests', () => {
-    touchProfile(testJid);
-    const response = handleProfile('interests ', testJid);
+  it('rejects empty interests', async () => {
+    await touchProfile(testJid);
+    const response = await handleProfile('interests ', testJid);
     expect(response).toContain('Provide comma-separated');
   });
 });
@@ -74,43 +74,43 @@ describe('Memory — long-term community facts', async () => {
   const { handleMemory } = await import('../src/features/memory.js');
   const { addMemory, deleteMemory, getAllMemories: _getAllMemories, searchMemory } = await import('../src/utils/db.js');
 
-  it('shows help when called with unknown arg', () => {
-    const response = handleMemory('unknown-command');
+  it('shows help when called with unknown arg', async () => {
+    const response = await handleMemory('unknown-command');
     expect(response).toContain('Garbanzo Memory');
     expect(response).toContain('!memory add');
   });
 
-  it('adds a memory via command', () => {
-    const response = handleMemory('add venues Best trivia is at Parlor on Wednesdays');
+  it('adds a memory via command', async () => {
+    const response = await handleMemory('add venues Best trivia is at Parlor on Wednesdays');
     expect(response).toContain('Memory #');
     expect(response).toContain('stored');
     expect(response).toContain('venues');
   });
 
-  it('lists all memories', () => {
-    addMemory('Group was founded in 2024', 'general', 'owner');
-    const response = handleMemory('');
+  it('lists all memories', async () => {
+    await addMemory('Group was founded in 2024', 'general', 'owner');
+    const response = await handleMemory('');
     expect(response).toContain('facts stored');
   });
 
-  it('searches memories by keyword', () => {
-    addMemory('Koreana in Porter Square is great', 'venues', 'owner');
-    const results = searchMemory('Koreana');
+  it('searches memories by keyword', async () => {
+    await addMemory('Koreana in Porter Square is great', 'venues', 'owner');
+    const results = await searchMemory('Koreana');
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0].fact).toContain('Koreana');
   });
 
-  it('deletes a memory by ID', () => {
-    const entry = addMemory('test fact to delete', 'general', 'test');
-    const deleted = deleteMemory(entry.id);
+  it('deletes a memory by ID', async () => {
+    const entry = await addMemory('test fact to delete', 'general', 'test');
+    const deleted = await deleteMemory(entry.id);
     expect(deleted).toBe(true);
 
-    const deletedAgain = deleteMemory(entry.id);
+    const deletedAgain = await deleteMemory(entry.id);
     expect(deletedAgain).toBe(false);
   });
 
-  it('rejects add without category + fact', () => {
-    const response = handleMemory('add');
+  it('rejects add without category + fact', async () => {
+    const response = await handleMemory('add');
     expect(response).toContain('Usage');
   });
 });
@@ -262,27 +262,27 @@ describe('Security — input sanitization', async () => {
 describe('Context — compressed context formatting', async () => {
   const { formatContext, recordMessage } = await import('../src/middleware/context.js');
 
-  it('returns empty string for unknown chat', () => {
-    expect(formatContext('nonexistent-chat@g.us')).toBe('');
+  it('returns empty string for unknown chat', async () => {
+    expect(await formatContext('nonexistent-chat@g.us')).toBe('');
   });
 
-  it('returns context for chats with messages', () => {
+  it('returns context for chats with messages', async () => {
     // Seed some messages
     const chatJid = 'context-test-' + Date.now() + '@g.us';
     for (let i = 0; i < 10; i++) {
-      recordMessage(chatJid, `user${i}@s.whatsapp.net`, `Test message number ${i}`);
+      await recordMessage(chatJid, `user${i}@s.whatsapp.net`, `Test message number ${i}`);
     }
-    const context = formatContext(chatJid);
+    const context = await formatContext(chatJid);
     expect(context).toContain('Recent messages');
     expect(context.length).toBeGreaterThan(0);
   });
 
-  it('includes summary for chats with many messages', () => {
+  it('includes summary for chats with many messages', async () => {
     const chatJid = 'context-many-' + Date.now() + '@g.us';
     for (let i = 0; i < 20; i++) {
-      recordMessage(chatJid, `user${i % 5}@s.whatsapp.net`, `Discussion about topic ${i}, what do you think?`);
+      await recordMessage(chatJid, `user${i % 5}@s.whatsapp.net`, `Discussion about topic ${i}, what do you think?`);
     }
-    const context = formatContext(chatJid);
+    const context = await formatContext(chatJid);
     // Should have both summary and recent sections
     expect(context).toContain('Recent messages');
   });

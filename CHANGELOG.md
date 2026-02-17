@@ -1,4 +1,6 @@
 # Changelog
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 All notable changes to Garbanzo are documented here.
 

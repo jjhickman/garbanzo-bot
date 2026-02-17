@@ -1,4 +1,6 @@
 # Security Audit — Garbanzo Infrastructure
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 **Date:** 2026-02-13
 **Auditor:** Pre-build infrastructure assessment

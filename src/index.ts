@@ -18,6 +18,7 @@ async function main(): Promise<void> {
   if (config.ANTHROPIC_API_KEY) cloudProviders.push('anthropic');
   if (config.OPENAI_API_KEY) cloudProviders.push('openai');
   if (config.GEMINI_API_KEY) cloudProviders.push('gemini');
+  if (config.BEDROCK_MODEL_ID) cloudProviders.push('bedrock');
 
   logger.info({
     cloudProviders,
@@ -66,20 +67,25 @@ process.on('uncaughtException', (err) => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT — shutting down');
+async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
+  logger.info({ signal }, 'Received shutdown signal — shutting down');
   clearRetryQueue();
   stopOllamaWarmup();
   stopHealthServer();
-  closeDb();
+
+  try {
+    await closeDb();
+  } catch (err) {
+    logger.error({ err, signal }, 'Failed to close database cleanly during shutdown');
+  }
+
   process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
 });
 
 process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM — shutting down');
-  clearRetryQueue();
-  stopOllamaWarmup();
-  stopHealthServer();
-  closeDb();
-  process.exit(0);
+  void shutdown('SIGTERM');
 });

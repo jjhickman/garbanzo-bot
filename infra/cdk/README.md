@@ -1,12 +1,23 @@
 # Garbanzo AWS CDK
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
-This CDK app provisions a simple EC2-based deployment suitable for running Garbanzo with SQLite + persistent Baileys auth.
+
+This CDK app provisions two deployment patterns:
+
+- EC2 + Docker Compose (SQLite + persistent Baileys auth)
+- ECS Fargate + RDS Postgres (Phase 2 target for Slack/Discord official runtimes)
 
 ## Why EC2?
 
 - SQLite works best on local disk (EBS)
 - Baileys auth requires persistence
 - Fargate + EFS is possible but adds complexity and can be harder to debug
+
+## Why ECS + RDS?
+
+- Better fit for official webhook-style runtimes (Slack/Discord)
+- Managed orchestration + easier scaling knobs
+- Postgres removes SQLite multi-writer constraints
 
 ## Prereqs
 
@@ -67,7 +78,7 @@ Public subnet (default VPC; easiest to start):
 cd infra/cdk
 
 cdk deploy \
-  -c appVersion=0.1.6 \
+  -c appVersion=0.1.8 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
@@ -77,7 +88,7 @@ Hardened (private subnets + NAT; no public IP; access via SSM):
 ```bash
 cdk deploy \
   -c networkMode=private \
-  -c appVersion=0.1.6 \
+  -c appVersion=0.1.8 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
 ```
@@ -89,9 +100,168 @@ Optionally restrict health endpoint (only useful if you have VPC connectivity to
 ```bash
 cdk deploy \
   -c allowedHealthCidr=203.0.113.4/32 \
-  -c appVersion=0.1.6 \
+  -c appVersion=0.1.8 \
   -c envParamName=/garbanzo/prod/env \
   -c groupsParamName=/garbanzo/prod/groups_json
+```
+
+## Deploy ECS + RDS stack (Phase 2 target)
+
+Before deploying from repo root, run:
+
+```bash
+npm run aws:ecs:preflight
+```
+
+This validates AWS auth, bootstrap status, Route53 zone/certificate, and required Secrets Manager keys.
+
+Then run:
+
+```bash
+npm run aws:ecs:audit
+```
+
+This performs an automated CDK synth audit for ECS task definitions, ECR pull authorization policies, and demo abuse-control resources before deploy.
+
+This stack deploys:
+
+- VPC (public + private + isolated subnets)
+- ECS Fargate services for Slack and/or Discord runtimes
+- ALB routing:
+  - `/slack/events*` -> Slack service
+  - `/discord/interactions*` -> Discord service
+- RDS Postgres (encrypted, backup retention, snapshot delete policy)
+- Secrets wiring for platform credentials + Postgres credentials
+
+### Required contexts
+
+```bash
+-c deployEc2=false
+-c deployEcs=true
+-c ownerJid=<owner-id>
+-c slackSecretArn=<secret arn or secret name>
+-c discordSecretArn=<secret arn or secret name>
+-c aiSecretArn=<secret arn or secret name>
+```
+
+`slackSecretArn` secret JSON must include:
+
+- `SLACK_BOT_TOKEN`
+- `SLACK_SIGNING_SECRET`
+
+`discordSecretArn` secret JSON must include:
+
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_PUBLIC_KEY`
+
+`aiSecretArn` secret JSON must include at least one of:
+
+- `OPENROUTER_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+
+### Optional contexts
+
+```bash
+-c appVersion=0.1.8
+-c imageRepo=jjhickman/garbanzo
+-c imageTag=0.1.8
+-c aiProviderOrder=openrouter,anthropic,openai,gemini
+-c bedrockRegion=us-east-1
+-c bedrockModelId=anthropic.claude-3-5-haiku-20241022-v1:0
+-c dbDeletionProtection=false
+-c deploySlack=true
+-c deployDiscord=true
+-c deployDemo=false
+-c slackDesiredCount=1
+-c discordDesiredCount=1
+-c demoDesiredCount=1
+-c demoMinCapacity=1
+-c demoMaxCapacity=2
+-c demoRequestsPerTarget=25
+-c demo5xxAlarmThreshold=10
+-c demoP95LatencyMsThreshold=2500
+-c demoRequestBurstThreshold=500
+-c demoWafRateLimit=300
+-c demoPort=3004
+-c demoSecretArn=garbanzo/demo
+-c demoTurnstileEnabled=true
+-c demoAiProviderOrder=openrouter
+-c demoBedrockModelId=anthropic.claude-3-5-haiku-20241022-v1:0
+-c demoBedrockMaxTokens=256
+-c demoCloudMaxTokens=384
+-c demoRequestTimeoutMs=12000
+-c domainName=bot.garbanzobot.com
+-c demoDomainName=demo.garbanzobot.com
+-c hostedZoneName=garbanzobot.com
+-c hostedZoneId=Z123456789ABC
+-c certificateArn=arn:aws:acm:...
+-c demoCertificateArn=arn:aws:acm:...
+```
+
+If you set `hostedZoneId` and `hostedZoneName` together, CDK skips Route53 lookup calls and does not require context-provider lookups during synth.
+
+`deployDemo=true` provisions a public Slack demo runtime (no Slack API credentials required) so visitors can try Garbanzo over HTTP JSON.
+Use `demoDomainName` to map a separate subdomain (for example `demo.garbanzobot.com`) to that runtime.
+
+`demoSecretArn` should reference a Secrets Manager JSON secret with:
+- `DEMO_TURNSTILE_SITE_KEY`
+- `DEMO_TURNSTILE_SECRET_KEY`
+
+The stack applies demo-host scoped AWS WAF protection (rate limit + managed common/bot rules), CloudWatch alarms, and bounded ECS autoscaling for abuse control.
+
+Example:
+
+```bash
+cd infra/cdk
+
+cdk deploy GarbanzoEcsStack \
+  -c deployEc2=false \
+  -c deployEcs=true \
+  -c appVersion=0.1.8 \
+  -c ownerJid=U0123456789 \
+  -c slackSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/slack-abc123 \
+  -c discordSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/discord-def456 \
+  -c aiSecretArn=arn:aws:secretsmanager:us-east-1:123456789012:secret:garbanzo/ai-ghi789 \
+  -c domainName=bot.garbanzobot.com \
+  -c hostedZoneName=garbanzobot.com \
+  -c hostedZoneId=Z123456789ABC \
+  -c certificateArn=arn:aws:acm:us-east-1:123456789012:certificate/xxxx
+```
+
+Demo subdomain example:
+
+```bash
+cdk deploy GarbanzoEcsStack \
+  -c deployEc2=false \
+  -c deployEcs=true \
+  -c deploySlack=true \
+  -c deployDiscord=true \
+  -c deployDemo=true \
+  -c ownerJid=U0123456789 \
+  -c slackSecretArn=garbanzo/slack \
+  -c discordSecretArn=garbanzo/discord \
+  -c aiSecretArn=garbanzo/ai \
+  -c demoSecretArn=garbanzo/demo \
+  -c demoTurnstileEnabled=true \
+  -c demoAiProviderOrder=bedrock \
+  -c demoBedrockMaxTokens=256 \
+  -c demoCloudMaxTokens=384 \
+  -c demoRequestTimeoutMs=12000 \
+  -c domainName=bot.garbanzobot.com \
+  -c demoDomainName=demo.garbanzobot.com \
+  -c hostedZoneName=garbanzobot.com \
+  -c hostedZoneId=Z123456789ABC \
+  -c certificateArn=arn:aws:acm:us-east-1:123456789012:certificate/xxxx \
+  -c demoCertificateArn=arn:aws:acm:us-east-1:123456789012:certificate/yyyy
+```
+
+After deploy, validate demo runtime:
+
+```bash
+curl -s https://demo.garbanzobot.com/slack/demo \
+  -H 'content-type: application/json' \
+  -d '{"chatId":"public-demo","senderId":"visitor","text":"@garbanzo what can you do?"}'
 ```
 
 ## QR Linking

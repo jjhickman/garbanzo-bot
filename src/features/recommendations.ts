@@ -27,7 +27,7 @@ export async function handleRecommendations(
   senderJid: string,
   groupJid: string,
 ): Promise<string> {
-  const profile = getProfile(senderJid);
+  const profile = await getProfile(senderJid);
 
   if (!profile || !profile.opted_in) {
     return [
@@ -53,7 +53,7 @@ export async function handleRecommendations(
   const dayOfWeek = new Date().toLocaleString('en-US', { weekday: 'long' });
 
   // Find other members with overlapping interests for group activity suggestions
-  const similarMembers = findSimilarMembers(senderJid, interests);
+  const similarMembers = await findSimilarMembers(senderJid, interests);
 
   const prompt = [
     `Suggest 3-4 specific activity or event ideas for a Boston meetup group member.`,
@@ -96,9 +96,9 @@ export async function handleRecommendations(
  * Find other opted-in members with overlapping interests.
  * Returns count (not JIDs — privacy).
  */
-function findSimilarMembers(excludeJid: string, interests: string[]): MemberProfile[] {
+async function findSimilarMembers(excludeJid: string, interests: string[]): Promise<MemberProfile[]> {
   const bare = excludeJid.split('@')[0].split(':')[0];
-  const all = getOptedInProfiles();
+  const all = await getOptedInProfiles();
   const lowerInterests = interests.map((i) => i.toLowerCase());
 
   return all.filter((p) => {

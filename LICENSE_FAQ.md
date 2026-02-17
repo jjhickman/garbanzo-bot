@@ -1,4 +1,6 @@
 # License FAQ
+> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
 
 Garbanzo is licensed under Apache License 2.0.
 
@@ -32,8 +34,8 @@ No. Trademark and branding rights are separate.
 
 See `TRADEMARK.md`.
 
-## Is paid support still available?
+## Can I still support the project financially?
 
-Yes. Paid support and implementation help are optional services, not separate software license permissions.
+Yes. Sponsorship is optional and helps fund maintenance and roadmap work.
 
-See `COMMERCIAL_LICENSE.md`.
+See the support links in `README.md` and `.github/FUNDING.yml`.
