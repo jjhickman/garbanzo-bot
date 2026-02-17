@@ -79,6 +79,9 @@ npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
 ```
 
 7. If website content changed (`website/**`), run the website deployment workflow and verify the live site before closing the release checklist issue.
+8. For Postgres deploys, verify runtime schema guardrails before release:
+   - `npm run test -- tests/dockerfile-runtime-assets.test.ts`
+   - Confirm image includes `src/utils/postgres-schema.sql` and demo POST no longer returns `relation \"messages\" does not exist`.
 
 ## Member Release Communication Rules
 

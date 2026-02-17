@@ -24,6 +24,15 @@ const CONTEXT_VECTOR_DIMENSIONS = 256;
 const CONTEXT_RELEVANT_LIMIT = 6;
 const CONTEXT_MIN_EMBED_CHARS = 8;
 
+const REQUIRED_CORE_TABLES = [
+  'member_profiles',
+  'messages',
+  'moderation_log',
+  'daily_stats',
+  'feedback',
+  'memory',
+] as const;
+
 type BigintLike = string | number;
 
 interface DbCountRow {
@@ -249,6 +258,37 @@ function resolvePostgresConnectionString(): string {
   return `postgres://${encodedUser}:${encodedPass}@${config.POSTGRES_HOST}:${config.POSTGRES_PORT}/${config.POSTGRES_DB}`;
 }
 
+function resolveSchemaPath(): string | undefined {
+  const candidates = [
+    resolve(PROJECT_ROOT, 'src', 'utils', 'postgres-schema.sql'),
+    resolve(PROJECT_ROOT, 'dist', 'utils', 'postgres-schema.sql'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return undefined;
+}
+
+async function validateCoreTables(pool: Pool): Promise<void> {
+  const res = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+     FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = ANY($1::text[])`,
+    [Array.from(REQUIRED_CORE_TABLES)],
+  );
+
+  const available = new Set(res.rows.map((row) => row.table_name));
+  const missing = REQUIRED_CORE_TABLES.filter((table) => !available.has(table));
+  if (missing.length > 0) {
+    throw new Error(
+      `Postgres schema is incomplete; missing tables: ${missing.join(', ')}. `
+      + 'Run `npm run db:postgres:init` (or ensure postgres-schema.sql is bundled in runtime image).',
+    );
+  }
+}
+
 export async function createPostgresBackend(): Promise<DbBackend> {
   const poolConfig: PoolConfig = { connectionString: resolvePostgresConnectionString() };
   if (config.POSTGRES_SSL) {
@@ -259,11 +299,15 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
   const pool = new Pool(poolConfig);
 
-  const schemaPath = resolve(PROJECT_ROOT, 'src', 'utils', 'postgres-schema.sql');
-  if (existsSync(schemaPath)) {
+  const schemaPath = resolveSchemaPath();
+  if (schemaPath) {
     const schemaSql = readFileSync(schemaPath, 'utf-8');
     await pool.query(schemaSql);
+  } else {
+    logger.warn('postgres-schema.sql not found in runtime filesystem; relying on existing DB tables');
   }
+
+  await validateCoreTables(pool);
 
   let pgvectorEnabled = false;
   try {
