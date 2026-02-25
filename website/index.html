@@ -107,7 +107,7 @@
           Garbanzo Bean is operated as an independent software project focused on reliable AI chat operations for communities.
         </p>
         <ul class="trust-links">
-          <li>Contact: <a id="contactEmailLink" href="mailto:jjhickman@pm.me">jjhickman@pm.me</a></li>
+          <li>Contact: <a id="contactEmailLink" href="https://github.com/jjhickman/garbanzo-bot/issues">Open a GitHub Issue</a></li>
           <li><a id="privacyPolicyLink" href="./privacy.html">Privacy Policy</a></li>
           <li><a id="termsLink" href="./terms.html">Terms of Service</a></li>
         </ul>
@@ -200,11 +200,11 @@
           setLink('ctaDemo', cfg.demoUrl || 'https://demo.garbanzobot.com', cfg.demoLabel || 'Try Live Demo');
           setLink('ctaSecondary', cfg.ctaSecondaryUrl || cfg.patreonUrl || cfg.githubSponsorsUrl, cfg.ctaSecondaryLabel || 'Support the AI roadmap');
 
-          if (cfg.contactEmail) {
+          if (cfg.contactUrl) {
             const contact = document.getElementById('contactEmailLink');
             if (contact) {
-              contact.href = `mailto:${cfg.contactEmail}`;
-              contact.textContent = cfg.contactEmail;
+              contact.href = cfg.contactUrl;
+              contact.textContent = 'Open a GitHub Issue';
             }
           }
 

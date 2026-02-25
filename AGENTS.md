@@ -45,17 +45,26 @@ Before implementing any feature, task, or utility, **research whether a reliable
 
 All code changes are scanned for hardcoded secrets before they can be committed or pushed. This is enforced at three levels:
 
-1. **Pre-commit hook** — `gitleaks protect --staged` runs automatically on every `git commit`. Blocks commits containing API keys, tokens, private keys, or other secrets.
+1. **Pre-commit hook** — `gitleaks git --staged` runs automatically on every `git commit`. Blocks commits containing API keys, tokens, private keys, personal emails, or other secrets/PII. Install hooks with `npm run setup:hooks`.
 2. **`npm run check`** — The full pre-commit check pipeline (`audit:secrets` → `typecheck` → `lint` → `test`) includes a gitleaks scan of the working directory. Run this before every commit.
 3. **`npm run audit:secrets`** — Standalone secret scan. Use `--verbose` for detailed findings, `--staged` for only staged files.
 
-**Configuration:** `.gitleaks.toml` at project root. Built-in rules detect 150+ secret types. Custom rules added for WhatsApp JIDs. Allowlists configured for files that legitimately reference patterns (docs, examples, config).
+**Configuration:** `.gitleaks.toml` at project root. Built-in rules detect 150+ secret types. Custom rules added for WhatsApp JIDs and personal email addresses. Allowlists configured for files that legitimately reference patterns (docs, examples, config).
 
 **If gitleaks flags a finding:**
 - Move the secret to `.env` (gitignored)
 - Reference via `process.env.VAR_NAME` in code
 - For test files, use fake values (`test_key_xxx`, `5550001234`)
 - For genuine false positives, add an inline `gitleaks:allow` comment or update `.gitleaks.toml` allowlist
+
+### PII Guard: No Personal Contact Information in Code
+
+**Never commit personal email addresses, phone numbers, or private contact details to the repository.** This rule is enforced by both the `pii-personal-email` gitleaks rule and the pre-commit hook.
+
+- **Public contact channels only** — Use GitHub Issues, Discussions, or project-level email addresses for any contact links in websites, docs, or config files. Never use personal inboxes.
+- **The gitleaks `pii-personal-email` rule** blocks commits containing emails from private providers (ProtonMail, Tutanota, iCloud, Fastmail, etc.). See `.gitleaks.toml` for the full list.
+- **If you need to reference a maintainer** — link to their GitHub profile, not their personal email.
+- **AI agents must never** output, embed, or commit personal identifying information (names, emails, phone numbers, addresses) into any file unless the owner explicitly instructs them to do so in that specific conversation.
 
 ## Commands
 
@@ -80,6 +89,9 @@ npm run test
 
 # Scan for hardcoded secrets
 npm run audit:secrets
+
+# Install git hooks (pre-commit PII/secret scanning)
+npm run setup:hooks
 
 # Build for production
 npm run build
@@ -245,14 +257,19 @@ npm run test:watch
 - Commit messages: `type: short description` (e.g., `feat: add weather command`, `fix: handle empty message body`)
 - Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - Branch from `main` for features
-- Run `npm run check` before committing
+- **Before every commit:** Run `npm run check` (audit:secrets → audit:deps → typecheck → lint → test). Fix any failures before committing.
+- **Before every push / PR:** Run `npm run gh:dependabot` to check for open Dependabot PRs. The CI automation guard will block PRs if Dependabot PRs are pending. Either merge them first or add the `allow-open-dependabot` label with justification.
+- **After every push:** Monitor the GitHub Actions Quality Gate check. If it fails, fix the issue and push again — do not leave a PR with failing checks.
 
 ## Three-Tier Boundaries
 
 ### ✅ Always Do
-- Run `npm run check` before committing (runs secrets audit → typecheck → lint → test)
+- Run `npm run check` before committing (runs secrets audit → audit:deps → typecheck → lint → test). **Fix all failures before committing.**
+- Run `npm run setup:hooks` after cloning to install the pre-commit PII/secret scanner
+- Run `npm run gh:dependabot` before pushing or opening a PR — resolve or label open Dependabot PRs
 - Run `npm run typecheck` after editing TypeScript files
 - Run `npm run audit:secrets` after adding any config values, API keys, or identifiers
+- Monitor CI checks after every push — fix failures immediately, never leave a PR red
 - Research existing tools/libraries/APIs before implementing any new feature or utility
 - Validate all environment variables with Zod at startup
 - Log errors with structured context (Pino)
@@ -272,6 +289,8 @@ npm run test:watch
 
 ### 🚫 Never Do
 - Hardcode API keys, tokens, or phone numbers in source code
+- Commit personal email addresses, phone numbers, or private contact info — use project-level channels (GitHub Issues)
+- Output, embed, or commit PII (names, emails, addresses) unless the owner explicitly requests it in the current conversation
 - Auto-send messages without the bot being explicitly @mentioned (except moderation alerts to owner DM)
 - Commit `.env`, `baileys_auth/`, or `data/*.db` files
 - Delete or modify Baileys auth state files while the bot is running

@@ -78,6 +78,22 @@ title = "Garbanzo Bot secret scanning config"
       '''tests/''',
     ]
 
+# ─── PII: Personal Email Guard ─────────────────────────────────────────
+# Block any personal/private email addresses from being committed.
+# Contact info must use project-level channels (GitHub Issues, etc.),
+# never personal inboxes. Covers common private email providers.
+
+[[rules]]
+  id = "pii-personal-email"
+  description = "Personal email address — use GitHub Issues or project contact channel"
+  regex = '''[a-zA-Z0-9._%+\-]+@(pm\.me|proton\.me|protonmail\.com|tutanota\.com|tutamail\.com|tuta\.io|duck\.com|icloud\.com|me\.com|fastmail\.com|mailbox\.org|posteo\.de|disroot\.org|riseup\.net)'''
+  tags = ["pii", "email"]
+  [rules.allowlist]
+    description = "Allow references in gitleaks config and git history tooling"
+    paths = [
+      '''\.gitleaks\.toml''',
+    ]
+
 # ─── Entropy-based generic secret detection ────────────────────────────
 # The built-in generic-api-key rule handles most cases. We tighten the
 # entropy threshold to reduce false positives on base64 constants.
