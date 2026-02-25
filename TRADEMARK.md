@@ -13,7 +13,7 @@
 
 If you want to use Garbanzo branding in a commercial product or offering, contact the contributor:
 
-- Email: jjhickman@pm.me
+- Open a [GitHub Issue](https://github.com/jjhickman/garbanzo-bot/issues)
 
 ## Note
 

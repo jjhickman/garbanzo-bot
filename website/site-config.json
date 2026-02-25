@@ -13,7 +13,7 @@
   "ctaSecondaryLabel": "Support the AI Roadmap",
   "ctaSecondaryUrl": "https://www.patreon.com/c/garbanzobot",
   "supportBlurb": "Support helps fund provider integrations, AI workflow improvements, and reliable release operations.",
-  "contactEmail": "jjhickman@pm.me",
+  "contactUrl": "https://github.com/jjhickman/garbanzo-bot/issues",
   "privacyPolicyUrl": "./privacy.html",
   "termsUrl": "./terms.html",
   "supportTiers": [
