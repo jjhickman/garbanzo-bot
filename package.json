@@ -27,6 +27,7 @@
     "gh:switch:owner": "bash scripts/gh-workflow.sh switch-owner",
     "gh:switch:author": "bash scripts/gh-workflow.sh switch-author",
     "rotate:gh-secrets": "bash scripts/rotate-gh-secrets.sh",
+    "setup:hooks": "bash scripts/install-hooks.sh",
     "db:postgres:init": "node scripts/postgres-init.mjs",
     "db:sqlite:migrate:postgres": "node scripts/sqlite-to-postgres.mjs",
     "db:sqlite:verify:postgres": "node scripts/postgres-verify.mjs",
