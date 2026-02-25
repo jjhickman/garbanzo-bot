@@ -257,15 +257,19 @@ npm run test:watch
 - Commit messages: `type: short description` (e.g., `feat: add weather command`, `fix: handle empty message body`)
 - Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - Branch from `main` for features
-- Run `npm run check` before committing
+- **Before every commit:** Run `npm run check` (audit:secrets → audit:deps → typecheck → lint → test). Fix any failures before committing.
+- **Before every push / PR:** Run `npm run gh:dependabot` to check for open Dependabot PRs. The CI automation guard will block PRs if Dependabot PRs are pending. Either merge them first or add the `allow-open-dependabot` label with justification.
+- **After every push:** Monitor the GitHub Actions Quality Gate check. If it fails, fix the issue and push again — do not leave a PR with failing checks.
 
 ## Three-Tier Boundaries
 
 ### ✅ Always Do
-- Run `npm run check` before committing (runs secrets audit → typecheck → lint → test)
+- Run `npm run check` before committing (runs secrets audit → audit:deps → typecheck → lint → test). **Fix all failures before committing.**
 - Run `npm run setup:hooks` after cloning to install the pre-commit PII/secret scanner
+- Run `npm run gh:dependabot` before pushing or opening a PR — resolve or label open Dependabot PRs
 - Run `npm run typecheck` after editing TypeScript files
 - Run `npm run audit:secrets` after adding any config values, API keys, or identifiers
+- Monitor CI checks after every push — fix failures immediately, never leave a PR red
 - Research existing tools/libraries/APIs before implementing any new feature or utility
 - Validate all environment variables with Zod at startup
 - Log errors with structured context (Pino)
