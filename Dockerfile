@@ -4,7 +4,7 @@
 
 ARG APP_VERSION=0.0.0
 
-FROM node:25-alpine AS builder
+FROM node:26-alpine AS builder
 
 # Build tools for native addons (better-sqlite3)
 RUN apk add --no-cache python3 make g++
@@ -32,7 +32,7 @@ RUN npm prune --omit=dev
 # ─── Stage 2: Production ──────────────────────────────────────────────────────
 # Minimal runtime image. No build tools, no devDeps, no source code.
 
-FROM node:25-alpine
+FROM node:26-alpine
 
 ARG APP_VERSION=0.0.0
 LABEL org.opencontainers.image.title="Garbanzo"
