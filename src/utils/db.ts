@@ -16,6 +16,11 @@ export type {
   ModerationEntry,
   StrikeSummary,
   SessionSummaryHit,
+  WhatsAppOutboundJob,
+  WhatsAppOutboundStatus,
+  WhatsAppRiskLevel,
+  WhatsAppSafetyMetrics,
+  WhatsAppSafetyState,
 } from './db-types.js';
 
 const backend: DbBackend = await (async () => {
@@ -58,6 +63,17 @@ export const getRepeatOffenders = backend.getRepeatOffenders;
 // Daily stats
 export const saveDailyStats = backend.saveDailyStats;
 export const getDailyGroupActivity = backend.getDailyGroupActivity;
+
+// WhatsApp safety
+export const createWhatsAppOutboundJob = backend.createWhatsAppOutboundJob;
+export const updateWhatsAppOutboundJob = backend.updateWhatsAppOutboundJob;
+export const getWhatsAppOutboundJob = backend.getWhatsAppOutboundJob;
+export const listWhatsAppHeldJobs = backend.listWhatsAppHeldJobs;
+export const recoverWhatsAppPendingJobs = backend.recoverWhatsAppPendingJobs;
+export const countWhatsAppSentSince = backend.countWhatsAppSentSince;
+export const getWhatsAppSafetyState = backend.getWhatsAppSafetyState;
+export const setWhatsAppSafetyState = backend.setWhatsAppSafetyState;
+export const getWhatsAppSafetyMetrics = backend.getWhatsAppSafetyMetrics;
 
 // Feedback
 export const submitFeedback = backend.submitFeedback;

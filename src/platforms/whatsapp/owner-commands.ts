@@ -12,6 +12,7 @@ import { handleMemory } from '../../features/memory.js';
 import { recordOwnerDM } from '../../middleware/stats.js';
 import { GROUP_IDS, isFeatureEnabled } from '../../core/groups-config.js';
 import { getResponse } from '../../core/response-router.js';
+import { getWhatsAppOutboundSafety } from './outbound-safety.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [
@@ -68,6 +69,84 @@ async function broadcastSupportMessage(sock: WASocket, text: string): Promise<st
   return `✅ Support message sent to ${sent} group${sent !== 1 ? 's' : ''}${failed > 0 ? ` (${failed} failed)` : ''}.`;
 }
 
+async function sendOwnerControlMessage(sock: WASocket, remoteJid: string, text: string): Promise<void> {
+  const safety = getWhatsAppOutboundSafety(sock);
+  if (safety) {
+    await safety.sendControlText(remoteJid, text);
+    return;
+  }
+  await sock.sendMessage(remoteJid, { text });
+}
+
+async function handleWhatsAppSafetyCommand(sock: WASocket, remoteJid: string, text: string): Promise<boolean> {
+  const safety = getWhatsAppOutboundSafety(sock);
+  if (!safety) {
+    await sendOwnerControlMessage(sock, remoteJid, 'WhatsApp safety controls are unavailable on this socket.');
+    return true;
+  }
+
+  const args = text.trim().slice('!whatsapp'.length).trim().toLowerCase();
+  if (args === '' || args === 'status') {
+    const metrics = await safety.metrics();
+    await sendOwnerControlMessage(
+      sock,
+      remoteJid,
+      [
+        '*WhatsApp safety status*',
+        `Output: ${metrics.paused ? 'paused' : 'active'}`,
+        `Risk: ${metrics.risk} (${metrics.score})`,
+        `Held: ${metrics.held} | Pending: ${metrics.pending}`,
+        `Sent: ${metrics.sentLastHour} last hour | ${metrics.sentLastDay} last day`,
+        `Failed: ${metrics.failedLastHour} last hour`,
+      ].join('\n'),
+    );
+    return true;
+  }
+
+  if (args === 'pause') {
+    await safety.pause();
+    await sendOwnerControlMessage(sock, remoteJid, 'WhatsApp outbound sending paused. New output will be held for manual release.');
+    return true;
+  }
+
+  if (args === 'resume') {
+    await safety.resume();
+    await sendOwnerControlMessage(sock, remoteJid, 'WhatsApp outbound sending resumed. Held output remains held until explicitly released.');
+    return true;
+  }
+
+  if (args === 'held') {
+    const held = await safety.heldJobs(10);
+    const response = held.length === 0
+      ? 'No held WhatsApp outbound jobs.'
+      : ['*Held WhatsApp jobs*', ...held.map((job) => `#${job.id} ${job.kind}: ${job.reason ?? 'held'}`)].join('\n');
+    await sendOwnerControlMessage(sock, remoteJid, response);
+    return true;
+  }
+
+  const actionMatch = args.match(/^(release|discard)\s+(\d+)$/);
+  if (actionMatch) {
+    const id = Number.parseInt(actionMatch[2], 10);
+    const success = actionMatch[1] === 'release'
+      ? await safety.releaseHeldJob(id)
+      : await safety.discardHeldJob(id);
+    const verb = actionMatch[1] === 'release' ? 'released' : 'discarded';
+    await sendOwnerControlMessage(
+      sock,
+      remoteJid,
+      success ? `WhatsApp job #${id} ${verb}.` : `Unable to ${actionMatch[1]} WhatsApp job #${id}; it is not currently held.`,
+    );
+    return true;
+  }
+
+  await sendOwnerControlMessage(
+    sock,
+    remoteJid,
+    'Usage: !whatsapp status | pause | resume | held | release <id> | discard <id>',
+  );
+  return true;
+}
+
 /**
  * Handle a direct message from the bot owner.
  * Routes owner-only commands (!catchup intros, !digest, !strikes, etc.)
@@ -87,6 +166,10 @@ export async function handleOwnerDM(
   recordOwnerDM();
 
   const trimmedLower = text.trim().toLowerCase();
+
+  if (trimmedLower.startsWith('!whatsapp')) {
+    return handleWhatsAppSafetyCommand(sock, remoteJid, text);
+  }
 
   // !catchup intros
   if (trimmedLower === '!catchup intros') {
@@ -132,7 +215,7 @@ export async function handleOwnerDM(
     const result = await handleRelease(args, async (jid, t) => {
       await sock.sendMessage(jid, { text: t });
     });
-    await sock.sendMessage(remoteJid, { text: result });
+    await sendOwnerControlMessage(sock, remoteJid, result);
     return true;
   }
 
@@ -143,7 +226,7 @@ export async function handleOwnerDM(
 
     if (args === 'broadcast') {
       const result = await broadcastSupportMessage(sock, supportMessage);
-      await sock.sendMessage(remoteJid, { text: `${supportMessage}\n\n---\n\n${result}` });
+      await sendOwnerControlMessage(sock, remoteJid, `${supportMessage}\n\n---\n\n${result}`);
       return true;
     }
 

@@ -19,6 +19,11 @@ import type {
   ModerationEntry,
   SessionSummaryHit,
   StrikeSummary,
+  WhatsAppOutboundJob,
+  WhatsAppOutboundStatus,
+  WhatsAppRiskLevel,
+  WhatsAppSafetyMetrics,
+  WhatsAppSafetyState,
 } from './db-types.js';
 
 // ── Re-export sub-modules ───────────────────────────────────────────
@@ -68,6 +73,11 @@ export type {
   ModerationEntry,
   SessionSummaryHit,
   StrikeSummary,
+  WhatsAppOutboundJob,
+  WhatsAppOutboundStatus,
+  WhatsAppRiskLevel,
+  WhatsAppSafetyMetrics,
+  WhatsAppSafetyState,
 } from './db-types.js';
 
 // ── Prepared statements ─────────────────────────────────────────────
@@ -163,6 +173,46 @@ const insertMemory = db.prepare(
 const selectAllMemories = db.prepare(`SELECT * FROM memory ORDER BY category, created_at DESC`);
 const deleteMemoryById = db.prepare(`DELETE FROM memory WHERE id = ?`);
 const searchMemories = db.prepare(`SELECT * FROM memory WHERE fact LIKE ? ORDER BY created_at DESC LIMIT ?`);
+const insertWhatsAppOutboundJob = db.prepare(
+  `INSERT INTO whatsapp_outbound_jobs
+   (chat_jid, kind, content_json, options_json, status, created_at, updated_at)
+   VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+);
+const selectWhatsAppOutboundJob = db.prepare(`SELECT * FROM whatsapp_outbound_jobs WHERE id = ?`);
+const selectWhatsAppHeldJobs = db.prepare(
+  `SELECT * FROM whatsapp_outbound_jobs WHERE status = 'held' ORDER BY created_at ASC, id ASC LIMIT ?`,
+);
+const updateWhatsAppOutboundStatus = db.prepare(
+  `UPDATE whatsapp_outbound_jobs
+   SET status = ?, reason = ?, attempts = attempts + 1, updated_at = ?, sent_at = ?
+   WHERE id = ?`,
+);
+const recoverWhatsAppPending = db.prepare(
+  `UPDATE whatsapp_outbound_jobs SET status = 'held', reason = ?, updated_at = ? WHERE status = 'pending'`,
+);
+const countWhatsAppSent = db.prepare(
+  `SELECT COUNT(*) AS count FROM whatsapp_outbound_jobs WHERE status = 'sent' AND sent_at >= ?`,
+);
+const selectWhatsAppSafetyState = db.prepare(`SELECT * FROM whatsapp_safety_state WHERE id = 1`);
+const upsertWhatsAppSafetyState = db.prepare(
+  `INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
+   VALUES (1, ?, ?, ?, ?, ?)
+   ON CONFLICT(id) DO UPDATE SET
+     paused = excluded.paused,
+     risk = excluded.risk,
+     score = excluded.score,
+     reasons = excluded.reasons,
+     updated_at = excluded.updated_at`,
+);
+const selectWhatsAppMetricCounts = db.prepare(
+  `SELECT
+     SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+     SUM(CASE WHEN status = 'held' THEN 1 ELSE 0 END) AS held,
+     SUM(CASE WHEN status = 'sent' AND sent_at >= ? THEN 1 ELSE 0 END) AS sentLastHour,
+     SUM(CASE WHEN status = 'sent' AND sent_at >= ? THEN 1 ELSE 0 END) AS sentLastDay,
+     SUM(CASE WHEN status = 'failed' AND updated_at >= ? THEN 1 ELSE 0 END) AS failedLastHour
+   FROM whatsapp_outbound_jobs`,
+);
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -188,6 +238,36 @@ interface SessionSummaryRow {
   topic_tags: string;
 }
 
+interface WhatsAppOutboundRow {
+  id: number;
+  chat_jid: string;
+  kind: string;
+  content_json: string;
+  options_json: string | null;
+  status: WhatsAppOutboundStatus;
+  reason: string | null;
+  attempts: number;
+  created_at: number;
+  updated_at: number;
+  sent_at: number | null;
+}
+
+interface WhatsAppSafetyStateRow {
+  paused: number;
+  risk: WhatsAppRiskLevel;
+  score: number;
+  reasons: string;
+  updated_at: number;
+}
+
+interface WhatsAppMetricCountsRow {
+  pending: number | null;
+  held: number | null;
+  sentLastHour: number | null;
+  sentLastDay: number | null;
+  failedLastHour: number | null;
+}
+
 function parseStringArray(value: string): string[] {
   try {
     const parsed = JSON.parse(value);
@@ -202,6 +282,22 @@ function mergeParticipants(existing: string, sender: string): string {
   const participants = parseStringArray(existing);
   if (!participants.includes(sender)) participants.push(sender);
   return JSON.stringify(participants);
+}
+
+function mapWhatsAppOutboundJob(row: WhatsAppOutboundRow): WhatsAppOutboundJob {
+  return {
+    id: row.id,
+    chatJid: row.chat_jid,
+    kind: row.kind,
+    contentJson: row.content_json,
+    optionsJson: row.options_json,
+    status: row.status,
+    reason: row.reason,
+    attempts: row.attempts,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    sentAt: row.sent_at,
+  };
 }
 
 function finalizeSessionSummary(chatJid: string, session: OpenSessionRow): void {
@@ -396,6 +492,82 @@ export function getDailyGroupActivity(date: string): DailyGroupActivity[] {
   ) as DailyGroupActivity[];
 }
 
+// ── Public API: WhatsApp Safety ─────────────────────────────────────
+
+export function createWhatsAppOutboundJob(
+  chatJid: string,
+  kind: string,
+  contentJson: string,
+  optionsJson: string | null,
+): WhatsAppOutboundJob {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertWhatsAppOutboundJob.run(chatJid, kind, contentJson, optionsJson, ts, ts);
+  return mapWhatsAppOutboundJob(selectWhatsAppOutboundJob.get(result.lastInsertRowid) as WhatsAppOutboundRow);
+}
+
+export function updateWhatsAppOutboundJob(
+  id: number,
+  status: WhatsAppOutboundStatus,
+  reason: string | null = null,
+  sentAt: number | null = null,
+): boolean {
+  const ts = Math.floor(Date.now() / 1000);
+  return updateWhatsAppOutboundStatus.run(status, reason, ts, sentAt, id).changes > 0;
+}
+
+export function getWhatsAppOutboundJob(id: number): WhatsAppOutboundJob | undefined {
+  const row = selectWhatsAppOutboundJob.get(id) as WhatsAppOutboundRow | undefined;
+  return row ? mapWhatsAppOutboundJob(row) : undefined;
+}
+
+export function listWhatsAppHeldJobs(limit: number = 20): WhatsAppOutboundJob[] {
+  return (selectWhatsAppHeldJobs.all(limit) as WhatsAppOutboundRow[]).map(mapWhatsAppOutboundJob);
+}
+
+export function recoverWhatsAppPendingJobs(reason: string): number {
+  const ts = Math.floor(Date.now() / 1000);
+  return recoverWhatsAppPending.run(reason, ts).changes;
+}
+
+export function countWhatsAppSentSince(since: number): number {
+  return (countWhatsAppSent.get(since) as { count: number }).count;
+}
+
+export function getWhatsAppSafetyState(): WhatsAppSafetyState {
+  const row = selectWhatsAppSafetyState.get() as WhatsAppSafetyStateRow;
+  return {
+    paused: row.paused === 1,
+    risk: row.risk,
+    score: row.score,
+    reasons: parseStringArray(row.reasons),
+    updatedAt: row.updated_at,
+  };
+}
+
+export function setWhatsAppSafetyState(
+  paused: boolean,
+  risk: WhatsAppRiskLevel,
+  score: number,
+  reasons: string[],
+): void {
+  upsertWhatsAppSafetyState.run(paused ? 1 : 0, risk, score, JSON.stringify(reasons), Math.floor(Date.now() / 1000));
+}
+
+export function getWhatsAppSafetyMetrics(hourSince: number, daySince: number): WhatsAppSafetyMetrics {
+  const counts = selectWhatsAppMetricCounts.get(hourSince, daySince, hourSince) as WhatsAppMetricCountsRow;
+  const state = getWhatsAppSafetyState();
+  return {
+    pending: counts.pending ?? 0,
+    held: counts.held ?? 0,
+    sentLastHour: counts.sentLastHour ?? 0,
+    sentLastDay: counts.sentLastDay ?? 0,
+    failedLastHour: counts.failedLastHour ?? 0,
+    paused: state.paused,
+    risk: state.risk,
+    score: state.score,
+  };
+}
+
 // ── Public API: Feedback ────────────────────────────────────────────
 
 /** Submit a new feature suggestion or bug report */
@@ -559,6 +731,30 @@ export function createSqliteBackend(): DbBackend {
       saveDailyStats(date, data);
     },
     getDailyGroupActivity: async (date: string) => getDailyGroupActivity(date),
+
+    createWhatsAppOutboundJob: async (chatJid: string, kind: string, contentJson: string, optionsJson: string | null) =>
+      createWhatsAppOutboundJob(chatJid, kind, contentJson, optionsJson),
+    updateWhatsAppOutboundJob: async (
+      id: number,
+      status: WhatsAppOutboundStatus,
+      reason?: string | null,
+      sentAt?: number | null,
+    ) => updateWhatsAppOutboundJob(id, status, reason, sentAt),
+    getWhatsAppOutboundJob: async (id: number) => getWhatsAppOutboundJob(id),
+    listWhatsAppHeldJobs: async (limit?: number) => listWhatsAppHeldJobs(limit),
+    recoverWhatsAppPendingJobs: async (reason: string) => recoverWhatsAppPendingJobs(reason),
+    countWhatsAppSentSince: async (since: number) => countWhatsAppSentSince(since),
+    getWhatsAppSafetyState: async () => getWhatsAppSafetyState(),
+    setWhatsAppSafetyState: async (
+      paused: boolean,
+      risk: WhatsAppRiskLevel,
+      score: number,
+      reasons: string[],
+    ): Promise<void> => {
+      setWhatsAppSafetyState(paused, risk, score, reasons);
+    },
+    getWhatsAppSafetyMetrics: async (hourSince: number, daySince: number) =>
+      getWhatsAppSafetyMetrics(hourSince, daySince),
 
     submitFeedback: async (
       type: 'suggestion' | 'bug',

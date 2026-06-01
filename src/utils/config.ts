@@ -59,6 +59,15 @@ const envSchema = z.object({
 
   // WhatsApp
   BOT_PHONE_NUMBER: z.string().optional(),
+  WHATSAPP_SAFETY_ENABLED: booleanFromEnv.default(true),
+  WHATSAPP_SAFETY_MAX_PER_MINUTE: z.coerce.number().int().min(1).max(100).default(5),
+  WHATSAPP_SAFETY_MAX_PER_HOUR: z.coerce.number().int().min(1).max(5000).default(100),
+  WHATSAPP_SAFETY_MAX_PER_DAY: z.coerce.number().int().min(1).max(50000).default(800),
+  WHATSAPP_SAFETY_MIN_DELAY_MS: z.coerce.number().int().min(0).max(60000).default(2500),
+  WHATSAPP_SAFETY_MAX_DELAY_MS: z.coerce.number().int().min(0).max(120000).default(7000),
+  WHATSAPP_SAFETY_WARMUP_DAYS: z.coerce.number().int().min(0).max(30).default(10),
+  WHATSAPP_SAFETY_DAY1_LIMIT: z.coerce.number().int().min(1).max(5000).default(15),
+  WHATSAPP_SAFETY_AUTO_PAUSE_AT: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
 
   // Feature API keys (all optional — features degrade gracefully)
   GOOGLE_API_KEY: z.string().optional(),
@@ -214,6 +223,11 @@ if (parsed.data.DEMO_TURNSTILE_ENABLED) {
     console.error('❌ DEMO_TURNSTILE_ENABLED=true requires DEMO_TURNSTILE_SITE_KEY and DEMO_TURNSTILE_SECRET_KEY');
     process.exit(1);
   }
+}
+
+if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_DELAY_MS) {
+  console.error('❌ WHATSAPP_SAFETY_MIN_DELAY_MS must be less than or equal to WHATSAPP_SAFETY_MAX_DELAY_MS');
+  process.exit(1);
 }
 
 export const config = {

@@ -55,7 +55,7 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 
 ## Supported Messaging Runtimes
 
-- **WhatsApp:** Baileys runtime (community/experimental transport)
+- **WhatsApp:** Baileys runtime (community/experimental transport) with retained outbound safety controls for personal-account deployments
 - **Slack:** official Events API runtime (with demo mode fallback)
 - **Discord:** official interactions runtime (with demo mode fallback)
 - **Unified demo:** single-service app at `demo.garbanzobot.com` serving both Slack and Discord behavior modes with platform switcher, model transparency UI, and Turnstile protection
@@ -99,7 +99,7 @@ What we intentionally changed in Garbanzo (why it's safer and easier to run for 
 - **Smaller operational surface area:** one shared core pipeline with platform adapters instead of channel-specific reimplementations
 - **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
 - **Group safety defaults:** mention gating + per-group feature allowlists
-- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
+- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on connection loss; idle chat periods are informational
 - **Local-first, inspectable state:** SQLite + explicit backups; health reports backup integrity
 - **Security guardrails in CI:** secrets scan + typecheck + lint + tests (`npm run check`)
 

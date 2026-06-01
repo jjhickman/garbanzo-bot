@@ -8,13 +8,17 @@
  * - Memory usage
  * - Ollama availability
  *
- * Also tracks connection staleness — if no messages are received
- * across any group for 30+ minutes, the connection is considered stale.
+ * Also reports incoming-message inactivity. A quiet group is not sufficient
+ * evidence of a failed WhatsApp session, so inactivity is informational only.
  */
 
 import { createServer, type Server } from 'http';
 import { logger } from './logger.js';
-import { verifyLatestBackupIntegrity, type BackupIntegrityStatus } from '../utils/db.js';
+import {
+  getWhatsAppSafetyMetrics,
+  verifyLatestBackupIntegrity,
+  type BackupIntegrityStatus,
+} from '../utils/db.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -123,6 +127,10 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   const lastMessageAgoSeconds = state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : -1;
   const mem = process.memoryUsage();
   const backup = await getCachedBackupStatus(now);
+  const whatsappSafety = await getWhatsAppSafetyMetrics(
+    Math.floor((now - 60 * 60 * 1000) / 1000),
+    Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+  );
 
   const statusConnected = state.status === 'connected' ? 1 : 0;
   const statusConnecting = state.status === 'connecting' ? 1 : 0;
@@ -174,6 +182,22 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   lines.push('# TYPE garbanzo_backup_integrity_ok gauge');
   lines.push(`garbanzo_backup_integrity_ok ${backupIntegrityOk}`);
 
+  lines.push('# HELP garbanzo_whatsapp_safety_paused Whether protected WhatsApp output is paused.');
+  lines.push('# TYPE garbanzo_whatsapp_safety_paused gauge');
+  lines.push(`garbanzo_whatsapp_safety_paused ${whatsappSafety.paused ? 1 : 0}`);
+
+  lines.push('# HELP garbanzo_whatsapp_outbound_held Number of retained WhatsApp outbound jobs awaiting owner action.');
+  lines.push('# TYPE garbanzo_whatsapp_outbound_held gauge');
+  lines.push(`garbanzo_whatsapp_outbound_held ${whatsappSafety.held}`);
+
+  lines.push('# HELP garbanzo_whatsapp_outbound_sent_last_hour Number of protected WhatsApp sends completed in the last hour.');
+  lines.push('# TYPE garbanzo_whatsapp_outbound_sent_last_hour gauge');
+  lines.push(`garbanzo_whatsapp_outbound_sent_last_hour ${whatsappSafety.sentLastHour}`);
+
+  lines.push('# HELP garbanzo_whatsapp_safety_risk_score Current WhatsApp safety middleware risk score.');
+  lines.push('# TYPE garbanzo_whatsapp_safety_risk_score gauge');
+  lines.push(`garbanzo_whatsapp_safety_risk_score ${whatsappSafety.score}`);
+
   return lines.join('\n') + '\n';
 }
 
@@ -207,9 +231,9 @@ export function startHealthServer(
         }
 
         // `/health` is informational and always 200.
-        // `/health/ready` is actionable: 200 only when connected + not stale.
+        // `/health/ready` is actionable: incoming-message inactivity alone must not fail it.
         if (path === '/health/ready') {
-          const ready = state.status === 'connected' && !stale;
+          const ready = state.status === 'connected';
           res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ ready, status: state.status, stale }));
           return;
@@ -217,6 +241,10 @@ export function startHealthServer(
 
         const mem = process.memoryUsage();
         const backup = await getCachedBackupStatus(now);
+        const whatsappSafety = await getWhatsAppSafetyMetrics(
+          Math.floor((now - 60 * 60 * 1000) / 1000),
+          Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+        );
 
         const body = JSON.stringify({
           status: state.status,
@@ -234,6 +262,7 @@ export function startHealthServer(
             ...backup.status,
             checkedAt: backup.checkedAt,
           },
+          whatsappSafety,
         });
 
         res.writeHead(200, { 'content-type': 'application/json' });

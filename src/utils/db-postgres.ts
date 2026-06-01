@@ -20,6 +20,11 @@ import type {
   ModerationEntry,
   SessionSummaryHit,
   StrikeSummary,
+  WhatsAppOutboundJob,
+  WhatsAppOutboundStatus,
+  WhatsAppRiskLevel,
+  WhatsAppSafetyMetrics,
+  WhatsAppSafetyState,
 } from './db-types.js';
 
 const MAX_MESSAGES_PER_CHAT = 5000;
@@ -37,6 +42,8 @@ const REQUIRED_CORE_TABLES = [
   'daily_stats',
   'feedback',
   'memory',
+  'whatsapp_outbound_jobs',
+  'whatsapp_safety_state',
 ] as const;
 
 type BigintLike = string | number;
@@ -114,6 +121,36 @@ interface MemoryRow {
   category: string;
   source: string;
   created_at: BigintLike;
+}
+
+interface WhatsAppOutboundRow {
+  id: BigintLike;
+  chat_jid: string;
+  kind: string;
+  content_json: string;
+  options_json: string | null;
+  status: WhatsAppOutboundStatus;
+  reason: string | null;
+  attempts: BigintLike;
+  created_at: BigintLike;
+  updated_at: BigintLike;
+  sent_at: BigintLike | null;
+}
+
+interface WhatsAppSafetyStateRow {
+  paused: BigintLike;
+  risk: WhatsAppRiskLevel;
+  score: BigintLike;
+  reasons: unknown;
+  updated_at: BigintLike;
+}
+
+interface WhatsAppMetricCountsRow {
+  pending: BigintLike;
+  held: BigintLike;
+  sent_last_hour: BigintLike;
+  sent_last_day: BigintLike;
+  failed_last_hour: BigintLike;
 }
 
 interface ExistsRow {
@@ -215,6 +252,32 @@ function mapMessage(row: MessageRow): DbMessage {
     sender: row.sender,
     text: row.text,
     timestamp: toNumber(row.timestamp),
+  };
+}
+
+function mapWhatsAppOutboundJob(row: WhatsAppOutboundRow): WhatsAppOutboundJob {
+  return {
+    id: toNumber(row.id),
+    chatJid: row.chat_jid,
+    kind: row.kind,
+    contentJson: row.content_json,
+    optionsJson: row.options_json,
+    status: row.status,
+    reason: row.reason,
+    attempts: toNumber(row.attempts),
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
+    sentAt: row.sent_at === null ? null : toNumber(row.sent_at),
+  };
+}
+
+function mapWhatsAppSafetyState(row: WhatsAppSafetyStateRow): WhatsAppSafetyState {
+  return {
+    paused: toNumber(row.paused) === 1,
+    risk: row.risk,
+    score: toNumber(row.score),
+    reasons: toJsonArray(row.reasons),
+    updatedAt: toNumber(row.updated_at),
   };
 }
 
@@ -924,6 +987,131 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         messageCount: toNumber(row.messagecount),
         activeUsers: toNumber(row.activeusers),
       }));
+    },
+
+    async createWhatsAppOutboundJob(
+      chatJid: string,
+      kind: string,
+      contentJson: string,
+      optionsJson: string | null,
+    ): Promise<WhatsAppOutboundJob> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<WhatsAppOutboundRow>(
+        `INSERT INTO whatsapp_outbound_jobs
+         (chat_jid, kind, content_json, options_json, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'pending', $5, $5)
+         RETURNING *`,
+        [chatJid, kind, contentJson, optionsJson, ts],
+      );
+      return mapWhatsAppOutboundJob(res.rows[0]);
+    },
+
+    async updateWhatsAppOutboundJob(
+      id: number,
+      status: WhatsAppOutboundStatus,
+      reason: string | null = null,
+      sentAt: number | null = null,
+    ): Promise<boolean> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query(
+        `UPDATE whatsapp_outbound_jobs
+         SET status = $1, reason = $2, attempts = attempts + 1, updated_at = $3, sent_at = $4
+         WHERE id = $5`,
+        [status, reason, ts, sentAt, id],
+      );
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async getWhatsAppOutboundJob(id: number): Promise<WhatsAppOutboundJob | undefined> {
+      const res = await pool.query<WhatsAppOutboundRow>(
+        'SELECT * FROM whatsapp_outbound_jobs WHERE id = $1',
+        [id],
+      );
+      const row = res.rows[0];
+      return row ? mapWhatsAppOutboundJob(row) : undefined;
+    },
+
+    async listWhatsAppHeldJobs(limit: number = 20): Promise<WhatsAppOutboundJob[]> {
+      const res = await pool.query<WhatsAppOutboundRow>(
+        `SELECT * FROM whatsapp_outbound_jobs
+         WHERE status = 'held' ORDER BY created_at ASC, id ASC LIMIT $1`,
+        [limit],
+      );
+      return res.rows.map(mapWhatsAppOutboundJob);
+    },
+
+    async recoverWhatsAppPendingJobs(reason: string): Promise<number> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query(
+        `UPDATE whatsapp_outbound_jobs SET status = 'held', reason = $1, updated_at = $2
+         WHERE status = 'pending'`,
+        [reason, ts],
+      );
+      return res.rowCount ?? 0;
+    },
+
+    async countWhatsAppSentSince(since: number): Promise<number> {
+      const res = await pool.query<DbCountRow>(
+        `SELECT COUNT(*)::bigint AS count FROM whatsapp_outbound_jobs
+         WHERE status = 'sent' AND sent_at >= $1`,
+        [since],
+      );
+      return toNumber(res.rows[0]?.count);
+    },
+
+    async getWhatsAppSafetyState(): Promise<WhatsAppSafetyState> {
+      const res = await pool.query<WhatsAppSafetyStateRow>(
+        'SELECT paused, risk, score, reasons, updated_at FROM whatsapp_safety_state WHERE id = 1',
+      );
+      return mapWhatsAppSafetyState(res.rows[0]);
+    },
+
+    async setWhatsAppSafetyState(
+      paused: boolean,
+      risk: WhatsAppRiskLevel,
+      score: number,
+      reasons: string[],
+    ): Promise<void> {
+      const ts = Math.floor(Date.now() / 1000);
+      await pool.query(
+        `INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
+         VALUES (1, $1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (id) DO UPDATE SET
+           paused = EXCLUDED.paused,
+           risk = EXCLUDED.risk,
+           score = EXCLUDED.score,
+           reasons = EXCLUDED.reasons,
+           updated_at = EXCLUDED.updated_at`,
+        [paused ? 1 : 0, risk, score, JSON.stringify(reasons), ts],
+      );
+    },
+
+    async getWhatsAppSafetyMetrics(hourSince: number, daySince: number): Promise<WhatsAppSafetyMetrics> {
+      const counts = await pool.query<WhatsAppMetricCountsRow>(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
+           COUNT(*) FILTER (WHERE status = 'held')::bigint AS held,
+           COUNT(*) FILTER (WHERE status = 'sent' AND sent_at >= $1)::bigint AS sent_last_hour,
+           COUNT(*) FILTER (WHERE status = 'sent' AND sent_at >= $2)::bigint AS sent_last_day,
+           COUNT(*) FILTER (WHERE status = 'failed' AND updated_at >= $1)::bigint AS failed_last_hour
+         FROM whatsapp_outbound_jobs`,
+        [hourSince, daySince],
+      );
+      const safetyState = await pool.query<WhatsAppSafetyStateRow>(
+        'SELECT paused, risk, score, reasons, updated_at FROM whatsapp_safety_state WHERE id = 1',
+      );
+      const state = mapWhatsAppSafetyState(safetyState.rows[0]);
+      const row = counts.rows[0];
+      return {
+        pending: toNumber(row?.pending),
+        held: toNumber(row?.held),
+        sentLastHour: toNumber(row?.sent_last_hour),
+        sentLastDay: toNumber(row?.sent_last_day),
+        failedLastHour: toNumber(row?.failed_last_hour),
+        paused: state.paused,
+        risk: state.risk,
+        score: state.score,
+      };
     },
 
     async submitFeedback(

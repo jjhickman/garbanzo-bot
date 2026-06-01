@@ -9,6 +9,11 @@ import type {
   ModerationEntry,
   StrikeSummary,
   SessionSummaryHit,
+  WhatsAppOutboundJob,
+  WhatsAppOutboundStatus,
+  WhatsAppRiskLevel,
+  WhatsAppSafetyMetrics,
+  WhatsAppSafetyState,
 } from './db-types.js';
 
 /**
@@ -47,6 +52,17 @@ export interface DbBackend {
   // Daily stats archive
   saveDailyStats(date: string, json: string): Promise<void>;
   getDailyGroupActivity(date: string): Promise<DailyGroupActivity[]>;
+
+  // WhatsApp outbound safety and retained manual releases
+  createWhatsAppOutboundJob(chatJid: string, kind: string, contentJson: string, optionsJson: string | null): Promise<WhatsAppOutboundJob>;
+  updateWhatsAppOutboundJob(id: number, status: WhatsAppOutboundStatus, reason?: string | null, sentAt?: number | null): Promise<boolean>;
+  getWhatsAppOutboundJob(id: number): Promise<WhatsAppOutboundJob | undefined>;
+  listWhatsAppHeldJobs(limit?: number): Promise<WhatsAppOutboundJob[]>;
+  recoverWhatsAppPendingJobs(reason: string): Promise<number>;
+  countWhatsAppSentSince(since: number): Promise<number>;
+  getWhatsAppSafetyState(): Promise<WhatsAppSafetyState>;
+  setWhatsAppSafetyState(paused: boolean, risk: WhatsAppRiskLevel, score: number, reasons: string[]): Promise<void>;
+  getWhatsAppSafetyMetrics(hourSince: number, daySince: number): Promise<WhatsAppSafetyMetrics>;
 
   // Feedback
   submitFeedback(type: 'suggestion' | 'bug', sender: string, groupJid: string | null, text: string): Promise<FeedbackEntry>;
