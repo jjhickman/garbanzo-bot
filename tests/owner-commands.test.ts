@@ -6,7 +6,12 @@ describe('owner support commands', () => {
     vi.restoreAllMocks();
   });
 
-  function mockOwnerDeps() {
+  type MockSafety = {
+    metrics: ReturnType<typeof vi.fn>;
+    sendControlText: ReturnType<typeof vi.fn>;
+  };
+
+  function mockOwnerDeps(safety?: MockSafety) {
     vi.doMock('../src/middleware/logger.js', () => ({
       logger: {
         info: vi.fn(),
@@ -41,7 +46,7 @@ describe('owner support commands', () => {
     vi.doMock('../src/features/memory.js', () => ({ handleMemory: vi.fn(() => 'memory') }));
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
     vi.doMock('../src/core/response-router.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
-    vi.doMock('../src/platforms/whatsapp/outbound-safety.js', () => ({ getWhatsAppOutboundSafety: vi.fn(() => undefined) }));
+    vi.doMock('../src/platforms/whatsapp/outbound-safety.js', () => ({ getWhatsAppOutboundSafety: vi.fn(() => safety) }));
     vi.doMock('../src/core/groups-config.js', () => ({
       GROUP_IDS: {
         'g1@g.us': { name: 'General', enabled: true },
@@ -111,7 +116,6 @@ describe('owner support commands', () => {
   });
 
   it('routes WhatsApp safety status through an unqueued owner control response', async () => {
-    mockOwnerDeps();
     const safety = {
       metrics: vi.fn(async () => ({
         paused: true,
@@ -125,9 +129,7 @@ describe('owner support commands', () => {
       })),
       sendControlText: vi.fn(async () => undefined),
     };
-    vi.doMock('../src/platforms/whatsapp/outbound-safety.js', () => ({
-      getWhatsAppOutboundSafety: vi.fn(() => safety),
-    }));
+    mockOwnerDeps(safety);
     const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
     const sock = { sendMessage: vi.fn(async () => undefined) };
 
