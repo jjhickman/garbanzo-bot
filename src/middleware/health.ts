@@ -96,10 +96,19 @@ const healthRateWindow = new Map<string, { windowStart: number; count: number }>
 const BACKUP_CHECK_CACHE_MS = 5 * 60_000;
 let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | null = null;
 
+export function normalizeIp(ip: string): string {
+  return ip.startsWith('::ffff:') ? ip.slice('::ffff:'.length) : ip;
+}
+
 function isHealthRequestRateLimited(ip: string, now: number): boolean {
-  const existing = healthRateWindow.get(ip);
+  const key = normalizeIp(ip);
+  // Opportunistic eviction so the map cannot grow unbounded over long uptimes.
+  for (const [k, v] of healthRateWindow) {
+    if (now - v.windowStart >= HEALTH_RATE_WINDOW_MS) healthRateWindow.delete(k);
+  }
+  const existing = healthRateWindow.get(key);
   if (!existing || now - existing.windowStart >= HEALTH_RATE_WINDOW_MS) {
-    healthRateWindow.set(ip, { windowStart: now, count: 1 });
+    healthRateWindow.set(key, { windowStart: now, count: 1 });
     return false;
   }
 
@@ -342,3 +351,5 @@ function stopMemoryWatchdog(): void {
     memoryTimer = null;
   }
 }
+
+export const __testing = { normalizeIp };
