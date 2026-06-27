@@ -7,18 +7,36 @@ import { scheduleDigest } from './digest.js';
 import type { PlatformRuntime } from '../types.js';
 
 export function createWhatsAppRuntime(): PlatformRuntime {
+  let currentSock: WASocket | null = null;
+  const disposers: Array<() => void> = [];
+
+  function disposeAll(): void {
+    for (const dispose of disposers.splice(0)) {
+      try { dispose(); } catch (err) { logger.warn({ err }, 'WhatsApp registration dispose failed'); }
+    }
+  }
+
   return {
     platform: 'whatsapp',
     async start(): Promise<void> {
       await startConnection((sock: WASocket) => {
+        // New connection generation: tear down the previous generation first.
+        disposeAll();
+        currentSock = sock;
         registerWhatsAppHandlers(sock);
-        registerIntroCatchUp(sock);
-        scheduleDigest(sock);
+        disposers.push(registerIntroCatchUp(sock));
+        disposers.push(scheduleDigest(sock));
         logger.info('🫘 WhatsApp runtime started');
       });
     },
     async stop(): Promise<void> {
-      // No persistent resources to release here yet; present for lifecycle parity.
+      disposeAll();
+      const sock = currentSock;
+      currentSock = null;
+      if (sock) {
+        try { (sock.ev as unknown as { removeAllListeners(): void }).removeAllListeners(); } catch { /* best effort */ }
+        try { sock.end(undefined); } catch { /* best effort */ }
+      }
     },
   };
 }
