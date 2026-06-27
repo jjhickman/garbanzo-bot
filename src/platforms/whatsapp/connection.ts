@@ -30,7 +30,7 @@ type MessageHandler = (sock: WASocket) => void;
  * Create and manage the Baileys WhatsApp connection.
  * Handles auth persistence, reconnection, and lifecycle.
  */
-export async function startConnection(onReady: MessageHandler): Promise<WASocket> {
+export async function startConnection(onReady: MessageHandler, onClosed?: () => void): Promise<WASocket> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -50,7 +50,7 @@ export async function startConnection(onReady: MessageHandler): Promise<WASocket
   const safety = getWhatsAppOutboundSafety(protectedSock);
 
   // Connection lifecycle
-  sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
+  const onConnectionUpdate = (update: Partial<ConnectionState>): void => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
@@ -79,10 +79,11 @@ export async function startConnection(onReady: MessageHandler): Promise<WASocket
       markDisconnected();
       safety?.onDisconnected(statusCode ?? 0);
       safety?.destroy();
+      try { onClosed?.(); } catch (err) { logger.warn({ err }, 'WhatsApp close disposer failed'); }
 
       // Enforce the single-socket invariant: fully retire this socket before any reconnect.
-      try { (sock.ev as unknown as { removeAllListeners(): void }).removeAllListeners(); } catch { /* best effort */ }
-      try { sock.end(undefined); } catch { /* best effort */ }
+      try { sock.ev.off('connection.update', onConnectionUpdate); } catch { /* best effort */ }
+      try { sock.end(undefined); } catch (err) { logger.warn({ err }, 'Socket end during retirement failed'); }
 
       logger.warn(
         { statusCode, shouldReconnect, disconnectCategory: classification.category, message: classification.message },
@@ -92,12 +93,14 @@ export async function startConnection(onReady: MessageHandler): Promise<WASocket
       if (shouldReconnect) {
         const backoffMs = classification.backoffMs ?? 3000;
         logger.info({ backoffMs }, 'Scheduling WhatsApp reconnect');
-        setTimeout(() => startConnection(onReady), backoffMs);
+        setTimeout(() => startConnection(onReady, onClosed), backoffMs);
       } else {
         logger.error('Logged out — runtime paused until WhatsApp is re-linked (delete baileys_auth/ and re-scan QR). Keeping process alive for health monitoring.');
       }
     }
-  });
+  };
+
+  sock.ev.on('connection.update', onConnectionUpdate);
 
   // CRITICAL: persist auth state on every update
   sock.ev.on('creds.update', saveCreds);

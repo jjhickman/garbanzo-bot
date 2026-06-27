@@ -27,7 +27,7 @@ export function createWhatsAppRuntime(): PlatformRuntime {
         disposers.push(registerIntroCatchUp(sock));
         disposers.push(scheduleDigest(sock));
         logger.info('🫘 WhatsApp runtime started');
-      });
+      }, () => disposeAll());
     },
     async stop(): Promise<void> {
       disposeAll();

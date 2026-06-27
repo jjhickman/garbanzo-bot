@@ -32,6 +32,7 @@ export function registerIntroCatchUp(sock: WASocket): () => void {
   }
 
   const groupJid = INTRODUCTIONS_JID;
+  let cancelled = false;
   const cutoffTimestamp = Math.floor(Date.now() / 1000) - (CATCHUP_DAYS * 24 * 60 * 60);
 
   function filterIntroMessages(messages: WAMessage[]): WAMessage[] {
@@ -62,18 +63,20 @@ export function registerIntroCatchUp(sock: WASocket): () => void {
   }
 
   const onHistorySet = async ({ messages }: { messages: WAMessage[] }): Promise<void> => {
+    if (cancelled) return;
     const introMessages = filterIntroMessages(messages);
     if (introMessages.length === 0) return;
     logger.info({ count: introMessages.length, source: 'history-sync' }, 'Found missed introductions — responding');
-    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
+    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages), () => cancelled);
   };
 
   const onUpsert = async ({ messages, type }: { messages: WAMessage[]; type: string }): Promise<void> => {
+    if (cancelled) return;
     if (type === 'notify') return;
     const introMessages = filterIntroMessages(messages);
     if (introMessages.length === 0) return;
     logger.info({ count: introMessages.length, type, source: 'messages-upsert' }, 'Found missed introductions via message sync — responding');
-    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
+    await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages), () => cancelled);
   };
 
   sock.ev.on('messaging-history.set', onHistorySet as never);
@@ -92,6 +95,7 @@ export function registerIntroCatchUp(sock: WASocket): () => void {
   logger.info({ catchupDays: CATCHUP_DAYS }, 'Introduction catch-up listeners registered');
 
   return () => {
+    cancelled = true;
     clearTimeout(historyTimer);
     sock.ev.off('messaging-history.set', onHistorySet as never);
     sock.ev.off('messages.upsert', onUpsert as never);
@@ -121,7 +125,12 @@ export async function triggerIntroCatchUp(sock: WASocket): Promise<string> {
   }
 }
 
-async function processMissedIntros(sock: WASocket, groupJid: string, messages: WAMessage[]): Promise<void> {
+async function processMissedIntros(
+  sock: WASocket,
+  groupJid: string,
+  messages: WAMessage[],
+  isCancelled: () => boolean,
+): Promise<void> {
   for (const msg of messages) {
     const content = normalizeMessageContent(msg.message);
     const text = content?.conversation
@@ -136,6 +145,7 @@ async function processMissedIntros(sock: WASocket, groupJid: string, messages: W
     const response = await handleIntroduction(text, messageId, senderJid, groupJid);
 
     if (response) {
+      if (isCancelled()) return;
       try {
         await sock.sendMessage(groupJid, { text: response }, { quoted: msg });
         logger.info({ messageId, sender: senderJid }, 'Catch-up introduction response sent');
@@ -144,6 +154,7 @@ async function processMissedIntros(sock: WASocket, groupJid: string, messages: W
       }
 
       await sleep(CATCHUP_DELAY_MS);
+      if (isCancelled()) return;
     }
   }
 

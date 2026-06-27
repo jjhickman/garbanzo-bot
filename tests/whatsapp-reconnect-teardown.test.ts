@@ -4,7 +4,12 @@ process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
-const sockets: Array<{ ev: { on: ReturnType<typeof vi.fn>; removeAllListeners: ReturnType<typeof vi.fn> }; end: ReturnType<typeof vi.fn>; updateProfileName: ReturnType<typeof vi.fn>; user?: unknown }> = [];
+const sockets: Array<{
+  ev: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
+  end: ReturnType<typeof vi.fn>;
+  updateProfileName: ReturnType<typeof vi.fn>;
+  user?: unknown;
+}> = [];
 
 vi.mock('@whiskeysockets/baileys', () => {
   const makeWASocket = vi.fn(() => {
@@ -15,7 +20,7 @@ vi.mock('@whiskeysockets/baileys', () => {
       end: vi.fn(),
       ev: {
         on: vi.fn((evt: string, cb: (u: unknown) => void) => { if (evt === 'connection.update') updateCb = cb; }),
-        removeAllListeners: vi.fn(),
+        off: vi.fn(),
       },
       __fire: (u: unknown) => updateCb?.(u),
     };
@@ -45,7 +50,10 @@ describe('reconnect teardown', () => {
     const first = sockets[0];
     // Fire a non-loggedOut close (e.g. 500 -> reconnect)
     (first as never as { __fire: (u: unknown) => void }).__fire({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 500 } } } });
-    expect(first.ev.removeAllListeners).toHaveBeenCalled();
+    expect(sockets.length).toBe(1);
+    expect(first.ev.off).toHaveBeenCalledWith('connection.update', expect.any(Function));
     expect(first.end).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sockets.length).toBe(2);
   });
 });
