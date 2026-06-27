@@ -17,5 +17,8 @@ export function createWhatsAppRuntime(): PlatformRuntime {
         logger.info('🫘 WhatsApp runtime started');
       });
     },
+    async stop(): Promise<void> {
+      // No persistent resources to release here yet; present for lifecycle parity.
+    },
   };
 }

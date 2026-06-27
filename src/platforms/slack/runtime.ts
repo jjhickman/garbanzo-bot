@@ -63,5 +63,8 @@ export function createSlackRuntime(): PlatformRuntime {
       );
       throw new Error('Slack runtime is not configured');
     },
+    async stop(): Promise<void> {
+      // No persistent resources to release here yet; present for lifecycle parity.
+    },
   };
 }
