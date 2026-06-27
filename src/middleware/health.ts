@@ -331,6 +331,7 @@ export function startMemoryWatchdog(): void {
       memoryWarned = false; // reset if memory drops back down
     }
   }, MEMORY_CHECK_INTERVAL_MS);
+  memoryTimer.unref?.();
 
   logger.info({ warnMB: MEMORY_WARN_MB, restartMB: MEMORY_RESTART_MB }, 'Memory watchdog started');
 }

@@ -5,6 +5,17 @@ import { config } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
+import type { PlatformRuntime } from './platforms/types.js';
+
+let activeRuntime: PlatformRuntime | null = null;
+
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | void> {
+  return Promise.race([
+    p,
+    new Promise<void>((resolve) => setTimeout(() => { logger.warn({ label, ms }, 'Shutdown step timed out'); resolve(); }, ms).unref?.()),
+  ]);
+}
 
 async function main(): Promise<void> {
   logger.info('🫘 Garbanzo starting...');
@@ -46,6 +57,7 @@ async function main(): Promise<void> {
   }
 
   const runtime = getPlatformRuntime();
+  activeRuntime = runtime;
   logger.info({ platform: runtime.platform }, 'Starting platform runtime');
   await runtime.start();
   logger.info('🫘 Garbanzo Bean is online and listening');
@@ -73,8 +85,16 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   stopOllamaWarmup();
   stopHealthServer();
 
+  if (activeRuntime) {
+    try {
+      await withTimeout(activeRuntime.stop(), SHUTDOWN_TIMEOUT_MS, 'runtime.stop');
+    } catch (err) {
+      logger.error({ err, signal }, 'Runtime stop failed during shutdown');
+    }
+  }
+
   try {
-    await closeDb();
+    await withTimeout(closeDb(), SHUTDOWN_TIMEOUT_MS, 'closeDb');
   } catch (err) {
     logger.error({ err, signal }, 'Failed to close database cleanly during shutdown');
   }
