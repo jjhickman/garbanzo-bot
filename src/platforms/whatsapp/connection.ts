@@ -79,6 +79,11 @@ export async function startConnection(onReady: MessageHandler): Promise<WASocket
       markDisconnected();
       safety?.onDisconnected(statusCode ?? 0);
       safety?.destroy();
+
+      // Enforce the single-socket invariant: fully retire this socket before any reconnect.
+      try { (sock.ev as unknown as { removeAllListeners(): void }).removeAllListeners(); } catch { /* best effort */ }
+      try { sock.end(undefined); } catch { /* best effort */ }
+
       logger.warn(
         { statusCode, shouldReconnect, disconnectCategory: classification.category, message: classification.message },
         'Connection closed',
