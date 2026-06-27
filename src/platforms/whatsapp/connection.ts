@@ -30,7 +30,11 @@ type MessageHandler = (sock: WASocket) => void;
  * Create and manage the Baileys WhatsApp connection.
  * Handles auth persistence, reconnection, and lifecycle.
  */
-export async function startConnection(onReady: MessageHandler, onClosed?: () => void): Promise<WASocket> {
+export async function startConnection(
+  onReady: MessageHandler,
+  onClosed?: () => void,
+  onSocketCreated?: (sock: WASocket) => void,
+): Promise<WASocket> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -47,6 +51,7 @@ export async function startConnection(onReady: MessageHandler, onClosed?: () => 
     markOnlineOnConnect: false,
   });
   const protectedSock = createProtectedWhatsAppSocket(sock);
+  onSocketCreated?.(protectedSock);
   const safety = getWhatsAppOutboundSafety(protectedSock);
 
   // Connection lifecycle
@@ -93,7 +98,7 @@ export async function startConnection(onReady: MessageHandler, onClosed?: () => 
       if (shouldReconnect) {
         const backoffMs = classification.backoffMs ?? 3000;
         logger.info({ backoffMs }, 'Scheduling WhatsApp reconnect');
-        setTimeout(() => startConnection(onReady, onClosed), backoffMs);
+        setTimeout(() => startConnection(onReady, onClosed, onSocketCreated), backoffMs);
       } else {
         logger.error('Logged out — runtime paused until WhatsApp is re-linked (delete baileys_auth/ and re-scan QR). Keeping process alive for health monitoring.');
       }

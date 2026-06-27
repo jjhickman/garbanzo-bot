@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
+process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
+process.env.AI_PROVIDER_ORDER ??= 'openrouter';
+
 describe('memory watchdog does not block exit', () => {
   afterEach(() => vi.restoreAllMocks());
   it('calls unref() on its interval', async () => {

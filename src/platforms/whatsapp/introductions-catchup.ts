@@ -132,6 +132,8 @@ async function processMissedIntros(
   isCancelled: () => boolean,
 ): Promise<void> {
   for (const msg of messages) {
+    if (isCancelled()) return;
+
     const content = normalizeMessageContent(msg.message);
     const text = content?.conversation
       ?? content?.extendedTextMessage?.text
@@ -145,7 +147,6 @@ async function processMissedIntros(
     const response = await handleIntroduction(text, messageId, senderJid, groupJid);
 
     if (response) {
-      if (isCancelled()) return;
       try {
         await sock.sendMessage(groupJid, { text: response }, { quoted: msg });
         logger.info({ messageId, sender: senderJid }, 'Catch-up introduction response sent');
@@ -154,7 +155,6 @@ async function processMissedIntros(
       }
 
       await sleep(CATCHUP_DELAY_MS);
-      if (isCancelled()) return;
     }
   }
 

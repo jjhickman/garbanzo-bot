@@ -22,12 +22,13 @@ export function createWhatsAppRuntime(): PlatformRuntime {
       await startConnection((sock: WASocket) => {
         // New connection generation: tear down the previous generation first.
         disposeAll();
-        currentSock = sock;
         registerWhatsAppHandlers(sock);
         disposers.push(registerIntroCatchUp(sock));
         disposers.push(scheduleDigest(sock));
         logger.info('🫘 WhatsApp runtime started');
-      }, () => disposeAll());
+      }, () => disposeAll(), (sock) => {
+        currentSock = sock;
+      });
     },
     async stop(): Promise<void> {
       disposeAll();
