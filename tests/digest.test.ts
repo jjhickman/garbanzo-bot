@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('daily digest formatting', () => {
   beforeEach(() => {
@@ -70,5 +70,20 @@ describe('daily digest formatting', () => {
 
     expect(out).toContain('No group activity recorded today');
     expect(out).toContain('0 messages across 0 groups');
+  });
+});
+
+describe('scheduleDigest disposer', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('cancel() clears the pending timer so no digest fires', async () => {
+    vi.useFakeTimers();
+    const { scheduleDigest } = await import('../src/platforms/whatsapp/digest.js');
+    const sock = { sendMessage: vi.fn().mockResolvedValue(undefined) };
+    const cancel = scheduleDigest(sock as never);
+    expect(typeof cancel).toBe('function');
+    cancel();
+    await vi.advanceTimersByTimeAsync(25 * 60 * 60 * 1000); // advance >24h
+    expect(sock.sendMessage).not.toHaveBeenCalled();
   });
 });

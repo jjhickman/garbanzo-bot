@@ -11,22 +11,35 @@ const DIGEST_HOUR = 21; // 9 PM local time
  * Schedule the daily digest. Call once at startup.
  * Automatically reschedules after each digest send.
  */
-export function scheduleDigest(sock: WASocket): void {
-  const msUntilDigest = msUntilHour(DIGEST_HOUR);
-  const hoursUntil = Math.round((msUntilDigest / 1000 / 60 / 60) * 10) / 10;
+export function scheduleDigest(sock: WASocket): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
 
-  logger.info({ nextDigestIn: `${hoursUntil}h`, targetHour: DIGEST_HOUR }, 'Daily digest scheduled');
+  function arm(): void {
+    if (cancelled) return;
+    const msUntilDigest = msUntilHour(DIGEST_HOUR);
+    const hoursUntil = Math.round((msUntilDigest / 1000 / 60 / 60) * 10) / 10;
+    logger.info({ nextDigestIn: `${hoursUntil}h`, targetHour: DIGEST_HOUR }, 'Daily digest scheduled');
 
-  setTimeout(async () => {
-    try {
-      await sendDigest(sock);
-    } catch (err) {
-      logger.error({ err, targetHour: DIGEST_HOUR }, 'Failed to send daily digest');
+    timer = setTimeout(async () => {
+      try {
+        await sendDigest(sock);
+      } catch (err) {
+        logger.error({ err, targetHour: DIGEST_HOUR }, 'Failed to send daily digest');
+      }
+      arm(); // reschedule for tomorrow
+    }, msUntilDigest);
+  }
+
+  arm();
+
+  return () => {
+    cancelled = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
     }
-
-    // Reschedule for tomorrow
-    scheduleDigest(sock);
-  }, msUntilDigest);
+  };
 }
 
 async function sendDigest(sock: WASocket): Promise<string> {
