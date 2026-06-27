@@ -25,10 +25,10 @@ const CATCHUP_DELAY_MS = 5_000;
  * Also listens for 'messages.upsert' with type 'append' which Baileys
  * uses to deliver messages received while offline.
  */
-export function registerIntroCatchUp(sock: WASocket): void {
+export function registerIntroCatchUp(sock: WASocket): () => void {
   if (!INTRODUCTIONS_JID) {
     logger.warn('Introductions group not found in config — skipping catch-up registration');
-    return;
+    return () => {};
   }
 
   const groupJid = INTRODUCTIONS_JID;
@@ -38,21 +38,17 @@ export function registerIntroCatchUp(sock: WASocket): void {
     return messages.filter((msg) => {
       if (msg.key.remoteJid !== groupJid) return false;
       if (msg.key.fromMe) return false;
-
       const ts = msg.messageTimestamp;
       if (!ts) return false;
       const epochSeconds = typeof ts === 'number' ? ts : Number(ts);
       if (epochSeconds < cutoffTimestamp) return false;
-
       const messageId = msg.key.id;
       if (!messageId || hasResponded(messageId)) return false;
-
       const content = normalizeMessageContent(msg.message);
       const text = content?.conversation
         ?? content?.extendedTextMessage?.text
         ?? content?.imageMessage?.caption
         ?? null;
-
       return text !== null && looksLikeIntroduction(text);
     });
   }
@@ -65,49 +61,41 @@ export function registerIntroCatchUp(sock: WASocket): void {
     });
   }
 
-  sock.ev.on('messaging-history.set', async ({ messages }) => {
+  const onHistorySet = async ({ messages }: { messages: WAMessage[] }): Promise<void> => {
     const introMessages = filterIntroMessages(messages);
     if (introMessages.length === 0) return;
-
-    logger.info(
-      { count: introMessages.length, source: 'history-sync' },
-      'Found missed introductions — responding',
-    );
-
+    logger.info({ count: introMessages.length, source: 'history-sync' }, 'Found missed introductions — responding');
     await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
-  });
+  };
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // 'notify' messages are handled by the real-time handler
+  const onUpsert = async ({ messages, type }: { messages: WAMessage[]; type: string }): Promise<void> => {
     if (type === 'notify') return;
-
     const introMessages = filterIntroMessages(messages);
     if (introMessages.length === 0) return;
-
-    logger.info(
-      { count: introMessages.length, type, source: 'messages-upsert' },
-      'Found missed introductions via message sync — responding',
-    );
-
+    logger.info({ count: introMessages.length, type, source: 'messages-upsert' }, 'Found missed introductions via message sync — responding');
     await processMissedIntros(sock, groupJid, sortOldestFirst(introMessages));
-  });
+  };
 
-  // Actively request message history from the Introductions group.
+  sock.ev.on('messaging-history.set', onHistorySet as never);
+  sock.ev.on('messages.upsert', onUpsert as never);
+
   const HISTORY_REQUEST_DELAY_MS = 5_000;
-  setTimeout(async () => {
+  const historyTimer = setTimeout(async () => {
     try {
       logger.info({ group: groupJid }, 'Requesting Introductions group message history');
-      await sock.fetchMessageHistory(
-        50,
-        { remoteJid: groupJid, fromMe: false, id: '' },
-        Math.floor(Date.now() / 1000),
-      );
+      await sock.fetchMessageHistory(50, { remoteJid: groupJid, fromMe: false, id: '' }, Math.floor(Date.now() / 1000));
     } catch (err) {
       logger.warn({ err, groupJid }, 'Failed to request message history — catch-up will rely on passive sync');
     }
   }, HISTORY_REQUEST_DELAY_MS);
 
   logger.info({ catchupDays: CATCHUP_DAYS }, 'Introduction catch-up listeners registered');
+
+  return () => {
+    clearTimeout(historyTimer);
+    sock.ev.off('messaging-history.set', onHistorySet as never);
+    sock.ev.off('messages.upsert', onUpsert as never);
+  };
 }
 
 /**
