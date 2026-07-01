@@ -41,10 +41,11 @@ LABEL org.opencontainers.image.licenses="https://prosperitylicense.com/versions/
 
 # dumb-init: proper PID 1 signal handling (SIGTERM → graceful shutdown)
 # ffmpeg: video frame extraction for Claude Vision
-# yt-dlp: YouTube audio download for transcription
+# yt-dlp: YouTube audio download for transcription (installed via pip — the Alpine
+#   edge/community package no longer resolves against the stable base and broke the build)
 # curl: health check probe
-RUN apk add --no-cache dumb-init ffmpeg curl \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community yt-dlp
+RUN apk add --no-cache dumb-init ffmpeg curl python3 py3-pip \
+    && pip install --no-cache-dir --break-system-packages yt-dlp
 
 WORKDIR /app
 
