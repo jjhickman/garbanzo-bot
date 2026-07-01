@@ -70,3 +70,14 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
   skipped without one, so the Postgres backend is guarded here by typecheck + `db-shared-layer` unit
   tests + independent review. Run it against a real Postgres in CI to exercise the extracted mappers
   end-to-end.
+
+## Post-release deploy fixes (v0.2.x — surfaced during a real Raspberry Pi deploy)
+
+| Item | Status |
+|------|--------|
+| **WhatsApp `515` (restartRequired) treated as fatal** — `baileys-antiban`'s `classifyDisconnect(515)` returns `shouldReconnect:false`, so the first QR link never completed (phone hung on "Logging in…"). `515` is the normal post-pairing reconnect signal. | ✅ Fixed — v0.2.2 (`connection.ts` reconnects on `DisconnectReason.restartRequired`; 401/loggedOut still pauses) |
+| **Docker image build broken** — Alpine `edge/community` `yt-dlp` no longer resolves against the `node:25-alpine` base. | ✅ Fixed — v0.2.1 (install `yt-dlp` via `pip --break-system-packages`) |
+| **Wizard `config/groups.json` ignored in Docker** — config was baked into the image, so host edits didn't apply. | ✅ Fixed — host `config/groups.json` bind-mounted read-only (edit + restart, no rebuild) |
+| **Operator PII committed** — real phone number + moderator names in `config/groups.json` and test fixtures (also in published images/history). | ✅ Redacted going forward (placeholders); still present in git history + pre-v0.2.x images (separate scrub) |
+| **Release runs always red** — `aquasecurity/trivy-action` pinned to `@0.34.0` (tags are `v`-prefixed), so the scan job failed at setup. | ✅ Fixed — pinned `@v0.36.0`; releases go green |
+| **Headless OpenAI OAuth** — `localhost:1455` redirect can't be reached on a remote host. | ✅ Added `--manual` paste-back to `openai-login.mjs` (no SSH tunnel needed); see README |
