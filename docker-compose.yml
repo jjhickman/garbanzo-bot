@@ -39,11 +39,12 @@ services:
       - baileys_auth:/app/baileys_auth
       # SQLite database + backups
       - garbanzo_data:/app/data
+      # Runtime config from the host (wizard-generated) — overrides the image's
+      # baked-in default so `npm run setup` edits take effect without a rebuild.
+      - ./config/groups.json:/app/config/groups.json:ro
       # Optional: mount local voice models (Piper TTS)
       # Uncomment if you have Piper voice models on the host:
       # - ./data/voices:/app/data/voices:ro
-      # Optional: mount custom groups config without rebuilding
-      # - ./config/groups.json:/app/config/groups.json:ro
 
     # Memory limit — matches the bot's built-in watchdog (exits at 1GB)
     deploy:
