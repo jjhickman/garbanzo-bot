@@ -80,7 +80,14 @@ export async function startConnection(
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const classification = classifyDisconnect(statusCode ?? 0);
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && classification.shouldReconnect;
+      // 515 (restartRequired) is the normal signal WhatsApp sends immediately after
+      // a successful QR scan / pairing: the credentials are valid and the client MUST
+      // reconnect to finish linking. baileys-antiban misclassifies it as fatal, so
+      // override — otherwise the very first link never completes.
+      const isRestartRequired = statusCode === DisconnectReason.restartRequired;
+      const shouldReconnect =
+        statusCode !== DisconnectReason.loggedOut &&
+        (isRestartRequired || classification.shouldReconnect);
 
       markDisconnected();
       markUnlinked();
@@ -98,7 +105,8 @@ export async function startConnection(
       );
 
       if (shouldReconnect) {
-        const backoffMs = classification.backoffMs ?? 3000;
+        // restartRequired should reconnect promptly to complete linking.
+        const backoffMs = isRestartRequired ? 1000 : (classification.backoffMs ?? 3000);
         logger.info({ backoffMs }, 'Scheduling WhatsApp reconnect');
         setTimeout(() => startConnection(onReady, onClosed, onSocketCreated), backoffMs);
       } else {
