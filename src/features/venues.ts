@@ -77,13 +77,14 @@ async function searchPlaces(query: string): Promise<PlaceResult[]> {
 
   const params = new URLSearchParams({
     query: searchQuery,
-    key: config.GOOGLE_API_KEY,
     location: `${BOSTON_LAT},${BOSTON_LNG}`,
     radius: '15000', // 15km radius
   });
 
   try {
     const response = await fetch(`${PLACES_API}?${params}`, {
+      // Key in a header, not the URL query string, so it does not leak into logs/proxies.
+      headers: { 'X-Goog-Api-Key': config.GOOGLE_API_KEY },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) return [];
@@ -106,12 +107,13 @@ async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
 
   const params = new URLSearchParams({
     place_id: placeId,
-    key: config.GOOGLE_API_KEY,
     fields: 'name,formatted_address,formatted_phone_number,website,rating,user_ratings_total,price_level,opening_hours,url',
   });
 
   try {
     const response = await fetch(`${DETAILS_API}?${params}`, {
+      // Key in a header, not the URL query string, so it does not leak into logs/proxies.
+      headers: { 'X-Goog-Api-Key': config.GOOGLE_API_KEY },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) return null;

@@ -28,7 +28,8 @@ describe('Gemini integration', () => {
     expect(safeReq.provider).toBe('gemini');
     expect(safeReq.model).toBe('gemini-1.5-flash');
     expect(safeReq.endpoint).toContain('generativelanguage.googleapis.com');
-    expect(safeReq.endpoint).toContain('test-key');
+    expect(safeReq.endpoint).not.toContain('test-key');
+    expect(safeReq.headers['x-goog-api-key']).toBe('test-key');
 
     const body = safeReq.body as {
       systemInstruction: { parts: Array<{ text?: string }> };
