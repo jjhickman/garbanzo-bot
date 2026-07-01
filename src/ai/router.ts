@@ -124,11 +124,8 @@ export async function getAIResponse(
     }, 'Routing to cloud providers');
 
     const t0 = Date.now();
-    let aiResult: CloudResponse;
-
+    let aiResult: CloudResponse | null = null;
     let lastProviderError: Error | null = null;
-    let resolved = false;
-    aiResult = { text: '', provider: 'openai', model: '' };
 
     const configuredProviders = providerOrder.filter(isProviderConfigured);
     if (configuredProviders.length === 0) {
@@ -148,7 +145,6 @@ export async function getAIResponse(
         } else {
           aiResult = await callClaude(provider, systemPrompt, query, visionImages);
         }
-        resolved = true;
         break;
       } catch (providerErr) {
         const error = providerErr instanceof Error ? providerErr : new Error(String(providerErr));
@@ -157,7 +153,7 @@ export async function getAIResponse(
       }
     }
 
-    if (!resolved) {
+    if (!aiResult) {
       throw new Error(`All configured cloud providers failed. Last error: ${lastProviderError?.message ?? 'unknown error'}`);
     }
 
