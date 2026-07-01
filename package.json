@@ -1,6 +1,6 @@
 {
   "name": "garbanzo",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Garbanzo Bean — AI chat operations platform with multi-provider LLM routing and integrations",
   "type": "module",
   "main": "dist/index.js",
@@ -57,6 +57,7 @@
     "baileys-antiban": "3.9.0",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
+    "link-preview-js": "^3.2.0",
     "openai": "^6.22.0",
     "pdf-lib": "^1.17.1",
     "pg": "^8.18.0",
