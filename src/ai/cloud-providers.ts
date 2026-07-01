@@ -236,7 +236,15 @@ export function buildOpenAIResponsesRequest(
 
 function parseResponsesApiResponse(data: unknown): string {
   const parsed = ResponsesApiSchema.safeParse(data);
-  if (!parsed.success) return 'No response generated.';
+  // A malformed HTTP-200 payload (backend error object or response-shape drift)
+  // must NOT be treated as a successful reply — throw so the shared caller records
+  // the failure and the router falls back to the next provider in AI_PROVIDER_ORDER.
+  // The schema is permissive (all fields optional), so a body carrying neither
+  // `output_text` nor `output` (e.g. `{ error: 'temporarily_unavailable' }`) is
+  // drift, not a genuine empty reply — distinct from output_text:''/[] or output:[].
+  if (!parsed.success || (parsed.data.output_text === undefined && parsed.data.output === undefined)) {
+    throw new Error('OpenAI Responses payload did not match expected shape');
+  }
 
   if (typeof parsed.data.output_text === 'string') {
     return parsed.data.output_text.trim() || 'No response generated.';

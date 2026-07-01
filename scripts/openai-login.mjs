@@ -13,7 +13,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, chmod } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,6 +79,9 @@ async function exchangeCode(code, codeVerifier) {
 async function writeTokenStore(store) {
   await mkdir(dirname(TOKEN_PATH), { recursive: true });
   await writeFile(TOKEN_PATH, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+  // `mode` only applies when the file is created; chmod ensures a pre-existing
+  // (possibly world/group-readable) token file is tightened on every re-login.
+  await chmod(TOKEN_PATH, 0o600);
 }
 
 async function main() {
@@ -113,11 +116,20 @@ async function main() {
       const returnedState = url.searchParams.get('state');
       const error = url.searchParams.get('error');
 
-      res.writeHead(error || !code ? 400 : 200, { 'content-type': 'text/html; charset=utf-8' });
+      // Decide success/failure (including the CSRF state check) BEFORE rendering,
+      // so a wrong-state callback never shows a false "linked" success page.
+      let failure = null;
+      if (error || !code) {
+        failure = error ?? 'no authorization code returned';
+      } else if (returnedState !== state) {
+        failure = 'State mismatch — aborting for safety.';
+      }
+
+      res.writeHead(failure ? 400 : 200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(
         `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:2rem">` +
-          (error || !code
-            ? `<h1>Login failed</h1><p>${error ?? 'no authorization code returned'}</p>`
+          (failure
+            ? `<h1>Login failed</h1><p>${failure}</p>`
             : `<h1>Garbanzo is linked to ChatGPT ✓</h1><p>You can close this tab and return to the terminal.</p>`) +
           `</body>`,
       );
@@ -125,10 +137,8 @@ async function main() {
       clearTimeout(timer);
       server.close();
 
-      if (error || !code) {
-        rejectPromise(new Error(`Authorization failed: ${error ?? 'no code'}`));
-      } else if (returnedState !== state) {
-        rejectPromise(new Error('State mismatch — aborting for safety.'));
+      if (failure) {
+        rejectPromise(new Error(error || !code ? `Authorization failed: ${error ?? 'no code'}` : failure));
       } else {
         resolvePromise(code);
       }

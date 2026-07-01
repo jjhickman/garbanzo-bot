@@ -76,6 +76,15 @@ describe('callChatGPT auth modes', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('oauth mode throws on a malformed HTTP-200 payload so the router falls over', async () => {
+    config.OPENAI_AUTH_MODE = 'oauth';
+    oauth.getOpenAIAccessToken.mockResolvedValue({ accessToken: 't', accountId: null });
+    // HTTP 200 but the body does not match the Responses schema (backend error / shape drift).
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ error: 'temporarily_unavailable' }));
+
+    await expect(callChatGPT('s', 'u')).rejects.toThrow(/did not match expected shape/);
+  });
+
   it('apikey mode is unchanged (chat/completions, no OAuth token fetch)', async () => {
     config.OPENAI_AUTH_MODE = 'apikey';
     config.OPENAI_API_KEY = 'sk-test';
