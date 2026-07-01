@@ -48,6 +48,15 @@ fingerprint changes, stealth connection behavior, or third-party webhooks from
   persisted `data` volume, while Garbanzo's database remains authoritative for
   job retention and operator controls.
 
+### Follow-on hardening (PR #164 continuation)
+
+- The prior bot-flag was traced to reconnect-lifecycle bugs (zombie sockets +
+  stacking timers), not QR-refresh frequency; the reconnect path now enforces a
+  single live socket per account and disposes per-generation timers/listeners.
+- Account linking moved to a token-gated browser page (`WHATSAPP_LOGIN_MODE`,
+  default `web`); QR rotation within one attempt is not a reconnect and is safe.
+  See `docs/IMPROVEMENTS.md` for the full audit status.
+
 ## Deployment Gate
 
 Deployment and QR/account linking must not proceed until the dedicated phone

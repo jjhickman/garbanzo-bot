@@ -840,6 +840,7 @@ Repo guardrails are configured under `.github/`:
 - [ROADMAP.md](docs/ROADMAP.md) — Product milestones and release direction
 - [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md) — Ready-to-post launch and feature snippets
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
+- [IMPROVEMENTS.md](docs/IMPROVEMENTS.md) — Hardening audit status (reliability/security/DX, done + deferred)
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
