@@ -64,6 +64,33 @@ Copy `.env.example` to `.env` and configure:
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 
+## WhatsApp outbound safety (anti-ban)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `WHATSAPP_SAFETY_ENABLED` | `true` | Enables the outbound safety layer for WhatsApp sends. |
+| `WHATSAPP_SAFETY_MAX_PER_MINUTE` | `5` | Per-minute outbound rate cap. |
+| `WHATSAPP_SAFETY_MAX_PER_HOUR` | `100` | Per-hour outbound rate cap. |
+| `WHATSAPP_SAFETY_MAX_PER_DAY` | `2000` | Per-day outbound rate cap. |
+| `WHATSAPP_SAFETY_MIN_DELAY_MS` | `2500` | Minimum inter-message delay in milliseconds. |
+| `WHATSAPP_SAFETY_MAX_DELAY_MS` | `7000` | Maximum inter-message delay in milliseconds. |
+| `WHATSAPP_SAFETY_WARMUP_DAYS` | `10` | Number of days a newly linked account follows the warm-up ramp. |
+| `WHATSAPP_SAFETY_DAY1_LIMIT` | `2000` | First-day warm-up cap before ramp growth is applied. |
+| `WHATSAPP_SAFETY_AUTO_PAUSE_AT` | `medium` | Risk level that automatically pauses outbound WhatsApp sends. |
+
+Two independent gates can stop outbound WhatsApp sends. The warm-up ramp starts
+at `WHATSAPP_SAFETY_DAY1_LIMIT` and grows by `day1Limit * growthFactor^day`,
+then graduates to unlimited after `WHATSAPP_SAFETY_WARMUP_DAYS`. The rate
+limiter separately enforces the per-minute, per-hour, and per-day caps plus the
+minimum/maximum inter-message delay. The effective daily cap is the lower of the
+warm-up ramp and `WHATSAPP_SAFETY_MAX_PER_DAY`. `WHATSAPP_SAFETY_AUTO_PAUSE_AT`
+auto-pauses outbound sends when risk reaches the configured level.
+
+Loosening or disabling for testing: set `WHATSAPP_SAFETY_WARMUP_DAYS=0` to skip
+the warm-up ramp, raise the rate caps for a higher test ceiling, or set
+`WHATSAPP_SAFETY_ENABLED=false` to turn off rate limits, warm-up, and auto-pause.
+Only disable the full safety layer on an established number.
+
 ## AI Routing Profiles (Examples)
 
 Cost-optimized routing (fast + affordable cloud-first):
