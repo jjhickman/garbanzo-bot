@@ -59,6 +59,8 @@ const envSchema = z.object({
 
   // WhatsApp
   BOT_PHONE_NUMBER: z.string().optional(),
+  WHATSAPP_LOGIN_MODE: z.enum(['web', 'terminal', 'both']).default('web'),
+  WHATSAPP_LOGIN_TOKEN: z.string().optional(),
   WHATSAPP_SAFETY_ENABLED: booleanFromEnv.default(true),
   WHATSAPP_SAFETY_MAX_PER_MINUTE: z.coerce.number().int().min(1).max(100).default(5),
   WHATSAPP_SAFETY_MAX_PER_HOUR: z.coerce.number().int().min(1).max(5000).default(100),
