@@ -8,10 +8,15 @@ Copy `.env.example` to `.env` and configure:
 |----------|----------|---------|
 | `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp`, `slack`, `discord`, `teams`) |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
-| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `bedrock,gemini,openai,openrouter,anthropic`) |
-| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
+| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (default: `anthropic,openai`) |
+| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-5-20251001`) |
+| `ANTHROPIC_PRICING_INPUT_PER_M` | No | Anthropic input pricing (USD per 1M tokens, for cost tracking; default `1.0` = Haiku 4.5) |
+| `ANTHROPIC_PRICING_OUTPUT_PER_M` | No | Anthropic output pricing (USD per 1M tokens; default `5.0` = Haiku 4.5) |
+| `ANTHROPIC_PROMPT_CACHING` | No | Mark the static persona system prompt cacheable so repeat calls read it at ~10% input price (default: `true`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
-| `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-4.1`; oauth mode uses a ChatGPT-backend slug) |
+| `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-5.4-mini`; oauth mode uses a ChatGPT-backend slug) |
+| `OPENAI_PRICING_INPUT_PER_M` | No | OpenAI input pricing (USD per 1M tokens; default `0.75` = gpt-5.4-mini) |
+| `OPENAI_PRICING_OUTPUT_PER_M` | No | OpenAI output pricing (USD per 1M tokens; default `4.5` = gpt-5.4-mini) |
 | `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |
 | `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
 | `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
@@ -105,8 +110,8 @@ Quality-prioritized routing (high-complexity prompts first):
 
 ```bash
 AI_PROVIDER_ORDER=anthropic,openai,gemini,openrouter
-ANTHROPIC_MODEL=claude-sonnet-4-5-20250514
-OPENAI_MODEL=gpt-4.1
+ANTHROPIC_MODEL=claude-sonnet-5
+OPENAI_MODEL=gpt-5.4
 ```
 
 Hybrid local/cloud routing (keep simple prompts local):

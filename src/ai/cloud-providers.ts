@@ -117,7 +117,12 @@ export function buildProviderRequest(
       body: {
         model: config.ANTHROPIC_MODEL,
         max_tokens: config.CLOUD_MAX_TOKENS,
-        system: systemPrompt,
+        // The persona system prompt is static across calls; mark it cacheable so
+        // repeat calls read it at ~10% of base input price (ignored by the API
+        // when below the model's cache minimum, so it's safe to always request).
+        system: config.ANTHROPIC_PROMPT_CACHING
+          ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
+          : systemPrompt,
         messages: [{ role: 'user', content: buildAnthropicUserContent(userMessage, visionImages) }],
       },
       parser: parseAnthropicResponse,

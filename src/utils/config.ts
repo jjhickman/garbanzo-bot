@@ -37,10 +37,18 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   // Comma-separated provider priority order, eg: "openrouter,anthropic,openai,gemini,bedrock"
-  AI_PROVIDER_ORDER: z.string().default('openrouter,anthropic,openai'),
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-5-20250514'),
+  AI_PROVIDER_ORDER: z.string().default('anthropic,openai'),
+  ANTHROPIC_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Anthropic pricing (USD per 1M tokens) for cost tracking — default: Claude Haiku 4.5 ($1/$5).
+  ANTHROPIC_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(1.0),
+  ANTHROPIC_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(5.0),
+  // Cache the (static) persona system prompt so repeat calls read it at 10% of input price.
+  ANTHROPIC_PROMPT_CACHING: booleanFromEnv.default(true),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
-  OPENAI_MODEL: z.string().default('gpt-4.1'),
+  OPENAI_MODEL: z.string().default('gpt-5.4-mini'),
+  // OpenAI pricing (USD per 1M tokens) for cost tracking — default: gpt-5.4-mini ($0.75/$4.50).
+  OPENAI_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.75),
+  OPENAI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(4.5),
   // apikey (default): api.openai.com with OPENAI_API_KEY. oauth (EXPERIMENTAL,
   // ToS-grey): "Sign in with ChatGPT" via `npm run openai:login`, calls the
   // ChatGPT backend. Always falls back to the next provider on failure.
