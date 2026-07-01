@@ -144,6 +144,15 @@ describe('WhatsApp browser login server', () => {
     await expectUnauthorized(await fetch(`${baseUrl}/whatsapp/login?token=wrong`));
   });
 
+  it('returns 401 when the expected token is empty and the page token is missing', async () => {
+    const blankTokenServer = await startLoginServer('');
+    try {
+      await expectUnauthorized(await fetch(`${blankTokenServer.baseUrl}/whatsapp/login`));
+    } finally {
+      await blankTokenServer.close();
+    }
+  });
+
   it('returns 401 when the stream token is missing or wrong', async () => {
     const { baseUrl } = await server();
 
@@ -186,6 +195,24 @@ describe('WhatsApp browser login server', () => {
     expect(qrEvent.qrDataUrl).toMatch(/^data:image\/png;base64,/);
 
     markLinked();
+    await expect(stream.nextEvent()).resolves.toEqual({ state: 'linked', qrDataUrl: null });
+
+    await stream.cancel();
+  });
+
+  it('streams rapid QR and linked updates in store order', async () => {
+    const { baseUrl } = await server();
+    const stream = await openLoginStream(`${baseUrl}/whatsapp/login/stream?token=${TOKEN}`);
+
+    await expect(stream.nextEvent()).resolves.toEqual({ state: 'pending', qrDataUrl: null });
+
+    publishQr('x');
+    markLinked();
+
+    const qrEvent = await stream.nextEvent();
+    expect(qrEvent.state).toBe('pending');
+    expect(qrEvent.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+
     await expect(stream.nextEvent()).resolves.toEqual({ state: 'linked', qrDataUrl: null });
 
     await stream.cancel();

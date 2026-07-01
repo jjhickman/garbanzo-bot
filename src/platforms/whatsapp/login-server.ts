@@ -79,7 +79,10 @@ function parseRequestUrl(req: IncomingMessage): URL | null {
 }
 
 function isAuthorized(providedToken: string | null, expectedToken: string): boolean {
-  const provided = Buffer.from(providedToken ?? '');
+  if (providedToken === null) return false;
+  if (expectedToken.length === 0) return false;
+
+  const provided = Buffer.from(providedToken);
   const expected = Buffer.from(expectedToken);
   if (provided.length !== expected.length) return false;
 
@@ -89,6 +92,7 @@ function isAuthorized(providedToken: string | null, expectedToken: string): bool
 async function writeLoginStream(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let closed = false;
   let unsubscribe: (() => void) | null = null;
+  let writeChain = Promise.resolve();
 
   const close = (): void => {
     if (closed) return;
@@ -105,11 +109,18 @@ async function writeLoginStream(req: IncomingMessage, res: ServerResponse): Prom
   res.setHeader('connection', 'keep-alive');
   res.flushHeaders?.();
 
-  await sendSnapshot(res, getSnapshot(), () => closed);
+  const enqueueSnapshot = (snapshot: LoginSnapshot): Promise<void> => {
+    writeChain = writeChain
+      .then(() => sendSnapshot(res, snapshot, () => closed))
+      .catch(() => undefined);
+    return writeChain;
+  };
+
+  await enqueueSnapshot(getSnapshot());
   if (closed) return;
 
   unsubscribe = subscribe((snapshot) => {
-    void sendSnapshot(res, snapshot, () => closed);
+    void enqueueSnapshot(snapshot);
   });
 }
 
