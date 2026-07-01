@@ -31,6 +31,26 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 | AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
 | Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
 
+### OpenAI: API key vs. "Sign in with ChatGPT" (experimental)
+
+OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
+
+- **`apikey` (default):** standard `OPENAI_API_KEY` against `api.openai.com`. Recommended.
+- **`oauth` (experimental):** use a ChatGPT (Plus/Pro) subscription instead of an API key.
+
+  ```bash
+  npm run openai:login   # opens the browser, links your ChatGPT account
+  # then set OPENAI_AUTH_MODE=oauth and include "openai" in AI_PROVIDER_ORDER
+  ```
+
+  > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
+  > OAuth client to call OpenAI's private ChatGPT backend, can break without
+  > notice, and is **not validated end-to-end**. It is isolated and always falls
+  > back to the next provider in `AI_PROVIDER_ORDER` on any failure — never make
+  > it your only provider. Tokens are stored in `data/openai-oauth.json`
+  > (gitignored, mode `0600`). In oauth mode `OPENAI_MODEL` must be a
+  > ChatGPT-backend model slug, not an API model name.
+
 ## AI Capabilities
 
 - Mention-driven AI responses for group chat (`@garbanzo`) with context continuity
@@ -469,7 +489,8 @@ Copy `.env.example` to `.env` and configure:
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `bedrock,gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
-| `OPENAI_MODEL` | No | OpenAI fallback model override (default: `gpt-4.1`) |
+| `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-4.1`; oauth mode uses a ChatGPT-backend slug) |
+| `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |
 | `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
 | `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
 | `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
