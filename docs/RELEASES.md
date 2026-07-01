@@ -153,12 +153,12 @@ npm run release:deploy:verify -- --version=0.1.9 --rollback-version=0.1.8
 
 If a deploy introduces problems, roll back to the last known-good release tag.
 
-1. Identify the prior healthy version (example: `0.1.8`).
+1. Identify the prior healthy version (example: `0.2.1`).
 2. Redeploy with that version:
 
 ```bash
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.2.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.2.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 3. Verify health and readiness:
