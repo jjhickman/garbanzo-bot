@@ -1,165 +1,76 @@
 # Garbanzo
 > Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
+![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
 [![Quality Gate](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/ci.yml)
-[![Automation Guard](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml/badge.svg?branch=main)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/automation-guard.yml)
-[![Release Docker](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-docker.yml/badge.svg)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-docker.yml)
-[![Release Native Binaries](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-native-binaries.yml/badge.svg)](https://github.com/jjhickman/garbanzo-bot/actions/workflows/release-native-binaries.yml)
 [![Docker Hub](https://img.shields.io/docker/v/jjhickman/garbanzo?label=dockerhub)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
-[![Secrets Scan](https://img.shields.io/badge/secrets-gitleaks%20enforced-success)](scripts/audit-secrets.sh)
-[![Dependency Audit](https://img.shields.io/badge/dependencies-npm%20audit%20in%20check-success)](package.json)
-
-![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 Garbanzo is an AI chat operations platform for communities and small teams. It combines multi-provider LLM routing, practical automations, and Docker-first deployment so you can run useful AI workflows directly in group chat.
 
-## AI Providers and Routing
+## Highlights
+- Multi-provider LLM routing with Claude, OpenAI, Gemini, Bedrock, OpenRouter, failover, and optional local Ollama for low-cost/simple traffic.
+- Community workflows for introductions, summaries, events, polls, recommendations, feedback, memory, and owner digests.
+- Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs.
+- WhatsApp-first runtime with browser login, plus Slack and Discord scaffolds with demo modes.
+- Operational guardrails: health/readiness endpoints, backups, retry queue, moderation review, rate limits, and per-group feature allowlists.
+- Docker-first deployment with SQLite by default and Postgres support for semantic session retrieval.
 
-- **Multi-provider cloud failover:** route across Claude, OpenAI, Gemini, Bedrock, and OpenRouter with configurable priority (`AI_PROVIDER_ORDER`)
-- **Hybrid cloud + local mode:** use Ollama for low-cost/simple requests while reserving cloud models for high-complexity prompts
-- **Per-provider model control:** set explicit model overrides (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `BEDROCK_MODEL_ID`)
-- **Cost-aware operations:** token and pricing fields support practical cost tracking and routing decisions
+## See it in action
+A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
 
-| Provider | Primary Strength | Typical Role in Routing |
-|----------|------------------|-------------------------|
-| Anthropic Claude | nuanced reasoning, long-form quality | quality-first primary or complex fallback |
-| OpenAI | broad capability and tool reliability | balanced primary or secondary |
-| Gemini | speed and cost efficiency | fast primary for high-volume traffic |
-| OpenRouter | model marketplace flexibility | portability/fallback layer |
-| AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
-| Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
+### Help + command discovery
+In a busy group chat, "help" should be fast, readable, and copy/pasteable.
+<p align="center">
+  <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Help + command discovery" />
+</p>
 
-### OpenAI: API key vs. "Sign in with ChatGPT" (experimental)
+### Introductions welcome
+Introductions are the one place Garbanzo replies without needing an @mention.
+<p align="center">
+  <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Introductions welcome" />
+</p>
 
-OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
+### Weather report
+Quick, local weather for planning (default city is configurable).
+<p align="center">
+  <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Weather report" />
+</p>
 
-- **`apikey` (default):** standard `OPENAI_API_KEY` against `api.openai.com`. Recommended.
-- **`oauth` (experimental):** use a ChatGPT (Plus/Pro) subscription instead of an API key.
+### MBTA alerts
+Transit alerts + delays when the group is trying to meet up.
+<p align="center">
+  <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="MBTA alerts" />
+</p>
 
-  ```bash
-  npm run openai:login   # opens the browser, links your ChatGPT account
-  # then set OPENAI_AUTH_MODE=oauth and include "openai" in AI_PROVIDER_ORDER
-  ```
+### Restaurant recommendations
+Local recommendations tuned to Boston-area neighborhoods.
+<p align="center">
+  <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Restaurant recommendations" />
+</p>
 
-  **Headless / remote host (e.g. a Raspberry Pi over SSH).** OpenAI pins the OAuth
-  redirect to `http://localhost:1455`, so on a machine with no local browser, run:
+### Local news
+Quick headlines and links when someone asks what's happening in the city.
+<p align="center">
+  <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Local news" />
+</p>
 
-  ```bash
-  npm run openai:login -- --manual   # or: node scripts/openai-login.mjs --manual
-  ```
+### Book recommendations
+A lightweight example of "community concierge" behavior beyond Q&A.
+<p align="center">
+  <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Book recommendations" />
+</p>
 
-  It prints the sign-in URL — open it in a browser on any machine, authorize, then
-  the browser lands on a dead `localhost:1455/...` page. Copy that URL (or just the
-  `code`) back into the terminal prompt. No `ssh -L` tunnel required. (The default
-  `npm run openai:login` also falls back to this paste prompt if the callback never
-  arrives.) In Docker, the login script isn't in the image — run it on the host to
-  write `data/openai-oauth.json`, then load it into the container's volume:
-  `docker compose cp data/openai-oauth.json garbanzo:/app/data/openai-oauth.json`
-  and `docker compose exec -u root garbanzo chown garbanzo:garbanzo /app/data/openai-oauth.json`.
-
-  > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
-  > OAuth client to call OpenAI's private ChatGPT backend, can break without
-  > notice, and is **not validated end-to-end**. It is isolated and always falls
-  > back to the next provider in `AI_PROVIDER_ORDER` on any failure — never make
-  > it your only provider. Tokens are stored in `data/openai-oauth.json`
-  > (gitignored, mode `0600`). In oauth mode `OPENAI_MODEL` must be a
-  > ChatGPT-backend model slug, not an API model name.
-
-## AI Capabilities
-
-- Mention-driven AI responses for group chat (`@garbanzo`) with context continuity
-- Community memory and profile context to keep recommendations personalized and actionable
-- Moderation signals and owner-safe controls so AI behavior stays useful, not noisy
-- Workflow-friendly command layer for summaries, event planning, recommendations, and structured lookups
-
-## Integrations and Automations
-
-- **Community workflows:** introductions, summaries/catch-up, event enrichment, polls, recommendations, and daily owner digests
-- **Data integrations:** weather, transit (MBTA), news, venues, and books with graceful degradation when keys are missing
-- **Specialized workflows:** D&D rolls/lookups plus character sheet PDF generation
-- **Operational tooling:** health/readiness endpoints, backups, retry queue, rate limits, and release-safe group messaging controls
-
-## Top 5 AI Workflows
-
-- **Catch-up in seconds:** `!summary` and `!catchup` compress noisy chat into actionable context
-- **Plan real meetups faster:** event proposals auto-enrich with weather + transit context
-- **Triage moderation risk:** moderation signals route to owner review without auto-punishing users
-- **Personalize recommendations:** profile memory improves recs for venues, events, and interest-based prompts
-- **Publish member-safe updates:** preview/lint release notes before broadcasting to avoid chat confusion
-
-## Supported Messaging Runtimes
-
-- **WhatsApp:** Baileys runtime (community/experimental transport) with retained outbound safety controls for personal-account deployments
-- **Slack:** official Events API runtime (with demo mode fallback)
-- **Discord:** official interactions runtime (with demo mode fallback)
-- **Unified demo:** single-service app at `demo.garbanzobot.com` serving both Slack and Discord behavior modes with platform switcher, model transparency UI, and Turnstile protection
-- **Teams:** adapter target (roadmap)
-
-## Who This Is For
-
-- Operators who need AI-assisted coordination in busy group chats
-- Small teams that want reliable AI automations without managed-platform lock-in
-- Builders who need an extensible AI bot runtime with real operational guardrails
-
-## What Makes Garbanzo Different
-
-Garbanzo is built as an AI operations layer, not just a transport wrapper.
-
-- **Compared to messaging APIs/SDKs:** APIs handle message transport; Garbanzo ships end-to-end AI workflows and operational controls.
-- **Compared to raw bot libraries:** Garbanzo includes routing, moderation, retries, health checks, setup wizard flows, and release tooling.
-- **Compared to single-provider bots:** Garbanzo supports provider orchestration across Claude/OpenAI/Gemini/Bedrock plus local Ollama.
-- **Compared to generic chat assistants:** Garbanzo is tuned for real group operations (events, summaries, moderation, memory, owner controls).
-
-## Personas
-
-- Default persona: `docs/PERSONA.md` (Garbanzo Bean — warm, direct, Boston-savvy)
-- Slack professional persona: `docs/personas/slack.md` (professional coworker tone for workspace contexts)
-- Optional per-platform persona override: `docs/personas/<platform>.md`
-
-## Lessons From a Prior Tool-Heavy Assistant Stack (Trust & Maturity)
-
-Before Garbanzo, we ran a more ambitious multi-service assistant setup (more services, more automation, and a bigger tool surface). That experience taught a key lesson:
-
-Reliability comes from fewer moving parts and explicit guardrails, not from more integrations.
-
-What we kept (good ideas that translate well to AI community operations):
-
-- A bias toward useful "skills" (weather/transit/events/summaries) rather than generic chat
-- Tooling that makes the bot operationally observable (health endpoints, backups, logs)
-- Cost discipline: explicit routing and fallbacks instead of "just use the biggest model"
-
-What we intentionally changed in Garbanzo (why it's safer and easier to run for group deployments):
-
-- **Smaller operational surface area:** one shared core pipeline with platform adapters instead of channel-specific reimplementations
-- **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
-- **Group safety defaults:** mention gating + per-group feature allowlists
-- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on connection loss; idle chat periods are informational
-- **Local-first, inspectable state:** SQLite + explicit backups; health reports backup integrity
-- **Security guardrails in CI:** secrets scan + typecheck + lint + tests (`npm run check`)
-
-## What It Does
-
-Garbanzo runs an AI operations layer inside group chat: it ingests mentions and commands, routes prompts across configured LLM providers, enriches responses with integrations, and executes community workflows with operational guardrails. The default deployment is Docker Compose with persisted auth/runtime state and SQLite data.
-
-## Official Images
-
-- Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
-- GHCR: `ghcr.io/jjhickman/garbanzo`
-- Release tags are published as `vX.Y.Z`, `X.Y.Z`, and `latest` (stable only)
-
-## Support Options
-
-If Garbanzo helps your community, support funds provider integrations, AI workflow improvements, and reliable releases:
-
-- Patreon: https://www.patreon.com/c/garbanzobot
-  - `Bean Sprout` - project updates and roadmap votes
-  - `Steady Simmer` - priority issue triage and monthly office-hours notes
-  - `Kitchen Crew` - onboarding review queue and release planning input
-- GitHub Sponsors: https://github.com/sponsors/jjhickman
+### D&D character sheet generator
+Structured output + a real PDF attachment for tabletop groups.
+<p align="center">
+  <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="D&D character sheet generator" />
+</p>
 
 ## Quick Start
+Requirements: Docker + Docker Compose for the default deployment; Node.js 20+ only for the setup wizard and local development.
 
 ```bash
 # 1. Clone
@@ -173,7 +84,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:0.2.2
+# docker pull jjhickman/garbanzo:0.2.3
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
@@ -188,251 +99,10 @@ curl http://127.0.0.1:3001/health
 
 If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/demo/chat`.
 
-## Local Development (without Docker)
-
-```bash
-npm install
-cp .env.example .env
-# Edit .env and config/groups.json
-npm run dev
-
-# Complete platform linking/auth when prompted.
-# WhatsApp links through a browser page by default — see "WhatsApp Login (Browser)" below.
-```
-
-### WhatsApp Login (Browser)
-
-By default (`WHATSAPP_LOGIN_MODE=web`) WhatsApp links through a small, token-gated
-page on the health server instead of the terminal. On startup the logs print a URL
-like:
-
-```
-http://127.0.0.1:3001/whatsapp/login?token=<token>
-```
-
-Open it (over an SSH tunnel or on the host) and either:
-
-- **Scan QR** — the page shows a live QR that refreshes on its own; scan it from
-  WhatsApp > Settings > Linked Devices. QR rotation within one attempt is normal and
-  does not risk a bot-flag.
-- **Pair with code** — enter the bot's phone number to get an 8-character code, then
-  use WhatsApp > Linked Devices > "Link with phone number."
-
-The page shows "Linked ✓" once connected.
-
-- `WHATSAPP_LOGIN_MODE=terminal` restores the old in-terminal QR; `both` prints both.
-- The login token is generated per run and printed once. Set `WHATSAPP_LOGIN_TOKEN`
-  to pin it (e.g. for scripted access); an operator-set token is never echoed to the
-  logs. The same token also guards `/metrics`, so add `?token=<token>` when scraping.
-- All login routes are bound to `HEALTH_BIND_HOST` (`127.0.0.1` by default).
-
-**Linking a remote/headless host (e.g. a Raspberry Pi over the network).** Two options:
-
-- *SSH tunnel (recommended, keeps the default localhost bind):*
-  ```bash
-  ssh -L 3001:127.0.0.1:3001 pi@garbanzo-host
-  # then open http://127.0.0.1:3001/whatsapp/login?token=<token> on your laptop
-  ```
-- *Direct network exposure:* set `HEALTH_BIND_HOST=0.0.0.0`. On startup the logs
-  then print connectable `http://<LAN-IP>:3001/whatsapp/login` URLs (the machine's
-  LAN address, not `0.0.0.0`). This exposes the linking page — and `/health` +
-  token-gated `/metrics` — to your whole network, guarded only by the login token
-  over plaintext HTTP, so only do it on a trusted LAN. The bot logs a warning when
-  login is bound to a non-loopback host.
-
-### Slack Support
-
-For official Slack runtime:
-
-```bash
-# .env
-MESSAGING_PLATFORM=slack
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-SLACK_CLIENT_ID=...
-SLACK_CLIENT_SECRET=...
-SLACK_REFRESH_TOKEN=...
-SLACK_EVENTS_BIND_HOST=0.0.0.0
-SLACK_EVENTS_PORT=3002
-
-npm run dev
-```
-
-For local pipeline verification without a Slack app:
-
-```bash
-# .env
-MESSAGING_PLATFORM=slack
-SLACK_DEMO=true
-
-npm run dev
-
-# In another terminal
-curl -s -X POST http://127.0.0.1:3002/demo/chat \
-  -H 'content-type: application/json' \
-  -d '{"platform":"slack","text":"@garbanzo !help"}'
-```
-
-### Discord Support
-
-For official Discord runtime:
-
-```bash
-# .env
-MESSAGING_PLATFORM=discord
-DISCORD_BOT_TOKEN=...
-DISCORD_PUBLIC_KEY=...
-DISCORD_INTERACTIONS_BIND_HOST=0.0.0.0
-DISCORD_INTERACTIONS_PORT=3003
-
-npm run dev
-```
-
-For local pipeline verification without a Discord app setup:
-
-```bash
-# .env
-MESSAGING_PLATFORM=discord
-DISCORD_DEMO=true
-
-npm run dev
-
-# In another terminal
-curl -s -X POST http://127.0.0.1:3003/discord/demo \
-  -H 'content-type: application/json' \
-  -d '{"chatId":"C123","senderId":"U123","text":"@garbanzo !help"}'
-```
-
-### Automated / Non-Interactive Setup
-
-Use non-interactive mode for reproducible setup in scripts or CI-like environments:
-
-```bash
-npm run setup -- --non-interactive \
-  --platform=whatsapp \
-  --deploy=docker \
-  --providers=openrouter,openai \
-  --provider-order=openai,openrouter \
-  --profile=events \
-  --features=weather,transit,events,venues,poll,summary \
-  --owner-jid=your_number@s.whatsapp.net \
-  --owner-name="Your Name" \
-  --group-id=120000000000000000@g.us \
-  --group-name="General" \
-  --persona-file=./my-persona.md
-```
-
-Get flag help:
-
-```bash
-npm run setup -- --help
-```
-
-Preview changes without writing files:
-
-```bash
-npm run setup -- --non-interactive --dry-run --platform=whatsapp --providers=openai --profile=lightweight
-```
-
-More recipes: [`docs/SETUP_EXAMPLES.md`](docs/SETUP_EXAMPLES.md)
-
-On first run, Baileys will display a QR code in the terminal. Scan it with WhatsApp (Settings > Linked Devices) to authenticate. Auth state persists in `baileys_auth/` across restarts.
-
-## Demo
-
-A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
-
-### Help + command discovery
-
-In a busy group chat, "help" should be fast, readable, and copy/pasteable.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Help + command discovery" />
-</p>
-
-### Introductions welcome
-
-Introductions are the one place Garbanzo replies without needing an @mention.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Introductions welcome" />
-</p>
-
-### Weather report
-
-Quick, local weather for planning (default city is configurable).
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Weather report" />
-</p>
-
-### MBTA alerts
-
-Transit alerts + delays when the group is trying to meet up.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="MBTA alerts" />
-</p>
-
-### Restaurant recommendations
-
-Local recommendations tuned to Boston-area neighborhoods.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Restaurant recommendations" />
-</p>
-
-### Local news
-
-Quick headlines and links when someone asks what's happening in the city.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Local news" />
-</p>
-
-### Book recommendations
-
-A lightweight example of "community concierge" behavior beyond Q&A.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Book recommendations" />
-</p>
-
-### D&D character sheet generator
-
-Structured output + a real PDF attachment for tabletop groups.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="D&D character sheet generator" />
-</p>
-
-Setup flow (text-only for now):
-
-```bash
-npm run setup
-# follow prompts to set platform, AI provider order/models, and groups
-
-docker compose up -d
-docker compose logs -f garbanzo
-# the logs print a browser login URL; open it to scan the QR or pair with a code
-# (WhatsApp > Settings > Linked Devices). See "WhatsApp Login (Browser)" above.
-```
-
-Health check example:
-
-```bash
-curl http://127.0.0.1:3001/health
-curl http://127.0.0.1:3001/health/ready
-```
+## Table of Contents
+[Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)
 
 ## Features
-
-### AI Provider Integrations
-- Claude (Anthropic/OpenRouter), OpenAI, and Gemini with configurable priority order
-- Optional local Ollama for low-cost/local inference on simple prompts
-- Per-provider model overrides and fallback behavior for reliability
-- Provider-aware token/cost accounting hooks
-
 ### AI Chat Capabilities
 - Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
 - Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
@@ -443,7 +113,6 @@ curl http://127.0.0.1:3001/health/ready
 - Multi-language detection (14 languages) — responds in the user's language
 - Custom per-group persona — different tone per group (casual in General, structured in Events)
 - Context compression — recent messages verbatim, older messages extractively compressed, session summaries for long-range context
-
 ### Community Workflows
 - **Introductions** — AI-powered personal welcomes for new member introductions (no @mention needed)
 - **Welcome messages** — greets new participants when they join a group
@@ -454,31 +123,26 @@ curl http://127.0.0.1:3001/health/ready
 - **Summaries** — `!summary` / `!catchup` for "what did I miss?" recaps
 - **Feedback** — `!suggest`, `!bug`, `!upvote` for community-driven improvements
 - **Daily digest** — owner-only summary of daily bot activity
-
 ### External Integrations
 - **Weather** — `!weather` / `!forecast` via Google Weather API (default: Boston)
 - **MBTA Transit** — `!transit` / `!mbta` for real-time alerts, predictions, schedules
 - **News** — `!news [topic]` via NewsAPI
 - **Venues** — `!venue bars in somerville` via Google Places API
 - **Books** — `!book [title]` via Open Library API
-
 ### D&D 5e
 - **Dice** — `!roll 2d6+3`, `!roll d20`
 - **Lookups** — `!dnd spell fireball`, `!dnd monster goblin`
 - **Character sheets** — `!character elf wizard` generates a filled PDF (official WotC template, levels 1-20)
-
 ### Fun
 - `!trivia` — random or category-specific trivia
 - `!fact` — random fun fact
 - `!today` — this day in history
 - `!icebreaker` — conversation starters (40 curated, Boston-themed)
-
 ### Moderation & Safety
 - Content moderation: regex patterns + OpenAI Moderation API (human-in-the-loop)
 - Strike tracking with soft-mute after threshold
 - Input sanitization: control chars, message length, prompt injection detection
 - All flags sent to owner DM — bot never auto-acts on content
-
 ### Owner Commands (DM only)
 - `!memory add/delete/search` — manage long-term community facts injected into AI context
 - `!feedback` — review pending suggestions and bug reports
@@ -493,395 +157,103 @@ curl http://127.0.0.1:3001/health/ready
 - `!catchup intros` — recent introduction summaries
 
 ## Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp`, `slack`, `discord`, `teams`) |
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
-| `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `bedrock,gemini,openai,openrouter,anthropic`) |
-| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
-| `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
-| `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-4.1`; oauth mode uses a ChatGPT-backend slug) |
-| `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |
-| `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
-| `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
-| `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
-| `BEDROCK_REGION` | Bedrock only | AWS region for Bedrock runtime (default: `us-east-1`) |
-| `BEDROCK_MODEL_ID` | Bedrock only | Bedrock model ID used when provider order includes `bedrock` |
-| `BEDROCK_MAX_TOKENS` | Bedrock only | Max output tokens for Bedrock calls (default: `1024`) |
-| `BEDROCK_PRICING_INPUT_PER_M` | Bedrock only | Bedrock input pricing (USD per 1M tokens, for cost tracking) |
-| `BEDROCK_PRICING_OUTPUT_PER_M` | Bedrock only | Bedrock output pricing (USD per 1M tokens, for cost tracking) |
-| `GOOGLE_API_KEY` | No | Weather + venue search |
-| `MBTA_API_KEY` | No | Transit data (Boston-specific) |
-| `NEWSAPI_KEY` | No | News search |
-| `BRAVE_SEARCH_API_KEY` | No | Brave Search API (venue/web search fallback) |
-| `SLACK_BOT_TOKEN` | Slack only | Official Slack bot token (`xoxb-...`) |
-| `SLACK_SIGNING_SECRET` | Slack only | Slack Events API signing secret (Basic Information -> App Credentials) |
-| `SLACK_BOT_USER_ID` | Optional | Bot user id for mention matching (`U...`) |
-| `SLACK_CLIENT_ID` | Slack rotation | Required for token refresh flow |
-| `SLACK_CLIENT_SECRET` | Slack rotation | Required for token refresh flow |
-| `SLACK_REFRESH_TOKEN` | Slack rotation | Rotating refresh token from OAuth response |
-| `SLACK_TOKEN_STATE_FILE` | Optional | Local persisted token state path (default `data/slack-token-state.json`) |
-| `SLACK_TOKEN_ROTATE_MIN_BUFFER` | Optional | Minutes before expiry to refresh (default `5`) |
-| `DISCORD_BOT_TOKEN` | Discord only | Official Discord bot token |
-| `DISCORD_PUBLIC_KEY` | Discord only | Discord interactions signature public key |
-| `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
-| `DB_DIALECT` | No | Database backend: `sqlite` (default) or `postgres` |
-| `DATABASE_URL` | Postgres only | Full Postgres connection string (alternative to individual `POSTGRES_*` vars) |
-| `POSTGRES_HOST` | Postgres only | Postgres hostname |
-| `POSTGRES_PORT` | Postgres only | Postgres port (default: `5432`) |
-| `POSTGRES_DB` | Postgres only | Postgres database name |
-| `POSTGRES_USER` | Postgres only | Postgres user |
-| `POSTGRES_PASSWORD` | Postgres only | Postgres password |
-| `POSTGRES_SSL` | Postgres only | Enable SSL for Postgres connection (default: `false`) |
-| `POSTGRES_SSL_REJECT_UNAUTHORIZED` | Postgres only | Reject unauthorized SSL certs (default: `false`) |
-| `CONTEXT_SESSION_MEMORY_ENABLED` | No | Enable session memory pipeline (default: `true`) |
-| `CONTEXT_SESSION_GAP_MINUTES` | No | Inactivity gap to close a session (default: `30`) |
-| `CONTEXT_SESSION_MIN_MESSAGES` | No | Minimum messages to summarize a session (default: `4`) |
-| `CONTEXT_SESSION_MAX_RETRIEVED` | No | Max session summaries injected into prompt context (default: `3`) |
-| `CONTEXT_SESSION_SUMMARY_VERSION` | No | Summary algorithm version for cache invalidation (default: `1`) |
-| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `deterministic` (default) or `openai` |
-| `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
-| `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
-| `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
-| `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
-| `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
-| `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
-| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics token instead of generating one per run (guards `/whatsapp/login*` and `/metrics`) |
-| `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
-| `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
-| `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
-
+Copy `.env.example` to `.env`, then set provider credentials, owner identity, health bind options, and optional integration keys. Group names, per-group personas, mention patterns, and feature allowlists live in `config/groups.json`.
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
+Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 
-### AI Routing Profiles (Examples)
+<a id="platforms--login"></a>
 
-Cost-optimized routing (fast + affordable cloud-first):
+## Platforms & Login
+WhatsApp is the default runtime and links through a token-gated browser page on the health server. Slack and Discord have official runtime scaffolds plus local demo modes for pipeline verification without a full app setup.
+Setup details: [docs/PLATFORMS.md](docs/PLATFORMS.md)
 
-```bash
-AI_PROVIDER_ORDER=gemini,openrouter,openai,anthropic
-GEMINI_MODEL=gemini-1.5-flash
-OPENROUTER_MODEL=anthropic/claude-sonnet-4-5
-```
+<a id="ai-providers--routing"></a>
 
-Quality-prioritized routing (high-complexity prompts first):
+## AI Providers & Routing
+- **Multi-provider cloud failover:** route across Claude, OpenAI, Gemini, Bedrock, and OpenRouter with configurable priority (`AI_PROVIDER_ORDER`)
+- **Hybrid cloud + local mode:** use Ollama for low-cost/simple requests while reserving cloud models for high-complexity prompts
+- **Per-provider model control:** set explicit model overrides (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `BEDROCK_MODEL_ID`)
+- **Cost-aware operations:** token and pricing fields support practical cost tracking and routing decisions
 
-```bash
-AI_PROVIDER_ORDER=anthropic,openai,gemini,openrouter
-ANTHROPIC_MODEL=claude-sonnet-4-5-20250514
-OPENAI_MODEL=gpt-4.1
-```
+| Provider | Primary Strength | Typical Role in Routing |
+|----------|------------------|-------------------------|
+| Anthropic Claude | nuanced reasoning, long-form quality | quality-first primary or complex fallback |
+| OpenAI | broad capability and tool reliability | balanced primary or secondary |
+| Gemini | speed and cost efficiency | fast primary for high-volume traffic |
+| OpenRouter | model marketplace flexibility | portability/fallback layer |
+| AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
+| Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
+OpenAI supports `OPENAI_AUTH_MODE=apikey` by default. Experimental `OPENAI_AUTH_MODE=oauth` can sign in with ChatGPT and store tokens in `data/openai-oauth.json`.
+> Warning: OAuth mode is unofficial, uses a private ChatGPT backend, can break without notice, and should never be your only provider.
+Headless/manual auth and Docker token injection: [docs/CONFIGURATION.md#openai-oauth-experimental](docs/CONFIGURATION.md#openai-oauth-experimental)
 
-Hybrid local/cloud routing (keep simple prompts local):
-
-```bash
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-AI_PROVIDER_ORDER=openrouter,gemini,openai
-```
-
-### Group Configuration
-
-Edit `config/groups.json` to map your WhatsApp group IDs:
-
-```json
-{
-  "groups": {
-    "YOUR_GROUP_JID@g.us": {
-      "name": "General",
-      "enabled": true,
-      "requireMention": true,
-      "persona": "Casual and conversational.",
-      "enabledFeatures": ["weather", "transit", "fun"]
-    }
-  },
-  "mentionPatterns": ["@yourbot", "@YourBot"],
-  "admins": {
-    "owner": {
-      "name": "Your Name",
-      "jid": "1YOURNUMBER@s.whatsapp.net"
-    }
-  }
-}
-```
-
-To find your group JIDs, enable `LOG_LEVEL=debug` and check logs when messages arrive.
-
-**Per-group options:**
-- `enabled` — whether the bot responds in this group
-- `requireMention` — if true, bot only responds to @mentions (recommended)
-- `persona` — custom personality hint for this group (injected into Claude prompt)
-- `enabledFeatures` — array of feature names to enable (omit for all features)
-
-> **Docker:** `docker-compose.yml` bind-mounts the host `./config/groups.json`
-> read-only into the container, so your edits take effect on `docker compose
-> restart` with **no image rebuild**. The file must exist on the host (the setup
-> wizard creates it) before `docker compose up`, or Docker will create a directory
-> in its place and the bot will fail to start.
-
-## Adapting for Your Community
-
-Garbanzo was built for Boston, but the architecture is locale-agnostic. Here's what to customize:
-
-### 1. Persona (`docs/PERSONA.md`)
-This file defines the bot's personality and is loaded at runtime into every AI prompt. Replace Boston references with your city, update the voice/tone, and adjust the "community knowledge" section.
-
-### 2. Transit (`src/features/transit.ts`)
-Currently uses the MBTA API. To adapt:
-- Replace the API client with your city's transit API
-- Update station/route aliases in the lookup maps
-- Adjust the response formatting
-
-### 3. Weather (`src/features/weather.ts`)
-Default location is Boston. Change the `DEFAULT_LOCATION` constant to your city.
-
-### 4. Groups (`config/groups.json`)
-Replace all group JIDs and names with your own. Persona hints are per-group.
-
-### 5. Mention Patterns (`config/groups.json`)
-Update `mentionPatterns` to match your bot's name as it appears in WhatsApp.
-
-### 6. Icebreakers (`src/features/fun.ts`)
-The curated icebreaker list is Boston-themed. Replace with your city's landmarks, neighborhoods, and culture.
-
-### 7. Memory Facts (`!memory add`)
-After deploying, use `!memory add` to teach the bot about your community's venues, traditions, and members.
-
-## Architecture
-
-Core/platform separation:
-
-- Core pipeline: `src/core/*` (platform-agnostic processing)
-- Platform runtimes/adapters: `src/platforms/*` (WhatsApp production; others are scaffolds)
-
-Full walkthrough: `docs/ARCHITECTURE.md`
-
-```
-src/
-  index.ts              # Entry point — starts health/maintenance, starts selected platform runtime
-  core/                 # Platform-agnostic pipeline + feature routing
-    process-inbound-message.ts
-    process-group-message.ts
-    response-router.ts
-    groups-config.ts
-    vision.ts
-  platforms/
-    index.ts            # Platform runtime selection
-    whatsapp/           # Baileys runtime + WhatsApp-specific adapters
-    slack/              # Scaffold (not production)
-    discord/            # Placeholder runtime
-    teams/              # Placeholder runtime
-  ai/                   # Local + cloud model routing + providers
-  features/             # Feature handlers (weather, transit, polls, etc.)
-  middleware/           # Health, retry, sanitize, rate limiting, stats, logging
-  utils/                # Config (Zod), db, jid helpers
-config/
-docs/
-tests/
-```
-
-## Stack
-
-- **Runtime:** Node.js 20+ / TypeScript (ES Modules, strict mode)
-- **Messaging:** Adapter-based platform runtime with support for WhatsApp, Slack, Discord, and Teams targets
-- **AI:** Flexible multi-provider routing with configurable cloud priority (`AI_PROVIDER_ORDER`), per-provider model overrides, and optional local Ollama for low-cost/simple traffic
-- **Storage:** SQLite (better-sqlite3, WAL mode, auto-vacuum, nightly backups) or Postgres with pgvector for semantic session retrieval
-- **Validation:** Zod
-- **Logging:** Pino (structured JSON)
-- **Testing:** Vitest (509+ tests)
-- **PDF:** pdf-lib (D&D character sheets)
-
-## Development
+## Deployment
+Default Docker Compose deployment:
 
 ```bash
-npm run dev         # Hot-reload (tsx watch)
-npm run typecheck   # Type-check only
-npm run test        # Run all tests
-npm run lint        # ESLint
-npm run check       # Full pre-commit: secrets + typecheck + lint + test
-npm run release:plan # Dry-run release validation before tagging
-# add -- --clean-artifacts to remove local release artifact folders
-npm run release:checklist -- --version=X.Y.Z # Open release checklist issue
-npm run release:deploy:verify -- --version=X.Y.Z --rollback-version=W.Y.Z
-npm run logs:scan -- ./logs/garbanzo.log --min-level warn
-npm run logs:journal -- --unit garbanzo.service --since "24 hours ago"
-npm run host:lynis -- --install
-npm run host:fail2ban -- --apply
-npm run build       # Compile to dist/
-npm run start       # Production (from dist/)
-```
-
-## Production Deployment
-
-Default: Docker Compose.
-
-```bash
-# Start
 docker compose up -d
-
-# Logs
 docker compose logs -f garbanzo
-
-# Check status
 curl http://127.0.0.1:3001/health
 ```
 
-By default, `docker compose up -d` runs the published `latest` image.
-
-To deploy a specific release image:
-
-```bash
-APP_VERSION=0.2.2 docker compose pull garbanzo
-APP_VERSION=0.2.2 docker compose up -d
-```
-
-Recommended (production) — pin a version and force pulls (prevents accidentally running a stale cached image):
+Pinned production pull:
 
 ```bash
 APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
 APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-Local development (build from source):
+Local development build:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-Cross-platform portable binaries are published on version tags (`v*`) as release assets:
-
-- `garbanzo-linux-x64.tar.gz`
-- `garbanzo-linux-arm64.tar.gz`
-- `garbanzo-macos-arm64.tar.gz`
-- `garbanzo-windows-x64.zip`
-
-Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
-
-If you previously used `garbanzo-bot.service`, migrate to `garbanzo.service`.
-
-The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status.
-
-### Monitoring with Uptime Kuma
-
+Cross-platform portable binaries are published on version tags (`v*`) as release assets. Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
 This is what Garbanzo looks like on a basic Kuma HTTP monitor (tracking `/health`):
-
 <p align="center">
   <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
 </p>
+The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status. Use `/health/ready` for alerting on disconnected or stale chat state. Deep Kuma settings and LAN firewall examples: [docs/INFRASTRUCTURE.md#monitoring--lan-firewall](docs/INFRASTRUCTURE.md#monitoring--lan-firewall)
 
-If your Kuma dashboard is running on another host (for example `nas.local`), expose health on a reachable bind host:
+## Customizing for Your Community
+Garbanzo was built for Boston, but the architecture is locale-agnostic. Customize the persona, transit provider, weather defaults, groups, mention patterns, icebreakers, and memory facts.
+Guide: [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)
 
-```bash
-HEALTH_BIND_HOST=0.0.0.0
-HEALTH_PORT=3001
-```
+<a id="architecture--stack"></a>
 
-Then configure an HTTP monitor in Kuma to check:
+## Architecture & Stack
+Garbanzo separates a platform-agnostic core pipeline from runtime adapters under `src/platforms/*`. It runs on Node.js 20+ and TypeScript ES Modules with Zod validation, Pino structured logging, Vitest tests, and SQLite by default. Postgres with pgvector supports semantic session retrieval for larger deployments.
+Full walkthrough: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-```text
-http://<garbanzo-host>:3001/health
-```
-
-Optional Prometheus scrape (if you enable it):
-
-```text
-http://<garbanzo-host>:3001/metrics
-```
-
-Optional (recommended) second monitor — alert when WhatsApp is disconnected or "connected but deaf":
-
-```text
-http://<garbanzo-host>:3001/health/ready
-```
-
-`/health/ready` returns:
-
-- `200` when connected and not stale
-- `503` when disconnected/connecting or stale
-
-Recommended Kuma monitor settings:
-
-- **Monitor type:** HTTP(s)
-- **Method:** GET
-- **Heartbeat interval:** 30s
-- **Request timeout:** 5s
-- **Retries:** 3
-- **Accepted status codes:** 200-299
-- **Resend interval:** 30m (or your preferred alert noise level)
-
-Suggested setup on `nas.local`:
-
-1. Add monitor name `garbanzo-health` with URL `http://<garbanzo-host>:3001/health`.
-2. Save, then verify response body includes `status`, `stale`, `uptime`, and `backup` keys.
-3. Add your notification channel (Discord, email, Slack, etc.) and run a test notification.
-4. Optional second monitor: keyword check on `"stale":false` if you want alerting on stale chat activity, not just process uptime.
-
-Keep network access restricted to trusted LAN/VPN segments.
-
-If you expose port `3001` on your LAN for external monitoring, restrict it to your monitor host. For Docker deployments, the most reliable place is the `DOCKER-USER` iptables chain (so Docker's own rules can't bypass it):
+## Development
 
 ```bash
-# Allow Uptime Kuma (NAS) to reach /health
-sudo iptables -I DOCKER-USER 1 -i <lan-iface> -p tcp -s 192.168.50.219 --dport 3001 -j ACCEPT
-
-# Drop everyone else on LAN -> 3001
-sudo iptables -I DOCKER-USER 2 -i <lan-iface> -p tcp --dport 3001 -j DROP
+npm run dev          # Hot-reload (tsx watch)
+npm run setup        # Interactive setup wizard
+npm run typecheck    # Type-check only
+npm run lint         # ESLint
+npm run test         # Run all tests
+npm run check        # Full pre-commit: secrets + typecheck + lint + test
+npm run build        # Compile to dist/
+npm run start        # Production (from dist/)
 ```
-
-To persist across reboots on Ubuntu, install and save:
-
-```bash
-sudo apt-get install -y iptables-persistent
-sudo netfilter-persistent save
-```
-
-## Sponsorship and Support
-
-Garbanzo is Apache-2.0 licensed. If it helps your team or community, support development through Patreon or GitHub Sponsors links in this README.
-
-## Main Branch Stability
-
-Repo guardrails are configured under `.github/`:
-
-- `ci.yml` runs `npm run check` on PRs and pushes to `main`
-- `automation-guard.yml` blocks non-Dependabot PRs when open Dependabot PRs exist (unless `allow-open-dependabot` label is used)
-- `CODEOWNERS` requires owner review coverage
-- `pull_request_template.md` enforces verification checklist discipline
-- `dependabot.yml` keeps npm/docker dependencies updated weekly
-- `release-docker.yml` builds and publishes versioned Docker images to GHCR (and optional Docker Hub) on `v*` tags
-- `release-native-binaries.yml` builds and attaches cross-platform native bundles on `v*` tags
-- release Docker workflow runs a smoke test against published image health endpoint
-- `FUNDING.yml` enables sponsorship links in GitHub UI
 
 ## Docs
+Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md)
 
-- [PERSONA.md](docs/PERSONA.md) — Bot personality and voice guidelines
-- [ROADMAP.md](docs/ROADMAP.md) — Product milestones and release direction
-- [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md) — Ready-to-post launch and feature snippets
-- [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
-- [IMPROVEMENTS.md](docs/IMPROVEMENTS.md) — Hardening audit status (reliability/security/DX, done + deferred)
-- [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
-- [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes
-- [RELEASES.md](docs/RELEASES.md) — Versioning, tag flow, and Docker image release process
-- [AWS.md](docs/AWS.md) — Running Garbanzo on AWS (including CDK EC2 bootstrap)
-- [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md) — Session memory and vector retrieval phased implementation spec
-- [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md) — pgvector/Qdrant migration plan
-- [SCALING.md](docs/SCALING.md) — Scaling constraints (Baileys + SQLite) and future path
-- [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md) — Multi-platform roadmap (personas per platform)
-- [CHANGELOG.md](CHANGELOG.md) — Full release history
-- [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
-- [AGENTS.md](AGENTS.md) — Coding agent instructions and conventions
+Operations: [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
 
-## License
+Design & internals: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [IMPROVEMENTS.md](docs/IMPROVEMENTS.md), [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md), [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md), [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md), [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 
-Garbanzo is licensed under [Apache License 2.0](LICENSE).
+## Contributing - Support - License
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Support funds provider integrations, AI workflow improvements, and reliable releases:
 
-- Commercial use is allowed
-- Modification and redistribution are allowed under Apache-2.0 terms
-- Trademark and branding rights are covered separately (see `TRADEMARK.md`)
-
-See `LICENSE_FAQ.md` for a quick guide.
+- Patreon: https://www.patreon.com/c/garbanzobot
+- GitHub Sponsors: https://github.com/sponsors/jjhickman
+Main branch stability:
+- `ci.yml` runs `npm run check` on PRs and pushes to `main`
+- `CODEOWNERS` requires owner review coverage
+- `pull_request_template.md` enforces verification checklist discipline
+- Dependabot and release workflows keep npm, Docker, and published image paths maintained
+Garbanzo is licensed under [Apache License 2.0](LICENSE). See `LICENSE_FAQ.md` for a quick guide.

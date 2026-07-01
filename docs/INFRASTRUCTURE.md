@@ -66,3 +66,73 @@ Start simple and scale based on measured usage:
 - [ ] Backup retention and restore test documented
 - [ ] Secrets managed outside git (`.env`, SSM, or Secrets Manager)
 - [ ] Release rollback command tested (`npm run release:deploy:verify`)
+
+<a id="monitoring--lan-firewall"></a>
+
+## Monitoring & LAN firewall
+
+If your Kuma dashboard is running on another host (for example `nas.local`), expose health on a reachable bind host:
+
+```bash
+HEALTH_BIND_HOST=0.0.0.0
+HEALTH_PORT=3001
+```
+
+Then configure an HTTP monitor in Kuma to check:
+
+```text
+http://<garbanzo-host>:3001/health
+```
+
+Optional Prometheus scrape (if you enable it):
+
+```text
+http://<garbanzo-host>:3001/metrics
+```
+
+Optional (recommended) second monitor — alert when WhatsApp is disconnected or "connected but deaf":
+
+```text
+http://<garbanzo-host>:3001/health/ready
+```
+
+`/health/ready` returns:
+
+- `200` when connected and not stale
+- `503` when disconnected/connecting or stale
+
+Recommended Kuma monitor settings:
+
+- **Monitor type:** HTTP(s)
+- **Method:** GET
+- **Heartbeat interval:** 30s
+- **Request timeout:** 5s
+- **Retries:** 3
+- **Accepted status codes:** 200-299
+- **Resend interval:** 30m (or your preferred alert noise level)
+
+Suggested setup on `nas.local`:
+
+1. Add monitor name `garbanzo-health` with URL `http://<garbanzo-host>:3001/health`.
+2. Save, then verify response body includes `status`, `stale`, `uptime`, and `backup` keys.
+3. Add your notification channel (Discord, email, Slack, etc.) and run a test notification.
+4. Optional second monitor: keyword check on `"stale":false` if you want alerting on stale chat activity, not just process uptime.
+
+Keep network access restricted to trusted LAN/VPN segments.
+
+If you expose port `3001` on your LAN for external monitoring, restrict it to your monitor host. For Docker deployments, the most reliable place is the `DOCKER-USER` iptables chain (so Docker's own rules can't bypass it):
+
+```bash
+# Allow Uptime Kuma (NAS) to reach /health
+sudo iptables -I DOCKER-USER 1 -i <lan-iface> -p tcp -s 192.168.50.219 --dport 3001 -j ACCEPT
+
+# Drop everyone else on LAN -> 3001
+sudo iptables -I DOCKER-USER 2 -i <lan-iface> -p tcp --dport 3001 -j DROP
+```
+
+To persist across reboots on Ubuntu, install and save:
+
+```bash
+sudo apt-get install -y iptables-persistent
+sudo netfilter-persistent save
+```
