@@ -61,8 +61,8 @@ cd garbanzo-bot
 cp .env.example .env
 # edit .env and config/groups.json
 
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 docker compose logs -f garbanzo
 ```

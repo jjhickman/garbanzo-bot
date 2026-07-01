@@ -43,6 +43,22 @@ OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
   # then set OPENAI_AUTH_MODE=oauth and include "openai" in AI_PROVIDER_ORDER
   ```
 
+  **Headless / remote host (e.g. a Raspberry Pi over SSH).** OpenAI pins the OAuth
+  redirect to `http://localhost:1455`, so on a machine with no local browser, run:
+
+  ```bash
+  npm run openai:login -- --manual   # or: node scripts/openai-login.mjs --manual
+  ```
+
+  It prints the sign-in URL — open it in a browser on any machine, authorize, then
+  the browser lands on a dead `localhost:1455/...` page. Copy that URL (or just the
+  `code`) back into the terminal prompt. No `ssh -L` tunnel required. (The default
+  `npm run openai:login` also falls back to this paste prompt if the callback never
+  arrives.) In Docker, the login script isn't in the image — run it on the host to
+  write `data/openai-oauth.json`, then load it into the container's volume:
+  `docker compose cp data/openai-oauth.json garbanzo:/app/data/openai-oauth.json`
+  and `docker compose exec -u root garbanzo chown garbanzo:garbanzo /app/data/openai-oauth.json`.
+
   > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
   > OAuth client to call OpenAI's private ChatGPT backend, can break without
   > notice, and is **not validated end-to-end**. It is isolated and always falls
@@ -157,7 +173,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:0.1.8
+# docker pull jjhickman/garbanzo:0.2.2
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
@@ -600,6 +616,12 @@ To find your group JIDs, enable `LOG_LEVEL=debug` and check logs when messages a
 - `persona` — custom personality hint for this group (injected into Claude prompt)
 - `enabledFeatures` — array of feature names to enable (omit for all features)
 
+> **Docker:** `docker-compose.yml` bind-mounts the host `./config/groups.json`
+> read-only into the container, so your edits take effect on `docker compose
+> restart` with **no image rebuild**. The file must exist on the host (the setup
+> wizard creates it) before `docker compose up`, or Docker will create a directory
+> in its place and the bot will fail to start.
+
 ## Adapting for Your Community
 
 Garbanzo was built for Boston, but the architecture is locale-agnostic. Here's what to customize:
@@ -712,15 +734,15 @@ By default, `docker compose up -d` runs the published `latest` image.
 To deploy a specific release image:
 
 ```bash
-APP_VERSION=0.1.8 docker compose pull garbanzo
-APP_VERSION=0.1.8 docker compose up -d
+APP_VERSION=0.2.2 docker compose pull garbanzo
+APP_VERSION=0.2.2 docker compose up -d
 ```
 
 Recommended (production) — pin a version and force pulls (prevents accidentally running a stale cached image):
 
 ```bash
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.8 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development (build from source):

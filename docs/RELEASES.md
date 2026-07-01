@@ -130,15 +130,15 @@ Notes:
 Set `APP_VERSION` in your `.env` before deploy, then pull and restart:
 
 ```bash
-APP_VERSION=0.1.9 docker compose pull garbanzo
-APP_VERSION=0.1.9 docker compose up -d
+APP_VERSION=0.2.2 docker compose pull garbanzo
+APP_VERSION=0.2.2 docker compose up -d
 ```
 
 Recommended (production) — use `docker-compose.prod.yml` to disable local builds:
 
 ```bash
-APP_VERSION=0.1.9 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.1.9 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 `docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
