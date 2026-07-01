@@ -12,7 +12,8 @@
  * evidence of a failed WhatsApp session, so inactivity is informational only.
  */
 
-import { createServer, type Server } from 'http';
+import { timingSafeEqual } from 'crypto';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { logger } from './logger.js';
 import {
   getWhatsAppSafetyMetrics,
@@ -96,6 +97,12 @@ const healthRateWindow = new Map<string, { windowStart: number; count: number }>
 const BACKUP_CHECK_CACHE_MS = 5 * 60_000;
 let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | null = null;
 
+interface HealthServerOptions {
+  metricsEnabled?: boolean;
+  authToken?: string;
+  extraHandler?: (req: IncomingMessage, res: ServerResponse) => boolean;
+}
+
 export function normalizeIp(ip: string): string {
   return ip.startsWith('::ffff:') ? ip.slice('::ffff:'.length) : ip;
 }
@@ -114,6 +121,16 @@ function isHealthRequestRateLimited(ip: string, now: number): boolean {
 
   existing.count += 1;
   return existing.count > HEALTH_RATE_LIMIT;
+}
+
+function tokenMatches(actual: string | null, expected: string): boolean {
+  if (actual === null) return false;
+
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; status: BackupIntegrityStatus }> {
@@ -213,13 +230,16 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
 export function startHealthServer(
   port: number = 3001,
   host: string = '127.0.0.1',
-  options?: { metricsEnabled?: boolean },
-): void {
+  options?: HealthServerOptions,
+): Server {
   const metricsEnabled = options?.metricsEnabled === true;
 
   server = createServer((req, res) => {
     void (async () => {
-      const path = (req.url ?? '').split('?')[0];
+      if (options?.extraHandler?.(req, res)) return;
+
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const path = url.pathname;
 
       if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
         const now = Date.now();
@@ -234,6 +254,13 @@ export function startHealthServer(
         const stale = isConnectionStale();
 
         if (path === '/metrics') {
+          const authToken = options?.authToken;
+          if (authToken !== undefined && !tokenMatches(url.searchParams.get('token'), authToken)) {
+            res.writeHead(401, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'unauthorized' }));
+            return;
+          }
+
           res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
           res.end(await renderPrometheusMetrics(now));
           return;
@@ -297,6 +324,8 @@ export function startHealthServer(
   server.on('error', (err) => {
     logger.error({ err, port }, 'Health check server error');
   });
+
+  return server;
 }
 
 /** Stop the local health endpoint and memory watchdog timers. */

@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { closeDb, scheduleMaintenance } from './utils/db.js';
 import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
@@ -5,6 +6,7 @@ import { config } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
+import { createLoginRequestHandler } from './platforms/whatsapp/login-server.js';
 import type { PlatformRuntime } from './platforms/types.js';
 
 let activeRuntime: PlatformRuntime | null = null;
@@ -41,9 +43,33 @@ async function main(): Promise<void> {
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');
 
+  const loginToken = config.WHATSAPP_LOGIN_TOKEN ?? randomBytes(24).toString('hex');
+  const loginHandler = createLoginRequestHandler({ token: loginToken });
+
   // Start health check server + memory watchdog for monitoring
-  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, { metricsEnabled: config.METRICS_ENABLED });
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
+    metricsEnabled: config.METRICS_ENABLED,
+    authToken: loginToken,
+    extraHandler: loginHandler,
+  });
   startMemoryWatchdog();
+
+  if (!healthOnlyMode && (config.WHATSAPP_LOGIN_MODE === 'web' || config.WHATSAPP_LOGIN_MODE === 'both')) {
+    const loginBaseUrl = `http://${config.HEALTH_BIND_HOST}:${config.HEALTH_PORT}/whatsapp/login`;
+    if (config.WHATSAPP_LOGIN_TOKEN) {
+      // The operator supplied the token — never echo their secret into the logs.
+      logger.info(
+        { url: loginBaseUrl },
+        'WhatsApp browser login available; append ?token=<your WHATSAPP_LOGIN_TOKEN> if WhatsApp needs linking',
+      );
+    } else {
+      // Token was generated for this run and has no other delivery channel — surface it once.
+      logger.info(
+        { url: `${loginBaseUrl}?token=${loginToken}` },
+        'WhatsApp browser login available; open this URL if WhatsApp needs linking (token generated for this run)',
+      );
+    }
+  }
 
   // Start Ollama warm-up pings to prevent model unloading
   startOllamaWarmup();
