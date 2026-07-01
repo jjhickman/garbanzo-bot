@@ -48,8 +48,8 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
 | DX-8 | No tests for `middleware/sanitize.ts` | ✅ Done — Phase 6 (`tests/sanitize.test.ts`) |
 | DX-11 | `router.ts` `aiResult` placeholder object | ✅ Done — Phase 3a (`CloudResponse | null` accumulator) |
 | DX-6 | ~500 lines of `nonInteractive ? cli : prompt` ternaries in `setup.mjs` | ✅ Done — Phase 5 (declarative `FIELD_TABLE` + resolver) |
-| DX-9 | `slack/demo-server.ts` is 1310 lines | ⏳ **Deferred** — large behavior-preserving split; recommended via independent review |
-| DX-10 | SQLite/Postgres backend duplication | ⏳ **Deferred** — large behavior-preserving refactor; recommended via independent review |
+| DX-9 | `slack/demo-server.ts` is 1310 lines | ✅ Done — Phase 6 (split into `demo-page`/`demo-protection`/`demo-handlers`/`demo-types` + thin `demo-server`; public exports unchanged; independently reviewed) |
+| DX-10 | SQLite/Postgres backend duplication | ✅ Done — Phase 6 (`db-mappers.ts` + `db-query-shape.ts` shared behind `DbBackend`; SQL/dialect bits isolated; −318 backend lines; independently reviewed) |
 
 ## Deferred low-priority items (tracked, not yet actioned)
 
@@ -62,5 +62,11 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
 
 - **OpenAI OAuth** is isolated and always falls back to the next provider in `AI_PROVIDER_ORDER`; it has
   **not** been validated end-to-end against a live ChatGPT token and should not be a sole provider.
+  A malformed HTTP-200 `/wham` payload (neither `output_text` nor `output`) now throws → fallback,
+  rather than returning a fake reply.
 - **`/metrics` token gate** (Sec-4) is a behavior change for existing scrapers: append `?token=<T>` or
   pin `WHATSAPP_LOGIN_TOKEN`.
+- **DX-10 Postgres coverage:** `tests/postgres-backend.test.ts` requires a live `DATABASE_URL` and is
+  skipped without one, so the Postgres backend is guarded here by typecheck + `db-shared-layer` unit
+  tests + independent review. Run it against a real Postgres in CI to exercise the extracted mappers
+  end-to-end.
