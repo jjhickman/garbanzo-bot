@@ -74,7 +74,7 @@ function isProviderConfigured(provider: CloudProvider): boolean {
   if (provider === 'anthropic') return !!config.ANTHROPIC_API_KEY;
   if (provider === 'gemini') return !!config.GEMINI_API_KEY;
   if (provider === 'bedrock') return !!config.BEDROCK_MODEL_ID;
-  return !!config.OPENAI_API_KEY;
+  return config.OPENAI_AUTH_MODE === 'oauth' || !!config.OPENAI_API_KEY;
 }
 
 /**

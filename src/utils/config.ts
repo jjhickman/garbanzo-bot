@@ -41,6 +41,10 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-5-20250514'),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
   OPENAI_MODEL: z.string().default('gpt-4.1'),
+  // apikey (default): api.openai.com with OPENAI_API_KEY. oauth (EXPERIMENTAL,
+  // ToS-grey): "Sign in with ChatGPT" via `npm run openai:login`, calls the
+  // ChatGPT backend. Always falls back to the next provider on failure.
+  OPENAI_AUTH_MODE: z.enum(['apikey', 'oauth']).default('apikey'),
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
   GEMINI_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.0),
   GEMINI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(0.0),
@@ -192,7 +196,7 @@ const normalizedProviderOrderList = Array.from(new Set(requestedProviderOrder));
 const configuredProviders = normalizedProviderOrderList.filter((provider) => {
   if (provider === 'openrouter') return !!parsed.data.OPENROUTER_API_KEY;
   if (provider === 'anthropic') return !!parsed.data.ANTHROPIC_API_KEY;
-  if (provider === 'openai') return !!parsed.data.OPENAI_API_KEY;
+  if (provider === 'openai') return parsed.data.OPENAI_AUTH_MODE === 'oauth' || !!parsed.data.OPENAI_API_KEY;
   if (provider === 'gemini') return !!parsed.data.GEMINI_API_KEY;
   return !!parsed.data.BEDROCK_MODEL_ID;
 });
