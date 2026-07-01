@@ -10,13 +10,12 @@ import type { ILogger } from '@whiskeysockets/baileys/lib/Utils/logger.js';
 import { Boom } from '@hapi/boom';
 import { classifyDisconnect } from 'baileys-antiban';
 import { resolve } from 'path';
-// @ts-expect-error — qrcode-terminal has no type declarations
-import qrcode from 'qrcode-terminal';
 
 import { logger } from '../../middleware/logger.js';
-import { PROJECT_ROOT } from '../../utils/config.js';
+import { config, PROJECT_ROOT } from '../../utils/config.js';
 import { markConnected, markDisconnected } from '../../middleware/health.js';
 import { createProtectedWhatsAppSocket, getWhatsAppOutboundSafety } from './outbound-safety.js';
+import { markLinked, markUnlinked, routeLoginQr, setActiveSocket } from './login-store.js';
 
 const AUTH_DIR = resolve(PROJECT_ROOT, 'baileys_auth');
 const baileysLogger = logger.child({ module: 'baileys' });
@@ -52,6 +51,7 @@ export async function startConnection(
   });
   const protectedSock = createProtectedWhatsAppSocket(sock);
   onSocketCreated?.(protectedSock);
+  setActiveSocket(protectedSock);
   const safety = getWhatsAppOutboundSafety(protectedSock);
 
   // Connection lifecycle
@@ -60,12 +60,13 @@ export async function startConnection(
 
     if (qr) {
       logger.info('QR code generated — scan with WhatsApp to connect');
-      qrcode.generate(qr, { small: true });
+      routeLoginQr(qr, config.WHATSAPP_LOGIN_MODE);
     }
 
     if (connection === 'open') {
       logger.info({ botJid: sock.user?.id }, '✅ Connected to WhatsApp');
       markConnected();
+      markLinked();
       safety?.onConnected();
 
       // Set the bot's display name so it shows as "Garbanzo Bean" in groups
@@ -82,6 +83,7 @@ export async function startConnection(
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut && classification.shouldReconnect;
 
       markDisconnected();
+      markUnlinked();
       safety?.onDisconnected(statusCode ?? 0);
       safety?.destroy();
       try { onClosed?.(); } catch (err) { logger.warn({ err }, 'WhatsApp close disposer failed'); }
