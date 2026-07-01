@@ -9,6 +9,36 @@ import { embedTextDeterministic, toPgvectorLiteral } from './text-embedding.js';
 import { embedTextForVectorSearch } from './embedding-provider.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import type { DbBackend } from './db-backend.js';
+import {
+  mapDailyGroupActivity,
+  mapDbMessage,
+  mapFeedbackEntry,
+  mapMemoryEntry,
+  mapMemberProfile,
+  mapSessionSummaryHit,
+  mapStrikeSummary,
+  mapWhatsAppOutboundJob,
+  mapWhatsAppSafetyState,
+  type DailyGroupActivityRow,
+  type FeedbackRow,
+  type MemoryRow,
+  type MessageRow,
+  type ProfileRow,
+  type SessionSummaryRow,
+  type StrikeSummaryRow,
+  type WhatsAppOutboundRow,
+  type WhatsAppSafetyStateRow,
+} from './db-mappers.js';
+import {
+  extractSearchTerms,
+  formatMemoriesForPromptEntries,
+  mapWhatsAppSafetyMetrics,
+  parseJsonArray,
+  toBareJid,
+  toNumber,
+  type DbNumeric,
+  type WhatsAppMetricCountsLike,
+} from './db-query-shape.js';
 import type {
   BackupIntegrityStatus,
   DailyGroupActivity,
@@ -46,239 +76,24 @@ const REQUIRED_CORE_TABLES = [
   'whatsapp_safety_state',
 ] as const;
 
-type BigintLike = string | number;
-
 interface DbCountRow {
-  count: BigintLike;
-}
-
-interface MessageRow {
-  sender: string;
-  text: string;
-  timestamp: BigintLike;
-}
-
-interface SessionSummaryRow {
-  id: BigintLike;
-  started_at: BigintLike;
-  ended_at: BigintLike;
-  message_count: BigintLike;
-  participants: unknown;
-  summary_text: string;
-  topic_tags: unknown;
+  count: DbNumeric;
 }
 
 interface OpenSessionRow {
-  id: BigintLike;
-  started_at: BigintLike;
-  ended_at: BigintLike;
-  message_count: BigintLike;
+  id: DbNumeric;
+  started_at: DbNumeric;
+  ended_at: DbNumeric;
+  message_count: DbNumeric;
   participants: unknown;
-}
-
-interface StrikeSummaryRow {
-  sender: string;
-  strike_count: BigintLike;
-  last_flag: BigintLike;
-  reasons: string | null;
-}
-
-interface DailyGroupActivityRow {
-  chatjid: string;
-  messagecount: BigintLike;
-  activeusers: BigintLike;
-}
-
-interface ProfileRow {
-  jid: string;
-  name: string | null;
-  interests: unknown;
-  groups_active: unknown;
-  event_count: BigintLike;
-  first_seen: BigintLike;
-  last_seen: BigintLike;
-  opted_in: BigintLike;
-}
-
-interface FeedbackRow {
-  id: BigintLike;
-  type: 'suggestion' | 'bug';
-  sender: string;
-  group_jid: string | null;
-  text: string;
-  status: 'open' | 'accepted' | 'rejected' | 'done';
-  upvotes: BigintLike;
-  upvoters: unknown;
-  github_issue_number: number | null;
-  github_issue_url: string | null;
-  github_issue_created_at: BigintLike | null;
-  timestamp: BigintLike;
-}
-
-interface MemoryRow {
-  id: BigintLike;
-  fact: string;
-  category: string;
-  source: string;
-  created_at: BigintLike;
-}
-
-interface WhatsAppOutboundRow {
-  id: BigintLike;
-  chat_jid: string;
-  kind: string;
-  content_json: string;
-  options_json: string | null;
-  status: WhatsAppOutboundStatus;
-  reason: string | null;
-  attempts: BigintLike;
-  created_at: BigintLike;
-  updated_at: BigintLike;
-  sent_at: BigintLike | null;
-}
-
-interface WhatsAppSafetyStateRow {
-  paused: BigintLike;
-  risk: WhatsAppRiskLevel;
-  score: BigintLike;
-  reasons: unknown;
-  updated_at: BigintLike;
-}
-
-interface WhatsAppMetricCountsRow {
-  pending: BigintLike;
-  held: BigintLike;
-  sent_last_hour: BigintLike;
-  sent_last_day: BigintLike;
-  failed_last_hour: BigintLike;
 }
 
 interface ExistsRow {
   exists: boolean;
 }
 
-function toNumber(value: BigintLike | null | undefined): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return value;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function toJsonArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string');
-  }
-
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((item): item is string => typeof item === 'string');
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  }
-
-  return [];
-}
-
-function toJsonArrayString(value: unknown): string {
-  return JSON.stringify(toJsonArray(value));
-}
-
-function toBareJid(senderJid: string): string {
-  return senderJid.split('@')[0].split(':')[0];
-}
-
 function shouldVectorizeText(text: string): boolean {
   return text.trim().length >= CONTEXT_MIN_EMBED_CHARS;
-}
-
-function extractSearchTerms(query: string): string[] {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((term) => term.trim())
-    .filter((term) => term.length >= 3)
-    .slice(0, 5);
-
-  return Array.from(new Set(terms));
-}
-
-function mapProfile(row: ProfileRow): MemberProfile {
-  return {
-    jid: row.jid,
-    name: row.name,
-    interests: toJsonArrayString(row.interests),
-    groups_active: toJsonArrayString(row.groups_active),
-    event_count: toNumber(row.event_count),
-    first_seen: toNumber(row.first_seen),
-    last_seen: toNumber(row.last_seen),
-    opted_in: toNumber(row.opted_in),
-  };
-}
-
-function mapFeedback(row: FeedbackRow): FeedbackEntry {
-  return {
-    id: toNumber(row.id),
-    type: row.type,
-    sender: row.sender,
-    group_jid: row.group_jid,
-    text: row.text,
-    status: row.status,
-    upvotes: toNumber(row.upvotes),
-    upvoters: toJsonArrayString(row.upvoters),
-    github_issue_number: row.github_issue_number,
-    github_issue_url: row.github_issue_url,
-    github_issue_created_at: row.github_issue_created_at === null ? null : toNumber(row.github_issue_created_at),
-    timestamp: toNumber(row.timestamp),
-  };
-}
-
-function mapMemory(row: MemoryRow): MemoryEntry {
-  return {
-    id: toNumber(row.id),
-    fact: row.fact,
-    category: row.category,
-    source: row.source,
-    created_at: toNumber(row.created_at),
-  };
-}
-
-function mapMessage(row: MessageRow): DbMessage {
-  return {
-    sender: row.sender,
-    text: row.text,
-    timestamp: toNumber(row.timestamp),
-  };
-}
-
-function mapWhatsAppOutboundJob(row: WhatsAppOutboundRow): WhatsAppOutboundJob {
-  return {
-    id: toNumber(row.id),
-    chatJid: row.chat_jid,
-    kind: row.kind,
-    contentJson: row.content_json,
-    optionsJson: row.options_json,
-    status: row.status,
-    reason: row.reason,
-    attempts: toNumber(row.attempts),
-    createdAt: toNumber(row.created_at),
-    updatedAt: toNumber(row.updated_at),
-    sentAt: row.sent_at === null ? null : toNumber(row.sent_at),
-  };
-}
-
-function mapWhatsAppSafetyState(row: WhatsAppSafetyStateRow): WhatsAppSafetyState {
-  return {
-    paused: toNumber(row.paused) === 1,
-    risk: row.risk,
-    score: toNumber(row.score),
-    reasons: toJsonArray(row.reasons),
-    updatedAt: toNumber(row.updated_at),
-  };
 }
 
 function createMaintenanceScheduler(
@@ -493,8 +308,8 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return;
     }
 
-    const participants = toJsonArray(session.participants);
-    const summary = summarizeSession(messagesRes.rows.map(mapMessage), participants);
+    const participants = parseJsonArray(session.participants);
+    const summary = summarizeSession(messagesRes.rows.map(mapDbMessage), participants);
 
     await client.query(
       `UPDATE conversation_sessions
@@ -571,7 +386,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
       const openEndedAt = toNumber(openSession.ended_at);
       const openMessageCount = toNumber(openSession.message_count);
-      const participants = toJsonArray(openSession.participants);
+      const participants = parseJsonArray(openSession.participants);
 
       if (timestamp - openEndedAt <= gapSeconds) {
         if (!participants.includes(sender)) participants.push(sender);
@@ -682,7 +497,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       const bare = toBareJid(senderJid);
       const res = await pool.query<ProfileRow>('SELECT * FROM member_profiles WHERE jid = $1', [bare]);
       const row = res.rows[0];
-      return row ? mapProfile(row) : undefined;
+      return row ? mapMemberProfile(row) : undefined;
     },
 
     async setProfileInterests(senderJid: string, interests: string[]): Promise<void> {
@@ -707,7 +522,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       const row = res.rows[0];
       if (!row) return;
 
-      const groups = toJsonArray(row.groups_active);
+      const groups = parseJsonArray(row.groups_active);
       if (groups.includes(groupJid)) return;
 
       groups.push(groupJid);
@@ -716,7 +531,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     async getOptedInProfiles(): Promise<MemberProfile[]> {
       const res = await pool.query<ProfileRow>('SELECT * FROM member_profiles WHERE opted_in = 1');
-      return res.rows.map(mapProfile);
+      return res.rows.map(mapMemberProfile);
     },
 
     async deleteProfileData(senderJid: string): Promise<void> {
@@ -785,7 +600,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         'SELECT sender, text, timestamp FROM messages WHERE chat_jid = $1 ORDER BY timestamp DESC, id DESC LIMIT $2',
         [chatJid, limit],
       );
-      return res.rows.map(mapMessage).reverse();
+      return res.rows.map(mapDbMessage).reverse();
     },
 
     async searchRelevantMessages(chatJid: string, query: string, limit: number = CONTEXT_RELEVANT_LIMIT): Promise<DbMessage[]> {
@@ -805,7 +620,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
           [chatJid, vectorLiteral, limit],
         );
 
-        return vectorResults.rows.map(mapMessage);
+        return vectorResults.rows.map(mapDbMessage);
       }
 
       const directResults = await pool.query<MessageRow>(
@@ -818,7 +633,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       );
 
       if (directResults.rows.length > 0) {
-        return directResults.rows.map(mapMessage);
+        return directResults.rows.map(mapDbMessage);
       }
 
       const terms = extractSearchTerms(trimmed);
@@ -836,7 +651,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         );
 
         for (const row of res.rows) {
-          const mapped = mapMessage(row);
+          const mapped = mapDbMessage(row);
           const key = `${mapped.timestamp}:${mapped.sender}:${mapped.text}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -874,18 +689,9 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         );
 
         return res.rows.map((row) => {
-          const topicTags = toJsonArray(row.topic_tags);
+          const topicTags = parseJsonArray(row.topic_tags);
           const summaryText = row.summary_text;
-          return {
-            sessionId: toNumber(row.id),
-            startedAt: toNumber(row.started_at),
-            endedAt: toNumber(row.ended_at),
-            messageCount: toNumber(row.message_count),
-            participants: toJsonArray(row.participants),
-            topicTags,
-            summaryText,
-            score: scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)),
-          };
+          return mapSessionSummaryHit(row, scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)));
         });
       }
 
@@ -900,18 +706,9 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
       return candidates.rows
         .map((row) => {
-          const topicTags = toJsonArray(row.topic_tags);
+          const topicTags = parseJsonArray(row.topic_tags);
           const summaryText = row.summary_text;
-          return {
-            sessionId: toNumber(row.id),
-            startedAt: toNumber(row.started_at),
-            endedAt: toNumber(row.ended_at),
-            messageCount: toNumber(row.message_count),
-            participants: toJsonArray(row.participants),
-            topicTags,
-            summaryText,
-            score: scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)),
-          };
+          return mapSessionSummaryHit(row, scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)));
         })
         .filter((row) => row.score > 0)
         .sort((a, b) => b.score - a.score)
@@ -946,12 +743,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [minStrikes],
       );
 
-      return res.rows.map((row) => ({
-        sender: row.sender,
-        strike_count: toNumber(row.strike_count),
-        last_flag: toNumber(row.last_flag),
-        reasons: row.reasons ?? '',
-      }));
+      return res.rows.map(mapStrikeSummary);
     },
 
     async saveDailyStats(date: string, json: string): Promise<void> {
@@ -982,11 +774,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [Math.floor(start.getTime() / 1000), Math.floor(end.getTime() / 1000)],
       );
 
-      return res.rows.map((row) => ({
-        chatJid: row.chatjid,
-        messageCount: toNumber(row.messagecount),
-        activeUsers: toNumber(row.activeusers),
-      }));
+      return res.rows.map(mapDailyGroupActivity);
     },
 
     async createWhatsAppOutboundJob(
@@ -1087,7 +875,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     },
 
     async getWhatsAppSafetyMetrics(hourSince: number, daySince: number): Promise<WhatsAppSafetyMetrics> {
-      const counts = await pool.query<WhatsAppMetricCountsRow>(
+      const counts = await pool.query<WhatsAppMetricCountsLike>(
         `SELECT
            COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
            COUNT(*) FILTER (WHERE status = 'held')::bigint AS held,
@@ -1101,17 +889,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         'SELECT paused, risk, score, reasons, updated_at FROM whatsapp_safety_state WHERE id = 1',
       );
       const state = mapWhatsAppSafetyState(safetyState.rows[0]);
-      const row = counts.rows[0];
-      return {
-        pending: toNumber(row?.pending),
-        held: toNumber(row?.held),
-        sentLastHour: toNumber(row?.sent_last_hour),
-        sentLastDay: toNumber(row?.sent_last_day),
-        failedLastHour: toNumber(row?.failed_last_hour),
-        paused: state.paused,
-        risk: state.risk,
-        score: state.score,
-      };
+      return mapWhatsAppSafetyMetrics(counts.rows[0], state);
     },
 
     async submitFeedback(
@@ -1129,14 +907,14 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [type, bare, groupJid, text, ts],
       );
 
-      return mapFeedback(res.rows[0]);
+      return mapFeedbackEntry(res.rows[0]);
     },
 
     async getOpenFeedback(): Promise<FeedbackEntry[]> {
       const res = await pool.query<FeedbackRow>(
         "SELECT * FROM feedback WHERE status = 'open' ORDER BY upvotes DESC, timestamp ASC",
       );
-      return res.rows.map(mapFeedback);
+      return res.rows.map(mapFeedbackEntry);
     },
 
     async getRecentFeedback(limit: number = 20): Promise<FeedbackEntry[]> {
@@ -1144,13 +922,13 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         'SELECT * FROM feedback ORDER BY timestamp DESC LIMIT $1',
         [limit],
       );
-      return res.rows.map(mapFeedback);
+      return res.rows.map(mapFeedbackEntry);
     },
 
     async getFeedbackById(id: number): Promise<FeedbackEntry | undefined> {
       const res = await pool.query<FeedbackRow>('SELECT * FROM feedback WHERE id = $1', [id]);
       const row = res.rows[0];
-      return row ? mapFeedback(row) : undefined;
+      return row ? mapFeedbackEntry(row) : undefined;
     },
 
     async setFeedbackStatus(id: number, status: 'open' | 'accepted' | 'rejected' | 'done'): Promise<boolean> {
@@ -1175,7 +953,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
           return false;
         }
 
-        const voters = toJsonArray(row.upvoters);
+        const voters = parseJsonArray(row.upvoters);
         if (voters.includes(bare)) {
           await client.query('COMMIT');
           return false;
@@ -1219,12 +997,12 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [fact, category, source, ts],
       );
 
-      return mapMemory(res.rows[0]);
+      return mapMemoryEntry(res.rows[0]);
     },
 
     async getAllMemories(): Promise<MemoryEntry[]> {
       const res = await pool.query<MemoryRow>('SELECT * FROM memory ORDER BY category, created_at DESC');
-      return res.rows.map(mapMemory);
+      return res.rows.map(mapMemoryEntry);
     },
 
     async deleteMemory(id: number): Promise<boolean> {
@@ -1237,30 +1015,13 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         'SELECT * FROM memory WHERE fact ILIKE $1 ORDER BY created_at DESC LIMIT $2',
         [`%${keyword}%`, limit],
       );
-      return res.rows.map(mapMemory);
+      return res.rows.map(mapMemoryEntry);
     },
 
     async formatMemoriesForPrompt(): Promise<string> {
       const res = await pool.query<MemoryRow>('SELECT * FROM memory ORDER BY category, created_at DESC');
-      const memories = res.rows.map(mapMemory);
-      if (memories.length === 0) return '';
-
-      const byCategory = new Map<string, string[]>();
-      for (const memory of memories) {
-        const list = byCategory.get(memory.category) ?? [];
-        list.push(memory.fact);
-        byCategory.set(memory.category, list);
-      }
-
-      const lines = ['Community knowledge (facts you know about this group):'];
-      for (const [category, facts] of byCategory) {
-        lines.push(`  ${category}:`);
-        for (const fact of facts) {
-          lines.push(`    - ${fact}`);
-        }
-      }
-
-      return lines.join('\n');
+      const memories = res.rows.map(mapMemoryEntry);
+      return formatMemoriesForPromptEntries(memories);
     },
 
     async closeDb(): Promise<void> {
