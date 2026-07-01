@@ -190,6 +190,20 @@ The page shows "Linked ✓" once connected.
   logs. The same token also guards `/metrics`, so add `?token=<token>` when scraping.
 - All login routes are bound to `HEALTH_BIND_HOST` (`127.0.0.1` by default).
 
+**Linking a remote/headless host (e.g. a Raspberry Pi over the network).** Two options:
+
+- *SSH tunnel (recommended, keeps the default localhost bind):*
+  ```bash
+  ssh -L 3001:127.0.0.1:3001 pi@garbanzo-host
+  # then open http://127.0.0.1:3001/whatsapp/login?token=<token> on your laptop
+  ```
+- *Direct network exposure:* set `HEALTH_BIND_HOST=0.0.0.0`. On startup the logs
+  then print connectable `http://<LAN-IP>:3001/whatsapp/login` URLs (the machine's
+  LAN address, not `0.0.0.0`). This exposes the linking page — and `/health` +
+  token-gated `/metrics` — to your whole network, guarded only by the login token
+  over plaintext HTTP, so only do it on a trusted LAN. The bot logs a warning when
+  login is bound to a non-loopback host.
+
 ### Slack Support
 
 For official Slack runtime:

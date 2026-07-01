@@ -7,6 +7,7 @@ import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './midd
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
 import { createLoginRequestHandler } from './platforms/whatsapp/login-server.js';
+import { isNetworkExposedHost, resolveLoginHosts } from './platforms/whatsapp/login-url.js';
 import type { PlatformRuntime } from './platforms/types.js';
 
 let activeRuntime: PlatformRuntime | null = null;
@@ -55,18 +56,31 @@ async function main(): Promise<void> {
   startMemoryWatchdog();
 
   if (!healthOnlyMode && (config.WHATSAPP_LOGIN_MODE === 'web' || config.WHATSAPP_LOGIN_MODE === 'both')) {
-    const loginBaseUrl = `http://${config.HEALTH_BIND_HOST}:${config.HEALTH_PORT}/whatsapp/login`;
+    // A wildcard bind (0.0.0.0/::) listens on every interface, so surface the
+    // machine's LAN address(es) a remote browser can actually reach — e.g. when
+    // garbanzo runs on a Raspberry Pi and you link from a laptop on the network.
+    const baseUrls = resolveLoginHosts(config.HEALTH_BIND_HOST).map(
+      (host) => `http://${host}:${config.HEALTH_PORT}/whatsapp/login`,
+    );
+
+    if (isNetworkExposedHost(config.HEALTH_BIND_HOST)) {
+      logger.warn(
+        { bindHost: config.HEALTH_BIND_HOST },
+        'WhatsApp login is exposed on the network; it is protected only by the login token over plaintext HTTP — prefer a trusted network or an SSH tunnel (ssh -L)',
+      );
+    }
+
     if (config.WHATSAPP_LOGIN_TOKEN) {
       // The operator supplied the token — never echo their secret into the logs.
       logger.info(
-        { url: loginBaseUrl },
+        { urls: baseUrls },
         'WhatsApp browser login available; append ?token=<your WHATSAPP_LOGIN_TOKEN> if WhatsApp needs linking',
       );
     } else {
       // Token was generated for this run and has no other delivery channel — surface it once.
       logger.info(
-        { url: `${loginBaseUrl}?token=${loginToken}` },
-        'WhatsApp browser login available; open this URL if WhatsApp needs linking (token generated for this run)',
+        { urls: baseUrls.map((url) => `${url}?token=${loginToken}`) },
+        'WhatsApp browser login available; open a URL if WhatsApp needs linking (token generated for this run)',
       );
     }
   }
