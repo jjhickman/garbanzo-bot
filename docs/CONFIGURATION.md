@@ -9,7 +9,7 @@ Copy `.env.example` to `.env` and configure:
 | `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp`, `slack`, `discord`, `teams`) |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (default: `anthropic,openai`) |
-| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-20251001`) |
+| `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-5-20251001`) |
 | `ANTHROPIC_PRICING_INPUT_PER_M` | No | Anthropic input pricing (USD per 1M tokens, for cost tracking; default `1.0` = Haiku 4.5) |
 | `ANTHROPIC_PRICING_OUTPUT_PER_M` | No | Anthropic output pricing (USD per 1M tokens; default `5.0` = Haiku 4.5) |
 | `ANTHROPIC_PROMPT_CACHING` | No | Mark the static persona system prompt cacheable so repeat calls read it at ~10% input price (default: `true`) |
