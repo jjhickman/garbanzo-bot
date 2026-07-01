@@ -8,20 +8,20 @@ describe('JID utilities', async () => {
 
   it('identifies group JIDs', () => {
     expect(isGroupJid('120363423357339667@g.us')).toBe(true);
-    expect(isGroupJid('17819754407@s.whatsapp.net')).toBe(false);
+    expect(isGroupJid('15551234567@s.whatsapp.net')).toBe(false);
   });
 
   it('identifies DM JIDs', () => {
-    expect(isDmJid('17819754407@s.whatsapp.net')).toBe(true);
+    expect(isDmJid('15551234567@s.whatsapp.net')).toBe(true);
     expect(isDmJid('120363423357339667@g.us')).toBe(false);
   });
 
   it('extracts phone from JID', () => {
-    expect(phoneFromJid('17819754407@s.whatsapp.net')).toBe('17819754407');
+    expect(phoneFromJid('15551234567@s.whatsapp.net')).toBe('15551234567');
   });
 
   it('converts phone to JID', () => {
-    expect(phoneToJid('+1-781-975-4407')).toBe('17819754407@s.whatsapp.net');
+    expect(phoneToJid('+1-555-123-4567')).toBe('15551234567@s.whatsapp.net');
   });
 });
 

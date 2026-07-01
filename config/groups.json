@@ -58,12 +58,9 @@
   ],
   "admins": {
     "owner": {
-      "name": "Josh Hickman",
-      "jid": "17819754407@s.whatsapp.net"
+      "name": "Owner",
+      "jid": "10000000000@s.whatsapp.net"
     },
-    "moderators": [
-      { "name": "George Sotelo" },
-      { "name": "Rana M" }
-    ]
+    "moderators": []
   }
 }

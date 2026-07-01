@@ -230,7 +230,7 @@ describe('Security — input sanitization', async () => {
   });
 
   it('validates WhatsApp JID formats', () => {
-    expect(isValidJid('17819754407@s.whatsapp.net')).toBe(true);
+    expect(isValidJid('15551234567@s.whatsapp.net')).toBe(true);
     expect(isValidJid('120363423357339667@g.us')).toBe(true);
     expect(isValidJid('not-a-jid')).toBe(false);
     expect(isValidJid('')).toBe(false);
