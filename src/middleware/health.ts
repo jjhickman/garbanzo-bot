@@ -238,8 +238,10 @@ export function startHealthServer(
     void (async () => {
       if (options?.extraHandler?.(req, res)) return;
 
-      const url = new URL(req.url ?? '/', 'http://localhost');
-      const path = url.pathname;
+      // Match on the raw origin-form path (unchanged from before): absolute-form
+      // request targets must not be normalized into a matching pathname.
+      const rawUrl = req.url ?? '';
+      const path = rawUrl.split('?')[0];
 
       if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
         const now = Date.now();
@@ -255,7 +257,8 @@ export function startHealthServer(
 
         if (path === '/metrics') {
           const authToken = options?.authToken;
-          if (authToken !== undefined && !tokenMatches(url.searchParams.get('token'), authToken)) {
+          const providedToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
+          if (authToken !== undefined && !tokenMatches(providedToken, authToken)) {
             res.writeHead(401, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ error: 'unauthorized' }));
             return;
