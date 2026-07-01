@@ -129,9 +129,11 @@ export function buildProviderRequest(
     return {
       provider: 'gemini',
       model: config.GEMINI_MODEL,
-      endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent?key=${config.GEMINI_API_KEY}`,
+      endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${config.GEMINI_MODEL}:generateContent`,
       headers: {
         'content-type': 'application/json',
+        // Key in a header, not the URL query string, so it does not leak into logs/proxies.
+        'x-goog-api-key': config.GEMINI_API_KEY,
       },
       body: {
         systemInstruction: {
@@ -169,6 +171,118 @@ export function buildProviderRequest(
     },
     parser: parseChatCompletionResponse,
   };
+}
+
+/** EXPERIMENTAL: ChatGPT-subscription backend used by OpenAI OAuth mode. */
+const OPENAI_RESPONSES_ENDPOINT = 'https://chatgpt.com/backend-api/wham/responses';
+
+const ResponsesApiSchema = z.object({
+  output_text: z.union([z.string(), z.array(z.string())]).optional(),
+  output: z.array(z.object({
+    type: z.string().optional(),
+    content: z.array(z.object({
+      type: z.string().optional(),
+      text: z.string().optional(),
+    })).optional(),
+  })).optional(),
+});
+
+/**
+ * Build the OpenAI Responses-API request for OAuth ("Sign in with ChatGPT")
+ * mode (EXPERIMENTAL, unverified against a live token). Targets the private
+ * ChatGPT backend with a fresh bearer token + account header. Distinct from the
+ * apikey chat/completions request: content type is `input_text` and `store` is
+ * false, with the system prompt passed as `instructions`.
+ */
+export function buildOpenAIResponsesRequest(
+  systemPrompt: string,
+  userMessage: string,
+  visionImages: VisionImage[] | undefined,
+  accessToken: string,
+  accountId: string | null,
+): ProviderRequest {
+  const content: Array<Record<string, unknown>> = [];
+  if (visionImages && visionImages.length > 0) {
+    for (const img of visionImages) {
+      content.push({ type: 'input_image', image_url: `data:${img.mediaType};base64,${img.base64}` });
+    }
+  }
+  content.push({
+    type: 'input_text',
+    text: userMessage || 'What do you see in this image? Describe it and respond naturally.',
+  });
+
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${accessToken}`,
+    originator: 'garbanzo',
+  };
+  if (accountId) headers['chatgpt-account-id'] = accountId;
+
+  return {
+    provider: 'openai',
+    model: config.OPENAI_MODEL,
+    endpoint: OPENAI_RESPONSES_ENDPOINT,
+    headers,
+    body: {
+      model: config.OPENAI_MODEL,
+      instructions: systemPrompt,
+      input: [{ role: 'user', content }],
+      store: false,
+    },
+    parser: parseResponsesApiResponse,
+  };
+}
+
+function parseResponsesApiResponse(data: unknown): string {
+  const parsed = ResponsesApiSchema.safeParse(data);
+  // A malformed HTTP-200 payload (backend error object or response-shape drift)
+  // must NOT be treated as a successful reply — throw so the shared caller records
+  // the failure and the router falls back to the next provider in AI_PROVIDER_ORDER.
+  // The schema is permissive (all fields optional), so a body carrying neither
+  // `output_text` nor `output` (e.g. `{ error: 'temporarily_unavailable' }`) is
+  // drift, not a genuine empty reply — distinct from output_text:''/[] or output:[].
+  if (!parsed.success || (parsed.data.output_text === undefined && parsed.data.output === undefined)) {
+    throw new Error('OpenAI Responses payload did not match expected shape');
+  }
+
+  if (typeof parsed.data.output_text === 'string') {
+    return parsed.data.output_text.trim() || 'No response generated.';
+  }
+  if (Array.isArray(parsed.data.output_text)) {
+    return parsed.data.output_text.join('').trim() || 'No response generated.';
+  }
+
+  const texts: string[] = [];
+  for (const item of parsed.data.output ?? []) {
+    for (const block of item.content ?? []) {
+      if (block.text) texts.push(block.text);
+    }
+  }
+  return texts.join('').trim() || 'No response generated.';
+}
+
+/**
+ * Standard HTTP transport for fetch-based providers (openrouter/anthropic/openai
+ * API-key mode). Posts the built request under the caller's abort signal, maps a
+ * non-2xx to `"<provider> API error <status>: <body>"`, and runs the parser.
+ * (Gemini keeps its own perform to preserve its non-JSON error message.)
+ */
+export async function performHttpRequest(req: ProviderRequest, signal: AbortSignal): Promise<string> {
+  const response = await fetch(req.endpoint, {
+    method: 'POST',
+    headers: req.headers,
+    body: JSON.stringify(req.body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
+  }
+
+  const data: unknown = await response.json();
+  return req.parser(data);
 }
 
 function parseChatCompletionResponse(data: unknown): string {

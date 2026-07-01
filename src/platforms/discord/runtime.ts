@@ -44,5 +44,8 @@ export function createDiscordRuntime(): PlatformRuntime {
       );
       throw new Error('Discord runtime is not configured');
     },
+    async stop(): Promise<void> {
+      // No persistent resources to release here yet; present for lifecycle parity.
+    },
   };
 }

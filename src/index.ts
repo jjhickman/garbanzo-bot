@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { closeDb, scheduleMaintenance } from './utils/db.js';
 import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
@@ -5,6 +6,19 @@ import { config } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
+import { createLoginRequestHandler } from './platforms/whatsapp/login-server.js';
+import { isNetworkExposedHost, resolveLoginHosts } from './platforms/whatsapp/login-url.js';
+import type { PlatformRuntime } from './platforms/types.js';
+
+let activeRuntime: PlatformRuntime | null = null;
+
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | void> {
+  return Promise.race([
+    p,
+    new Promise<void>((resolve) => setTimeout(() => { logger.warn({ label, ms }, 'Shutdown step timed out'); resolve(); }, ms).unref?.()),
+  ]);
+}
 
 async function main(): Promise<void> {
   logger.info('🫘 Garbanzo starting...');
@@ -30,9 +44,46 @@ async function main(): Promise<void> {
     logLevel: config.LOG_LEVEL,
   }, 'Configuration loaded');
 
+  const loginToken = config.WHATSAPP_LOGIN_TOKEN ?? randomBytes(24).toString('hex');
+  const loginHandler = createLoginRequestHandler({ token: loginToken });
+
   // Start health check server + memory watchdog for monitoring
-  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, { metricsEnabled: config.METRICS_ENABLED });
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
+    metricsEnabled: config.METRICS_ENABLED,
+    authToken: loginToken,
+    extraHandler: loginHandler,
+  });
   startMemoryWatchdog();
+
+  if (!healthOnlyMode && (config.WHATSAPP_LOGIN_MODE === 'web' || config.WHATSAPP_LOGIN_MODE === 'both')) {
+    // A wildcard bind (0.0.0.0/::) listens on every interface, so surface the
+    // machine's LAN address(es) a remote browser can actually reach — e.g. when
+    // garbanzo runs on a Raspberry Pi and you link from a laptop on the network.
+    const baseUrls = resolveLoginHosts(config.HEALTH_BIND_HOST).map(
+      (host) => `http://${host}:${config.HEALTH_PORT}/whatsapp/login`,
+    );
+
+    if (isNetworkExposedHost(config.HEALTH_BIND_HOST)) {
+      logger.warn(
+        { bindHost: config.HEALTH_BIND_HOST },
+        'WhatsApp login is exposed on the network; it is protected only by the login token over plaintext HTTP — prefer a trusted network or an SSH tunnel (ssh -L)',
+      );
+    }
+
+    if (config.WHATSAPP_LOGIN_TOKEN) {
+      // The operator supplied the token — never echo their secret into the logs.
+      logger.info(
+        { urls: baseUrls },
+        'WhatsApp browser login available; append ?token=<your WHATSAPP_LOGIN_TOKEN> if WhatsApp needs linking',
+      );
+    } else {
+      // Token was generated for this run and has no other delivery channel — surface it once.
+      logger.info(
+        { urls: baseUrls.map((url) => `${url}?token=${loginToken}`) },
+        'WhatsApp browser login available; open a URL if WhatsApp needs linking (token generated for this run)',
+      );
+    }
+  }
 
   // Start Ollama warm-up pings to prevent model unloading
   startOllamaWarmup();
@@ -46,6 +97,7 @@ async function main(): Promise<void> {
   }
 
   const runtime = getPlatformRuntime();
+  activeRuntime = runtime;
   logger.info({ platform: runtime.platform }, 'Starting platform runtime');
   await runtime.start();
   logger.info('🫘 Garbanzo Bean is online and listening');
@@ -73,8 +125,16 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   stopOllamaWarmup();
   stopHealthServer();
 
+  if (activeRuntime) {
+    try {
+      await withTimeout(activeRuntime.stop(), SHUTDOWN_TIMEOUT_MS, 'runtime.stop');
+    } catch (err) {
+      logger.error({ err, signal }, 'Runtime stop failed during shutdown');
+    }
+  }
+
   try {
-    await closeDb();
+    await withTimeout(closeDb(), SHUTDOWN_TIMEOUT_MS, 'closeDb');
   } catch (err) {
     logger.error({ err, signal }, 'Failed to close database cleanly during shutdown');
   }

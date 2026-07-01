@@ -74,7 +74,7 @@ function isProviderConfigured(provider: CloudProvider): boolean {
   if (provider === 'anthropic') return !!config.ANTHROPIC_API_KEY;
   if (provider === 'gemini') return !!config.GEMINI_API_KEY;
   if (provider === 'bedrock') return !!config.BEDROCK_MODEL_ID;
-  return !!config.OPENAI_API_KEY;
+  return config.OPENAI_AUTH_MODE === 'oauth' || !!config.OPENAI_API_KEY;
 }
 
 /**
@@ -124,11 +124,8 @@ export async function getAIResponse(
     }, 'Routing to cloud providers');
 
     const t0 = Date.now();
-    let aiResult: CloudResponse;
-
+    let aiResult: CloudResponse | null = null;
     let lastProviderError: Error | null = null;
-    let resolved = false;
-    aiResult = { text: '', provider: 'openai', model: '' };
 
     const configuredProviders = providerOrder.filter(isProviderConfigured);
     if (configuredProviders.length === 0) {
@@ -148,7 +145,6 @@ export async function getAIResponse(
         } else {
           aiResult = await callClaude(provider, systemPrompt, query, visionImages);
         }
-        resolved = true;
         break;
       } catch (providerErr) {
         const error = providerErr instanceof Error ? providerErr : new Error(String(providerErr));
@@ -157,7 +153,7 @@ export async function getAIResponse(
       }
     }
 
-    if (!resolved) {
+    if (!aiResult) {
       throw new Error(`All configured cloud providers failed. Last error: ${lastProviderError?.message ?? 'unknown error'}`);
     }
 

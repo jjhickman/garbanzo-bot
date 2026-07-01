@@ -13,6 +13,7 @@ import { isReplyToBot, isAcknowledgment } from './reactions.js';
 import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound.js';
 import { createWhatsAppAdapter } from './adapter.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
+import { getWhatsAppOutboundSafety } from './outbound-safety.js';
 
 /**
  * WhatsApp platform processor.
@@ -26,6 +27,7 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
 
   const inbound = normalizeWhatsAppInboundMessage(sock, msg);
   if (!inbound) return;
+  getWhatsAppOutboundSafety(sock)?.onIncomingMessage(inbound.chatId, inbound.text ?? undefined);
 
   // Voice message transcription
   if (isVoiceMessage(msg)) {
