@@ -80,14 +80,19 @@ export async function startConnection(
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const classification = classifyDisconnect(statusCode ?? 0);
-      // 515 (restartRequired) is the normal signal WhatsApp sends immediately after
-      // a successful QR scan / pairing: the credentials are valid and the client MUST
-      // reconnect to finish linking. baileys-antiban misclassifies it as fatal, so
-      // override — otherwise the very first link never completes.
+      // baileys-antiban's classifyDisconnect mislabels/over-fatals several transient
+      // codes (e.g. 428 connectionClosed and 515 restartRequired), which made the bot
+      // give up on routine disconnects and tell the operator to re-scan. The
+      // credentials are still valid for everything EXCEPT the genuinely terminal
+      // reasons below, so reconnect on all others (with bounded backoff).
       const isRestartRequired = statusCode === DisconnectReason.restartRequired;
-      const shouldReconnect =
-        statusCode !== DisconnectReason.loggedOut &&
-        (isRestartRequired || classification.shouldReconnect);
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+      const TERMINAL_REASONS: Array<number | undefined> = [
+        DisconnectReason.loggedOut, // 401 — credentials revoked, must re-link
+        DisconnectReason.forbidden, // 403 — account blocked/banned
+        DisconnectReason.connectionReplaced, // 440 — another session took over; don't fight it
+      ];
+      const shouldReconnect = statusCode === undefined || !TERMINAL_REASONS.includes(statusCode);
 
       markDisconnected();
       markUnlinked();
@@ -109,8 +114,13 @@ export async function startConnection(
         const backoffMs = isRestartRequired ? 1000 : (classification.backoffMs ?? 3000);
         logger.info({ backoffMs }, 'Scheduling WhatsApp reconnect');
         setTimeout(() => startConnection(onReady, onClosed, onSocketCreated), backoffMs);
-      } else {
+      } else if (isLoggedOut) {
         logger.error('Logged out — runtime paused until WhatsApp is re-linked (delete baileys_auth/ and re-scan QR). Keeping process alive for health monitoring.');
+      } else {
+        logger.error(
+          { statusCode, reason: classification.message },
+          'WhatsApp connection ended and will not auto-reconnect (another session took over, or the account is blocked). Credentials are still valid — restart the container once any conflicting session is gone; re-linking is only needed after a real logout.',
+        );
       }
     }
   };
