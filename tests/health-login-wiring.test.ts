@@ -89,6 +89,16 @@ describe('health login wiring', () => {
     expect(extraHandler).toHaveBeenCalledTimes(1);
   });
 
+  it('never authorizes metrics against an empty expected token', async () => {
+    const baseUrl = await startEphemeralHealthServer({ metricsEnabled: true, authToken: '' });
+
+    const emptyProvided = await fetch(`${baseUrl}/metrics?token=`);
+    expect(emptyProvided.status).toBe(401);
+
+    const noToken = await fetch(`${baseUrl}/metrics`);
+    expect(noToken.status).toBe(401);
+  });
+
   it('leaves health ungated when an auth token is configured', async () => {
     const baseUrl = await startEphemeralHealthServer({ metricsEnabled: true, authToken: 'T' });
 

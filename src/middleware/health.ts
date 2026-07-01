@@ -125,6 +125,7 @@ function isHealthRequestRateLimited(ip: string, now: number): boolean {
 
 function tokenMatches(actual: string | null, expected: string): boolean {
   if (actual === null) return false;
+  if (expected.length === 0) return false;
 
   const actualBuffer = Buffer.from(actual);
   const expectedBuffer = Buffer.from(expected);

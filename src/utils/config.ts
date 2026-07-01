@@ -60,7 +60,12 @@ const envSchema = z.object({
   // WhatsApp
   BOT_PHONE_NUMBER: z.string().optional(),
   WHATSAPP_LOGIN_MODE: z.enum(['web', 'terminal', 'both']).default('web'),
-  WHATSAPP_LOGIN_TOKEN: z.string().optional(),
+  // Empty string normalizes to undefined so a strong random token is generated at
+  // startup instead of an all-empty (bypassable) token guard.
+  WHATSAPP_LOGIN_TOKEN: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
   WHATSAPP_SAFETY_ENABLED: booleanFromEnv.default(true),
   WHATSAPP_SAFETY_MAX_PER_MINUTE: z.coerce.number().int().min(1).max(100).default(5),
   WHATSAPP_SAFETY_MAX_PER_HOUR: z.coerce.number().int().min(1).max(5000).default(100),
