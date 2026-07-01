@@ -94,3 +94,39 @@ export interface SessionSummaryHit {
   summaryText: string;
   score: number;
 }
+
+export type WhatsAppOutboundStatus = 'pending' | 'sent' | 'held' | 'failed' | 'discarded';
+export type WhatsAppRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface WhatsAppOutboundJob {
+  id: number;
+  chatJid: string;
+  kind: string;
+  contentJson: string;
+  optionsJson: string | null;
+  status: WhatsAppOutboundStatus;
+  reason: string | null;
+  attempts: number;
+  createdAt: number;
+  updatedAt: number;
+  sentAt: number | null;
+}
+
+export interface WhatsAppSafetyState {
+  paused: boolean;
+  risk: WhatsAppRiskLevel;
+  score: number;
+  reasons: string[];
+  updatedAt: number;
+}
+
+export interface WhatsAppSafetyMetrics {
+  pending: number;
+  held: number;
+  sentLastHour: number;
+  sentLastDay: number;
+  failedLastHour: number;
+  paused: boolean;
+  risk: WhatsAppRiskLevel;
+  score: number;
+}

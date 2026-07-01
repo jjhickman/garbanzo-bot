@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'node:net';
 
+process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
+process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
+process.env.AI_PROVIDER_ORDER ??= 'openrouter';
+
 /**
  * Phase 5 — Operations & Reliability tests.
  * Tests health tracking, cost estimation, retry queue, feature flags,
@@ -115,16 +119,21 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     stopHealthServer();
   });
 
-  it('health payload includes backup integrity fields', async () => {
+  it('health payload includes backup and WhatsApp safety fields', async () => {
     const port = await getFreePort();
     startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health`);
     expect(response.status).toBe(200);
-    const data = await response.json() as { backup?: { available: boolean; integrityOk: boolean | null; message: string } };
+    const data = await response.json() as {
+      backup?: { available: boolean; integrityOk: boolean | null; message: string };
+      whatsappSafety?: { held: number; paused: boolean; risk: string };
+    };
     expect(data.backup).toBeDefined();
     expect(typeof data.backup?.available).toBe('boolean');
     expect(typeof data.backup?.message).toBe('string');
+    expect(data.whatsappSafety).toBeDefined();
+    expect(typeof data.whatsappSafety?.held).toBe('number');
   });
 
   it('returns 429 when health endpoint request limit is exceeded', async () => {
@@ -163,7 +172,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     expect(data.ready).toBe(true);
   });
 
-  it('ready endpoint returns 503 when connection is stale', async () => {
+  it('ready endpoint remains healthy when connected but incoming traffic is quiet', async () => {
     const port = await getFreePort();
 
     const nowSpy = vi.spyOn(Date, 'now');
@@ -175,7 +184,7 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     startHealthServer(port, '127.0.0.1');
 
     const response = await fetch(`http://127.0.0.1:${port}/health/ready`);
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
 
     nowSpy.mockRestore();
   });
@@ -201,6 +210,8 @@ describe('Health endpoint — backup status and rate limiting', async () => {
     expect(text).toContain('garbanzo_up_time_seconds');
     expect(text).toContain('garbanzo_connection_status');
     expect(text).toContain('garbanzo_connection_stale');
+    expect(text).toContain('garbanzo_whatsapp_outbound_held');
+    expect(text).toContain('garbanzo_whatsapp_safety_risk_score');
   });
 });
 
@@ -336,7 +347,18 @@ describe('Feature flags — per-group feature control', async () => {
 // ── Database maintenance ────────────────────────────────────────────
 
 describe('Database — maintenance and backup', async () => {
-  const { runMaintenance, storeMessage, getMessages, backupDatabase } = await import('../src/utils/db.js');
+  const {
+    runMaintenance,
+    storeMessage,
+    getMessages,
+    backupDatabase,
+    createWhatsAppOutboundJob,
+    getWhatsAppOutboundJob,
+    listWhatsAppHeldJobs,
+    setWhatsAppSafetyState,
+    getWhatsAppSafetyMetrics,
+    updateWhatsAppOutboundJob,
+  } = await import('../src/utils/db.js');
   const { existsSync, unlinkSync } = await import('fs');
 
   it('runMaintenance returns stats object', async () => {
@@ -363,6 +385,30 @@ describe('Database — maintenance and backup', async () => {
     expect(existsSync(backupPath)).toBe(true);
     // Clean up
     try { unlinkSync(backupPath); } catch { /* ignore */ }
+  });
+
+  it('retains WhatsApp outbound jobs and reports safety state', async () => {
+    const job = await createWhatsAppOutboundJob(
+      'safety-test@g.us',
+      'text',
+      JSON.stringify({ text: 'queued test' }),
+      null,
+    );
+    await updateWhatsAppOutboundJob(job.id, 'held', 'manual pause');
+    await setWhatsAppSafetyState(true, 'medium', 42, ['manual pause']);
+
+    const stored = await getWhatsAppOutboundJob(job.id);
+    const held = await listWhatsAppHeldJobs(50);
+    const now = Math.floor(Date.now() / 1000);
+    const metrics = await getWhatsAppSafetyMetrics(now - 3600, now - 86400);
+
+    expect(stored?.status).toBe('held');
+    expect(held.some((entry) => entry.id === job.id)).toBe(true);
+    expect(metrics.paused).toBe(true);
+    expect(metrics.risk).toBe('medium');
+    expect(metrics.held).toBeGreaterThanOrEqual(1);
+
+    await setWhatsAppSafetyState(false, 'low', 0, []);
   });
 });
 

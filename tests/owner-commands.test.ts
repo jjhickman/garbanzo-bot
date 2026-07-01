@@ -6,7 +6,12 @@ describe('owner support commands', () => {
     vi.restoreAllMocks();
   });
 
-  function mockOwnerDeps() {
+  type MockSafety = {
+    metrics: ReturnType<typeof vi.fn>;
+    sendControlText: ReturnType<typeof vi.fn>;
+  };
+
+  function mockOwnerDeps(safety?: MockSafety) {
     vi.doMock('../src/middleware/logger.js', () => ({
       logger: {
         info: vi.fn(),
@@ -41,6 +46,7 @@ describe('owner support commands', () => {
     vi.doMock('../src/features/memory.js', () => ({ handleMemory: vi.fn(() => 'memory') }));
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
     vi.doMock('../src/core/response-router.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
+    vi.doMock('../src/platforms/whatsapp/outbound-safety.js', () => ({ getWhatsAppOutboundSafety: vi.fn(() => safety) }));
     vi.doMock('../src/core/groups-config.js', () => ({
       GROUP_IDS: {
         'g1@g.us': { name: 'General', enabled: true },
@@ -107,5 +113,31 @@ describe('owner support commands', () => {
     expect(sock.sendMessage).toHaveBeenCalledTimes(1);
     const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
     expect(calls[0]?.[1]?.text).toContain('created issue for #42');
+  });
+
+  it('routes WhatsApp safety status through an unqueued owner control response', async () => {
+    const safety = {
+      metrics: vi.fn(async () => ({
+        paused: true,
+        risk: 'medium',
+        score: 35,
+        held: 2,
+        pending: 0,
+        sentLastHour: 3,
+        sentLastDay: 7,
+        failedLastHour: 0,
+      })),
+      sendControlText: vi.fn(async () => undefined),
+    };
+    mockOwnerDeps(safety);
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
+    const sock = { sendMessage: vi.fn(async () => undefined) };
+
+    const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'owner@s.whatsapp.net', '!whatsapp status');
+
+    expect(handled).toBe(true);
+    expect(safety.sendControlText).toHaveBeenCalledTimes(1);
+    expect(String(safety.sendControlText.mock.calls[0]?.[1])).toContain('Held: 2');
+    expect(sock.sendMessage).not.toHaveBeenCalled();
   });
 });

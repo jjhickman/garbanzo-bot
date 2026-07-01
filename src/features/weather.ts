@@ -14,6 +14,14 @@ const WEATHER_BASE = 'https://weather.googleapis.com/v1';
 const GEOCODING_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
 const TIMEOUT_MS = 10_000;
 
+/**
+ * Send the Google API key in a header instead of the URL query string so it does
+ * not leak into request logs/proxies. Callers guard on GOOGLE_API_KEY first.
+ */
+function googleApiHeaders(): Record<string, string> {
+  return { 'X-Goog-Api-Key': config.GOOGLE_API_KEY ?? '' };
+}
+
 // Boston, MA — default location
 const BOSTON = { lat: 42.3601, lng: -71.0589, name: 'Boston' };
 
@@ -129,9 +137,9 @@ async function resolveLocation(query: string): Promise<Coords> {
 }
 
 async function geocode(address: string): Promise<Coords> {
-  const url = `${GEOCODING_BASE}?address=${encodeURIComponent(address)}&key=${config.GOOGLE_API_KEY}`;
+  const url = `${GEOCODING_BASE}?address=${encodeURIComponent(address)}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await fetch(url, { headers: googleApiHeaders(), signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     throw new Error(`Geocoding API error: ${res.status}`);
   }
@@ -155,12 +163,11 @@ async function geocode(address: string): Promise<Coords> {
 
 async function getCurrentConditions(location: Coords): Promise<string> {
   const url = `${WEATHER_BASE}/currentConditions:lookup`
-    + `?key=${config.GOOGLE_API_KEY}`
-    + `&location.latitude=${location.lat}`
+    + `?location.latitude=${location.lat}`
     + `&location.longitude=${location.lng}`
     + `&unitsSystem=IMPERIAL`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await fetch(url, { headers: googleApiHeaders(), signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Weather API error ${res.status}: ${errText}`);
@@ -202,13 +209,12 @@ async function getCurrentConditions(location: Coords): Promise<string> {
 async function getForecast(location: Coords): Promise<string> {
   const days = 5;
   const url = `${WEATHER_BASE}/forecast/days:lookup`
-    + `?key=${config.GOOGLE_API_KEY}`
-    + `&location.latitude=${location.lat}`
+    + `?location.latitude=${location.lat}`
     + `&location.longitude=${location.lng}`
     + `&unitsSystem=IMPERIAL`
     + `&days=${days}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await fetch(url, { headers: googleApiHeaders(), signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Forecast API error ${res.status}: ${errText}`);

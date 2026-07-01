@@ -31,6 +31,26 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 | AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
 | Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
 
+### OpenAI: API key vs. "Sign in with ChatGPT" (experimental)
+
+OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
+
+- **`apikey` (default):** standard `OPENAI_API_KEY` against `api.openai.com`. Recommended.
+- **`oauth` (experimental):** use a ChatGPT (Plus/Pro) subscription instead of an API key.
+
+  ```bash
+  npm run openai:login   # opens the browser, links your ChatGPT account
+  # then set OPENAI_AUTH_MODE=oauth and include "openai" in AI_PROVIDER_ORDER
+  ```
+
+  > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
+  > OAuth client to call OpenAI's private ChatGPT backend, can break without
+  > notice, and is **not validated end-to-end**. It is isolated and always falls
+  > back to the next provider in `AI_PROVIDER_ORDER` on any failure — never make
+  > it your only provider. Tokens are stored in `data/openai-oauth.json`
+  > (gitignored, mode `0600`). In oauth mode `OPENAI_MODEL` must be a
+  > ChatGPT-backend model slug, not an API model name.
+
 ## AI Capabilities
 
 - Mention-driven AI responses for group chat (`@garbanzo`) with context continuity
@@ -55,7 +75,7 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 
 ## Supported Messaging Runtimes
 
-- **WhatsApp:** Baileys runtime (community/experimental transport)
+- **WhatsApp:** Baileys runtime (community/experimental transport) with retained outbound safety controls for personal-account deployments
 - **Slack:** official Events API runtime (with demo mode fallback)
 - **Discord:** official interactions runtime (with demo mode fallback)
 - **Unified demo:** single-service app at `demo.garbanzobot.com` serving both Slack and Discord behavior modes with platform switcher, model transparency UI, and Turnstile protection
@@ -99,7 +119,7 @@ What we intentionally changed in Garbanzo (why it's safer and easier to run for 
 - **Smaller operational surface area:** one shared core pipeline with platform adapters instead of channel-specific reimplementations
 - **Curated features, not a marketplace:** no automatic install/run of third-party skills; features live in-repo and ship via release tags
 - **Group safety defaults:** mention gating + per-group feature allowlists
-- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on disconnect/staleness
+- **Ops-first health semantics:** `GET /health` for visibility and `GET /health/ready` for alerting on connection loss; idle chat periods are informational
 - **Local-first, inspectable state:** SQLite + explicit backups; health reports backup integrity
 - **Security guardrails in CI:** secrets scan + typecheck + lint + tests (`npm run check`)
 
@@ -160,8 +180,49 @@ cp .env.example .env
 # Edit .env and config/groups.json
 npm run dev
 
-# Complete platform linking/auth when prompted (WhatsApp runtime uses QR linking)
+# Complete platform linking/auth when prompted.
+# WhatsApp links through a browser page by default — see "WhatsApp Login (Browser)" below.
 ```
+
+### WhatsApp Login (Browser)
+
+By default (`WHATSAPP_LOGIN_MODE=web`) WhatsApp links through a small, token-gated
+page on the health server instead of the terminal. On startup the logs print a URL
+like:
+
+```
+http://127.0.0.1:3001/whatsapp/login?token=<token>
+```
+
+Open it (over an SSH tunnel or on the host) and either:
+
+- **Scan QR** — the page shows a live QR that refreshes on its own; scan it from
+  WhatsApp > Settings > Linked Devices. QR rotation within one attempt is normal and
+  does not risk a bot-flag.
+- **Pair with code** — enter the bot's phone number to get an 8-character code, then
+  use WhatsApp > Linked Devices > "Link with phone number."
+
+The page shows "Linked ✓" once connected.
+
+- `WHATSAPP_LOGIN_MODE=terminal` restores the old in-terminal QR; `both` prints both.
+- The login token is generated per run and printed once. Set `WHATSAPP_LOGIN_TOKEN`
+  to pin it (e.g. for scripted access); an operator-set token is never echoed to the
+  logs. The same token also guards `/metrics`, so add `?token=<token>` when scraping.
+- All login routes are bound to `HEALTH_BIND_HOST` (`127.0.0.1` by default).
+
+**Linking a remote/headless host (e.g. a Raspberry Pi over the network).** Two options:
+
+- *SSH tunnel (recommended, keeps the default localhost bind):*
+  ```bash
+  ssh -L 3001:127.0.0.1:3001 pi@garbanzo-host
+  # then open http://127.0.0.1:3001/whatsapp/login?token=<token> on your laptop
+  ```
+- *Direct network exposure:* set `HEALTH_BIND_HOST=0.0.0.0`. On startup the logs
+  then print connectable `http://<LAN-IP>:3001/whatsapp/login` URLs (the machine's
+  LAN address, not `0.0.0.0`). This exposes the linking page — and `/health` +
+  token-gated `/metrics` — to your whole network, guarded only by the login token
+  over plaintext HTTP, so only do it on a trusted LAN. The bot logs a warning when
+  login is bound to a non-loopback host.
 
 ### Slack Support
 
@@ -337,7 +398,8 @@ npm run setup
 
 docker compose up -d
 docker compose logs -f garbanzo
-# scan QR code shown in terminal: WhatsApp > Settings > Linked Devices
+# the logs print a browser login URL; open it to scan the QR or pair with a code
+# (WhatsApp > Settings > Linked Devices). See "WhatsApp Login (Browser)" above.
 ```
 
 Health check example:
@@ -427,7 +489,8 @@ Copy `.env.example` to `.env` and configure:
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (e.g., `bedrock,gemini,openai,openrouter,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-sonnet-4-5-20250514`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
-| `OPENAI_MODEL` | No | OpenAI fallback model override (default: `gpt-4.1`) |
+| `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-4.1`; oauth mode uses a ChatGPT-backend slug) |
+| `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |
 | `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
 | `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
 | `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
@@ -471,6 +534,8 @@ Copy `.env.example` to `.env` and configure:
 | `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
+| `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
+| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics token instead of generating one per run (guards `/whatsapp/login*` and `/metrics`) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
@@ -775,6 +840,7 @@ Repo guardrails are configured under `.github/`:
 - [ROADMAP.md](docs/ROADMAP.md) — Product milestones and release direction
 - [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md) — Ready-to-post launch and feature snippets
 - [SECURITY.md](docs/SECURITY.md) — Infrastructure security audit + data privacy
+- [IMPROVEMENTS.md](docs/IMPROVEMENTS.md) — Hardening audit status (reliability/security/DX, done + deferred)
 - [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) — Hardware and network reference
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Message flow, AI routing, and multimedia pipeline
 - [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md) — Interactive and non-interactive setup recipes

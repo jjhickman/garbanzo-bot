@@ -143,6 +143,40 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_feedback_status
     ON feedback (status, timestamp DESC);
+
+  CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_jid TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    content_json TEXT NOT NULL,
+    options_json TEXT,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'sent', 'held', 'failed', 'discarded')),
+    reason TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    sent_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_status_created
+    ON whatsapp_outbound_jobs (status, created_at DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_sent_at
+    ON whatsapp_outbound_jobs (sent_at DESC);
+
+  CREATE TABLE IF NOT EXISTS whatsapp_safety_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    paused INTEGER NOT NULL DEFAULT 0,
+    risk TEXT NOT NULL DEFAULT 'low'
+      CHECK (risk IN ('low', 'medium', 'high', 'critical')),
+    score INTEGER NOT NULL DEFAULT 0,
+    reasons TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL DEFAULT 0
+  );
+
+  INSERT OR IGNORE INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
+    VALUES (1, 0, 'low', 0, '[]', 0);
 `);
 
 interface TableColumnInfo {

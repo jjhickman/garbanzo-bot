@@ -6,6 +6,14 @@ import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { execSync } from 'node:child_process';
 
+import {
+  getField,
+  promptHint,
+  resolveEnvField,
+  OPENAI_AUTH_MODES,
+  WHATSAPP_LOGIN_MODES,
+} from './setup-fields.mjs';
+
 const PROJECT_ROOT = resolve(new URL('..', import.meta.url).pathname);
 const ENV_PATH = resolve(PROJECT_ROOT, '.env');
 const GROUPS_PATH = resolve(PROJECT_ROOT, 'config', 'groups.json');
@@ -220,6 +228,15 @@ async function main() {
   const rl = createInterface({ input, output });
   const existing = parseEnvFile(ENV_PATH);
 
+  // Resolve one FIELD_TABLE field: CLI/existing/default when non-interactive,
+  // otherwise prompt with a hint (masked for secret fields — Sec-3).
+  const resolveText = async (env) => {
+    const field = getField(env);
+    if (nonInteractive) return resolveEnvField(field, cli, existing);
+    const label = field.note ? `${field.env} ${field.note}` : field.env;
+    return rl.question(`${label} [${promptHint(field, existing)}]: `);
+  };
+
   try {
     const installDeps = nonInteractive
       ? parseBoolean(cli.options['install-deps'], false)
@@ -360,100 +377,71 @@ async function main() {
 
     const aiProviderOrder = providerOrder.join(',');
 
-    const anthropicKey = useAnthropic
-      ? (nonInteractive
-          ? (cli.options['anthropic-key'] ?? existing.ANTHROPIC_API_KEY ?? '')
-          : await rl.question(`ANTHROPIC_API_KEY [${existing.ANTHROPIC_API_KEY ?? ''}]: `))
-      : '';
-    const openRouterKey = useOpenRouter
-      ? (nonInteractive
-          ? (cli.options['openrouter-key'] ?? existing.OPENROUTER_API_KEY ?? '')
-          : await rl.question(`OPENROUTER_API_KEY [${existing.OPENROUTER_API_KEY ?? ''}]: `))
-      : '';
-    const openAIKey = useOpenAI
-      ? (nonInteractive
-          ? (cli.options['openai-key'] ?? existing.OPENAI_API_KEY ?? '')
-          : await rl.question(`OPENAI_API_KEY [${existing.OPENAI_API_KEY ?? ''}]: `))
-      : '';
-    const geminiKey = useGemini
-      ? (nonInteractive
-          ? (cli.options['gemini-key'] ?? existing.GEMINI_API_KEY ?? '')
-          : await rl.question(`GEMINI_API_KEY [${existing.GEMINI_API_KEY ?? ''}]: `))
-      : '';
+    let openaiAuthMode = 'apikey';
+    if (useOpenAI) {
+      if (nonInteractive) {
+        const requested = (cli.options['openai-auth-mode'] ?? existing.OPENAI_AUTH_MODE ?? 'apikey').trim().toLowerCase();
+        openaiAuthMode = OPENAI_AUTH_MODES.includes(requested) ? requested : 'apikey';
+      } else {
+        const authIndex = await promptChoice(
+          rl,
+          'OpenAI auth mode:',
+          ['API key (recommended)', 'Sign in with ChatGPT (OAuth — experimental, ToS-grey)'],
+          existing.OPENAI_AUTH_MODE === 'oauth' ? 1 : 0,
+        );
+        openaiAuthMode = authIndex === 1 ? 'oauth' : 'apikey';
+        if (openaiAuthMode === 'oauth') {
+          output.write('\n⚠️ "Sign in with ChatGPT" is experimental and against OpenAI ToS; the bot falls back to other providers if it breaks.\n');
+          const loginNow = yn(await rl.question('Run `npm run openai:login` now to link your ChatGPT account? [y/N]: '), false);
+          if (loginNow && dryRun) {
+            output.write('🧪 Dry-run: would run npm run openai:login\n');
+          } else if (loginNow) {
+            try {
+              execSync('npm run openai:login', { cwd: PROJECT_ROOT, stdio: 'inherit' });
+            } catch {
+              output.write('⚠️ openai:login did not complete; run `npm run openai:login` later.\n');
+            }
+          }
+        }
+      }
+    }
 
-    const anthropicModel = nonInteractive
-      ? (cli.options['anthropic-model'] ?? existing.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250514')
-      : await rl.question(`ANTHROPIC_MODEL [${existing.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250514'}]: `);
-    const openRouterModel = nonInteractive
-      ? (cli.options['openrouter-model'] ?? existing.OPENROUTER_MODEL ?? 'anthropic/claude-sonnet-4-5')
-      : await rl.question(`OPENROUTER_MODEL [${existing.OPENROUTER_MODEL ?? 'anthropic/claude-sonnet-4-5'}]: `);
-    const openAIModel = nonInteractive
-      ? (cli.options['openai-model'] ?? existing.OPENAI_MODEL ?? 'gpt-4.1')
-      : await rl.question(`OPENAI_MODEL [${existing.OPENAI_MODEL ?? 'gpt-4.1'}]: `);
-    const geminiModel = nonInteractive
-      ? (cli.options['gemini-model'] ?? existing.GEMINI_MODEL ?? 'gemini-1.5-flash')
-      : await rl.question(`GEMINI_MODEL [${existing.GEMINI_MODEL ?? 'gemini-1.5-flash'}]: `);
+    // Simple key/model/infra fields are resolved from the declarative FIELD_TABLE.
+    const anthropicKey = useAnthropic ? await resolveText('ANTHROPIC_API_KEY') : '';
+    const openRouterKey = useOpenRouter ? await resolveText('OPENROUTER_API_KEY') : '';
+    // In OAuth mode OpenAI needs no API key, so skip that prompt.
+    const openAIKey = useOpenAI && openaiAuthMode !== 'oauth' ? await resolveText('OPENAI_API_KEY') : '';
+    const geminiKey = useGemini ? await resolveText('GEMINI_API_KEY') : '';
 
-    const geminiPricingInputPerM = nonInteractive
-      ? (cli.options['gemini-pricing-input-per-m'] ?? existing.GEMINI_PRICING_INPUT_PER_M ?? '0')
-      : await rl.question(`GEMINI_PRICING_INPUT_PER_M (USD per 1M tokens) [${existing.GEMINI_PRICING_INPUT_PER_M ?? '0'}]: `);
-    const geminiPricingOutputPerM = nonInteractive
-      ? (cli.options['gemini-pricing-output-per-m'] ?? existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0')
-      : await rl.question(`GEMINI_PRICING_OUTPUT_PER_M (USD per 1M tokens) [${existing.GEMINI_PRICING_OUTPUT_PER_M ?? '0'}]: `);
+    const anthropicModel = await resolveText('ANTHROPIC_MODEL');
+    const openRouterModel = await resolveText('OPENROUTER_MODEL');
+    const openAIModel = await resolveText('OPENAI_MODEL');
+    const geminiModel = await resolveText('GEMINI_MODEL');
 
-    const bedrockRegion = nonInteractive
-      ? (cli.options['bedrock-region'] ?? existing.BEDROCK_REGION ?? 'us-east-1')
-      : await rl.question(`BEDROCK_REGION [${existing.BEDROCK_REGION ?? 'us-east-1'}]: `);
-    const bedrockModelId = nonInteractive
-      ? (cli.options['bedrock-model-id'] ?? existing.BEDROCK_MODEL_ID ?? '')
-      : await rl.question(`BEDROCK_MODEL_ID [${existing.BEDROCK_MODEL_ID ?? ''}]: `);
-    const bedrockMaxTokens = nonInteractive
-      ? (cli.options['bedrock-max-tokens'] ?? existing.BEDROCK_MAX_TOKENS ?? '1024')
-      : await rl.question(`BEDROCK_MAX_TOKENS [${existing.BEDROCK_MAX_TOKENS ?? '1024'}]: `);
-    const bedrockPricingInputPerM = nonInteractive
-      ? (cli.options['bedrock-pricing-input-per-m'] ?? existing.BEDROCK_PRICING_INPUT_PER_M ?? '0')
-      : await rl.question(`BEDROCK_PRICING_INPUT_PER_M (USD per 1M tokens) [${existing.BEDROCK_PRICING_INPUT_PER_M ?? '0'}]: `);
-    const bedrockPricingOutputPerM = nonInteractive
-      ? (cli.options['bedrock-pricing-output-per-m'] ?? existing.BEDROCK_PRICING_OUTPUT_PER_M ?? '0')
-      : await rl.question(`BEDROCK_PRICING_OUTPUT_PER_M (USD per 1M tokens) [${existing.BEDROCK_PRICING_OUTPUT_PER_M ?? '0'}]: `);
+    const geminiPricingInputPerM = await resolveText('GEMINI_PRICING_INPUT_PER_M');
+    const geminiPricingOutputPerM = await resolveText('GEMINI_PRICING_OUTPUT_PER_M');
 
-    const ollamaBaseUrl = nonInteractive
-      ? (cli.options['ollama-base-url'] ?? existing.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434')
-      : await rl.question(`OLLAMA_BASE_URL [${existing.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434'}]: `);
-    const ownerJid = nonInteractive
-      ? (cli.options['owner-jid'] ?? existing.OWNER_JID ?? 'your_number@s.whatsapp.net')
-      : await rl.question(`OWNER_JID [${existing.OWNER_JID ?? 'your_number@s.whatsapp.net'}]: `);
+    const bedrockRegion = await resolveText('BEDROCK_REGION');
+    const bedrockModelId = await resolveText('BEDROCK_MODEL_ID');
+    const bedrockMaxTokens = await resolveText('BEDROCK_MAX_TOKENS');
+    const bedrockPricingInputPerM = await resolveText('BEDROCK_PRICING_INPUT_PER_M');
+    const bedrockPricingOutputPerM = await resolveText('BEDROCK_PRICING_OUTPUT_PER_M');
+
+    const ollamaBaseUrl = await resolveText('OLLAMA_BASE_URL');
+    const ownerJid = await resolveText('OWNER_JID');
     const appVersion = nonInteractive
       ? (cli.options['app-version'] ?? existing.APP_VERSION ?? DEFAULT_APP_VERSION)
       : await rl.question(`APP_VERSION [${existing.APP_VERSION ?? DEFAULT_APP_VERSION}]: `);
-    const healthPort = nonInteractive
-      ? (cli.options['health-port'] ?? existing.HEALTH_PORT ?? '3001')
-      : await rl.question(`HEALTH_PORT [${existing.HEALTH_PORT ?? '3001'}]: `);
-    const healthBindHost = nonInteractive
-      ? (cli.options['health-bind-host'] ?? existing.HEALTH_BIND_HOST ?? '127.0.0.1')
-      : await rl.question(`HEALTH_BIND_HOST [${existing.HEALTH_BIND_HOST ?? '127.0.0.1'}]: `);
+    const healthPort = await resolveText('HEALTH_PORT');
+    const healthBindHost = await resolveText('HEALTH_BIND_HOST');
 
-    const githubSponsorsUrl = nonInteractive
-      ? (cli.options['github-sponsors-url'] ?? existing.GITHUB_SPONSORS_URL ?? '')
-      : await rl.question(`GITHUB_SPONSORS_URL [${existing.GITHUB_SPONSORS_URL ?? ''}]: `);
-    const patreonUrl = nonInteractive
-      ? (cli.options['patreon-url'] ?? existing.PATREON_URL ?? '')
-      : await rl.question(`PATREON_URL [${existing.PATREON_URL ?? ''}]: `);
-    const kofiUrl = nonInteractive
-      ? (cli.options['kofi-url'] ?? existing.KOFI_URL ?? '')
-      : await rl.question(`KOFI_URL [${existing.KOFI_URL ?? ''}]: `);
-    const supportCustomUrl = nonInteractive
-      ? (cli.options['support-custom-url'] ?? existing.SUPPORT_CUSTOM_URL ?? '')
-      : await rl.question(`SUPPORT_CUSTOM_URL [${existing.SUPPORT_CUSTOM_URL ?? ''}]: `);
-    const supportMessage = nonInteractive
-      ? (cli.options['support-message'] ?? existing.SUPPORT_MESSAGE ?? '')
-      : await rl.question(`SUPPORT_MESSAGE [${existing.SUPPORT_MESSAGE ?? ''}]: `);
-    const githubIssuesToken = nonInteractive
-      ? (cli.options['github-issues-token'] ?? existing.GITHUB_ISSUES_TOKEN ?? '')
-      : await rl.question(`GITHUB_ISSUES_TOKEN [${existing.GITHUB_ISSUES_TOKEN ?? ''}]: `);
-    const githubIssuesRepo = nonInteractive
-      ? (cli.options['github-issues-repo'] ?? existing.GITHUB_ISSUES_REPO ?? 'owner/repo')
-      : await rl.question(`GITHUB_ISSUES_REPO [${existing.GITHUB_ISSUES_REPO ?? 'owner/repo'}]: `);
+    const githubSponsorsUrl = await resolveText('GITHUB_SPONSORS_URL');
+    const patreonUrl = await resolveText('PATREON_URL');
+    const kofiUrl = await resolveText('KOFI_URL');
+    const supportCustomUrl = await resolveText('SUPPORT_CUSTOM_URL');
+    const supportMessage = await resolveText('SUPPORT_MESSAGE');
+    const githubIssuesToken = await resolveText('GITHUB_ISSUES_TOKEN');
+    const githubIssuesRepo = await resolveText('GITHUB_ISSUES_REPO');
 
     const profileKeys = Object.keys(FEATURE_PROFILES);
     const profileLabels = profileKeys.map((key) => `${FEATURE_PROFILES[key].label} — ${FEATURE_PROFILES[key].description}`);
@@ -522,6 +510,22 @@ async function main() {
       }
     }
 
+    let whatsappLoginMode = existing.WHATSAPP_LOGIN_MODE ?? 'web';
+    if (messagingPlatform === 'whatsapp') {
+      if (nonInteractive) {
+        const requested = (cli.options['whatsapp-login-mode'] ?? existing.WHATSAPP_LOGIN_MODE ?? 'web').trim().toLowerCase();
+        whatsappLoginMode = WHATSAPP_LOGIN_MODES.includes(requested) ? requested : 'web';
+      } else {
+        const loginIndex = await promptChoice(
+          rl,
+          'WhatsApp login mode:',
+          ['Browser page (default)', 'Terminal QR', 'Both'],
+          existing.WHATSAPP_LOGIN_MODE === 'terminal' ? 1 : existing.WHATSAPP_LOGIN_MODE === 'both' ? 2 : 0,
+        );
+        whatsappLoginMode = loginIndex === 1 ? 'terminal' : loginIndex === 2 ? 'both' : 'web';
+      }
+    }
+
     const ownerName = nonInteractive
       ? (cli.options['owner-name'] || 'Owner').trim()
       : (await rl.question('Owner display name [Owner]: ')).trim() || 'Owner';
@@ -536,6 +540,7 @@ async function main() {
       ANTHROPIC_MODEL: (anthropicModel || existing.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250514').trim(),
       OPENROUTER_MODEL: (openRouterModel || existing.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4-5').trim(),
       OPENAI_MODEL: (openAIModel || existing.OPENAI_MODEL || 'gpt-4.1').trim(),
+      OPENAI_AUTH_MODE: (openaiAuthMode || existing.OPENAI_AUTH_MODE || 'apikey').trim(),
       GEMINI_MODEL: (geminiModel || existing.GEMINI_MODEL || 'gemini-1.5-flash').trim(),
       GEMINI_PRICING_INPUT_PER_M: String(geminiPricingInputPerM || existing.GEMINI_PRICING_INPUT_PER_M || '0').trim(),
       GEMINI_PRICING_OUTPUT_PER_M: String(geminiPricingOutputPerM || existing.GEMINI_PRICING_OUTPUT_PER_M || '0').trim(),
@@ -565,6 +570,7 @@ async function main() {
       SLACK_DEMO_PORT: (existing.SLACK_DEMO_PORT || '3002').trim(),
       SLACK_DEMO_BIND_HOST: (existing.SLACK_DEMO_BIND_HOST || '127.0.0.1').trim(),
       OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
+      WHATSAPP_LOGIN_MODE: (whatsappLoginMode || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
     };
 
     const envContent = [
@@ -580,6 +586,7 @@ async function main() {
       `ANTHROPIC_MODEL=${finalEnv.ANTHROPIC_MODEL}`,
       `OPENROUTER_MODEL=${finalEnv.OPENROUTER_MODEL}`,
       `OPENAI_MODEL=${finalEnv.OPENAI_MODEL}`,
+      `OPENAI_AUTH_MODE=${finalEnv.OPENAI_AUTH_MODE}`,
       `GEMINI_MODEL=${finalEnv.GEMINI_MODEL}`,
       `GEMINI_PRICING_INPUT_PER_M=${finalEnv.GEMINI_PRICING_INPUT_PER_M}`,
       `GEMINI_PRICING_OUTPUT_PER_M=${finalEnv.GEMINI_PRICING_OUTPUT_PER_M}`,
@@ -592,6 +599,7 @@ async function main() {
       '# Messaging and bot identity',
       `BOT_PHONE_NUMBER=${finalEnv.BOT_PHONE_NUMBER}`,
       `OWNER_JID=${finalEnv.OWNER_JID}`,
+      `WHATSAPP_LOGIN_MODE=${finalEnv.WHATSAPP_LOGIN_MODE}`,
       '',
       '# Optional feature APIs',
       `GOOGLE_API_KEY=${finalEnv.GOOGLE_API_KEY}`,
@@ -703,6 +711,8 @@ async function main() {
     output.write('✅ Setup complete\n');
     output.write(`- Messaging platform: ${messagingPlatform}\n`);
     output.write(`- Cloud provider order: ${aiProviderOrder}\n`);
+    if (useOpenAI) output.write(`- OpenAI auth mode: ${finalEnv.OPENAI_AUTH_MODE}\n`);
+    if (messagingPlatform === 'whatsapp') output.write(`- WhatsApp login mode: ${finalEnv.WHATSAPP_LOGIN_MODE}\n`);
     output.write(`- Feature profile: ${selectedProfile.label}\n`);
     output.write(`- Enabled features: ${selectedFeatures.join(', ')}\n`);
     output.write(`- Persona source: ${customPersonaContent ? customPersonaSourcePath : 'existing docs/PERSONA.md'}\n`);

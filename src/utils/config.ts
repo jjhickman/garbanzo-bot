@@ -41,6 +41,10 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-5-20250514'),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
   OPENAI_MODEL: z.string().default('gpt-4.1'),
+  // apikey (default): api.openai.com with OPENAI_API_KEY. oauth (EXPERIMENTAL,
+  // ToS-grey): "Sign in with ChatGPT" via `npm run openai:login`, calls the
+  // ChatGPT backend. Always falls back to the next provider on failure.
+  OPENAI_AUTH_MODE: z.enum(['apikey', 'oauth']).default('apikey'),
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
   GEMINI_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.0),
   GEMINI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(0.0),
@@ -59,6 +63,22 @@ const envSchema = z.object({
 
   // WhatsApp
   BOT_PHONE_NUMBER: z.string().optional(),
+  WHATSAPP_LOGIN_MODE: z.enum(['web', 'terminal', 'both']).default('web'),
+  // Empty string normalizes to undefined so a strong random token is generated at
+  // startup instead of an all-empty (bypassable) token guard.
+  WHATSAPP_LOGIN_TOKEN: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
+  WHATSAPP_SAFETY_ENABLED: booleanFromEnv.default(true),
+  WHATSAPP_SAFETY_MAX_PER_MINUTE: z.coerce.number().int().min(1).max(100).default(5),
+  WHATSAPP_SAFETY_MAX_PER_HOUR: z.coerce.number().int().min(1).max(5000).default(100),
+  WHATSAPP_SAFETY_MAX_PER_DAY: z.coerce.number().int().min(1).max(50000).default(800),
+  WHATSAPP_SAFETY_MIN_DELAY_MS: z.coerce.number().int().min(0).max(60000).default(2500),
+  WHATSAPP_SAFETY_MAX_DELAY_MS: z.coerce.number().int().min(0).max(120000).default(7000),
+  WHATSAPP_SAFETY_WARMUP_DAYS: z.coerce.number().int().min(0).max(30).default(10),
+  WHATSAPP_SAFETY_DAY1_LIMIT: z.coerce.number().int().min(1).max(5000).default(15),
+  WHATSAPP_SAFETY_AUTO_PAUSE_AT: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
 
   // Feature API keys (all optional — features degrade gracefully)
   GOOGLE_API_KEY: z.string().optional(),
@@ -176,7 +196,7 @@ const normalizedProviderOrderList = Array.from(new Set(requestedProviderOrder));
 const configuredProviders = normalizedProviderOrderList.filter((provider) => {
   if (provider === 'openrouter') return !!parsed.data.OPENROUTER_API_KEY;
   if (provider === 'anthropic') return !!parsed.data.ANTHROPIC_API_KEY;
-  if (provider === 'openai') return !!parsed.data.OPENAI_API_KEY;
+  if (provider === 'openai') return parsed.data.OPENAI_AUTH_MODE === 'oauth' || !!parsed.data.OPENAI_API_KEY;
   if (provider === 'gemini') return !!parsed.data.GEMINI_API_KEY;
   return !!parsed.data.BEDROCK_MODEL_ID;
 });
@@ -214,6 +234,11 @@ if (parsed.data.DEMO_TURNSTILE_ENABLED) {
     console.error('❌ DEMO_TURNSTILE_ENABLED=true requires DEMO_TURNSTILE_SITE_KEY and DEMO_TURNSTILE_SECRET_KEY');
     process.exit(1);
   }
+}
+
+if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_DELAY_MS) {
+  console.error('❌ WHATSAPP_SAFETY_MIN_DELAY_MS must be less than or equal to WHATSAPP_SAFETY_MAX_DELAY_MS');
+  process.exit(1);
 }
 
 export const config = {

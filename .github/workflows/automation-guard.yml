@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
 
 jobs:
@@ -22,7 +23,15 @@ jobs:
             const repo = context.repo.repo;
             const current = context.payload.pull_request;
             const isCurrentDependabot = current?.user?.login === 'dependabot[bot]' || current?.head?.ref?.startsWith('dependabot/');
-            const hasOverrideLabel = (current?.labels ?? []).some((label) => label.name === 'allow-open-dependabot');
+            const currentLabels = current
+              ? await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                  owner,
+                  repo,
+                  issue_number: current.number,
+                  per_page: 100,
+                })
+              : [];
+            const hasOverrideLabel = currentLabels.some((label) => label.name === 'allow-open-dependabot');
 
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner,

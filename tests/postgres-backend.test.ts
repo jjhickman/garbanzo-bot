@@ -36,7 +36,11 @@ describePostgres('Postgres backend parity', () => {
 
   beforeEach(async () => {
     await client.query(
-      'TRUNCATE TABLE feedback, moderation_log, conversation_sessions, messages, memory, member_profiles, daily_stats RESTART IDENTITY CASCADE',
+      'TRUNCATE TABLE feedback, moderation_log, conversation_sessions, messages, memory, member_profiles, daily_stats, whatsapp_outbound_jobs, whatsapp_safety_state RESTART IDENTITY CASCADE',
+    );
+    await client.query(
+      `INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
+       VALUES (1, 0, 'low', 0, '[]'::jsonb, 0)`,
     );
   });
 

@@ -8,13 +8,18 @@
  * - Memory usage
  * - Ollama availability
  *
- * Also tracks connection staleness — if no messages are received
- * across any group for 30+ minutes, the connection is considered stale.
+ * Also reports incoming-message inactivity. A quiet group is not sufficient
+ * evidence of a failed WhatsApp session, so inactivity is informational only.
  */
 
-import { createServer, type Server } from 'http';
+import { timingSafeEqual } from 'crypto';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { logger } from './logger.js';
-import { verifyLatestBackupIntegrity, type BackupIntegrityStatus } from '../utils/db.js';
+import {
+  getWhatsAppSafetyMetrics,
+  verifyLatestBackupIntegrity,
+  type BackupIntegrityStatus,
+} from '../utils/db.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -92,15 +97,41 @@ const healthRateWindow = new Map<string, { windowStart: number; count: number }>
 const BACKUP_CHECK_CACHE_MS = 5 * 60_000;
 let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | null = null;
 
+interface HealthServerOptions {
+  metricsEnabled?: boolean;
+  authToken?: string;
+  extraHandler?: (req: IncomingMessage, res: ServerResponse) => boolean;
+}
+
+export function normalizeIp(ip: string): string {
+  return ip.startsWith('::ffff:') ? ip.slice('::ffff:'.length) : ip;
+}
+
 function isHealthRequestRateLimited(ip: string, now: number): boolean {
-  const existing = healthRateWindow.get(ip);
+  const key = normalizeIp(ip);
+  // Opportunistic eviction so the map cannot grow unbounded over long uptimes.
+  for (const [k, v] of healthRateWindow) {
+    if (now - v.windowStart >= HEALTH_RATE_WINDOW_MS) healthRateWindow.delete(k);
+  }
+  const existing = healthRateWindow.get(key);
   if (!existing || now - existing.windowStart >= HEALTH_RATE_WINDOW_MS) {
-    healthRateWindow.set(ip, { windowStart: now, count: 1 });
+    healthRateWindow.set(key, { windowStart: now, count: 1 });
     return false;
   }
 
   existing.count += 1;
   return existing.count > HEALTH_RATE_LIMIT;
+}
+
+function tokenMatches(actual: string | null, expected: string): boolean {
+  if (actual === null) return false;
+  if (expected.length === 0) return false;
+
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; status: BackupIntegrityStatus }> {
@@ -123,6 +154,10 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   const lastMessageAgoSeconds = state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : -1;
   const mem = process.memoryUsage();
   const backup = await getCachedBackupStatus(now);
+  const whatsappSafety = await getWhatsAppSafetyMetrics(
+    Math.floor((now - 60 * 60 * 1000) / 1000),
+    Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+  );
 
   const statusConnected = state.status === 'connected' ? 1 : 0;
   const statusConnecting = state.status === 'connecting' ? 1 : 0;
@@ -174,19 +209,40 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   lines.push('# TYPE garbanzo_backup_integrity_ok gauge');
   lines.push(`garbanzo_backup_integrity_ok ${backupIntegrityOk}`);
 
+  lines.push('# HELP garbanzo_whatsapp_safety_paused Whether protected WhatsApp output is paused.');
+  lines.push('# TYPE garbanzo_whatsapp_safety_paused gauge');
+  lines.push(`garbanzo_whatsapp_safety_paused ${whatsappSafety.paused ? 1 : 0}`);
+
+  lines.push('# HELP garbanzo_whatsapp_outbound_held Number of retained WhatsApp outbound jobs awaiting owner action.');
+  lines.push('# TYPE garbanzo_whatsapp_outbound_held gauge');
+  lines.push(`garbanzo_whatsapp_outbound_held ${whatsappSafety.held}`);
+
+  lines.push('# HELP garbanzo_whatsapp_outbound_sent_last_hour Number of protected WhatsApp sends completed in the last hour.');
+  lines.push('# TYPE garbanzo_whatsapp_outbound_sent_last_hour gauge');
+  lines.push(`garbanzo_whatsapp_outbound_sent_last_hour ${whatsappSafety.sentLastHour}`);
+
+  lines.push('# HELP garbanzo_whatsapp_safety_risk_score Current WhatsApp safety middleware risk score.');
+  lines.push('# TYPE garbanzo_whatsapp_safety_risk_score gauge');
+  lines.push(`garbanzo_whatsapp_safety_risk_score ${whatsappSafety.score}`);
+
   return lines.join('\n') + '\n';
 }
 
 export function startHealthServer(
   port: number = 3001,
   host: string = '127.0.0.1',
-  options?: { metricsEnabled?: boolean },
-): void {
+  options?: HealthServerOptions,
+): Server {
   const metricsEnabled = options?.metricsEnabled === true;
 
   server = createServer((req, res) => {
     void (async () => {
-      const path = (req.url ?? '').split('?')[0];
+      if (options?.extraHandler?.(req, res)) return;
+
+      // Match on the raw origin-form path (unchanged from before): absolute-form
+      // request targets must not be normalized into a matching pathname.
+      const rawUrl = req.url ?? '';
+      const path = rawUrl.split('?')[0];
 
       if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
         const now = Date.now();
@@ -201,15 +257,23 @@ export function startHealthServer(
         const stale = isConnectionStale();
 
         if (path === '/metrics') {
+          const authToken = options?.authToken;
+          const providedToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
+          if (authToken !== undefined && !tokenMatches(providedToken, authToken)) {
+            res.writeHead(401, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'unauthorized' }));
+            return;
+          }
+
           res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
           res.end(await renderPrometheusMetrics(now));
           return;
         }
 
         // `/health` is informational and always 200.
-        // `/health/ready` is actionable: 200 only when connected + not stale.
+        // `/health/ready` is actionable: incoming-message inactivity alone must not fail it.
         if (path === '/health/ready') {
-          const ready = state.status === 'connected' && !stale;
+          const ready = state.status === 'connected';
           res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ ready, status: state.status, stale }));
           return;
@@ -217,6 +281,10 @@ export function startHealthServer(
 
         const mem = process.memoryUsage();
         const backup = await getCachedBackupStatus(now);
+        const whatsappSafety = await getWhatsAppSafetyMetrics(
+          Math.floor((now - 60 * 60 * 1000) / 1000),
+          Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+        );
 
         const body = JSON.stringify({
           status: state.status,
@@ -234,6 +302,7 @@ export function startHealthServer(
             ...backup.status,
             checkedAt: backup.checkedAt,
           },
+          whatsappSafety,
         });
 
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -259,6 +328,8 @@ export function startHealthServer(
   server.on('error', (err) => {
     logger.error({ err, port }, 'Health check server error');
   });
+
+  return server;
 }
 
 /** Stop the local health endpoint and memory watchdog timers. */
@@ -302,6 +373,7 @@ export function startMemoryWatchdog(): void {
       memoryWarned = false; // reset if memory drops back down
     }
   }, MEMORY_CHECK_INTERVAL_MS);
+  memoryTimer.unref?.();
 
   logger.info({ warnMB: MEMORY_WARN_MB, restartMB: MEMORY_RESTART_MB }, 'Memory watchdog started');
 }
@@ -312,3 +384,5 @@ function stopMemoryWatchdog(): void {
     memoryTimer = null;
   }
 }
+
+export const __testing = { normalizeIp };

@@ -6,17 +6,11 @@ import {
   type SystemContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 
-import { logger } from '../middleware/logger.js';
 import { config } from '../utils/config.js';
 import type { VisionImage } from '../core/vision.js';
-import type { CloudResponse } from './cloud-providers.js';
+import { type CloudResponse } from './cloud-providers.js';
+import { callCloudProvider } from './cloud-call.js';
 
-const REQUEST_TIMEOUT_MS = () => config.CLOUD_REQUEST_TIMEOUT_MS;
-const CIRCUIT_BREAKER_THRESHOLD = 3;
-const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
-
-let consecutiveBedrockFailures = 0;
-let circuitOpenUntil = 0;
 let bedrockClient: BedrockRuntimeClient | null = null;
 
 function getBedrockClient(): BedrockRuntimeClient {
@@ -54,81 +48,30 @@ export async function callBedrock(
   userMessage: string,
   visionImages?: VisionImage[],
 ): Promise<CloudResponse> {
-  if (!config.BEDROCK_MODEL_ID) {
+  const modelId = config.BEDROCK_MODEL_ID;
+  if (!modelId) {
     throw new Error('bedrock is not configured (missing BEDROCK_MODEL_ID)');
   }
 
-  if (Date.now() < circuitOpenUntil) {
-    const secondsRemaining = Math.ceil((circuitOpenUntil - Date.now()) / 1000);
-    throw new Error(`Bedrock circuit breaker open (${secondsRemaining}s remaining)`);
-  }
+  return callCloudProvider({
+    provider: 'bedrock',
+    model: modelId,
+    perform: async (signal) => {
+      const client = getBedrockClient();
+      const messages: Message[] = [buildUserMessage(userMessage, visionImages)];
+      const system: SystemContentBlock[] = [{ text: systemPrompt }];
 
-  const controller = new AbortController();
-  const timeoutMs = REQUEST_TIMEOUT_MS();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const command = new ConverseCommand({
+        modelId,
+        system,
+        messages,
+        inferenceConfig: {
+          maxTokens: config.BEDROCK_MAX_TOKENS,
+        },
+      });
 
-  try {
-    const client = getBedrockClient();
-    const messages: Message[] = [buildUserMessage(userMessage, visionImages)];
-    const system: SystemContentBlock[] = [{ text: systemPrompt }];
-
-    logger.debug({
-      provider: 'bedrock',
-      model: config.BEDROCK_MODEL_ID,
-      region: config.BEDROCK_REGION,
-      maxTokens: config.BEDROCK_MAX_TOKENS,
-      hasVision: !!visionImages?.length,
-      imageCount: visionImages?.length ?? 0,
-    }, 'Calling Bedrock provider');
-
-    const command = new ConverseCommand({
-      modelId: config.BEDROCK_MODEL_ID,
-      system,
-      messages,
-      inferenceConfig: {
-        maxTokens: config.BEDROCK_MAX_TOKENS,
-      },
-    });
-
-    const response = await client.send(command, {
-      abortSignal: controller.signal,
-    });
-
-    const text = extractResponseText(response.output?.message?.content);
-    if (!text) {
-      throw new Error('bedrock returned empty response');
-    }
-
-    consecutiveBedrockFailures = 0;
-    circuitOpenUntil = 0;
-
-    return {
-      text,
-      provider: 'bedrock',
-      model: config.BEDROCK_MODEL_ID,
-    };
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    consecutiveBedrockFailures += 1;
-
-    if (consecutiveBedrockFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
-      logger.warn({
-        consecutiveBedrockFailures,
-        cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
-      }, 'Bedrock circuit breaker opened after repeated failures');
-    }
-
-    logger.warn({
-      provider: 'bedrock',
-      model: config.BEDROCK_MODEL_ID,
-      region: config.BEDROCK_REGION,
-      timeoutMs,
-      err: error,
-    }, 'Bedrock provider failed');
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+      const response = await client.send(command, { abortSignal: signal });
+      return extractResponseText(response.output?.message?.content);
+    },
+  });
 }

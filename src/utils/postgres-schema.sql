@@ -91,3 +91,38 @@ CREATE TABLE IF NOT EXISTS feedback (
 
 CREATE INDEX IF NOT EXISTS idx_feedback_status
   ON feedback (status, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
+  id BIGSERIAL PRIMARY KEY,
+  chat_jid TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  content_json TEXT NOT NULL,
+  options_json TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'sent', 'held', 'failed', 'discarded')),
+  reason TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  sent_at BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_status_created
+  ON whatsapp_outbound_jobs (status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_sent_at
+  ON whatsapp_outbound_jobs (sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS whatsapp_safety_state (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  paused SMALLINT NOT NULL DEFAULT 0,
+  risk TEXT NOT NULL DEFAULT 'low'
+    CHECK (risk IN ('low', 'medium', 'high', 'critical')),
+  score INTEGER NOT NULL DEFAULT 0,
+  reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at BIGINT NOT NULL DEFAULT 0
+);
+
+INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
+  VALUES (1, 0, 'low', 0, '[]'::jsonb, 0)
+  ON CONFLICT (id) DO NOTHING;
