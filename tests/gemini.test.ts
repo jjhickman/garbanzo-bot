@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildProviderRequest } from '../src/ai/cloud-providers.js';
 import { callGemini } from '../src/ai/gemini.js';
+import { __resetCloudBreakers } from '../src/ai/cloud-call.js';
 import { config } from '../src/utils/config.js';
 
 const originalGeminiApiKey = config.GEMINI_API_KEY;
@@ -10,6 +11,7 @@ const originalGeminiModel = config.GEMINI_MODEL;
 afterEach(() => {
   config.GEMINI_API_KEY = originalGeminiApiKey;
   config.GEMINI_MODEL = originalGeminiModel;
+  __resetCloudBreakers();
   vi.restoreAllMocks();
 });
 
@@ -98,5 +100,21 @@ describe('Gemini integration', () => {
     );
 
     await expect(callGemini('system', 'user')).rejects.toThrow('gemini API error 500');
+  });
+
+  it('opens a circuit breaker after repeated failures (now shared with other providers)', async () => {
+    config.GEMINI_API_KEY = 'test-key';
+
+    // Fresh Response per call — a Response body can only be read once.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response('upstream failure', { status: 500, headers: { 'Content-Type': 'text/plain' } }),
+    );
+
+    // 3 consecutive failures trip the breaker...
+    for (let i = 0; i < 3; i += 1) {
+      await expect(callGemini('system', 'user')).rejects.toThrow('gemini API error 500');
+    }
+    // ...so the next call is short-circuited before the transport runs.
+    await expect(callGemini('system', 'user')).rejects.toThrow(/circuit breaker open/);
   });
 });
