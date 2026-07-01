@@ -160,8 +160,35 @@ cp .env.example .env
 # Edit .env and config/groups.json
 npm run dev
 
-# Complete platform linking/auth when prompted (WhatsApp runtime uses QR linking)
+# Complete platform linking/auth when prompted.
+# WhatsApp links through a browser page by default — see "WhatsApp Login (Browser)" below.
 ```
+
+### WhatsApp Login (Browser)
+
+By default (`WHATSAPP_LOGIN_MODE=web`) WhatsApp links through a small, token-gated
+page on the health server instead of the terminal. On startup the logs print a URL
+like:
+
+```
+http://127.0.0.1:3001/whatsapp/login?token=<token>
+```
+
+Open it (over an SSH tunnel or on the host) and either:
+
+- **Scan QR** — the page shows a live QR that refreshes on its own; scan it from
+  WhatsApp > Settings > Linked Devices. QR rotation within one attempt is normal and
+  does not risk a bot-flag.
+- **Pair with code** — enter the bot's phone number to get an 8-character code, then
+  use WhatsApp > Linked Devices > "Link with phone number."
+
+The page shows "Linked ✓" once connected.
+
+- `WHATSAPP_LOGIN_MODE=terminal` restores the old in-terminal QR; `both` prints both.
+- The login token is generated per run and printed once. Set `WHATSAPP_LOGIN_TOKEN`
+  to pin it (e.g. for scripted access); an operator-set token is never echoed to the
+  logs. The same token also guards `/metrics`, so add `?token=<token>` when scraping.
+- All login routes are bound to `HEALTH_BIND_HOST` (`127.0.0.1` by default).
 
 ### Slack Support
 
@@ -337,7 +364,8 @@ npm run setup
 
 docker compose up -d
 docker compose logs -f garbanzo
-# scan QR code shown in terminal: WhatsApp > Settings > Linked Devices
+# the logs print a browser login URL; open it to scan the QR or pair with a code
+# (WhatsApp > Settings > Linked Devices). See "WhatsApp Login (Browser)" above.
 ```
 
 Health check example:
@@ -471,6 +499,8 @@ Copy `.env.example` to `.env` and configure:
 | `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
+| `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
+| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics token instead of generating one per run (guards `/whatsapp/login*` and `/metrics`) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
