@@ -171,6 +171,87 @@ export function buildProviderRequest(
   };
 }
 
+/** EXPERIMENTAL: ChatGPT-subscription backend used by OpenAI OAuth mode. */
+const OPENAI_RESPONSES_ENDPOINT = 'https://chatgpt.com/backend-api/wham/responses';
+
+const ResponsesApiSchema = z.object({
+  output_text: z.union([z.string(), z.array(z.string())]).optional(),
+  output: z.array(z.object({
+    type: z.string().optional(),
+    content: z.array(z.object({
+      type: z.string().optional(),
+      text: z.string().optional(),
+    })).optional(),
+  })).optional(),
+});
+
+/**
+ * Build the OpenAI Responses-API request for OAuth ("Sign in with ChatGPT")
+ * mode (EXPERIMENTAL, unverified against a live token). Targets the private
+ * ChatGPT backend with a fresh bearer token + account header. Distinct from the
+ * apikey chat/completions request: content type is `input_text` and `store` is
+ * false, with the system prompt passed as `instructions`.
+ */
+export function buildOpenAIResponsesRequest(
+  systemPrompt: string,
+  userMessage: string,
+  visionImages: VisionImage[] | undefined,
+  accessToken: string,
+  accountId: string | null,
+): ProviderRequest {
+  const content: Array<Record<string, unknown>> = [];
+  if (visionImages && visionImages.length > 0) {
+    for (const img of visionImages) {
+      content.push({ type: 'input_image', image_url: `data:${img.mediaType};base64,${img.base64}` });
+    }
+  }
+  content.push({
+    type: 'input_text',
+    text: userMessage || 'What do you see in this image? Describe it and respond naturally.',
+  });
+
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${accessToken}`,
+    originator: 'garbanzo',
+  };
+  if (accountId) headers['chatgpt-account-id'] = accountId;
+
+  return {
+    provider: 'openai',
+    model: config.OPENAI_MODEL,
+    endpoint: OPENAI_RESPONSES_ENDPOINT,
+    headers,
+    body: {
+      model: config.OPENAI_MODEL,
+      instructions: systemPrompt,
+      input: [{ role: 'user', content }],
+      store: false,
+    },
+    parser: parseResponsesApiResponse,
+  };
+}
+
+function parseResponsesApiResponse(data: unknown): string {
+  const parsed = ResponsesApiSchema.safeParse(data);
+  if (!parsed.success) return 'No response generated.';
+
+  if (typeof parsed.data.output_text === 'string') {
+    return parsed.data.output_text.trim() || 'No response generated.';
+  }
+  if (Array.isArray(parsed.data.output_text)) {
+    return parsed.data.output_text.join('').trim() || 'No response generated.';
+  }
+
+  const texts: string[] = [];
+  for (const item of parsed.data.output ?? []) {
+    for (const block of item.content ?? []) {
+      if (block.text) texts.push(block.text);
+    }
+  }
+  return texts.join('').trim() || 'No response generated.';
+}
+
 /**
  * Standard HTTP transport for fetch-based providers (openrouter/anthropic/openai
  * API-key mode). Posts the built request under the caller's abort signal, maps a
