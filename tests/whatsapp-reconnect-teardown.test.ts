@@ -29,7 +29,7 @@ vi.mock('@whiskeysockets/baileys', () => {
   });
   return {
     default: makeWASocket,
-    DisconnectReason: { loggedOut: 401, restartRequired: 515 },
+    DisconnectReason: { loggedOut: 401, forbidden: 403, connectionClosed: 428, connectionReplaced: 440, restartRequired: 515 },
     useMultiFileAuthState: vi.fn().mockResolvedValue({ state: { creds: {}, keys: {} }, saveCreds: vi.fn() }),
     fetchLatestBaileysVersion: vi.fn().mockResolvedValue({ version: [2, 3, 4] }),
     makeCacheableSignalKeyStore: vi.fn((k: unknown) => k),
@@ -67,5 +67,26 @@ describe('reconnect teardown', () => {
     expect(first.end).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sockets.length).toBe(2); // reconnected, not paused
+  });
+
+  it('reconnects on 428 (connectionClosed) — a routine transient disconnect', async () => {
+    vi.useFakeTimers();
+    const { startConnection } = await import('../src/platforms/whatsapp/connection.js');
+    await startConnection(() => {});
+    const first = sockets[0];
+    // 428 = connectionClosed; baileys-antiban mislabels it fatal, but it must reconnect.
+    (first as never as { __fire: (u: unknown) => void }).__fire({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 428 } } } });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sockets.length).toBe(2);
+  });
+
+  it('does NOT reconnect on 440 (connectionReplaced) or 401 (loggedOut)', async () => {
+    vi.useFakeTimers();
+    const { startConnection } = await import('../src/platforms/whatsapp/connection.js');
+    await startConnection(() => {});
+    const first = sockets[0];
+    (first as never as { __fire: (u: unknown) => void }).__fire({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 440 } } } });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sockets.length).toBe(1); // stayed down — another session owns the account
   });
 });
