@@ -2,9 +2,18 @@
 /**
  * Interactive "Sign in with ChatGPT" login for OpenAI OAuth mode (EXPERIMENTAL).
  *
- * Runs the Codex PKCE OAuth flow: opens the browser, captures the callback on
- * http://localhost:1455/auth/callback, exchanges the code for tokens, and writes
- * them to data/openai-oauth.json (mode 0600) for OPENAI_AUTH_MODE=oauth.
+ * Runs the Codex PKCE OAuth flow and writes tokens to data/openai-oauth.json
+ * (mode 0600) for OPENAI_AUTH_MODE=oauth. OpenAI pins the redirect URI to
+ * http://localhost:1455/auth/callback, so it captures the authorization code
+ * two ways at once and uses whichever completes first:
+ *
+ *   1. A local callback server on 127.0.0.1:1455 — works when the browser runs
+ *      on the same host (or over an `ssh -L 1455:localhost:1455` tunnel).
+ *   2. A paste prompt — for headless/remote hosts (e.g. a Raspberry Pi over SSH):
+ *      sign in from any browser, then paste the dead `localhost:1455/...` URL you
+ *      land on (or just the code) back into this terminal. No tunnel needed.
+ *
+ * Pass --manual (or --no-browser) to skip the local server and only paste.
  *
  * This is unofficial and against OpenAI's ToS; the bot always falls back to
  * other providers if it fails. Constants here mirror src/ai/openai-oauth.ts.
@@ -13,6 +22,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { writeFile, mkdir, chmod } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +51,36 @@ function accountIdFromIdToken(idToken) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Extract the authorization code from whatever the user pasted: a full redirect
+ * URL, a bare `code=...&state=...` query string, or just the code itself.
+ * Validates the CSRF `state` when it is present. Returns { code } or null for
+ * empty input; throws on an OAuth error, a missing code, or a state mismatch.
+ */
+export function parseCallbackInput(input, expectedState) {
+  const trimmed = String(input ?? '').trim();
+  if (!trimmed) return null;
+
+  const looksStructured = trimmed.includes('://') || trimmed.includes('code=') || trimmed.startsWith('?');
+  if (!looksStructured) {
+    // A bare code with no surrounding query — no state to validate.
+    return { code: trimmed, stateChecked: false };
+  }
+
+  const base = trimmed.includes('://') ? trimmed : `http://localhost/?${trimmed.replace(/^\?/, '')}`;
+  const url = new URL(base);
+  const error = url.searchParams.get('error');
+  if (error) throw new Error(`Authorization error: ${error}`);
+
+  const code = url.searchParams.get('code');
+  const returnedState = url.searchParams.get('state');
+  if (!code) throw new Error('No "code" found — paste the full redirect URL from your browser address bar.');
+  if (returnedState !== expectedState) {
+    throw new Error('State mismatch — that URL is from a different login attempt. Aborting for safety.');
+  }
+  return { code, stateChecked: true };
 }
 
 function openBrowser(url) {
@@ -84,27 +124,61 @@ async function writeTokenStore(store) {
   await chmod(TOKEN_PATH, 0o600);
 }
 
-async function main() {
-  const codeVerifier = base64url(randomBytes(64));
-  const codeChallenge = base64url(createHash('sha256').update(codeVerifier).digest());
-  const state = base64url(randomBytes(24));
+/**
+ * Race the local callback server against a stdin paste; return the authorization
+ * code from whichever arrives first. In --manual mode the server is skipped.
+ */
+function captureAuthCode(authorizeUrl, state, { manual }) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    let settled = false;
+    let server = null;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  const authorizeUrl = new URL(AUTHORIZE_URL);
-  authorizeUrl.search = new URLSearchParams({
-    response_type: 'code',
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    scope: SCOPE,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-    state,
-    id_token_add_organizations: 'true',
-    codex_cli_simplified_flow: 'true',
-    originator: 'garbanzo',
-  }).toString();
+    const cleanup = () => {
+      clearTimeout(timer);
+      try { rl.close(); } catch { /* ignore */ }
+      try { server?.close(); } catch { /* ignore */ }
+    };
+    const succeed = (code) => { if (settled) return; settled = true; cleanup(); resolvePromise(code); };
+    const fail = (err) => { if (settled) return; settled = true; cleanup(); rejectPromise(err); };
 
-  const result = await new Promise((resolvePromise, rejectPromise) => {
-    const server = createServer((req, res) => {
+    const timer = setTimeout(
+      () => fail(new Error(`Timed out after ${CALLBACK_TIMEOUT_MS / 1000}s waiting for the callback or a pasted code.`)),
+      CALLBACK_TIMEOUT_MS,
+    );
+
+    // Paste path — always available.
+    rl.on('line', (line) => {
+      try {
+        const parsed = parseCallbackInput(line, state);
+        if (parsed) succeed(parsed.code);
+      } catch (err) {
+        // Non-fatal: let the user try again (or wait for the browser callback).
+        console.error(`   ⚠️ ${err.message} Try pasting again, or press Ctrl+C to abort.`);
+      }
+    });
+
+    const printInstructions = ({ serverUp }) => {
+      console.log('\n🫘 Sign in with ChatGPT to link OpenAI OAuth (experimental).\n');
+      console.log('1. Open this URL in a browser and sign in:\n');
+      console.log(`   ${authorizeUrl}\n`);
+      if (serverUp) {
+        console.log(`2. If the browser is on THIS machine (or an "ssh -L ${REDIRECT_PORT}:localhost:${REDIRECT_PORT}" tunnel),`);
+        console.log('   login completes automatically — you can ignore the prompt below.\n');
+      }
+      console.log('   Otherwise (remote/headless host): after signing in your browser will land on a');
+      console.log(`   "can't reach localhost:${REDIRECT_PORT}" page. Copy that page's full URL from the address`);
+      console.log('   bar and paste it here, then press Enter:');
+      rl.setPrompt('\n   redirect URL (or code) > ');
+      rl.prompt();
+    };
+
+    if (manual) {
+      printInstructions({ serverUp: false });
+      return;
+    }
+
+    server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://localhost:${REDIRECT_PORT}`);
       if (url.pathname !== '/auth/callback') {
         res.writeHead(404);
@@ -134,30 +208,49 @@ async function main() {
           `</body>`,
       );
 
-      clearTimeout(timer);
-      server.close();
-
-      if (failure) {
-        rejectPromise(new Error(error || !code ? `Authorization failed: ${error ?? 'no code'}` : failure));
-      } else {
-        resolvePromise(code);
-      }
+      if (failure) fail(new Error(error || !code ? `Authorization failed: ${error ?? 'no code'}` : failure));
+      else succeed(code);
     });
 
-    const timer = setTimeout(() => {
-      server.close();
-      rejectPromise(new Error(`Timed out waiting for the browser callback after ${CALLBACK_TIMEOUT_MS / 1000}s.`));
-    }, CALLBACK_TIMEOUT_MS);
+    // If the local server can't bind (port in use, sandbox, no permission), don't
+    // abort — fall back to paste-only so remote/headless logins still work.
+    server.on('error', (err) => {
+      console.error(`   ⚠️ Local callback server unavailable (${err.code ?? err.message}); use the paste option.`);
+      server = null;
+      printInstructions({ serverUp: false });
+    });
 
-    server.on('error', rejectPromise);
     server.listen(REDIRECT_PORT, '127.0.0.1', () => {
-      console.log('\n🫘 Opening your browser to sign in with ChatGPT...');
-      console.log(`If it does not open, paste this URL into your browser:\n\n${authorizeUrl.toString()}\n`);
-      openBrowser(authorizeUrl.toString());
+      printInstructions({ serverUp: true });
+      openBrowser(authorizeUrl);
     });
   });
+}
 
-  const tokens = await exchangeCode(result, codeVerifier);
+async function main() {
+  const manual = process.argv.slice(2).some((a) => a === '--manual' || a === '--no-browser' || a === '--paste');
+
+  const codeVerifier = base64url(randomBytes(64));
+  const codeChallenge = base64url(createHash('sha256').update(codeVerifier).digest());
+  const state = base64url(randomBytes(24));
+
+  const authorizeUrl = new URL(AUTHORIZE_URL);
+  authorizeUrl.search = new URLSearchParams({
+    response_type: 'code',
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPE,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    state,
+    id_token_add_organizations: 'true',
+    codex_cli_simplified_flow: 'true',
+    originator: 'garbanzo',
+  }).toString();
+
+  const code = await captureAuthCode(authorizeUrl.toString(), state, { manual });
+
+  const tokens = await exchangeCode(code, codeVerifier);
   const expiresInMs = (Number(tokens.expires_in) || 3600) * 1000;
   const store = {
     access_token: tokens.access_token,
@@ -177,7 +270,10 @@ async function main() {
   console.log('   Note: this path is experimental and against OpenAI ToS; the bot falls back if it breaks.\n');
 }
 
-main().catch((err) => {
-  console.error(`\n❌ OpenAI login failed: ${err.message}\n`);
-  process.exit(1);
-});
+// Only run the flow when invoked directly (not when imported by tests).
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(`\n❌ OpenAI login failed: ${err.message}\n`);
+    process.exit(1);
+  });
+}
