@@ -20,7 +20,7 @@ describe('setup field resolver', () => {
     const field = getField('OPENAI_MODEL');
     expect(resolveEnvField(field, cli({ 'openai-model': 'gpt-x' }), { OPENAI_MODEL: 'existing' })).toBe('gpt-x');
     expect(resolveEnvField(field, cli({}), { OPENAI_MODEL: 'existing' })).toBe('existing');
-    expect(resolveEnvField(field, cli({}), {})).toBe('gpt-4.1');
+    expect(resolveEnvField(field, cli({}), {})).toBe('gpt-5.4-mini');
   });
 
   it('masks secret fields in prompt hints, never showing the raw value', () => {
@@ -34,7 +34,7 @@ describe('setup field resolver', () => {
   it('shows the current value or default for non-secret fields', () => {
     const model = getField('OPENAI_MODEL');
     expect(promptHint(model, { OPENAI_MODEL: 'gpt-9' })).toBe('gpt-9');
-    expect(promptHint(model, {})).toBe('gpt-4.1');
+    expect(promptHint(model, {})).toBe('gpt-5.4-mini');
   });
 
   it('marks every API key/token field as secret', () => {
