@@ -7,7 +7,7 @@ describe('baileys-antiban package contract', () => {
       preset: 'conservative',
       maxPerMinute: 5,
       maxPerHour: 100,
-      maxPerDay: 800,
+      maxPerDay: 2000,
       minDelayMs: 0,
       maxDelayMs: 0,
       newChatDelayMs: 0,
