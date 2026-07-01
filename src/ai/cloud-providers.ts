@@ -171,6 +171,29 @@ export function buildProviderRequest(
   };
 }
 
+/**
+ * Standard HTTP transport for fetch-based providers (openrouter/anthropic/openai
+ * API-key mode). Posts the built request under the caller's abort signal, maps a
+ * non-2xx to `"<provider> API error <status>: <body>"`, and runs the parser.
+ * (Gemini keeps its own perform to preserve its non-JSON error message.)
+ */
+export async function performHttpRequest(req: ProviderRequest, signal: AbortSignal): Promise<string> {
+  const response = await fetch(req.endpoint, {
+    method: 'POST',
+    headers: req.headers,
+    body: JSON.stringify(req.body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
+  }
+
+  const data: unknown = await response.json();
+  return req.parser(data);
+}
+
 function parseChatCompletionResponse(data: unknown): string {
   const parsed = ChatCompletionResponseSchema.safeParse(data);
   if (!parsed.success) return 'No response generated.';
