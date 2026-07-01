@@ -202,16 +202,16 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Claude Sonnet 4 pricing (OpenRouter) — USD per million tokens */
+/** Anthropic pricing — env-configurable, USD per million tokens (default: Claude Haiku 4.5 $1/$5). */
 const CLAUDE_PRICING = {
-  input: 3.0 / 1_000_000,
-  output: 15.0 / 1_000_000,
+  input: (config.ANTHROPIC_PRICING_INPUT_PER_M ?? 0) / 1_000_000,
+  output: (config.ANTHROPIC_PRICING_OUTPUT_PER_M ?? 0) / 1_000_000,
 };
 
-/** OpenAI GPT-4.1 pricing — USD per million tokens */
+/** OpenAI pricing — env-configurable, USD per million tokens (default: gpt-5.4-mini $0.75/$4.50). */
 const OPENAI_PRICING = {
-  input: 2.0 / 1_000_000,
-  output: 8.0 / 1_000_000,
+  input: (config.OPENAI_PRICING_INPUT_PER_M ?? 0) / 1_000_000,
+  output: (config.OPENAI_PRICING_OUTPUT_PER_M ?? 0) / 1_000_000,
 };
 
 /**
