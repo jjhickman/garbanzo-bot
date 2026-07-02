@@ -3,22 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Garbanzo: a self-hosted chat bot for communities</title>
+    <title>Garbanzo</title>
     <meta
       name="description"
-      content="Garbanzo is a self-hosted chat bot for group communities on WhatsApp, Slack, and Discord. It answers with live transit and weather data, remembers group facts, and runs from a single docker compose command."
+      content="Garbanzo is an AI-driven chat bot for group communities on WhatsApp, Slack, and Discord. It moderates and enriches messaging communities using models from OpenAI, Anthropic, Google Gemini, AWS Bedrock,or even self-hosted via Ollama or other similar platform!"
     />
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
     <link rel="canonical" href="https://garbanzobot.com/" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://garbanzobot.com/" />
-    <meta property="og:title" content="Garbanzo: a self-hosted chat bot for communities" />
-    <meta property="og:description" content="A chat bot for group communities that you run on your own server. Live data answers, group memory, moderation help, and dashboards." />
+    <meta property="og:title" content="Garbanzo for the People" />
+    <meta property="og:description" content="The intelligent community bot to bring people together." />
     <meta property="og:image" content="https://garbanzobot.com/assets/og-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Garbanzo: a self-hosted chat bot for communities" />
-    <meta name="twitter:description" content="A chat bot for group communities that you run on your own server." />
+    <meta name="twitter:title" content="Garbanzo for the People" />
+    <meta name="twitter:description" content="The intelligent community bot to bring people together." />
     <meta name="twitter:image" content="https://garbanzobot.com/assets/og-card.png" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -37,8 +37,8 @@
       </a>
       <nav class="site-nav" aria-label="Site">
         <a href="#features">Features</a>
-        <a href="#gallery">Screenshots</a>
-        <a href="#deploy">Deploy</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#deploy">Deployment</a>
         <a class="nav-github" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
     </header>
@@ -47,10 +47,10 @@
       <!-- ============ Hero: headline + live chat panel ============ -->
       <section class="hero">
         <div class="hero-copy">
-          <h1>A group chat bot<br /> you run <em>yourself</em>.</h1>
+          <h1>The community chat bot that brings people together, hosted anywhere.</h1>
           <p class="lede">
-            Built for a Boston WhatsApp group. Live transit and weather answers, welcomes for
-            newcomers, group memory, event reminders. Runs on your own server.
+            Live transit and weather answers, welcomes for
+            newcomers, group memory, event reminders, hosted anywhere.
           </p>
           <div class="actions">
             <a class="button button-primary" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">View on GitHub</a>
@@ -98,13 +98,13 @@
       <section class="deploy" id="deploy" aria-label="Deployment">
         <div class="deploy-inner">
           <div class="deploy-copy">
-            <h2>Running it</h2>
-            <p>API keys and chat data stay on your machine:</p>
+            <h2>Deployment</h2>
+            <p>Hosting Options</p>
           <ul class="deploy-ways">
-            <li><strong>Docker Compose</strong>: Raspberry Pi, home server, or VPS</li>
-            <li><strong>Kubernetes</strong>: published image, any cluster</li>
-            <li><strong>AWS</strong>: CDK stacks for EC2 and ECS in the repo</li>
-            <li><strong>Bare metal</strong>: systemd unit or prebuilt binaries</li>
+            <li>Docker</li>
+            <li>Kubernetes</li>
+            <li>Amazon Web Services</li>
+            <li>Linux, WSL</li>
           </ul>
           </div>
           <pre class="deploy-code"><code><span class="c"># 1. configure</span>
@@ -117,15 +117,15 @@ docker compose up -d</code></pre>
 
       <!-- ============ Features ============ -->
       <section class="features" id="features" aria-label="Features">
-        <h2>What it does</h2>
+        <h2>Features</h2>
         <div class="feature-grid">
           <article class="feature">
             <h3>Live lookups</h3>
-            <p>Transit, weather, news, venues, books. Plain-language questions, answered in the reply. No command syntax.</p>
+            <p>Transit, weather, news, venues, books. Requested in any natural language!</p>
           </article>
           <article class="feature">
             <h3>Group memory</h3>
-            <p>Who runs book club, where the picnics are. Add facts yourself or let it collect them. Everything viewable and deletable.</p>
+            <p>Add community facts yourself or collect them automatically. Everything is viewable and removable.</p>
           </article>
           <article class="feature">
             <h3>Events</h3>
@@ -140,31 +140,31 @@ docker compose up -d</code></pre>
             <p>OpenAI, Anthropic, Google, AWS Bedrock, OpenRouter. Any order, automatic failover. Cost readout included. Ollama for local replies.</p>
           </article>
           <article class="feature">
-            <h3>Dashboards</h3>
-            <p>Admin page for spend and activity. Prometheus and Grafana behind one compose flag.</p>
+            <h3>Monitoring</h3>
+            <p>Prometheus and Grafana powered dashboards for observing community activity, token spend, and more.</p>
           </article>
         </div>
       </section>
 
       <!-- ============ Real screenshots ============ -->
       <section class="gallery" id="gallery" aria-label="Real screenshots">
-        <h2>Screenshots</h2>
+        <h2>Gallery</h2>
         <div class="shots">
           <figure>
             <a href="./assets/screenshots/introductions-welcome.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/introductions-welcome.jpg" alt="Garbanzo writing a personal welcome to a new member's introduction" loading="lazy" /></a>
-            <figcaption>Welcoming a new member</figcaption>
+            <figcaption>New member greetings</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/mbta-alerts.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/mbta-alerts.jpg" alt="Garbanzo reporting live MBTA transit alerts" loading="lazy" /></a>
-            <figcaption>Answering a transit question</figcaption>
+            <figcaption>Local Transit Updates</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/weather-report.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/weather-report.jpg" alt="Garbanzo giving a local weather report" loading="lazy" /></a>
-            <figcaption>A local weather report</figcaption>
+            <figcaption>Local Weather updates</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/dnd-character.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/dnd-character.jpg" alt="Garbanzo generating a Dungeons and Dragons character sheet PDF" loading="lazy" /></a>
-            <figcaption>A generated D&amp;D character sheet</figcaption>
+            <figcaption>D&amp;D (5e) character sheet generation, requested in natural language</figcaption>
           </figure>
         </div>
       </section>
@@ -182,7 +182,7 @@ docker compose up -d</code></pre>
 
       <!-- ============ Support ============ -->
       <section class="support" aria-label="Support the project">
-        <h2>Supporting the project</h2>
+        <h2>Support</h2>
         <p>
           Maintained in spare time. Contributions cover API costs.
         </p>
