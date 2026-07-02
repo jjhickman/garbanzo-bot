@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { config } from '../utils/config.js';
 import type { VisionImage } from '../core/vision.js';
+import type { AiTool } from './tools.js';
 
 /** Cloud providers supported for fallback chain. */
 export type CloudProvider = 'openrouter' | 'anthropic' | 'openai' | 'gemini' | 'bedrock';
@@ -79,9 +80,19 @@ export function buildProviderRequest(
   systemPrompt: string,
   userMessage: string,
   visionImages?: VisionImage[],
+  tools?: AiTool[],
 ): ProviderRequest | null {
   if (provider === 'openrouter') {
     if (!config.OPENROUTER_API_KEY) return null;
+    const body: Record<string, unknown> = {
+      model: config.OPENROUTER_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
+      ],
+      max_tokens: config.CLOUD_MAX_TOKENS,
+    };
+    addOpenAiCompatibleTools(body, tools);
     return {
       provider: 'openrouter',
       model: config.OPENROUTER_MODEL,
@@ -91,20 +102,25 @@ export function buildProviderRequest(
         authorization: `Bearer ${config.OPENROUTER_API_KEY}`,
         'x-title': 'Garbanzo',
       },
-      body: {
-        model: config.OPENROUTER_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
-        ],
-        max_tokens: config.CLOUD_MAX_TOKENS,
-      },
+      body,
       parser: parseChatCompletionResponse,
     };
   }
 
   if (provider === 'anthropic') {
     if (!config.ANTHROPIC_API_KEY) return null;
+    const body: Record<string, unknown> = {
+      model: config.ANTHROPIC_MODEL,
+      max_tokens: config.CLOUD_MAX_TOKENS,
+      // The persona system prompt is static across calls; mark it cacheable so
+      // repeat calls read it at ~10% of base input price (ignored by the API
+      // when below the model's cache minimum, so it's safe to always request).
+      system: config.ANTHROPIC_PROMPT_CACHING
+        ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
+        : systemPrompt,
+      messages: [{ role: 'user', content: buildAnthropicUserContent(userMessage, visionImages) }],
+    };
+    addAnthropicTools(body, tools);
     return {
       provider: 'anthropic',
       model: config.ANTHROPIC_MODEL,
@@ -114,17 +130,7 @@ export function buildProviderRequest(
         'x-api-key': config.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: {
-        model: config.ANTHROPIC_MODEL,
-        max_tokens: config.CLOUD_MAX_TOKENS,
-        // The persona system prompt is static across calls; mark it cacheable so
-        // repeat calls read it at ~10% of base input price (ignored by the API
-        // when below the model's cache minimum, so it's safe to always request).
-        system: config.ANTHROPIC_PROMPT_CACHING
-          ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
-          : systemPrompt,
-        messages: [{ role: 'user', content: buildAnthropicUserContent(userMessage, visionImages) }],
-      },
+      body,
       parser: parseAnthropicResponse,
     };
   }
@@ -158,6 +164,15 @@ export function buildProviderRequest(
   }
 
   if (!config.OPENAI_API_KEY) return null;
+  const body: Record<string, unknown> = {
+    model: config.OPENAI_MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
+    ],
+    max_tokens: config.CLOUD_MAX_TOKENS,
+  };
+  addOpenAiCompatibleTools(body, tools);
   return {
     provider: 'openai',
     model: config.OPENAI_MODEL,
@@ -166,14 +181,7 @@ export function buildProviderRequest(
       'content-type': 'application/json',
       authorization: `Bearer ${config.OPENAI_API_KEY}`,
     },
-    body: {
-      model: config.OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
-      ],
-      max_tokens: config.CLOUD_MAX_TOKENS,
-    },
+    body,
     parser: parseChatCompletionResponse,
   };
 }
@@ -365,7 +373,7 @@ function parseResponsesApiResponse(data: unknown): string {
  * non-2xx to `"<provider> API error <status>: <body>"`, and runs the parser.
  * (Gemini keeps its own perform to preserve its non-JSON error message.)
  */
-export async function performHttpRequest(req: ProviderRequest, signal: AbortSignal): Promise<string> {
+export async function performJsonRequest(req: ProviderRequest, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(req.endpoint, {
     method: 'POST',
     headers: req.headers,
@@ -378,8 +386,33 @@ export async function performHttpRequest(req: ProviderRequest, signal: AbortSign
     throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
   }
 
-  const data: unknown = await response.json();
+  return await response.json() as unknown;
+}
+
+export async function performHttpRequest(req: ProviderRequest, signal: AbortSignal): Promise<string> {
+  const data = await performJsonRequest(req, signal);
   return req.parser(data);
+}
+
+function addOpenAiCompatibleTools(body: Record<string, unknown>, tools: AiTool[] | undefined): void {
+  if (!tools || tools.length === 0) return;
+  body.tools = tools.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }));
+}
+
+function addAnthropicTools(body: Record<string, unknown>, tools: AiTool[] | undefined): void {
+  if (!tools || tools.length === 0) return;
+  body.tools = tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.parameters,
+  }));
 }
 
 function parseChatCompletionResponse(data: unknown): string {

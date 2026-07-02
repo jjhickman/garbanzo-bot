@@ -62,6 +62,8 @@ const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.coerce.number().int().min(1000).max(120000).optional(),
   ),
+  AI_TOOL_CALLING: booleanFromEnv.default(false),
+  AI_TOOL_MAX_ITERATIONS: z.coerce.number().int().min(1).max(5).default(3),
 
   // AWS Bedrock (uses AWS credentials via default provider chain)
   BEDROCK_REGION: z.string().default('us-east-1'),
