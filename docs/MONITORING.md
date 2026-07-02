@@ -32,7 +32,10 @@ clear error instead of scraping blind.
 - **Grafana**: `http://<pi>:3000` — the **Garbanzo — Community Ops** dashboard
   is pre-provisioned and loads immediately. Anonymous LAN users can *view*;
   editing needs the admin login (`admin` / your `WHATSAPP_LOGIN_TOKEN`, or
-  `GRAFANA_ADMIN_PASSWORD` if you set one).
+  `GRAFANA_ADMIN_PASSWORD` if you set one). Sharing the token is a
+  deliberate single-owner convenience — note it also guards the WhatsApp
+  re-link page, so set a separate `GRAFANA_ADMIN_PASSWORD` if others can
+  reach Grafana on your network.
   Grafana listens on the LAN by design (view from any device); if your LAN is
   untrusted, restrict port 3000 with an iptables `DOCKER-USER` allowlist or
   bind it to `127.0.0.1` in compose and front it with a reverse proxy.

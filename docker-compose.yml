@@ -122,9 +122,12 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
     # Admin password: GRAFANA_ADMIN_PASSWORD if set, else the pinned
     # WHATSAPP_LOGIN_TOKEN (one secret gates the whole stack — it already
-    # guards /metrics and /admin). Refuses to start when neither is set;
-    # enforced here (not via ${VAR:?}) so plain `docker compose up` without
-    # the monitoring profile keeps working for everyone else.
+    # guards /metrics and /admin). Deliberate single-owner tradeoff: the
+    # token can also re-link WhatsApp via /whatsapp/login, so compromising
+    # the Grafana login yields it — set GRAFANA_ADMIN_PASSWORD for separate
+    # credentials if that matters in your environment. Refuses to start when
+    # neither is set; enforced here (not via ${VAR:?}) so plain
+    # `docker compose up` without the monitoring profile keeps working.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
