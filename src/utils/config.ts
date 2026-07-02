@@ -37,7 +37,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   // Comma-separated provider priority order, eg: "openrouter,anthropic,openai,gemini,bedrock"
-  AI_PROVIDER_ORDER: z.string().default('anthropic,openai'),
+  AI_PROVIDER_ORDER: z.string().default('openai,anthropic'),
   ANTHROPIC_MODEL: z.string().default('claude-haiku-4-5-20251001'),
   // Anthropic pricing (USD per 1M tokens) for cost tracking — default: Claude Haiku 4.5 ($1/$5).
   ANTHROPIC_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(1.0),
