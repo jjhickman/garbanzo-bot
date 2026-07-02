@@ -32,29 +32,45 @@ import type { VisionImage } from '../core/vision.js';
  * Provider-specific logic lives in ai/claude.ts, ai/chatgpt.ts, ai/gemini.ts, and ai/bedrock.ts.
  */
 
-/** Cached Ollama availability check — refreshed on failure */
-let ollamaReachable: boolean | null = null;
+const OLLAMA_AVAILABILITY_TTL_MS = 60_000;
+
+let ollamaAvailabilityCache: { available: boolean; expiresAtMs: number } | null = null;
+let ollamaAvailabilityProbe: Promise<boolean> | null = null;
 
 const DEFAULT_PROVIDER_ORDER: CloudProvider[] = ['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock'];
 
-/** Prevent spamming cost alerts — reset on rollover via stats module */
-let costAlertSentToday = false;
-
-// Reset cost alert flag at midnight (checked lazily on next call)
-let lastAlertDate = new Date().toDateString();
-function maybeResetCostAlert(): void {
-  const today = new Date().toDateString();
-  if (today !== lastAlertDate) {
-    costAlertSentToday = false;
-    lastAlertDate = today;
+async function checkOllama(): Promise<boolean> {
+  const now = Date.now();
+  if (ollamaAvailabilityCache && ollamaAvailabilityCache.expiresAtMs > now) {
+    return ollamaAvailabilityCache.available;
   }
+
+  if (ollamaAvailabilityProbe) return ollamaAvailabilityProbe;
+
+  ollamaAvailabilityProbe = (async () => {
+    const available = await isOllamaAvailable();
+    ollamaAvailabilityCache = {
+      available,
+      expiresAtMs: Date.now() + OLLAMA_AVAILABILITY_TTL_MS,
+    };
+    logger.info({ available }, 'Ollama availability check');
+    return available;
+  })().finally(() => {
+    ollamaAvailabilityProbe = null;
+  });
+
+  return ollamaAvailabilityProbe;
 }
 
-async function checkOllama(): Promise<boolean> {
-  if (ollamaReachable !== null) return ollamaReachable;
-  ollamaReachable = await isOllamaAvailable();
-  logger.info({ available: ollamaReachable }, 'Ollama availability check');
-  return ollamaReachable;
+function invalidateOllamaAvailability(): void {
+  ollamaAvailabilityCache = null;
+}
+
+let costAlertDateKey: string | null = null;
+
+function currentDateKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 function getConfiguredProviderOrder(): CloudProvider[] {
@@ -87,7 +103,6 @@ export async function getAIResponse(
 ): Promise<string | null> {
   if (!query.trim() && (!visionImages || visionImages.length === 0)) return null;
 
-  maybeResetCostAlert();
   const complexity = classifyComplexity(query, ctx);
   // Always use cloud providers for vision (Ollama can't do multimodal well)
   const hasVision = visionImages && visionImages.length > 0;
@@ -108,7 +123,7 @@ export async function getAIResponse(
       } catch (err) {
         logger.warn({ err, groupJid: ctx.groupJid }, 'Ollama failed — falling back to cloud providers');
         recordAIError(ctx.groupJid);
-        ollamaReachable = null; // Re-check availability next time
+        invalidateOllamaAvailability();
       }
     }
 
@@ -186,9 +201,11 @@ export async function getAIResponse(
     }, 'Cloud response received');
 
     // Alert owner if daily cost is approaching threshold
-    if (getDailyCost() >= DAILY_COST_ALERT_THRESHOLD && !costAlertSentToday) {
-      costAlertSentToday = true;
-      logger.warn({ dailyCost: getDailyCost(), threshold: DAILY_COST_ALERT_THRESHOLD }, 'Daily cost alert threshold reached');
+    const dailyCost = getDailyCost();
+    const today = currentDateKey();
+    if (dailyCost >= DAILY_COST_ALERT_THRESHOLD && costAlertDateKey !== today) {
+      costAlertDateKey = today;
+      logger.warn({ dailyCost, threshold: DAILY_COST_ALERT_THRESHOLD }, 'Daily cost alert threshold reached');
       // The alert is logged; digest will surface it. Direct DM alerting
       // is wired through the daily digest, not here (avoid circular deps).
     }
