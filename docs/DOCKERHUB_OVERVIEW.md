@@ -28,8 +28,8 @@ cp .env.example .env
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=1.0.3 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=1.0.3 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.0.4 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.0.4 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -63,9 +63,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `1.0.3`
+- `1.0.4`
   - Semver tag without the leading `v`
-- `v1.0.3`
+- `v1.0.4`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:
