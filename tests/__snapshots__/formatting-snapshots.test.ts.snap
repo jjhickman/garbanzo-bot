@@ -110,6 +110,10 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
   !strikes — view strike counts
   !catchup intros — recent introductions summary
 
+*Reports*
+  !digest — preview today's digest so far
+  !recap — weekly community recap (last 7 days)
+
 *WhatsApp Safety*
   !whatsapp status — view risk, retained jobs, and send counts
   !whatsapp pause / resume — control new outbound sends
