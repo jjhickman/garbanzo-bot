@@ -5,7 +5,7 @@ import {
   normalizeMessageContent,
 } from '@whiskeysockets/baileys';
 import { hasVisualMedia } from './media.js';
-import { getSenderJid, isGroupJid } from '../../utils/jid.js';
+import { getSenderJid, isGroupJid, isLidJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
 import type { MessageRef } from '../../core/message-ref.js';
 import { createWhatsAppInboundMessageRef } from './message-ref.js';
@@ -64,13 +64,29 @@ export function extractWhatsAppMentionedJids(content: WAMessageContent | undefin
   return jids;
 }
 
+/**
+ * Resolve the sender to a phone-number JID when WhatsApp delivers a LID
+ * (privacy alias, `<n>@lid`). The message key carries the real phone JID in
+ * `participantPn` (groups) / `senderPn` (DMs); preferring it keeps owner
+ * matching, rate-limit exemption, and profile/strike keys stable regardless
+ * of which form WhatsApp chose for this message.
+ */
+export function resolveWhatsAppSenderJid(msg: WAMessage, chatId: string): string {
+  const key = msg.key;
+  const sender = getSenderJid(chatId, key.participant);
+  if (!isLidJid(sender)) return sender;
+  if (isGroupJid(chatId) && key.participantPn) return key.participantPn;
+  if (!isGroupJid(chatId) && key.senderPn) return key.senderPn;
+  return sender;
+}
+
 export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage): WhatsAppInbound | null {
   const chatId = msg.key.remoteJid;
   if (!chatId) return null;
 
   const content = unwrapWhatsAppMessage(msg);
   const text = extractWhatsAppText(content);
-  const senderId = getSenderJid(chatId, msg.key.participant);
+  const senderId = resolveWhatsAppSenderJid(msg, chatId);
 
   const timestampSeconds = typeof msg.messageTimestamp === 'number'
     ? msg.messageTimestamp
