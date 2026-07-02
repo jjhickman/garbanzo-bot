@@ -755,6 +755,14 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       );
     },
 
+    async loadDailyStatsRange(fromDate: string, toDate: string): Promise<Array<{ date: string; data: string }>> {
+      const result = await pool.query(
+        `SELECT date, data FROM daily_stats WHERE date >= $1 AND date <= $2 ORDER BY date ASC`,
+        [fromDate, toDate],
+      );
+      return result.rows as Array<{ date: string; data: string }>;
+    },
+
     async getDailyGroupActivity(date: string): Promise<DailyGroupActivity[]> {
       const [year, month, day] = date.split('-').map((part) => Number.parseInt(part, 10));
       if (!year || !month || !day) return [];

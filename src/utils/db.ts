@@ -63,6 +63,7 @@ export const getRepeatOffenders = backend.getRepeatOffenders;
 // Daily stats
 export const saveDailyStats = backend.saveDailyStats;
 export const getDailyGroupActivity = backend.getDailyGroupActivity;
+export const loadDailyStatsRange = backend.loadDailyStatsRange;
 
 // WhatsApp safety
 export const createWhatsAppOutboundJob = backend.createWhatsAppOutboundJob;
