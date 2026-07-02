@@ -18,6 +18,7 @@ let __resetCloudBreakers: CloudCallModule['__resetCloudBreakers'];
 let buildProviderRequest: CloudProvidersModule['buildProviderRequest'];
 let runAnthropicToolLoop: ToolLoopModule['runAnthropicToolLoop'];
 let runOpenAiCompatToolLoop: ToolLoopModule['runOpenAiCompatToolLoop'];
+let runOpenAiResponsesToolLoop: ToolLoopModule['runOpenAiResponsesToolLoop'];
 let config: ConfigModule['config'];
 let original: {
   anthropicKey: string | undefined;
@@ -68,7 +69,7 @@ describe('LLM tool loops', () => {
     ({ callChatGPT } = await import('../src/ai/chatgpt.js'));
     ({ __resetCloudBreakers } = await import('../src/ai/cloud-call.js'));
     ({ buildProviderRequest } = await import('../src/ai/cloud-providers.js'));
-    ({ runAnthropicToolLoop, runOpenAiCompatToolLoop } = await import('../src/ai/tool-loop.js'));
+    ({ runAnthropicToolLoop, runOpenAiCompatToolLoop, runOpenAiResponsesToolLoop } = await import('../src/ai/tool-loop.js'));
     ({ config } = await import('../src/utils/config.js'));
     original = {
       anthropicKey: config.ANTHROPIC_API_KEY,
@@ -230,6 +231,7 @@ describe('LLM tool loops', () => {
 
   it('uses tool_choice none on the final OpenAI-compatible turn after the iteration cap', async () => {
     config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-test';
     const tools = [stringTool('get_weather', async () => 'Weather result')];
     const req = expectProviderRequest(
       buildProviderRequest('openai', 'system', 'weather loop', undefined, tools),
@@ -261,6 +263,7 @@ describe('LLM tool loops', () => {
 
   it('sends tool execution errors as tool results and still returns a reply', async () => {
     config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-test';
     const tools = [stringTool('get_news', async () => {
       throw new Error('upstream timeout');
     })];
@@ -297,13 +300,189 @@ describe('LLM tool loops', () => {
     });
   });
 
+  it('runs an OpenAI Responses API tool round trip and preserves prior input', async () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+    const execute = vi.fn(async () => 'Red Line has normal service');
+    const tools = [stringTool('get_transit_status', execute)];
+    const req = expectProviderRequest(
+      buildProviderRequest('openai', 'system prompt', 'is the red line running?', undefined, tools),
+    );
+
+    const functionCall = {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'get_transit_status',
+      arguments: '{"query":"red line status"}',
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ output: [functionCall] }))
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'The Red Line is running normally.' }],
+        }],
+      }));
+
+    const text = await runOpenAiResponsesToolLoop(req, tools, new AbortController().signal);
+
+    expect(text).toBe('The Red Line is running normally.');
+    expect(execute).toHaveBeenCalledWith({ query: 'red line status' });
+    const [, secondBody] = requestBodies(fetchSpy);
+    expect(secondBody.input).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'is the red line running?' }] },
+      functionCall,
+      { type: 'function_call_output', call_id: 'call_1', output: 'Red Line has normal service' },
+    ]);
+  });
+
+  it('executes multiple OpenAI Responses API tool calls from one model turn', async () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+    const weather = vi.fn(async () => 'Weather result');
+    const transit = vi.fn(async () => 'Transit result');
+    const tools = [
+      stringTool('get_weather', weather),
+      stringTool('get_transit_status', transit),
+    ];
+    const req = expectProviderRequest(
+      buildProviderRequest('openai', 'system', 'plan my commute', undefined, tools),
+    );
+
+    const weatherCall = {
+      type: 'function_call',
+      call_id: 'call_weather',
+      name: 'get_weather',
+      arguments: '{"query":"somerville now"}',
+    };
+    const transitCall = {
+      type: 'function_call',
+      call_id: 'call_transit',
+      name: 'get_transit_status',
+      arguments: '{"query":"orange line"}',
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ output: [weatherCall, transitCall] }))
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'Bring an umbrella and take the Orange Line.' }],
+        }],
+      }));
+
+    const text = await runOpenAiResponsesToolLoop(req, tools, new AbortController().signal);
+
+    expect(text).toBe('Bring an umbrella and take the Orange Line.');
+    expect(weather).toHaveBeenCalledWith({ query: 'somerville now' });
+    expect(transit).toHaveBeenCalledWith({ query: 'orange line' });
+    const [, secondBody] = requestBodies(fetchSpy);
+    const input = secondBody.input as Array<Record<string, unknown>>;
+    expect(input.slice(-4)).toEqual([
+      weatherCall,
+      { type: 'function_call_output', call_id: 'call_weather', output: 'Weather result' },
+      transitCall,
+      { type: 'function_call_output', call_id: 'call_transit', output: 'Transit result' },
+    ]);
+  });
+
+  it('uses tool_choice none on the final OpenAI Responses API turn after the iteration cap', async () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+    const tools = [stringTool('get_weather', async () => 'Weather result')];
+    const req = expectProviderRequest(
+      buildProviderRequest('openai', 'system', 'weather loop', undefined, tools),
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'get_weather',
+          arguments: '{"query":"boston"}',
+        }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'Forced final answer.' }],
+        }],
+      }));
+
+    const text = await runOpenAiResponsesToolLoop(req, tools, new AbortController().signal, 1);
+
+    expect(text).toBe('Forced final answer.');
+    const [, finalBody] = requestBodies(fetchSpy);
+    expect(finalBody.tool_choice).toBe('none');
+  });
+
+  it('sends OpenAI Responses API tool execution errors as function outputs', async () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+    const tools = [stringTool('get_news', async () => {
+      throw new Error('upstream timeout');
+    })];
+    const req = expectProviderRequest(
+      buildProviderRequest('openai', 'system', 'news?', undefined, tools),
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'function_call',
+          call_id: 'call_news',
+          name: 'get_news',
+          arguments: '{"query":"boston"}',
+        }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'I could not check news, but here is what I can say.' }],
+        }],
+      }));
+
+    const text = await runOpenAiResponsesToolLoop(req, tools, new AbortController().signal);
+
+    expect(text).toBe('I could not check news, but here is what I can say.');
+    const [, secondBody] = requestBodies(fetchSpy);
+    const input = secondBody.input as Array<Record<string, unknown>>;
+    expect(input.at(-1)).toEqual({
+      type: 'function_call_output',
+      call_id: 'call_news',
+      output: 'Tool get_news failed: upstream timeout',
+    });
+  });
+
+  it('throws when an OpenAI Responses API payload has no text and no function calls', async () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+    const tools = [stringTool('get_weather', async () => 'Weather result')];
+    const req = expectProviderRequest(
+      buildProviderRequest('openai', 'system', 'weather?', undefined, tools),
+    );
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({
+      output: [{ type: 'reasoning', summary: [] }],
+    }));
+
+    await expect(runOpenAiResponsesToolLoop(req, tools, new AbortController().signal))
+      .rejects.toThrow('OpenAI Responses payload did not include output text or function calls');
+  });
+
   it('leaves the single-shot OpenAI request tool-free when the flag is off', async () => {
     config.AI_TOOL_CALLING = false;
     config.OPENAI_AUTH_MODE = 'apikey';
     config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ choices: [{ message: { content: 'plain reply' } }] }),
+      jsonResponse({
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'plain reply' }],
+        }],
+      }),
     );
 
     const response = await callChatGPT('system prompt', 'hello');

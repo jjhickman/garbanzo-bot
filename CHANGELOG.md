@@ -10,11 +10,7 @@ All notable changes to Garbanzo are documented here.
 
 ### Fixed
 
-- **OpenAI tool calling with GPT-5-family models** — chat/completions rejects `reasoning_effort` combined with function tools (400 "use /v1/responses instead"), which broke every tool-bearing request on the OpenAI path when `AI_TOOL_CALLING` is enabled. With tools attached, `reasoning_effort` is now omitted (model default depth); plain messages keep the bounded effort.
-
-### Changed
-
-- Recommended primary reverted to Anthropic (`anthropic,openai`, Sonnet-class model): the Anthropic tool loop is first-class today, while GPT-5-family tool use wants OpenAI's Responses API — tracked as a future migration.
+- **OpenAI tool calling with GPT-5-family models** — the OpenAI API-key path now uses the Responses API (`/v1/responses`) with full function-tool and `reasoning.effort` support. OpenAI remains the default primary provider (`openai,anthropic`).
 
 
 ## [1.0.1] — 2026-07-02
