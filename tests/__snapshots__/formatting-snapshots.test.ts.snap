@@ -93,8 +93,8 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
 "*Owner Commands* 🔧
 
 *Memory*
-  !memory — list all stored community facts
-  !memory add <category> <fact> — store a fact
+  !memory — list all stored community facts; auto-extracted facts are tagged
+  !memory add <category> <fact> — store an owner fact
   !memory delete <id> — remove a fact
   !memory search <keyword> — search facts
 
