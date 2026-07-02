@@ -170,8 +170,16 @@ export function buildProviderRequest(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
     ],
-    max_tokens: config.CLOUD_MAX_TOKENS,
   };
+  if (isOpenAiReasoningModel(config.OPENAI_MODEL)) {
+    // GPT-5-series/o-series reject max_tokens on chat/completions and bill
+    // hidden reasoning as output — cap with max_completion_tokens and bound
+    // the reasoning spend explicitly.
+    body.max_completion_tokens = config.CLOUD_MAX_TOKENS;
+    body.reasoning_effort = config.OPENAI_REASONING_EFFORT;
+  } else {
+    body.max_tokens = config.CLOUD_MAX_TOKENS;
+  }
   addOpenAiCompatibleTools(body, tools);
   return {
     provider: 'openai',
@@ -184,6 +192,16 @@ export function buildProviderRequest(
     body,
     parser: parseChatCompletionResponse,
   };
+}
+
+/**
+ * OpenAI reasoning-model detection (GPT-5 family and o-series): these models
+ * take max_completion_tokens + reasoning_effort instead of max_tokens on
+ * chat/completions. Applies only to the direct api.openai.com path — the
+ * OpenRouter path keeps max_tokens (OpenRouter normalizes params per vendor).
+ */
+export function isOpenAiReasoningModel(model: string): boolean {
+  return /^(gpt-5|o\d)/i.test(model);
 }
 
 /** EXPERIMENTAL: ChatGPT-subscription backend used by OpenAI OAuth mode. */

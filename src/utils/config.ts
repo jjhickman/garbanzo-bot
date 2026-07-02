@@ -46,6 +46,9 @@ const envSchema = z.object({
   ANTHROPIC_PROMPT_CACHING: booleanFromEnv.default(true),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4-5'),
   OPENAI_MODEL: z.string().default('gpt-5.4-mini'),
+  // Reasoning depth for GPT-5-series/o-series chat models. 'low' keeps chat
+  // replies cheap and fast; raise only if answers feel shallow.
+  OPENAI_REASONING_EFFORT: z.enum(['minimal', 'low', 'medium', 'high']).default('low'),
   // OpenAI pricing (USD per 1M tokens) for cost tracking — default: gpt-5.4-mini ($0.75/$4.50).
   OPENAI_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.75),
   OPENAI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(4.5),
