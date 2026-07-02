@@ -218,6 +218,8 @@ The health endpoint returns JSON with connection status, uptime, memory usage, m
 
 Nightly off-machine backups of the WhatsApp credentials + database (systemd timer, verification, retention, one-command restore): [docs/BACKUPS.md](docs/BACKUPS.md)
 
+Full observability stack — a pre-provisioned Grafana dashboard (community activity, AI cost by provider, tool usage, anti-ban trends, backups) over Prometheus, running beside the bot with `docker compose --profile monitoring up -d`: [docs/MONITORING.md](docs/MONITORING.md)
+
 ## Customizing for Your Community
 Garbanzo was built for Boston, but the architecture is locale-agnostic. Customize the persona, transit provider, weather defaults, groups, mention patterns, icebreakers, and memory facts.
 Guide: [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)

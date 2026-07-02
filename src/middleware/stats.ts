@@ -39,6 +39,9 @@ export interface CostEntry {
   latencyMs: number;
 }
 
+type AiProvider = CostEntry['model'];
+type ToolCallOutcome = 'ok' | 'error';
+
 export interface DailyStats {
   /** ISO date string (YYYY-MM-DD) for this stats period */
   date: string;
@@ -52,7 +55,33 @@ export interface DailyStats {
   totalCost: number;
 }
 
+export interface LifetimeCounters {
+  messagesByGroupJid: ReadonlyMap<string, number>;
+  botResponsesByGroupJid: ReadonlyMap<string, number>;
+  aiRequestsByProvider: ReadonlyMap<AiProvider, number>;
+  aiErrorsByGroupJid: ReadonlyMap<string, number>;
+  moderationFlagsByGroupJid: ReadonlyMap<string, number>;
+  ownerDmsTotal: number;
+  aiCostUsdByProvider: ReadonlyMap<AiProvider, number>;
+  rateLimitedTotal: number;
+  toolCalls: ReadonlyMap<string, Readonly<Record<ToolCallOutcome, number>>>;
+  eventRemindersSentTotal: number;
+}
+
 let current: DailyStats = freshStats();
+
+const lifetime = {
+  messagesByGroupJid: new Map<string, number>(),
+  botResponsesByGroupJid: new Map<string, number>(),
+  aiRequestsByProvider: new Map<AiProvider, number>(),
+  aiErrorsByGroupJid: new Map<string, number>(),
+  moderationFlagsByGroupJid: new Map<string, number>(),
+  ownerDmsTotal: 0,
+  aiCostUsdByProvider: new Map<AiProvider, number>(),
+  rateLimitedTotal: 0,
+  toolCalls: new Map<string, Record<ToolCallOutcome, number>>(),
+  eventRemindersSentTotal: 0,
+};
 
 function freshStats(): DailyStats {
   return {
@@ -99,6 +128,10 @@ function getGroupStats(groupJid: string): GroupStats {
   return stats;
 }
 
+function incrementCounter<K>(counters: Map<K, number>, key: K, amount: number = 1): void {
+  counters.set(key, (counters.get(key) ?? 0) + amount);
+}
+
 /** Roll over to a new day if needed. Returns the old stats if rolled. */
 function maybeRollover(): DailyStats | null {
   const today = todayISO();
@@ -116,6 +149,7 @@ function maybeRollover(): DailyStats | null {
 /** Record a user message for per-group volume and active-user tracking. */
 export function recordGroupMessage(groupJid: string, senderJid: string): void {
   maybeRollover();
+  incrementCounter(lifetime.messagesByGroupJid, groupJid);
   const stats = getGroupStats(groupJid);
   stats.messageCount++;
   stats.activeUsers.add(senderJid.split('@')[0].split(':')[0]);
@@ -124,12 +158,14 @@ export function recordGroupMessage(groupJid: string, senderJid: string): void {
 /** Record that the bot sent a response in a group. */
 export function recordBotResponse(groupJid: string): void {
   maybeRollover();
+  incrementCounter(lifetime.botResponsesByGroupJid, groupJid);
   getGroupStats(groupJid).botResponses++;
 }
 
 /** Record which AI route handled a group response (Ollama/Claude/OpenAI/Gemini). */
 export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'openai' | 'gemini' | 'bedrock'): void {
   maybeRollover();
+  incrementCounter(lifetime.aiRequestsByProvider, model);
   const stats = getGroupStats(groupJid);
   if (model === 'ollama') stats.ollamaRouted++;
   else if (model === 'openai') stats.openaiRouted++;
@@ -141,19 +177,39 @@ export function recordAIRoute(groupJid: string, model: 'ollama' | 'claude' | 'op
 /** Record that a moderation flag was raised in a group. */
 export function recordModerationFlag(groupJid: string): void {
   maybeRollover();
+  incrementCounter(lifetime.moderationFlagsByGroupJid, groupJid);
   getGroupStats(groupJid).moderationFlags++;
 }
 
 /** Record an owner DM interaction. */
 export function recordOwnerDM(): void {
   maybeRollover();
+  lifetime.ownerDmsTotal++;
   current.ownerDMs++;
 }
 
 /** Record an AI processing error for a group. */
 export function recordAIError(groupJid: string): void {
   maybeRollover();
+  incrementCounter(lifetime.aiErrorsByGroupJid, groupJid);
   getGroupStats(groupJid).aiErrors++;
+}
+
+/** Record that a bot response was rejected by rate limiting. */
+export function recordRateLimited(): void {
+  lifetime.rateLimitedTotal++;
+}
+
+/** Record a tool call result. */
+export function recordToolCall(tool: string, outcome: ToolCallOutcome): void {
+  const calls = lifetime.toolCalls.get(tool) ?? { ok: 0, error: 0 };
+  calls[outcome]++;
+  lifetime.toolCalls.set(tool, calls);
+}
+
+/** Record a successfully sent event reminder. */
+export function recordEventReminderSent(): void {
+  lifetime.eventRemindersSentTotal++;
 }
 
 export function recordSessionSummaryLifecycle(
@@ -237,6 +293,7 @@ const BEDROCK_PRICING = {
  */
 export function recordAICost(entry: CostEntry): void {
   maybeRollover();
+  incrementCounter(lifetime.aiCostUsdByProvider, entry.model, entry.estimatedCost);
   current.costs.push(entry);
   current.totalCost += entry.estimatedCost;
 }
@@ -324,6 +381,24 @@ export const DAILY_COST_ALERT_THRESHOLD = 1.00;
 export function getCurrentStats(): DailyStats {
   maybeRollover();
   return current;
+}
+
+/** Get process-lifetime Prometheus counters. */
+export function getLifetimeCounters(): LifetimeCounters {
+  return {
+    messagesByGroupJid: new Map(lifetime.messagesByGroupJid),
+    botResponsesByGroupJid: new Map(lifetime.botResponsesByGroupJid),
+    aiRequestsByProvider: new Map(lifetime.aiRequestsByProvider),
+    aiErrorsByGroupJid: new Map(lifetime.aiErrorsByGroupJid),
+    moderationFlagsByGroupJid: new Map(lifetime.moderationFlagsByGroupJid),
+    ownerDmsTotal: lifetime.ownerDmsTotal,
+    aiCostUsdByProvider: new Map(lifetime.aiCostUsdByProvider),
+    rateLimitedTotal: lifetime.rateLimitedTotal,
+    toolCalls: new Map(
+      Array.from(lifetime.toolCalls, ([tool, counts]) => [tool, { ...counts }]),
+    ),
+    eventRemindersSentTotal: lifetime.eventRemindersSentTotal,
+  };
 }
 
 /** Snapshot and reset — used by digest to get final stats for the day */

@@ -75,8 +75,81 @@ services:
   #   labels:
   #     - com.centurylinklabs.watchtower.enable=true
 
+  # Optional monitoring stack (Prometheus + Grafana), sized for a Pi-class host.
+  # Enable with:  docker compose --profile monitoring up -d
+  # One-time setup (scrape token + METRICS_ENABLED=true): see docs/MONITORING.md
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: garbanzo-prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      # Interpolated from .env — the same token that guards /metrics.
+      # Must be PINNED there (a per-boot generated token can't be scraped).
+      - PROM_BEARER_TOKEN=${WHATSAPP_LOGIN_TOKEN:-}
+    # Materialize the scrape token from the env var, then start Prometheus.
+    # Written to the data volume because /etc/prometheus is root-owned and
+    # the image runs as nobody.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$PROM_BEARER_TOKEN" ]; then
+          echo "WHATSAPP_LOGIN_TOKEN must be set in .env to enable monitoring (it authenticates /metrics scrapes)" >&2
+          exit 1
+        fi
+        printf '%s' "$$PROM_BEARER_TOKEN" > /prometheus/token
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.retention.time=30d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    # LAN-reachable for debugging; Grafana is the intended UI
+    ports:
+      - "127.0.0.1:9090:9090"
+    mem_limit: 300m
+
+  grafana:
+    image: grafana/grafana-oss:11.6.0
+    container_name: garbanzo-grafana
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      # Anyone on your LAN can VIEW dashboards; editing needs the admin login.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    # No default password: refuse to start until GRAFANA_ADMIN_PASSWORD is set
+    # in .env. Enforced here (not via ${VAR:?}) so plain `docker compose up`
+    # without the monitoring profile keeps working for everyone else.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$GF_SECURITY_ADMIN_PASSWORD" ]; then
+          echo "GRAFANA_ADMIN_PASSWORD must be set in .env to enable monitoring (it is the Grafana admin login)" >&2
+          exit 1
+        fi
+        exec /run.sh
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    # LAN-reachable by design: dashboards are meant to be viewed from other
+    # devices (same documented posture as the /health port). Anonymous access
+    # is read-only; restrict with an iptables DOCKER-USER allowlist or bind to
+    # 127.0.0.1 + reverse proxy if your LAN is untrusted — see docs/MONITORING.md.
+    ports:
+      - "0.0.0.0:3000:3000"
+    mem_limit: 300m
+    depends_on:
+      - prometheus
+
 volumes:
   baileys_auth:
     name: garbanzo-bot-auth
   garbanzo_data:
     name: garbanzo-bot-data
+  prom_data:
+    name: garbanzo-bot-prometheus
+  grafana_data:
+    name: garbanzo-bot-grafana

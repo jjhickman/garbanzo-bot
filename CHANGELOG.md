@@ -6,6 +6,14 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-07-02
+
+### Added
+
+- Community/admin Prometheus metric families for lifetime activity, daily group gauges, memory facts, pending/sent event reminders, rate-limit rejections, tool-call outcomes, and AI cost/request/error totals.
+- Bearer auth support for `/metrics` and `/admin`, alongside the existing query-token flow.
+- Self-hosted Prometheus + Grafana monitoring stack (`docker compose --profile monitoring`).
+
 ## [1.0.2] — 2026-07-02
 
 ### Fixed

@@ -17,10 +17,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { logger } from './logger.js';
 import { buildAdminSnapshot, renderAdminHtml } from './admin-page.js';
 import {
+  getAllMemories,
   getWhatsAppSafetyMetrics,
+  listUpcomingEventReminders,
   verifyLatestBackupIntegrity,
   type BackupIntegrityStatus,
 } from '../utils/db.js';
+import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
+import { getGroupName } from '../core/groups-config.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -137,6 +141,20 @@ function tokenMatches(actual: string | null, expected: string): boolean {
   return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
+function bearerToken(req: IncomingMessage): string | null {
+  const header = req.headers.authorization;
+  if (typeof header !== 'string') return null;
+
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match?.[1] ?? null;
+}
+
+function requestHasValidToken(req: IncomingMessage, expected: string): boolean {
+  const rawUrl = req.url ?? '';
+  const queryToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
+  return tokenMatches(queryToken, expected) || tokenMatches(bearerToken(req), expected);
+}
+
 async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; status: BackupIntegrityStatus }> {
   if (!backupStatusCache || now - backupStatusCache.checkedAt >= BACKUP_CHECK_CACHE_MS) {
     backupStatusCache = {
@@ -145,6 +163,138 @@ async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; 
     };
   }
   return backupStatusCache;
+}
+
+function escapePrometheusLabelValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/"/g, '\\"');
+}
+
+function groupLabelValue(groupJid: string): string {
+  return escapePrometheusLabelValue(getGroupName(groupJid));
+}
+
+function pushCounterMap(
+  lines: string[],
+  name: string,
+  labelName: string,
+  counters: ReadonlyMap<string, number>,
+): void {
+  for (const [labelValue, value] of Array.from(counters).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`${name}{${labelName}="${escapePrometheusLabelValue(labelValue)}"} ${value}`);
+  }
+}
+
+function pushGroupCounterMap(
+  lines: string[],
+  name: string,
+  counters: ReadonlyMap<string, number>,
+): void {
+  for (const [groupJid, value] of Array.from(counters).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`${name}{group="${groupLabelValue(groupJid)}"} ${value}`);
+  }
+}
+
+function pushLifetimeCounters(lines: string[]): void {
+  const lifetime = getLifetimeCounters();
+
+  lines.push('# HELP garbanzo_messages_total Total observed group messages by group for this process lifetime.');
+  lines.push('# TYPE garbanzo_messages_total counter');
+  pushGroupCounterMap(lines, 'garbanzo_messages_total', lifetime.messagesByGroupJid);
+
+  lines.push('# HELP garbanzo_bot_responses_total Total bot responses by group for this process lifetime.');
+  lines.push('# TYPE garbanzo_bot_responses_total counter');
+  pushGroupCounterMap(lines, 'garbanzo_bot_responses_total', lifetime.botResponsesByGroupJid);
+
+  lines.push('# HELP garbanzo_ai_requests_total Total AI requests by provider for this process lifetime.');
+  lines.push('# TYPE garbanzo_ai_requests_total counter');
+  pushCounterMap(lines, 'garbanzo_ai_requests_total', 'provider', lifetime.aiRequestsByProvider);
+
+  lines.push('# HELP garbanzo_ai_errors_total Total AI errors by group for this process lifetime.');
+  lines.push('# TYPE garbanzo_ai_errors_total counter');
+  pushGroupCounterMap(lines, 'garbanzo_ai_errors_total', lifetime.aiErrorsByGroupJid);
+
+  lines.push('# HELP garbanzo_moderation_flags_total Total moderation flags by group for this process lifetime.');
+  lines.push('# TYPE garbanzo_moderation_flags_total counter');
+  pushGroupCounterMap(lines, 'garbanzo_moderation_flags_total', lifetime.moderationFlagsByGroupJid);
+
+  lines.push('# HELP garbanzo_owner_dms_total Total owner DM interactions for this process lifetime.');
+  lines.push('# TYPE garbanzo_owner_dms_total counter');
+  lines.push(`garbanzo_owner_dms_total ${lifetime.ownerDmsTotal}`);
+
+  lines.push('# HELP garbanzo_ai_cost_usd_total Total estimated AI cost in USD by provider for this process lifetime.');
+  lines.push('# TYPE garbanzo_ai_cost_usd_total counter');
+  pushCounterMap(lines, 'garbanzo_ai_cost_usd_total', 'provider', lifetime.aiCostUsdByProvider);
+
+  lines.push('# HELP garbanzo_rate_limited_total Total bot response requests rejected by rate limiting for this process lifetime.');
+  lines.push('# TYPE garbanzo_rate_limited_total counter');
+  lines.push(`garbanzo_rate_limited_total ${lifetime.rateLimitedTotal}`);
+
+  lines.push('# HELP garbanzo_tool_calls_total Total AI tool calls by tool and outcome for this process lifetime.');
+  lines.push('# TYPE garbanzo_tool_calls_total counter');
+  for (const [tool, counts] of Array.from(lifetime.toolCalls).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_tool_calls_total{tool="${escapePrometheusLabelValue(tool)}",outcome="ok"} ${counts.ok}`);
+    lines.push(`garbanzo_tool_calls_total{tool="${escapePrometheusLabelValue(tool)}",outcome="error"} ${counts.error}`);
+  }
+
+  lines.push('# HELP garbanzo_event_reminders_sent_total Total event reminders successfully sent for this process lifetime.');
+  lines.push('# TYPE garbanzo_event_reminders_sent_total counter');
+  lines.push(`garbanzo_event_reminders_sent_total ${lifetime.eventRemindersSentTotal}`);
+}
+
+function pushDailyGauges(lines: string[]): void {
+  const stats = getCurrentStats();
+
+  lines.push('# HELP garbanzo_daily_cost_usd Estimated AI cost in USD for the current local day.');
+  lines.push('# TYPE garbanzo_daily_cost_usd gauge');
+  lines.push(`garbanzo_daily_cost_usd ${getDailyCost()}`);
+
+  lines.push('# HELP garbanzo_daily_messages Current local-day observed group messages by group.');
+  lines.push('# TYPE garbanzo_daily_messages gauge');
+  for (const [groupJid, group] of Array.from(stats.groups).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_daily_messages{group="${groupLabelValue(groupJid)}"} ${group.messageCount}`);
+  }
+
+  lines.push('# HELP garbanzo_daily_bot_responses Current local-day bot responses by group.');
+  lines.push('# TYPE garbanzo_daily_bot_responses gauge');
+  for (const [groupJid, group] of Array.from(stats.groups).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_daily_bot_responses{group="${groupLabelValue(groupJid)}"} ${group.botResponses}`);
+  }
+
+  lines.push('# HELP garbanzo_daily_active_users Current local-day active users by group.');
+  lines.push('# TYPE garbanzo_daily_active_users gauge');
+  for (const [groupJid, group] of Array.from(stats.groups).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_daily_active_users{group="${groupLabelValue(groupJid)}"} ${group.activeUsers.size}`);
+  }
+}
+
+async function pushMemoryFactGauge(lines: string[]): Promise<void> {
+  try {
+    const memories = await getAllMemories();
+    const bySource = new Map<string, number>();
+    for (const memory of memories) {
+      bySource.set(memory.source, (bySource.get(memory.source) ?? 0) + 1);
+    }
+
+    lines.push('# HELP garbanzo_memory_facts Number of stored community memory facts by source.');
+    lines.push('# TYPE garbanzo_memory_facts gauge');
+    pushCounterMap(lines, 'garbanzo_memory_facts', 'source', bySource);
+  } catch (err) {
+    logger.warn({ err }, 'Skipping memory fact Prometheus gauge');
+  }
+}
+
+async function pushEventReminderPendingGauge(lines: string[]): Promise<void> {
+  try {
+    const reminders = await listUpcomingEventReminders(100);
+    lines.push('# HELP garbanzo_event_reminders_pending Number of pending upcoming event reminders.');
+    lines.push('# TYPE garbanzo_event_reminders_pending gauge');
+    lines.push(`garbanzo_event_reminders_pending ${reminders.length}`);
+  } catch (err) {
+    logger.warn({ err }, 'Skipping pending event reminder Prometheus gauge');
+  }
 }
 
 /**
@@ -228,6 +378,11 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   lines.push('# TYPE garbanzo_whatsapp_safety_risk_score gauge');
   lines.push(`garbanzo_whatsapp_safety_risk_score ${whatsappSafety.score}`);
 
+  pushLifetimeCounters(lines);
+  pushDailyGauges(lines);
+  await pushMemoryFactGauge(lines);
+  await pushEventReminderPendingGauge(lines);
+
   return lines.join('\n') + '\n';
 }
 
@@ -259,8 +414,7 @@ export function startHealthServer(
           return;
         }
 
-        const providedToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
-        if (!tokenMatches(providedToken, options.authToken ?? '')) {
+        if (!requestHasValidToken(req, options.authToken ?? '')) {
           res.writeHead(401, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'unauthorized' }));
           return;
@@ -297,8 +451,7 @@ export function startHealthServer(
 
         if (path === '/metrics') {
           const authToken = options?.authToken;
-          const providedToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
-          if (authToken !== undefined && !tokenMatches(providedToken, authToken)) {
+          if (authToken !== undefined && !requestHasValidToken(req, authToken)) {
             res.writeHead(401, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ error: 'unauthorized' }));
             return;
@@ -424,4 +577,4 @@ function stopMemoryWatchdog(): void {
   }
 }
 
-export const __testing = { normalizeIp };
+export const __testing = { normalizeIp, renderPrometheusMetrics, requestHasValidToken };
