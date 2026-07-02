@@ -6,12 +6,13 @@ Garbanzo is an AI chat operations platform packaged for Docker-first self-hostin
 
 This image is built for operators and small teams that want:
 
-- Multi-provider AI routing with configurable failover order (Claude, OpenAI, Gemini, Bedrock, OpenRouter)
-- Cloud + local hybrid inference to balance quality, latency, and cost
-- Session memory with vector retrieval for long-horizon conversation recall
-- Built-in workflow automations (summaries, events, moderation signals, recommendations)
+- Multi-provider AI routing with configurable failover order (OpenAI GPT-5 family via the Responses API, Claude, Gemini, Bedrock, OpenRouter) plus optional local Ollama
+- **Native tool calling** — the model invokes weather/transit/venues/news/books/memory integrations mid-reply
+- Session memory with vector retrieval, plus **automatic community-memory extraction** (opt-in)
+- Built-in workflow automations (summaries, events + reminders, weekly recaps, moderation signals, recommendations)
 - Built-in integrations (weather, transit, venues, news, books, D&D lookups)
-- Operations-friendly health + readiness endpoints (`/health`, `/health/ready`)
+- Operations: health/readiness endpoints, token-gated `/admin` usage & cost page, Prometheus `/metrics`, and a pre-provisioned Grafana dashboard via the compose `monitoring` profile
+- Verified off-machine backups (systemd timer + restore runbook) and anti-ban outbound safety for WhatsApp
 - Docker-first deployment with persistent auth + SQLite or Postgres (pgvector) state
 
 ## Quick Start (Docker Compose)
@@ -27,8 +28,8 @@ cp .env.example .env
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.0.3 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.0.3 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -45,13 +46,15 @@ curl -i http://127.0.0.1:3001/health/ready
 
 ## Key Features
 
-- **AI routing:** configurable provider failover order across Claude, OpenAI, Gemini, Bedrock, and OpenRouter with per-provider model overrides
+- **AI routing:** configurable provider failover order across OpenAI (GPT-5 family via the Responses API with bounded `reasoning_effort`), Claude, Gemini, Bedrock, and OpenRouter with per-provider model overrides
+- **Tool calling:** opt-in native function calling (`AI_TOOL_CALLING`) so members ask naturally — "is the red line running?" — instead of using bang commands
+- **Community memory:** owner-curated facts plus opt-in automatic extraction (`MEMORY_AUTO_EXTRACT`), injected into the AI prompt and managed with `!memory`
 - **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
 - **Embedding providers:** deterministic hash embeddings by default, OpenAI `text-embedding-3-small` available with automatic fallback
 - **Storage:** SQLite (default) or Postgres with pgvector for semantic session retrieval
 - **Platforms:** WhatsApp (production), Slack, Discord (official API runtimes), unified demo at demo.garbanzobot.com
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
-- **Operations:** health/readiness endpoints, daily digest, backup integrity, rate limiting, retry queue
+- **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
 
 ## Tags
 
@@ -60,9 +63,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `0.2.2`
+- `1.0.3`
   - Semver tag without the leading `v`
-- `v0.2.2`
+- `v1.0.3`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:

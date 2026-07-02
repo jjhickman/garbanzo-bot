@@ -11,11 +11,12 @@
 Garbanzo is an AI chat operations platform for communities and small teams. It combines multi-provider LLM routing, practical automations, and Docker-first deployment so you can run useful AI workflows directly in group chat.
 
 ## Highlights
-- Multi-provider LLM routing with Claude, OpenAI, Gemini, Bedrock, OpenRouter, failover, and optional local Ollama for low-cost/simple traffic.
-- Community workflows for introductions, summaries, events, polls, recommendations, feedback, memory, and owner digests.
-- Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs.
-- WhatsApp-first runtime with browser login, plus Slack and Discord scaffolds with demo modes.
-- Operational guardrails: health/readiness endpoints, backups, retry queue, moderation review, rate limits, and per-group feature allowlists.
+- Multi-provider LLM routing (OpenAI GPT-5 via the Responses API, Claude, Gemini, Bedrock, OpenRouter) with failover, native tool calling, and optional local Ollama for low-cost/simple traffic.
+- Community workflows for introductions, summaries, events + reminders, polls, recommendations, feedback, curated **and automatic** community memory, weekly recaps, and owner digests.
+- Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs — callable by name or invoked naturally by the model when tool calling is on.
+- WhatsApp-first runtime (Baileys v7) with browser login, plus Slack and Discord scaffolds with demo modes.
+- Operational guardrails: health/readiness endpoints, verified off-machine backups, anti-ban outbound safety, retry queue, moderation review (edit-aware), rate limits, and per-group feature allowlists.
+- Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard (`docker compose --profile monitoring up -d`).
 - Docker-first deployment with SQLite by default and Postgres support for semantic session retrieval.
 
 ## See it in action
@@ -84,7 +85,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:1.0.0
+# docker pull jjhickman/garbanzo:1.0.3
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
@@ -105,7 +106,9 @@ If you want the fastest non-chat test path first, run Slack demo mode and post a
 ## Features
 ### AI Chat Capabilities
 - Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
-- Local Ollama fallback for simple queries (reduces API costs by routing to qwen3:8b)
+- **Native tool calling** (`AI_TOOL_CALLING`) — the model invokes weather/transit/venues/news/books/memory tools mid-reply, so members ask naturally instead of using commands
+- **Automatic community memory** (`MEMORY_AUTO_EXTRACT`) — durable facts are extracted asynchronously from conversation, deduped, capped, and curated with `!memory`
+- Local Ollama fallback for simple queries (model via `OLLAMA_MODEL`; runs 1-3B models on a Pi 5 — see docs/INFRASTRUCTURE.md)
 - Conversation context from SQLite or Postgres — remembers recent messages per group
 - **Session memory** — conversations are sessionized by inactivity gap, extractively summarized, and stored with vector embeddings for long-horizon recall (e.g., "what did we decide about trivia last week?")
 - **Semantic retrieval** — session summaries and message hits are merged and reranked with a unified scoring model (recency decay, token overlap, coverage deduplication) before injection into the AI prompt
@@ -116,7 +119,8 @@ If you want the fastest non-chat test path first, run Slack demo mode and post a
 ### Community Workflows
 - **Introductions** — AI-powered personal welcomes for new member introductions (no @mention needed)
 - **Welcome messages** — greets new participants when they join a group
-- **Events** — detects event proposals, enriches with weather/transit/AI logistics
+- **Events** — detects event proposals, enriches with weather/transit/AI logistics, and posts a reminder before start time (`!events` to manage)
+- **Weekly recap** — `!recap` and a scheduled Sunday owner DM: 7-day totals, most active groups, unique participants
 - **Polls** — native WhatsApp polls: `!poll Question? / A / B / C`
 - **Profiles** — opt-in interest tracking: `!profile interests hiking, cooking`
 - **Recommendations** — `!recommend` suggests events based on your interests
