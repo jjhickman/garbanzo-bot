@@ -6,6 +6,40 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-07-02
+
+First stable release. Every item below shipped as an individually reviewed PR (#183–#202) and runs in production on a Raspberry Pi 5.
+
+### Added
+
+- **Native LLM tool calling** (opt-in, `AI_TOOL_CALLING`) — the model invokes weather/transit/venues/news/books/community-memory tools mid-response for Anthropic, OpenAI, and OpenRouter; bounded tool loop under the existing circuit breaker (#198).
+- **Automatic community memory** (opt-in, `MEMORY_AUTO_EXTRACT`) — async post-reply fact extraction with dedup, caps, `(auto)` tagging, and `!memory` curation (#195).
+- **Event reminders** — confidently-parsed event proposals persist and the chat gets a "starts soon" nudge; `!events` owner commands (#201).
+- **Weekly community recap** — `!recap` + scheduled Sunday owner DM aggregating the archived daily digests (#200).
+- **Owner admin page** — token-gated `/admin` + `/admin.json`: daily AI spend vs. threshold, provider mix, per-group activity, outbound-safety counters (#196).
+- **Message-edit awareness** — edits re-run moderation and intro classification; editing a message can no longer dodge moderation (#199).
+- **Host backups** — nightly systemd-timer archive of the WhatsApp auth + data volumes to external storage, with verification, retention, and a one-command restore (#191).
+- **Watchtower option** — documented label-filtered auto-update path with pinned-vs-latest guidance (#193).
+- `OLLAMA_MODEL` env var + Raspberry Pi local-inference guide (gemma3:1b-class models) (#197).
+- `RETRY_ATTEMPT_TIMEOUT_MS` optional per-attempt retry bound (#192).
+
+### Fixed
+
+- **Owner commands ignored for LID senders** — inbound senders resolve LID→phone JID; owner match tolerates device suffixes; rate-limit exemption restored (#190).
+- **OpenAI OAuth mode never worked** — the private Responses backend is SSE-only; the OAuth path now streams and parses events (verified against a live token). Still experimental/ToS-grey and fallback-protected (#194).
+- Router race conditions (Ollama availability cache, midnight cost-alert reset), Slack refresh regression coverage, structured pre-logger config errors (#192).
+- WhatsApp linking/reconnect: 515 (restartRequired) and 428 (connectionClosed) reconnect instead of pausing (#183, #185).
+- `node_modules/` gitignore pattern also matches symlinks now; a stray committed symlink was removed.
+
+### Changed
+
+- **Baileys 7.0.0-rc13 + baileys-antiban 4.10.0** — LID-era upgrade; v7 alt-field message keys with v6 fallbacks; auth state migrates in place (back up first — see docs/BACKUPS.md) (#202).
+- Model defaults modernized: `claude-haiku-4-5` / `gpt-5.4-mini`, env-driven pricing, Anthropic prompt caching, provider order `anthropic,openai` (#188).
+- WhatsApp anti-ban warm-up defaults raised to 2000/day and documented (#187).
+- README restructured (887 → 259 lines) with reference docs extracted to docs/ (#186); new docs: BACKUPS, CONFIGURATION, PLATFORMS, CUSTOMIZATION, PHILOSOPHY.
+- 665 tests (from 609 at v0.2.4).
+
+
 ## [0.1.9] — 2026-02-17
 
 ### Added
