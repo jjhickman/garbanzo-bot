@@ -33,13 +33,24 @@ interface OpenAIImageBlock {
   image_url: { url: string };
 }
 
+interface OpenAIResponsesImageBlock {
+  type: 'input_image';
+  image_url: string;
+}
+
 interface TextBlock {
   type: 'text';
   text: string;
 }
 
+interface OpenAIResponsesTextBlock {
+  type: 'input_text';
+  text: string;
+}
+
 type AnthropicContentBlock = AnthropicImageBlock | TextBlock;
 type OpenAIContentBlock = OpenAIImageBlock | TextBlock;
+type OpenAIResponsesContentBlock = OpenAIResponsesImageBlock | OpenAIResponsesTextBlock;
 type AnthropicMessageContent = string | AnthropicContentBlock[];
 type OpenAIMessageContent = string | OpenAIContentBlock[];
 
@@ -164,22 +175,40 @@ export function buildProviderRequest(
   }
 
   if (!config.OPENAI_API_KEY) return null;
+  if (isOpenAiReasoningModel(config.OPENAI_MODEL)) {
+    const body: Record<string, unknown> = {
+      model: config.OPENAI_MODEL,
+      instructions: systemPrompt,
+      input: [{
+        role: 'user',
+        content: buildOpenAIResponsesUserContent(userMessage, visionImages),
+      }],
+      max_output_tokens: config.CLOUD_MAX_TOKENS,
+      reasoning: { effort: config.OPENAI_REASONING_EFFORT },
+      store: false,
+    };
+    addOpenAiResponsesTools(body, tools);
+    return {
+      provider: 'openai',
+      model: config.OPENAI_MODEL,
+      endpoint: 'https://api.openai.com/v1/responses',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${config.OPENAI_API_KEY}`,
+      },
+      body,
+      parser: parseResponsesApiResponse,
+    };
+  }
+
   const body: Record<string, unknown> = {
     model: config.OPENAI_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: buildOpenAICompatibleUserContent(userMessage, visionImages) },
     ],
+    max_tokens: config.CLOUD_MAX_TOKENS,
   };
-  if (isOpenAiReasoningModel(config.OPENAI_MODEL)) {
-    // GPT-5-series/o-series reject max_tokens on chat/completions and bill
-    // hidden reasoning as output — cap with max_completion_tokens and bound
-    // the reasoning spend explicitly.
-    body.max_completion_tokens = config.CLOUD_MAX_TOKENS;
-    body.reasoning_effort = config.OPENAI_REASONING_EFFORT;
-  } else {
-    body.max_tokens = config.CLOUD_MAX_TOKENS;
-  }
   addOpenAiCompatibleTools(body, tools);
   return {
     provider: 'openai',
@@ -211,6 +240,9 @@ const ResponsesApiSchema = z.object({
   output_text: z.union([z.string(), z.array(z.string())]).optional(),
   output: z.array(z.object({
     type: z.string().optional(),
+    call_id: z.string().optional(),
+    name: z.string().optional(),
+    arguments: z.string().optional(),
     content: z.array(z.object({
       type: z.string().optional(),
       text: z.string().optional(),
@@ -235,17 +267,6 @@ export function buildOpenAIResponsesRequest(
   accessToken: string,
   accountId: string | null,
 ): ProviderRequest {
-  const content: Array<Record<string, unknown>> = [];
-  if (visionImages && visionImages.length > 0) {
-    for (const img of visionImages) {
-      content.push({ type: 'input_image', image_url: `data:${img.mediaType};base64,${img.base64}` });
-    }
-  }
-  content.push({
-    type: 'input_text',
-    text: userMessage || 'What do you see in this image? Describe it and respond naturally.',
-  });
-
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     accept: 'text/event-stream',
@@ -262,7 +283,7 @@ export function buildOpenAIResponsesRequest(
     body: {
       model: config.OPENAI_MODEL,
       instructions: systemPrompt,
-      input: [{ role: 'user', content }],
+      input: [{ role: 'user', content: buildOpenAIResponsesUserContent(userMessage, visionImages) }],
       store: false,
       stream: true,
     },
@@ -325,9 +346,7 @@ export async function performSseRequest(req: ProviderRequest, signal: AbortSigna
     if (event.type === 'response.completed' && event.response !== undefined) {
       try {
         const parsedFinal = parseResponsesApiResponse(event.response);
-        // parseResponsesApiResponse substitutes a placeholder for empty output;
-        // never let that placeholder mask real streamed deltas.
-        finalText = parsedFinal === 'No response generated.' ? null : parsedFinal;
+        finalText = parsedFinal;
       } catch {
         finalText = null; // fall back to accumulated deltas
       }
@@ -363,26 +382,33 @@ function parseResponsesApiResponse(data: unknown): string {
   // must NOT be treated as a successful reply — throw so the shared caller records
   // the failure and the router falls back to the next provider in AI_PROVIDER_ORDER.
   // The schema is permissive (all fields optional), so a body carrying neither
-  // `output_text` nor `output` (e.g. `{ error: 'temporarily_unavailable' }`) is
-  // drift, not a genuine empty reply — distinct from output_text:''/[] or output:[].
+  // output text nor function calls (e.g. `{ error: 'temporarily_unavailable' }`)
+  // is drift, not a successful empty reply.
   if (!parsed.success || (parsed.data.output_text === undefined && parsed.data.output === undefined)) {
     throw new Error('OpenAI Responses payload did not match expected shape');
   }
 
   if (typeof parsed.data.output_text === 'string') {
-    return parsed.data.output_text.trim() || 'No response generated.';
+    const text = parsed.data.output_text.trim();
+    if (text) return text;
   }
   if (Array.isArray(parsed.data.output_text)) {
-    return parsed.data.output_text.join('').trim() || 'No response generated.';
+    const text = parsed.data.output_text.join('').trim();
+    if (text) return text;
   }
 
   const texts: string[] = [];
+  let hasFunctionCalls = false;
   for (const item of parsed.data.output ?? []) {
+    if (item.type === 'function_call') hasFunctionCalls = true;
     for (const block of item.content ?? []) {
-      if (block.text) texts.push(block.text);
+      if (block.type === 'output_text' && block.text) texts.push(block.text);
     }
   }
-  return texts.join('').trim() || 'No response generated.';
+  const text = texts.join('').trim();
+  if (text) return text;
+  if (hasFunctionCalls) return 'No response generated.';
+  throw new Error('OpenAI Responses payload did not include output text or function calls');
 }
 
 /**
@@ -421,6 +447,16 @@ function addOpenAiCompatibleTools(body: Record<string, unknown>, tools: AiTool[]
       description: tool.description,
       parameters: tool.parameters,
     },
+  }));
+}
+
+function addOpenAiResponsesTools(body: Record<string, unknown>, tools: AiTool[] | undefined): void {
+  if (!tools || tools.length === 0) return;
+  body.tools = tools.map((tool) => ({
+    type: 'function',
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
   }));
 }
 
@@ -498,6 +534,27 @@ function buildOpenAICompatibleUserContent(
 
   const textPrompt = text || 'What do you see in this image? Describe it and respond naturally.';
   blocks.push({ type: 'text', text: textPrompt });
+  return blocks;
+}
+
+function buildOpenAIResponsesUserContent(
+  text: string,
+  images: VisionImage[] | undefined,
+): OpenAIResponsesContentBlock[] {
+  const blocks: OpenAIResponsesContentBlock[] = [];
+  if (images && images.length > 0) {
+    for (const img of images) {
+      blocks.push({
+        type: 'input_image',
+        image_url: `data:${img.mediaType};base64,${img.base64}`,
+      });
+    }
+  }
+
+  blocks.push({
+    type: 'input_text',
+    text: text || 'What do you see in this image? Describe it and respond naturally.',
+  });
   return blocks;
 }
 

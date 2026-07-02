@@ -20,6 +20,13 @@ interface OpenAiToolCall {
   };
 }
 
+interface OpenAiResponsesFunctionCall {
+  item: Record<string, unknown>;
+  callId: string;
+  name: string;
+  arguments: string;
+}
+
 function cloneBody(body: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
 }
@@ -28,6 +35,12 @@ function messageList(body: Record<string, unknown>): Array<Record<string, unknow
   const messages = body.messages;
   if (!Array.isArray(messages)) return [];
   return messages as Array<Record<string, unknown>>;
+}
+
+function inputList(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  const input = body.input;
+  if (!Array.isArray(input)) return [];
+  return input as Array<Record<string, unknown>>;
 }
 
 function clampIterations(value: number): number {
@@ -93,6 +106,26 @@ function parseOpenAiToolCalls(data: unknown): OpenAiToolCall[] {
     });
   }
   return toolCalls;
+}
+
+function parseOpenAiResponsesFunctionCalls(data: unknown): OpenAiResponsesFunctionCall[] {
+  const root = objectValue(data);
+  const output = root?.output;
+  if (!Array.isArray(output)) return [];
+
+  const calls: OpenAiResponsesFunctionCall[] = [];
+  for (const item of output) {
+    const obj = objectValue(item);
+    if (!obj || obj.type !== 'function_call') continue;
+    if (typeof obj.call_id !== 'string' || typeof obj.name !== 'string' || typeof obj.arguments !== 'string') continue;
+    calls.push({
+      item: cloneBody(obj),
+      callId: obj.call_id,
+      name: obj.name,
+      arguments: obj.arguments,
+    });
+  }
+  return calls;
 }
 
 function parseFunctionArguments(value: string): Record<string, unknown> {
@@ -184,6 +217,36 @@ export async function runOpenAiCompatToolLoop(
           parseFunctionArguments(toolCall.function.arguments),
           tools,
         ),
+      });
+    }
+  }
+
+  body.tool_choice = 'none';
+  const data = await performJsonRequest(requestWithBody(req, body), signal);
+  return req.parser(data);
+}
+
+export async function runOpenAiResponsesToolLoop(
+  req: ProviderRequest,
+  tools: AiTool[],
+  signal: AbortSignal,
+  maxIterations: number = config.AI_TOOL_MAX_ITERATIONS,
+): Promise<string> {
+  const body = cloneBody(req.body);
+  const input = inputList(body);
+  const iterations = clampIterations(maxIterations);
+
+  for (let i = 0; i < iterations; i += 1) {
+    const data = await performJsonRequest(requestWithBody(req, body), signal);
+    const functionCalls = parseOpenAiResponsesFunctionCalls(data);
+    if (functionCalls.length === 0) return req.parser(data);
+
+    for (const call of functionCalls) {
+      input.push(call.item);
+      input.push({
+        type: 'function_call_output',
+        call_id: call.callId,
+        output: await executeTool(call.name, parseFunctionArguments(call.arguments), tools),
       });
     }
   }

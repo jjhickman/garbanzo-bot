@@ -15,13 +15,14 @@ import type { VisionImage } from '../core/vision.js';
 import {
   buildOpenAIResponsesRequest,
   buildProviderRequest,
+  isOpenAiReasoningModel,
   performHttpRequest,
   performSseRequest,
   type CloudResponse,
 } from './cloud-providers.js';
 import { callCloudProvider } from './cloud-call.js';
 import { getOpenAIAccessToken } from './openai-oauth.js';
-import { runOpenAiCompatToolLoop } from './tool-loop.js';
+import { runOpenAiCompatToolLoop, runOpenAiResponsesToolLoop } from './tool-loop.js';
 import { getEnabledTools } from './tools.js';
 
 /**
@@ -62,8 +63,10 @@ export async function callChatGPT(
   return callCloudProvider({
     provider: 'openai',
     model: req.model,
-    perform: (signal) => tools.length > 0
-      ? runOpenAiCompatToolLoop(req, tools, signal)
-      : performHttpRequest(req, signal),
+    perform: (signal) => {
+      if (tools.length === 0) return performHttpRequest(req, signal);
+      if (isOpenAiReasoningModel(req.model)) return runOpenAiResponsesToolLoop(req, tools, signal);
+      return runOpenAiCompatToolLoop(req, tools, signal);
+    },
   });
 }

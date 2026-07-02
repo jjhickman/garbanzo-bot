@@ -6,6 +6,13 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-02
+
+### Fixed
+
+- **OpenAI tool calling with GPT-5-family models** — the OpenAI API-key path now uses the Responses API (`/v1/responses`) with full function-tool and `reasoning.effort` support. OpenAI remains the default primary provider (`openai,anthropic`).
+
+
 ## [1.0.1] — 2026-07-02
 
 ### Fixed

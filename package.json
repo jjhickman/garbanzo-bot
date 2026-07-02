@@ -1,6 +1,6 @@
 {
   "name": "garbanzo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Garbanzo Bean — AI chat operations platform with multi-provider LLM routing and integrations",
   "type": "module",
   "main": "dist/index.js",
