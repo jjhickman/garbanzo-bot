@@ -15,6 +15,7 @@
 import { timingSafeEqual } from 'crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { logger } from './logger.js';
+import { buildAdminSnapshot, renderAdminHtml } from './admin-page.js';
 import {
   getWhatsAppSafetyMetrics,
   verifyLatestBackupIntegrity,
@@ -100,6 +101,8 @@ let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | nu
 interface HealthServerOptions {
   metricsEnabled?: boolean;
   authToken?: string;
+  /** Serve the owner admin page at /admin (+ /admin.json). Requires authToken. */
+  adminEnabled?: boolean;
   extraHandler?: (req: IncomingMessage, res: ServerResponse) => boolean;
 }
 
@@ -234,6 +237,9 @@ export function startHealthServer(
   options?: HealthServerOptions,
 ): Server {
   const metricsEnabled = options?.metricsEnabled === true;
+  // The admin page carries usage/cost detail, so it is only served when a
+  // token exists to gate it — never open, even on localhost binds.
+  const adminEnabled = options?.adminEnabled === true && options.authToken !== undefined;
 
   server = createServer((req, res) => {
     void (async () => {
@@ -243,6 +249,39 @@ export function startHealthServer(
       // request targets must not be normalized into a matching pathname.
       const rawUrl = req.url ?? '';
       const path = rawUrl.split('?')[0];
+
+      if (adminEnabled && (path === '/admin' || path === '/admin.json') && req.method === 'GET') {
+        const now = Date.now();
+        const ip = req.socket.remoteAddress ?? 'unknown';
+        if (isHealthRequestRateLimited(ip, now)) {
+          res.writeHead(429, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'rate_limited' }));
+          return;
+        }
+
+        const providedToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
+        if (!tokenMatches(providedToken, options.authToken ?? '')) {
+          res.writeHead(401, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'unauthorized' }));
+          return;
+        }
+
+        const snapshot = buildAdminSnapshot();
+        const whatsappSafety = await getWhatsAppSafetyMetrics(
+          Math.floor((now - 60 * 60 * 1000) / 1000),
+          Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+        );
+
+        if (path === '/admin.json') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ...snapshot, whatsappSafety }));
+          return;
+        }
+
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(renderAdminHtml(snapshot, { whatsappSafety, rawQuery: rawUrl.split('?')[1] }));
+        return;
+      }
 
       if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
         const now = Date.now();
