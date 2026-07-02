@@ -110,15 +110,13 @@ exports[`Formatted output snapshots > help message snapshot stays stable > owner
   !strikes — view strike counts
   !catchup intros — recent introductions summary
 
-<<<<<<< HEAD
 *Reports*
   !digest — preview today's digest so far
   !recap — weekly community recap (last 7 days)
-=======
+
 *Event Reminders*
   !events — list upcoming pending event reminders
   !events cancel <id> — cancel a pending event reminder
->>>>>>> ef56779 (feat(events): reminders — persist detected events, remind the chat before start)
 
 *WhatsApp Safety*
   !whatsapp status — view risk, retained jobs, and send counts
