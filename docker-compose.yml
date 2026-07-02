@@ -116,19 +116,24 @@ services:
       # Anyone on your LAN can VIEW dashboards; editing needs the admin login.
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - WHATSAPP_LOGIN_TOKEN=${WHATSAPP_LOGIN_TOKEN:-}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
-    # No default password: refuse to start until GRAFANA_ADMIN_PASSWORD is set
-    # in .env. Enforced here (not via ${VAR:?}) so plain `docker compose up`
-    # without the monitoring profile keeps working for everyone else.
+    # Admin password: GRAFANA_ADMIN_PASSWORD if set, else the pinned
+    # WHATSAPP_LOGIN_TOKEN (one secret gates the whole stack — it already
+    # guards /metrics and /admin). Refuses to start when neither is set;
+    # enforced here (not via ${VAR:?}) so plain `docker compose up` without
+    # the monitoring profile keeps working for everyone else.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        if [ -z "$$GF_SECURITY_ADMIN_PASSWORD" ]; then
-          echo "GRAFANA_ADMIN_PASSWORD must be set in .env to enable monitoring (it is the Grafana admin login)" >&2
+        PASSWORD="$${GRAFANA_ADMIN_PASSWORD:-$$WHATSAPP_LOGIN_TOKEN}"
+        if [ -z "$$PASSWORD" ]; then
+          echo "Set WHATSAPP_LOGIN_TOKEN (or GRAFANA_ADMIN_PASSWORD) in .env to enable monitoring — it becomes the Grafana admin login" >&2
           exit 1
         fi
+        export GF_SECURITY_ADMIN_PASSWORD="$$PASSWORD"
         exec /run.sh
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
