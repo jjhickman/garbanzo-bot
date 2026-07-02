@@ -8,6 +8,7 @@
  */
 
 import { logger } from './logger.js';
+import { config } from '../utils/config.js';
 
 const RETRY_DELAY_MS = 30_000; // 30 seconds
 const MAX_QUEUE_SIZE = 50; // prevent unbounded growth
@@ -73,11 +74,12 @@ export function queueRetry(entry: RetryEntry): boolean {
     logger.info({ groupJid: entry.groupJid, sender: entry.senderJid, query: entry.query.slice(0, 80) }, 'Retrying failed message');
 
     try {
-      if (!handler) {
+      const currentHandler = handler;
+      if (!currentHandler) {
         logger.warn({ groupJid: entry.groupJid }, 'Retry handler missing at execution time — message dropped');
         return;
       }
-      await handler(entry);
+      await runRetryHandler(currentHandler, entry);
     } catch (err) {
       logger.error({ err, groupJid: entry.groupJid }, 'Retry also failed — message dropped');
     }
@@ -105,4 +107,27 @@ export function clearRetryQueue(): void {
 
 function retryKey(entry: RetryEntry): string {
   return `${entry.groupJid}:${entry.senderJid}:${entry.timestamp}`;
+}
+
+async function runRetryHandler(fn: RetryHandler, entry: RetryEntry): Promise<void> {
+  const timeoutMs = config.RETRY_ATTEMPT_TIMEOUT_MS;
+  if (!timeoutMs) {
+    await fn(entry);
+    return;
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    await Promise.race([
+      fn(entry),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Retry attempt timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }

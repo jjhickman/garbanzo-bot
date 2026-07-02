@@ -58,6 +58,10 @@ const envSchema = z.object({
   GEMINI_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(0.0),
   CLOUD_MAX_TOKENS: z.coerce.number().int().min(64).max(4096).default(1024),
   CLOUD_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  RETRY_ATTEMPT_TIMEOUT_MS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number().int().min(1000).max(120000).optional(),
+  ),
 
   // AWS Bedrock (uses AWS credentials via default provider chain)
   BEDROCK_REGION: z.string().default('us-east-1'),
@@ -171,10 +175,13 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error('❌ Invalid environment variables:');
+  console.error('Invalid environment variables:');
+  console.error('  Offending variables:');
   for (const issue of parsed.error.issues) {
-    console.error(`   ${issue.path.join('.')}: ${issue.message}`);
+    const name = issue.path.join('.') || '<root>';
+    console.error(`  - ${name}: ${issue.message}`);
   }
+  console.error('  Run `npm run setup` to create or repair your .env file.');
   process.exit(1);
 }
 

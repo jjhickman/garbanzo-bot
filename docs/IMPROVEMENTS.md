@@ -51,12 +51,12 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
 | DX-9 | `slack/demo-server.ts` is 1310 lines | ✅ Done — Phase 6 (split into `demo-page`/`demo-protection`/`demo-handlers`/`demo-types` + thin `demo-server`; public exports unchanged; independently reviewed) |
 | DX-10 | SQLite/Postgres backend duplication | ✅ Done — Phase 6 (`db-mappers.ts` + `db-query-shape.ts` shared behind `DbBackend`; SQL/dialect bits isolated; −318 backend lines; independently reviewed) |
 
-## Deferred low-priority items (tracked, not yet actioned)
+## Deferred low-priority items
 
-- **#7** `router.ts` module-state races (cached Ollama availability, cost-alert flags) — benign under the current single-loop model.
-- **#9** retry handler lacks a per-attempt timeout — bounded by the provider request timeout in practice.
-- **#10** Slack token-manager refresh concurrency — single refresh path; low contention.
-- **#11** config validation logs before the logger is initialized — cosmetic (uses `console.error`).
+- **#7** `router.ts` module-state races (cached Ollama availability, cost-alert flags) — ✅ Done (TTL + single-flight Ollama availability; date-keyed cost alerts).
+- **#9** retry handler lacks a per-attempt timeout — ✅ Done (optional `RETRY_ATTEMPT_TIMEOUT_MS`; default remains unchanged).
+- **#10** Slack token-manager refresh concurrency — ✅ Done (existing single-flight refresh verified with regression coverage).
+- **#11** config validation logs before the logger is initialized — ✅ Done (structured pre-logger `console.error` output with `npm run setup` guidance).
 
 ## Notes
 
