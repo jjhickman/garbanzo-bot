@@ -4,11 +4,12 @@ import { config } from '../utils/config.js';
 /**
  * Ollama client — local AI inference via the OpenAI-compatible API.
  *
- * Uses qwen3:8b for simple queries (greetings, short factual,
- * casual chat) to reduce Claude API costs.
+ * Handles simple queries (greetings, short factual, casual chat) locally to
+ * reduce cloud API costs, and doubles as an offline degraded mode when cloud
+ * providers are unreachable. Model via OLLAMA_MODEL — default suits a
+ * workstation; Pi-class hosts should pin a 1-3B model (see
+ * docs/INFRASTRUCTURE.md "Local AI on the Pi").
  */
-
-const DEFAULT_MODEL = 'qwen3:8b';
 const MAX_TOKENS = 512;
 const TIMEOUT_MS = 15_000;
 
@@ -23,7 +24,7 @@ export async function callOllama(
   const endpoint = `${config.OLLAMA_BASE_URL}/v1/chat/completions`;
 
   const body = {
-    model: DEFAULT_MODEL,
+    model: config.OLLAMA_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
@@ -32,7 +33,7 @@ export async function callOllama(
     temperature: 0.7,
   };
 
-  logger.debug({ endpoint, model: DEFAULT_MODEL }, 'Calling Ollama');
+  logger.debug({ endpoint, model: config.OLLAMA_MODEL }, 'Calling Ollama');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -74,7 +75,7 @@ export async function isOllamaAvailable(): Promise<boolean> {
     if (!response.ok) return false;
 
     const data = await response.json() as { models: Array<{ name: string }> };
-    return data.models.some((m) => m.name.startsWith(DEFAULT_MODEL.split(':')[0]));
+    return data.models.some((m) => m.name.startsWith(config.OLLAMA_MODEL.split(':')[0]));
   } catch {
     return false;
   }
@@ -97,7 +98,7 @@ async function pingOllama(): Promise<void> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: config.OLLAMA_MODEL,
         prompt: '',
         keep_alive: '15m',
       }),
@@ -107,7 +108,7 @@ async function pingOllama(): Promise<void> {
     if (response.ok) {
       // Consume response body to prevent connection leak
       await response.text();
-      logger.debug({ model: DEFAULT_MODEL }, 'Ollama warm-up ping OK');
+      logger.debug({ model: config.OLLAMA_MODEL }, 'Ollama warm-up ping OK');
     } else {
       logger.warn({ status: response.status }, 'Ollama warm-up ping failed');
     }
@@ -128,7 +129,7 @@ export function startOllamaWarmup(): void {
     pingOllama().catch(() => {});
   }, WARMUP_INTERVAL_MS);
 
-  logger.info({ intervalMin: WARMUP_INTERVAL_MS / 60_000, model: DEFAULT_MODEL }, 'Ollama warm-up scheduled');
+  logger.info({ intervalMin: WARMUP_INTERVAL_MS / 60_000, model: config.OLLAMA_MODEL }, 'Ollama warm-up scheduled');
 }
 
 /** Stop the warm-up timer (for graceful shutdown) */

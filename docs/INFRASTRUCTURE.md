@@ -70,6 +70,35 @@ before enabling:
   monitor (Kuma) alerting and backups (see below) enabled if you turn
   this on; rollback is `APP_VERSION=<previous> docker compose up -d`.
 
+## Local AI on the Pi (Ollama fallback)
+
+Garbanzo routes short/casual queries to a local Ollama when one is reachable
+(`OLLAMA_BASE_URL`), cutting cloud spend — and if every cloud provider is
+down, local inference keeps the bot conversational instead of silent.
+
+On a Raspberry Pi 5 (8 GB) this is practical with small models:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull gemma3:1b            # ~18-22 tok/s on Pi 5, ~1 GB RAM at Q4
+# or: qwen2.5:1.5b (better multilingual), llama3.2:3b (smarter, ~2-5 tok/s)
+```
+
+Then in `.env`:
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434   # host install; Ollama binds localhost by default
+OLLAMA_MODEL=gemma3:1b
+```
+
+With the bot in Docker, point at the host: `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+and add `extra_hosts: ["host.docker.internal:host-gateway"]` to the garbanzo service.
+
+Budget memory before enabling: the bot caps at 1 GB, Whisper (if used) holds
+model RAM too, and a 1B model at Q4 adds ~1 GB. On an 8 GB Pi that fits; skip
+3B+ models unless nothing else heavy runs. The default `qwen3:8b` model is for
+workstation-class hosts.
+
 ## Storage & Backups
 
 - Runtime data lives in `data/` (SQLite by default)
