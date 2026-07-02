@@ -194,10 +194,13 @@ const ResponsesApiSchema = z.object({
 
 /**
  * Build the OpenAI Responses-API request for OAuth ("Sign in with ChatGPT")
- * mode (EXPERIMENTAL, unverified against a live token). Targets the private
- * ChatGPT backend with a fresh bearer token + account header. Distinct from the
- * apikey chat/completions request: content type is `input_text` and `store` is
- * false, with the system prompt passed as `instructions`.
+ * mode (EXPERIMENTAL, ToS-grey; verified against a live token 2026-07-02).
+ * Targets the private ChatGPT backend with a fresh bearer token + account
+ * header. Distinct from the apikey chat/completions request: content type is
+ * `input_text`, the system prompt is passed as `instructions`, `store` is
+ * false, and the backend REQUIRES `stream: true` (a non-streaming request is
+ * rejected with 400 "Stream must be set to true") — perform this request with
+ * performSseRequest, not performHttpRequest.
  */
 export function buildOpenAIResponsesRequest(
   systemPrompt: string,
@@ -219,6 +222,7 @@ export function buildOpenAIResponsesRequest(
 
   const headers: Record<string, string> = {
     'content-type': 'application/json',
+    accept: 'text/event-stream',
     authorization: `Bearer ${accessToken}`,
     originator: 'garbanzo',
   };
@@ -234,9 +238,97 @@ export function buildOpenAIResponsesRequest(
       instructions: systemPrompt,
       input: [{ role: 'user', content }],
       store: false,
+      stream: true,
     },
     parser: parseResponsesApiResponse,
   };
+}
+
+const SseEventSchema = z.object({
+  type: z.string(),
+  delta: z.string().optional(),
+  response: z.unknown().optional(),
+  error: z.object({ message: z.string().optional() }).optional(),
+});
+
+/**
+ * Transport for SSE-only endpoints (the ChatGPT /wham Responses backend).
+ * Accumulates `response.output_text.delta` events; on `response.completed`
+ * prefers the final response object (the shape parseResponsesApiResponse
+ * expects) over the accumulated deltas. `response.failed`/`error` events and
+ * a stream that ends without any output text both throw, so the shared
+ * caller records the failure and the router falls back to the next provider.
+ */
+export async function performSseRequest(req: ProviderRequest, signal: AbortSignal): Promise<string> {
+  const response = await fetch(req.endpoint, {
+    method: 'POST',
+    headers: req.headers,
+    body: JSON.stringify(req.body),
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    const errorText = response.body ? await response.text() : '(no body)';
+    throw new Error(`${req.provider} API error ${response.status}: ${errorText}`);
+  }
+
+  let buffer = '';
+  let accumulated = '';
+  let finalText: string | null = null;
+
+  const handleEvent = (rawEvent: string): void => {
+    // An SSE event may spread its payload over multiple `data:` lines.
+    const dataPayload = rawEvent
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim())
+      .join('');
+    if (!dataPayload || dataPayload === '[DONE]') return;
+
+    let event: z.infer<typeof SseEventSchema>;
+    try {
+      event = SseEventSchema.parse(JSON.parse(dataPayload));
+    } catch {
+      return; // unrecognized event payload — skip
+    }
+
+    if (event.type === 'response.output_text.delta' && event.delta) {
+      accumulated += event.delta;
+      return;
+    }
+    if (event.type === 'response.completed' && event.response !== undefined) {
+      try {
+        const parsedFinal = parseResponsesApiResponse(event.response);
+        // parseResponsesApiResponse substitutes a placeholder for empty output;
+        // never let that placeholder mask real streamed deltas.
+        finalText = parsedFinal === 'No response generated.' ? null : parsedFinal;
+      } catch {
+        finalText = null; // fall back to accumulated deltas
+      }
+      return;
+    }
+    if (event.type === 'response.failed' || event.type === 'error') {
+      throw new Error(`${req.provider} stream reported failure: ${event.error?.message ?? event.type}`);
+    }
+  };
+
+  const decoder = new TextDecoder();
+  for await (const chunk of response.body) {
+    buffer += decoder.decode(chunk as Uint8Array, { stream: true });
+    let sep = buffer.indexOf('\n\n');
+    while (sep >= 0) {
+      handleEvent(buffer.slice(0, sep));
+      buffer = buffer.slice(sep + 2);
+      sep = buffer.indexOf('\n\n');
+    }
+  }
+  if (buffer.trim()) handleEvent(buffer);
+
+  const text = (finalText ?? accumulated).trim();
+  if (!text) {
+    throw new Error(`${req.provider} stream ended without producing output text`);
+  }
+  return text;
 }
 
 function parseResponsesApiResponse(data: unknown): string {
