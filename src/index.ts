@@ -50,6 +50,7 @@ async function main(): Promise<void> {
   // Start health check server + memory watchdog for monitoring
   startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
     metricsEnabled: config.METRICS_ENABLED,
+    adminEnabled: config.ADMIN_PAGE_ENABLED,
     authToken: loginToken,
     extraHandler: loginHandler,
   });

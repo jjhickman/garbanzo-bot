@@ -62,12 +62,23 @@ Copy `.env.example` to `.env` and configure:
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
-| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics token instead of generating one per run (guards `/whatsapp/login*` and `/metrics`) |
+| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics/admin token instead of generating one per run (guards `/whatsapp/login*`, `/metrics`, and `/admin`) |
+| `ADMIN_PAGE_ENABLED` | No | Owner admin page at `/admin` + `/admin.json` on the health port (default: `true`; only served when a token exists) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
+
+## Owner admin page
+
+`http://<host>:3001/admin?token=<WHATSAPP_LOGIN_TOKEN>` renders a token-gated,
+auto-refreshing snapshot of today's usage: AI spend vs. the $1 alert threshold,
+per-provider calls/tokens/cost, per-group activity (messages, active users, bot
+replies, moderation flags, AI errors), and the WhatsApp outbound-safety
+counters. `/admin.json` returns the same data raw for scripting. The page is
+never served without a token, and requests share the health endpoint's rate
+limit. Disable with `ADMIN_PAGE_ENABLED=false`.
 
 ## WhatsApp outbound safety (anti-ban)
 
