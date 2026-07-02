@@ -16,8 +16,9 @@ Three layers, all optional, all runnable on a Pi-class host:
 ```bash
 # 1. In .env:
 #    METRICS_ENABLED=true
-#    WHATSAPP_LOGIN_TOKEN=<pin a value>     # must be pinned — it authenticates scrapes
-#    GRAFANA_ADMIN_PASSWORD=<pick a value>  # required — no default; Grafana refuses to start without it
+#    WHATSAPP_LOGIN_TOKEN=<pin a value>   # must be pinned — it authenticates scrapes
+#                                         # AND doubles as the Grafana admin password
+#    GRAFANA_ADMIN_PASSWORD=<optional>    # only if you want a separate Grafana login
 
 # 2. Start the stack alongside the bot:
 docker compose --profile monitoring up -d
@@ -30,7 +31,11 @@ clear error instead of scraping blind.
 
 - **Grafana**: `http://<pi>:3000` — the **Garbanzo — Community Ops** dashboard
   is pre-provisioned and loads immediately. Anonymous LAN users can *view*;
-  editing needs the admin login (`admin` / your `GRAFANA_ADMIN_PASSWORD`).
+  editing needs the admin login (`admin` / your `WHATSAPP_LOGIN_TOKEN`, or
+  `GRAFANA_ADMIN_PASSWORD` if you set one). Sharing the token is a
+  deliberate single-owner convenience — note it also guards the WhatsApp
+  re-link page, so set a separate `GRAFANA_ADMIN_PASSWORD` if others can
+  reach Grafana on your network.
   Grafana listens on the LAN by design (view from any device); if your LAN is
   untrusted, restrict port 3000 with an iptables `DOCKER-USER` allowlist or
   bind it to `127.0.0.1` in compose and front it with a reverse proxy.
