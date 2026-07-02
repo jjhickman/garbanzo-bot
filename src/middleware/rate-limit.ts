@@ -13,6 +13,7 @@
 import { logger } from './logger.js';
 import { config } from '../utils/config.js';
 import { jidsMatch } from '../utils/jid.js';
+import { recordRateLimited } from './stats.js';
 
 const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const USER_LIMIT = 10;
@@ -53,6 +54,7 @@ export function checkRateLimit(
 
   if (userWindow.length >= USER_LIMIT) {
     logger.warn({ senderJid, count: userWindow.length, limit: USER_LIMIT }, 'User rate limited');
+    recordRateLimited();
     return `🫘 Easy there — I can only handle ${USER_LIMIT} questions per 5 minutes. Give me a sec to catch up.`;
   }
 
@@ -63,6 +65,7 @@ export function checkRateLimit(
 
   if (groupWindow.length >= GROUP_LIMIT) {
     logger.warn({ groupJid, count: groupWindow.length, limit: GROUP_LIMIT }, 'Group rate limited');
+    recordRateLimited();
     return `🫘 This group's been keeping me busy — hit the limit of ${GROUP_LIMIT} responses per 5 minutes. I'll be back shortly.`;
   }
 

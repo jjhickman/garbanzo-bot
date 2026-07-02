@@ -58,6 +58,7 @@ describe('event reminder capture', () => {
         EVENT_REMINDER_LEAD_MINUTES: 120,
         GOOGLE_API_KEY: undefined,
         MBTA_API_KEY: undefined,
+        LOG_LEVEL: 'silent',
       },
     }));
     vi.doMock('../src/middleware/logger.js', () => ({
@@ -171,6 +172,7 @@ describe('event reminder scheduler', () => {
     vi.doMock('../src/utils/config.js', () => ({
       config: {
         EVENT_REMINDERS_ENABLED: options.enabled ?? true,
+        LOG_LEVEL: 'silent',
       },
     }));
     vi.doMock('../src/middleware/logger.js', () => ({
@@ -196,6 +198,8 @@ describe('event reminder scheduler', () => {
 
   it('sends due reminders and marks them sent after successful send', async () => {
     const { markSent, sock } = mockSchedulerDeps({ due: [makeReminder()] });
+    const { getLifetimeCounters } = await import('../src/middleware/stats.js');
+    const before = getLifetimeCounters().eventRemindersSentTotal;
     const { scheduleEventReminders } = await import('../src/platforms/whatsapp/event-reminders.js');
 
     const dispose = scheduleEventReminders(sock as never);
@@ -205,6 +209,7 @@ describe('event reminder scheduler', () => {
       text: expect.stringContaining('Reminder: trivia night'),
     });
     expect(markSent).toHaveBeenCalledWith(1);
+    expect(getLifetimeCounters().eventRemindersSentTotal).toBe(before + 1);
     dispose();
   });
 

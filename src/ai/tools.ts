@@ -1,4 +1,5 @@
 import { config } from '../utils/config.js';
+import { recordToolCall } from '../middleware/stats.js';
 
 const TOOL_RESULT_MAX_CHARS = 1500;
 
@@ -54,11 +55,17 @@ function queryTool(
     },
     execute: async (input) => {
       const value = stringInput(input, parameterName);
-      if (!value) return `Tool ${name} needs a non-empty ${parameterName}.`;
+      if (!value) {
+        recordToolCall(name, 'error');
+        return `Tool ${name} needs a non-empty ${parameterName}.`;
+      }
 
       try {
-        return truncateToolResult(await run(value));
+        const result = truncateToolResult(await run(value));
+        recordToolCall(name, 'ok');
+        return result;
       } catch (err) {
+        recordToolCall(name, 'error');
         return truncateToolResult(errorMessage(name, err));
       }
     },

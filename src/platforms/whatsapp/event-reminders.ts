@@ -1,6 +1,7 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 
 import { logger } from '../../middleware/logger.js';
+import { recordEventReminderSent } from '../../middleware/stats.js';
 import { config } from '../../utils/config.js';
 import {
   cancelEventReminder,
@@ -56,6 +57,7 @@ async function poll(sock: WASocket, failuresById: Map<number, number>): Promise<
     try {
       await sock.sendMessage(reminder.chatJid, { text: formatReminder(reminder) });
       await markEventReminderSent(reminder.id);
+      recordEventReminderSent();
       failuresById.delete(reminder.id);
       logger.info({ reminderId: reminder.id, chatJid: reminder.chatJid }, 'Event reminder sent');
     } catch (err) {
