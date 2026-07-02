@@ -164,6 +164,12 @@ const envSchema = z.object({
   CONTEXT_SESSION_MAX_RETRIEVED: z.coerce.number().int().min(1).max(12).default(3),
   CONTEXT_SESSION_SUMMARY_VERSION: z.coerce.number().int().min(1).max(20).default(1),
 
+  // Long-term community memory extraction
+  MEMORY_AUTO_EXTRACT: booleanFromEnv.default(false),
+  MEMORY_AUTO_EXTRACT_MIN_MESSAGES: z.coerce.number().int().min(5).max(500).default(25),
+  MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES: z.coerce.number().int().min(10).max(10080).default(360),
+  MEMORY_AUTO_MAX_FACTS: z.coerce.number().int().min(10).max(2000).default(200),
+
   // Vector embedding pipeline
   VECTOR_EMBEDDING_PROVIDER: z.enum(['deterministic', 'openai']).default('deterministic'),
   VECTOR_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
