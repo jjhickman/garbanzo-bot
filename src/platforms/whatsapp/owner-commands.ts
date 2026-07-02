@@ -179,6 +179,15 @@ export async function handleOwnerDM(
     return true;
   }
 
+  // !recap — weekly community recap (lazy import: recap pulls the db layer,
+  // which command tests mock per-module)
+  if (trimmedLower === '!recap') {
+    const { buildWeeklyRecap } = await import('../../features/recap.js');
+    const recap = await buildWeeklyRecap();
+    await sock.sendMessage(remoteJid, { text: recap });
+    return true;
+  }
+
   // !digest
   if (trimmedLower === '!digest') {
     const digest = await previewDigest();

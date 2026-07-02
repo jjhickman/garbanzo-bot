@@ -1,9 +1,11 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import { logger } from '../../middleware/logger.js';
+import { config } from '../../utils/config.js';
 import { startConnection } from './connection.js';
 import { registerWhatsAppHandlers } from './handlers.js';
 import { registerIntroCatchUp } from './introductions-catchup.js';
 import { scheduleDigest } from './digest.js';
+import { scheduleWeeklyRecap } from './recap.js';
 import type { PlatformRuntime } from '../types.js';
 
 export function createWhatsAppRuntime(): PlatformRuntime {
@@ -25,6 +27,7 @@ export function createWhatsAppRuntime(): PlatformRuntime {
         registerWhatsAppHandlers(sock);
         disposers.push(registerIntroCatchUp(sock));
         disposers.push(scheduleDigest(sock));
+        if (config.WEEKLY_RECAP_ENABLED) disposers.push(scheduleWeeklyRecap(sock));
         logger.info('🫘 WhatsApp runtime started');
       }, () => disposeAll(), (sock) => {
         currentSock = sock;

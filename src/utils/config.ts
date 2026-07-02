@@ -115,6 +115,8 @@ const envSchema = z.object({
   METRICS_ENABLED: booleanFromEnv.default(false),
   // Owner admin page at /admin (token-gated with the login token).
   ADMIN_PAGE_ENABLED: booleanFromEnv.default(true),
+  // Sunday-evening weekly recap DM to the owner.
+  WEEKLY_RECAP_ENABLED: booleanFromEnv.default(true),
 
   // Slack runtime
   SLACK_BOT_TOKEN: z.string().optional(),

@@ -51,6 +51,8 @@ export interface DbBackend {
 
   // Daily stats archive
   saveDailyStats(date: string, json: string): Promise<void>;
+  /** Archived daily stats snapshots for date >= from AND date <= to (ISO dates sort lexically). */
+  loadDailyStatsRange(fromDate: string, toDate: string): Promise<Array<{ date: string; data: string }>>;
   getDailyGroupActivity(date: string): Promise<DailyGroupActivity[]>;
 
   // WhatsApp outbound safety and retained manual releases

@@ -167,6 +167,9 @@ const insertModerationLog = db.prepare(
 const upsertDailyStats = db.prepare(
   `INSERT INTO daily_stats (date, data) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET data = excluded.data`,
 );
+const selectDailyStatsRange = db.prepare(
+  `SELECT date, data FROM daily_stats WHERE date >= ? AND date <= ? ORDER BY date ASC`,
+);
 const selectDailyGroupMessages = db.prepare(
   `SELECT chat_jid as chatJid, COUNT(*) as messageCount, COUNT(DISTINCT sender) as activeUsers
    FROM messages
@@ -422,6 +425,11 @@ export function saveDailyStats(date: string, data: string): void {
   upsertDailyStats.run(date, data);
 }
 
+/** Archived daily stats snapshots within an inclusive ISO-date range. */
+export function loadDailyStatsRange(fromDate: string, toDate: string): Array<{ date: string; data: string }> {
+  return selectDailyStatsRange.all(fromDate, toDate) as Array<{ date: string; data: string }>;
+}
+
 /**
  * Get per-group activity counts from stored messages for a local calendar date.
  * Used as a digest fallback so restarts don't zero out message volume.
@@ -651,6 +659,7 @@ export function createSqliteBackend(): DbBackend {
     saveDailyStats: async (date: string, data: string): Promise<void> => {
       saveDailyStats(date, data);
     },
+    loadDailyStatsRange: async (fromDate: string, toDate: string) => loadDailyStatsRange(fromDate, toDate),
     getDailyGroupActivity: async (date: string) => getDailyGroupActivity(date),
 
     createWhatsAppOutboundJob: async (chatJid: string, kind: string, contentJson: string, optionsJson: string | null) =>
