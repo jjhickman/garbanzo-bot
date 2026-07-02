@@ -72,6 +72,7 @@ const envSchema = z.object({
 
   // Ollama (local, optional)
   OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
+  OLLAMA_MODEL: z.string().default('qwen3:8b'),
 
   // WhatsApp
   BOT_PHONE_NUMBER: z.string().optional(),
