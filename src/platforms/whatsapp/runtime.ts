@@ -6,6 +6,7 @@ import { registerWhatsAppHandlers } from './handlers.js';
 import { registerIntroCatchUp } from './introductions-catchup.js';
 import { scheduleDigest } from './digest.js';
 import { scheduleWeeklyRecap } from './recap.js';
+import { scheduleEventReminders } from './event-reminders.js';
 import type { PlatformRuntime } from '../types.js';
 
 export function createWhatsAppRuntime(): PlatformRuntime {
@@ -28,6 +29,7 @@ export function createWhatsAppRuntime(): PlatformRuntime {
         disposers.push(registerIntroCatchUp(sock));
         disposers.push(scheduleDigest(sock));
         if (config.WEEKLY_RECAP_ENABLED) disposers.push(scheduleWeeklyRecap(sock));
+        disposers.push(scheduleEventReminders(sock));
         logger.info('🫘 WhatsApp runtime started');
       }, () => disposeAll(), (sock) => {
         currentSock = sock;

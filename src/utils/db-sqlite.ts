@@ -14,6 +14,7 @@ import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
   mapDbMessage,
+  mapEventReminder,
   mapFeedbackEntry,
   mapMemoryEntry,
   mapSessionSummaryHit,
@@ -21,6 +22,7 @@ import {
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
   type DailyGroupActivityRow,
+  type EventReminderRow,
   type FeedbackRow,
   type MemoryRow,
   type MessageRow,
@@ -42,9 +44,11 @@ import {
 import type {
   DailyGroupActivity,
   DbMessage,
+  EventReminder,
   FeedbackEntry,
   MemoryEntry,
   ModerationEntry,
+  NewEventReminder,
   SessionSummaryHit,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -176,6 +180,29 @@ const selectDailyGroupMessages = db.prepare(
    WHERE timestamp >= ? AND timestamp <= ?
    GROUP BY chat_jid
    ORDER BY messageCount DESC`,
+);
+const insertEventReminder = db.prepare(
+  `INSERT INTO event_reminders
+   (chat_jid, activity, location, event_at, remind_at, created_by, status, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+);
+const selectEventReminderById = db.prepare(`SELECT * FROM event_reminders WHERE id = ?`);
+const selectPendingEventReminders = db.prepare(
+  `SELECT * FROM event_reminders
+   WHERE status = 'pending' AND remind_at <= ?
+   ORDER BY remind_at ASC, id ASC`,
+);
+const selectUpcomingEventReminders = db.prepare(
+  `SELECT * FROM event_reminders
+   WHERE status = 'pending' AND event_at >= ?
+   ORDER BY event_at ASC, id ASC
+   LIMIT ?`,
+);
+const updateEventReminderSent = db.prepare(
+  `UPDATE event_reminders SET status = 'sent' WHERE id = ? AND status = 'pending'`,
+);
+const updateEventReminderCancelled = db.prepare(
+  `UPDATE event_reminders SET status = 'cancelled' WHERE id = ? AND status = 'pending'`,
 );
 const countStrikesBySender = db.prepare(
   `SELECT COUNT(*) as count FROM moderation_log WHERE sender = ?`,
@@ -447,6 +474,39 @@ export function getDailyGroupActivity(date: string): DailyGroupActivity[] {
   ) as DailyGroupActivityRow[]).map(mapDailyGroupActivity);
 }
 
+// ── Public API: Event Reminders ────────────────────────────────────
+
+export function addEventReminder(input: NewEventReminder): EventReminder {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertEventReminder.run(
+    input.chatJid,
+    input.activity,
+    input.location,
+    input.eventAt,
+    input.remindAt,
+    input.createdBy,
+    ts,
+  );
+  return mapEventReminder(selectEventReminderById.get(result.lastInsertRowid) as EventReminderRow);
+}
+
+export function listPendingEventReminders(nowSeconds: number): EventReminder[] {
+  return (selectPendingEventReminders.all(nowSeconds) as EventReminderRow[]).map(mapEventReminder);
+}
+
+export function listUpcomingEventReminders(limit: number = 20): EventReminder[] {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return (selectUpcomingEventReminders.all(nowSeconds, limit) as EventReminderRow[]).map(mapEventReminder);
+}
+
+export function markEventReminderSent(id: number): boolean {
+  return updateEventReminderSent.run(id).changes > 0;
+}
+
+export function cancelEventReminder(id: number): boolean {
+  return updateEventReminderCancelled.run(id).changes > 0;
+}
+
 // ── Public API: WhatsApp Safety ─────────────────────────────────────
 
 export function createWhatsAppOutboundJob(
@@ -661,6 +721,12 @@ export function createSqliteBackend(): DbBackend {
     },
     loadDailyStatsRange: async (fromDate: string, toDate: string) => loadDailyStatsRange(fromDate, toDate),
     getDailyGroupActivity: async (date: string) => getDailyGroupActivity(date),
+
+    addEventReminder: async (input: NewEventReminder) => addEventReminder(input),
+    listPendingEventReminders: async (nowSeconds: number) => listPendingEventReminders(nowSeconds),
+    listUpcomingEventReminders: async (limit?: number) => listUpcomingEventReminders(limit),
+    markEventReminderSent: async (id: number) => markEventReminderSent(id),
+    cancelEventReminder: async (id: number) => cancelEventReminder(id),
 
     createWhatsAppOutboundJob: async (chatJid: string, kind: string, contentJson: string, optionsJson: string | null) =>
       createWhatsAppOutboundJob(chatJid, kind, contentJson, optionsJson),

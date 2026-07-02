@@ -5,6 +5,8 @@ import { getEnabledGroupJidByName } from '../core/groups-config.js';
 import { handleWeather } from './weather.js';
 import { handleTransit } from './transit.js';
 import { getAIResponse } from '../ai/router.js';
+import { resolveEventTimestamp } from './event-time.js';
+import type { EventReminder } from '../utils/db-types.js';
 
 /**
  * Event detection and enrichment — detects event proposals in chat
@@ -18,6 +20,8 @@ import { getAIResponse } from '../ai/router.js';
 
 /** Minimum text length to consider for event detection (avoid false positives on short msgs) */
 const MIN_EVENT_TEXT_LENGTH = 15;
+const DEDUP_EVENT_WINDOW_SECONDS = 24 * 60 * 60;
+const DEDUP_LOOKAHEAD_LIMIT = 100;
 
 // ── Events group JID ────────────────────────────────────────────────
 
@@ -302,5 +306,80 @@ export async function handleEventPassive(
   if (!event) return null;
 
   logger.info({ activity: event.activity, date: event.date, time: event.time, location: event.location }, 'Event detected passively in Events group');
-  return await enrichEvent(event, senderJid, groupJid);
+  const response = await enrichEvent(event, senderJid, groupJid);
+  await maybeCaptureEventReminder(event, senderJid, groupJid);
+  return response;
+}
+
+async function maybeCaptureEventReminder(
+  event: EventDetails,
+  senderJid: string,
+  groupJid: string,
+): Promise<void> {
+  if (!config.EVENT_REMINDERS_ENABLED) return;
+
+  const eventMs = resolveEventTimestamp(event.date, event.time, new Date());
+  if (eventMs === null) return;
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const eventAt = Math.floor(eventMs / 1000);
+  let remindAt = eventAt - (config.EVENT_REMINDER_LEAD_MINUTES * 60);
+  if (remindAt <= nowSeconds) {
+    remindAt = nowSeconds + 60;
+  }
+
+  try {
+    const db = await import('../utils/db.js');
+    const upcoming = await db.listUpcomingEventReminders(DEDUP_LOOKAHEAD_LIMIT);
+    const duplicate = upcoming.some((reminder) => isDuplicateReminder(reminder, groupJid, event.activity, eventAt));
+    if (duplicate) {
+      logger.info({ groupJid, activity: event.activity, eventAt }, 'Skipped duplicate event reminder');
+      return;
+    }
+
+    await db.addEventReminder({
+      chatJid: groupJid,
+      activity: event.activity,
+      location: event.location,
+      eventAt,
+      remindAt,
+      createdBy: senderJid,
+    });
+    logger.info({ groupJid, activity: event.activity, eventAt, remindAt }, 'Event reminder captured');
+  } catch (err) {
+    logger.warn({ err, groupJid, activity: event.activity }, 'Failed to capture event reminder');
+  }
+}
+
+function isDuplicateReminder(
+  reminder: EventReminder,
+  groupJid: string,
+  activity: string,
+  eventAt: number,
+): boolean {
+  return reminder.chatJid === groupJid
+    && Math.abs(reminder.eventAt - eventAt) <= DEDUP_EVENT_WINDOW_SECONDS
+    && activitiesOverlap(reminder.activity, activity);
+}
+
+function activitiesOverlap(left: string, right: string): boolean {
+  const leftNormalized = normalizeActivity(left);
+  const rightNormalized = normalizeActivity(right);
+  if (!leftNormalized || !rightNormalized) return false;
+  if (leftNormalized.includes(rightNormalized) || rightNormalized.includes(leftNormalized)) return true;
+
+  const leftTokens = new Set(leftNormalized.split(' '));
+  const rightTokens = new Set(rightNormalized.split(' '));
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union > 0 && intersection / union >= 0.5;
+}
+
+function normalizeActivity(activity: string): string {
+  return activity
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 3)
+    .join(' ');
 }

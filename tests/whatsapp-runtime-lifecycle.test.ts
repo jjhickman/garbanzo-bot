@@ -34,6 +34,14 @@ vi.mock('../src/platforms/whatsapp/digest.js', () => ({
     return dispose;
   }),
 }));
+vi.mock('../src/platforms/whatsapp/event-reminders.js', () => ({
+  scheduleEventReminders: vi.fn((sock: { name: string }) => {
+    lifecycle.events.push(`event-reminders-register-${sock.name}`);
+    const dispose = vi.fn(() => lifecycle.events.push(`event-reminders-dispose-${sock.name}`));
+    lifecycle.disposeSpies.push(dispose);
+    return dispose;
+  }),
+}));
 vi.mock('../src/platforms/whatsapp/introductions-catchup.js', () => ({
   registerIntroCatchUp: vi.fn((sock: { name: string }) => {
     lifecycle.events.push(`intro-register-${sock.name}`);
@@ -57,7 +65,7 @@ describe('WhatsApp runtime lifecycle', () => {
     const rt = createWhatsAppRuntime();
     await rt.start();
     lifecycle.capturedOnReady?.(fakeSock('A'));
-    expect(lifecycle.disposeSpies.length).toBe(2); // intro + digest
+    expect(lifecycle.disposeSpies.length).toBe(3); // intro + digest + event reminders
     await rt.stop();
     for (const d of lifecycle.disposeSpies) expect(d).toHaveBeenCalledTimes(1);
   });
@@ -72,18 +80,21 @@ describe('WhatsApp runtime lifecycle', () => {
 
     lifecycle.capturedOnReady?.(fakeSock('B'));
 
-    expect(generationA).toHaveLength(2);
+    expect(generationA).toHaveLength(3);
     for (const dispose of generationA) expect(dispose).toHaveBeenCalledTimes(1);
     expect(lifecycle.events).toEqual([
       'intro-register-A',
       'digest-register-A',
+      'event-reminders-register-A',
       'intro-dispose-A',
       'digest-dispose-A',
+      'event-reminders-dispose-A',
       'intro-register-B',
       'digest-register-B',
+      'event-reminders-register-B',
     ]);
 
-    const generationB = lifecycle.disposeSpies.slice(2);
+    const generationB = lifecycle.disposeSpies.slice(3);
     for (const dispose of generationB) expect(dispose).not.toHaveBeenCalled();
 
     await rt.stop();

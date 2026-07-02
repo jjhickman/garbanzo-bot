@@ -14,6 +14,8 @@ import { GROUP_IDS, isFeatureEnabled } from '../../core/groups-config.js';
 import { jidsMatch } from '../../utils/jid.js';
 import { getResponse } from '../../core/response-router.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
+import { cancelEventReminder, listUpcomingEventReminders } from '../../utils/db.js';
+import type { EventReminder } from '../../utils/db-types.js';
 
 function buildSupportMessage(): string {
   const lines: string[] = [
@@ -148,6 +150,50 @@ async function handleWhatsAppSafetyCommand(sock: WASocket, remoteJid: string, te
   return true;
 }
 
+async function handleEventsOwnerCommand(sock: WASocket, remoteJid: string, text: string): Promise<boolean> {
+  const args = text.trim().slice('!events'.length).trim();
+  const cancelMatch = args.match(/^cancel\s+(\d+)$/i);
+
+  if (cancelMatch) {
+    const id = Number.parseInt(cancelMatch[1], 10);
+    const cancelled = await cancelEventReminder(id);
+    await sendOwnerControlMessage(
+      sock,
+      remoteJid,
+      cancelled ? `Event reminder #${id} cancelled.` : `Unable to cancel event reminder #${id}; it may not be pending.`,
+    );
+    return true;
+  }
+
+  if (args.length > 0) {
+    await sendOwnerControlMessage(sock, remoteJid, 'Usage: !events | !events cancel <id>');
+    return true;
+  }
+
+  const reminders = await listUpcomingEventReminders(10);
+  await sendOwnerControlMessage(sock, remoteJid, formatUpcomingEventReminders(reminders));
+  return true;
+}
+
+function formatUpcomingEventReminders(reminders: EventReminder[]): string {
+  if (reminders.length === 0) {
+    return 'No pending event reminders.';
+  }
+
+  return [
+    '*Upcoming event reminders*',
+    ...reminders.map((reminder) => {
+      const when = new Date(reminder.eventAt * 1000).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      return `#${reminder.id} ${reminder.activity} — ${when}${reminder.location ? ` at ${reminder.location}` : ''} — !events cancel ${reminder.id}`;
+    }),
+  ].join('\n');
+}
+
 /**
  * Handle a direct message from the bot owner.
  * Routes owner-only commands (!catchup intros, !digest, !strikes, etc.)
@@ -170,6 +216,10 @@ export async function handleOwnerDM(
 
   if (trimmedLower.startsWith('!whatsapp')) {
     return handleWhatsAppSafetyCommand(sock, remoteJid, text);
+  }
+
+  if (trimmedLower.startsWith('!events')) {
+    return handleEventsOwnerCommand(sock, remoteJid, text);
   }
 
   // !catchup intros

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mapDailyGroupActivity,
   mapDbMessage,
+  mapEventReminder,
   mapFeedbackEntry,
   mapMemoryEntry,
   mapMemberProfile,
@@ -113,6 +114,28 @@ describe('database shared query shaping', () => {
       category: 'general',
       source: 'owner',
       created_at: 400,
+    });
+
+    expect(mapEventReminder({
+      id: '6',
+      chat_jid: 'events@g.us',
+      activity: 'trivia night',
+      location: null,
+      event_at: '800',
+      remind_at: '700',
+      created_by: '15550000006@s.whatsapp.net',
+      status: 'pending',
+      created_at: '650',
+    })).toEqual({
+      id: 6,
+      chatJid: 'events@g.us',
+      activity: 'trivia night',
+      location: null,
+      eventAt: 800,
+      remindAt: 700,
+      createdBy: '15550000006@s.whatsapp.net',
+      status: 'pending',
+      createdAt: 650,
     });
   });
 
