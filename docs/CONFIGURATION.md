@@ -55,6 +55,10 @@ Copy `.env.example` to `.env` and configure:
 | `CONTEXT_SESSION_MIN_MESSAGES` | No | Minimum messages to summarize a session (default: `4`) |
 | `CONTEXT_SESSION_MAX_RETRIEVED` | No | Max session summaries injected into prompt context (default: `3`) |
 | `CONTEXT_SESSION_SUMMARY_VERSION` | No | Summary algorithm version for cache invalidation (default: `1`) |
+| `MEMORY_AUTO_EXTRACT` | No | Enable automatic long-term community fact extraction (default: `false`) |
+| `MEMORY_AUTO_EXTRACT_MIN_MESSAGES` | No | Per-group messages required between extraction attempts (default: `25`) |
+| `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
+| `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
 | `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `deterministic` (default) or `openai` |
 | `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
 | `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
@@ -79,6 +83,20 @@ replies, moderation flags, AI errors), and the WhatsApp outbound-safety
 counters. `/admin.json` returns the same data raw for scripting. The page is
 never served without a token, and requests share the health endpoint's rate
 limit. Disable with `ADMIN_PAGE_ENABLED=false`.
+
+## Automatic community memory
+
+`MEMORY_AUTO_EXTRACT=false` by default. When enabled, Garbanzo periodically scans
+recent group context after a successful group AI response and asks the configured
+AI provider to extract 0-3 durable community facts: recurring events, venues,
+member roles/projects, traditions, or general long-term facts.
+
+The extractor is gated per group by `MEMORY_AUTO_EXTRACT_MIN_MESSAGES` and
+`MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES`, so it adds at most one extra cheap LLM
+call per group per interval. Auto-extracted facts are stored with source `auto`,
+included in the same prompt memory as owner-added facts, capped by
+`MEMORY_AUTO_MAX_FACTS`, and visible in `!memory` with an `(auto)` tag. Curate
+them with the existing owner command: `!memory delete <id>`.
 
 ## WhatsApp outbound safety (anti-ban)
 

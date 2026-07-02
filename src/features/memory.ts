@@ -2,10 +2,10 @@
  * Garbanzo memory — long-term community facts stored in SQLite.
  *
  * Owner commands (DM only):
- *   !memory                     — list all stored facts
- *   !memory add <category> <fact> — store a new fact
- *   !memory delete <id>         — remove a fact
- *   !memory search <keyword>    — search facts
+ *   !memory                       — list all stored facts
+ *   !memory add <category> <fact> — store a new owner fact
+ *   !memory delete <id>           — remove a fact
+ *   !memory search <keyword>      — search facts
  *
  * Facts are automatically injected into the AI system prompt so
  * Garbanzo "remembers" things about the community across conversations.
@@ -85,8 +85,8 @@ export async function handleMemory(args: string): Promise<string> {
     '🧠 *Garbanzo Memory*',
     '',
     'Commands:',
-    '  `!memory` — list all facts',
-    '  `!memory add <category> <fact>` — store a fact',
+    '  `!memory` — list all facts, including auto-extracted facts',
+    '  `!memory add <category> <fact>` — store an owner fact',
     '  `!memory delete <id>` — remove a fact',
     '  `!memory search <keyword>` — search facts',
     '',
@@ -122,7 +122,8 @@ function formatMemoryList(memories: MemoryEntry[], header: string): string {
   for (const [cat, entries] of byCategory) {
     lines.push(`*${cat}:*`);
     for (const e of entries) {
-      lines.push(`  #${e.id} — ${e.fact}`);
+      const sourceTag = e.source === 'auto' ? ' (auto)' : '';
+      lines.push(`  #${e.id}${sourceTag} — ${e.fact}`);
     }
     lines.push('');
   }

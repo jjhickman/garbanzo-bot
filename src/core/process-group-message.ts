@@ -5,6 +5,7 @@ import { handleCharacter } from '../features/character.js';
 import { handleFeedbackSubmit, handleUpvote } from '../features/feedback.js';
 import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } from '../features/voice.js';
 import { extractUrls, processUrl } from '../features/links.js';
+import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
 import { checkRateLimit, recordResponse } from '../middleware/rate-limit.js';
 import { recordBotResponse } from '../middleware/stats.js';
@@ -166,6 +167,9 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     recordBotResponse(chatId);
     recordResponse(senderId, chatId);
     await messenger.sendText(chatId, response, { replyTo });
+    void maybeExtractCommunityFacts(chatId, groupName).catch((err) => {
+      logger.warn({ err, chatId, groupName }, 'Automatic memory extraction trigger failed');
+    });
   }
 }
 
