@@ -144,6 +144,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_feedback_status
     ON feedback (status, timestamp DESC);
 
+  CREATE TABLE IF NOT EXISTS event_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_jid TEXT NOT NULL,
+    activity TEXT NOT NULL,
+    location TEXT,
+    event_at INTEGER NOT NULL,
+    remind_at INTEGER NOT NULL,
+    created_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'sent', 'cancelled')),
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_event_reminders_status_remind
+    ON event_reminders (status, remind_at ASC);
+
+  CREATE INDEX IF NOT EXISTS idx_event_reminders_status_event
+    ON event_reminders (status, event_at ASC);
+
   CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_jid TEXT NOT NULL,

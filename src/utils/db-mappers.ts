@@ -1,6 +1,8 @@
 import type {
   DailyGroupActivity,
   DbMessage,
+  EventReminder,
+  EventReminderStatus,
   FeedbackEntry,
   MemberProfile,
   MemoryEntry,
@@ -76,6 +78,18 @@ export interface MemoryRow {
   fact: string;
   category: string;
   source: string;
+  created_at: DbNumeric | null;
+}
+
+export interface EventReminderRow {
+  id: DbNumeric | null;
+  chat_jid: string;
+  activity: string;
+  location: string | null;
+  event_at: DbNumeric | null;
+  remind_at: DbNumeric | null;
+  created_by: string;
+  status: EventReminderStatus;
   created_at: DbNumeric | null;
 }
 
@@ -176,6 +190,20 @@ export function mapMemoryEntry(row: MemoryRow): MemoryEntry {
     category: row.category,
     source: row.source,
     created_at: toNumber(row.created_at),
+  };
+}
+
+export function mapEventReminder(row: EventReminderRow): EventReminder {
+  return {
+    id: toNumber(row.id),
+    chatJid: row.chat_jid,
+    activity: row.activity,
+    location: row.location,
+    eventAt: toNumber(row.event_at),
+    remindAt: toNumber(row.remind_at),
+    createdBy: row.created_by,
+    status: row.status,
+    createdAt: toNumber(row.created_at),
   };
 }
 

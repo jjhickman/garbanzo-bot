@@ -12,6 +12,7 @@ import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
   mapDbMessage,
+  mapEventReminder,
   mapFeedbackEntry,
   mapMemoryEntry,
   mapMemberProfile,
@@ -20,6 +21,7 @@ import {
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
   type DailyGroupActivityRow,
+  type EventReminderRow,
   type FeedbackRow,
   type MemoryRow,
   type MessageRow,
@@ -43,11 +45,13 @@ import type {
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
+  EventReminder,
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  NewEventReminder,
   SessionSummaryHit,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -71,6 +75,7 @@ const REQUIRED_CORE_TABLES = [
   'moderation_log',
   'daily_stats',
   'feedback',
+  'event_reminders',
   'memory',
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
@@ -783,6 +788,64 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       );
 
       return res.rows.map(mapDailyGroupActivity);
+    },
+
+    async addEventReminder(input: NewEventReminder): Promise<EventReminder> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<EventReminderRow>(
+        `INSERT INTO event_reminders
+         (chat_jid, activity, location, event_at, remind_at, created_by, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+         RETURNING *`,
+        [
+          input.chatJid,
+          input.activity,
+          input.location,
+          input.eventAt,
+          input.remindAt,
+          input.createdBy,
+          ts,
+        ],
+      );
+      return mapEventReminder(res.rows[0]);
+    },
+
+    async listPendingEventReminders(nowSeconds: number): Promise<EventReminder[]> {
+      const res = await pool.query<EventReminderRow>(
+        `SELECT * FROM event_reminders
+         WHERE status = 'pending' AND remind_at <= $1
+         ORDER BY remind_at ASC, id ASC`,
+        [nowSeconds],
+      );
+      return res.rows.map(mapEventReminder);
+    },
+
+    async listUpcomingEventReminders(limit: number = 20): Promise<EventReminder[]> {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const res = await pool.query<EventReminderRow>(
+        `SELECT * FROM event_reminders
+         WHERE status = 'pending' AND event_at >= $1
+         ORDER BY event_at ASC, id ASC
+         LIMIT $2`,
+        [nowSeconds, limit],
+      );
+      return res.rows.map(mapEventReminder);
+    },
+
+    async markEventReminderSent(id: number): Promise<boolean> {
+      const res = await pool.query(
+        "UPDATE event_reminders SET status = 'sent' WHERE id = $1 AND status = 'pending'",
+        [id],
+      );
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async cancelEventReminder(id: number): Promise<boolean> {
+      const res = await pool.query(
+        "UPDATE event_reminders SET status = 'cancelled' WHERE id = $1 AND status = 'pending'",
+        [id],
+      );
+      return (res.rowCount ?? 0) > 0;
     },
 
     async createWhatsAppOutboundJob(

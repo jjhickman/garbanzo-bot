@@ -2,11 +2,13 @@ import type {
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
+  EventReminder,
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  NewEventReminder,
   StrikeSummary,
   SessionSummaryHit,
   WhatsAppOutboundJob,
@@ -54,6 +56,13 @@ export interface DbBackend {
   /** Archived daily stats snapshots for date >= from AND date <= to (ISO dates sort lexically). */
   loadDailyStatsRange(fromDate: string, toDate: string): Promise<Array<{ date: string; data: string }>>;
   getDailyGroupActivity(date: string): Promise<DailyGroupActivity[]>;
+
+  // Event reminders
+  addEventReminder(input: NewEventReminder): Promise<EventReminder>;
+  listPendingEventReminders(nowSeconds: number): Promise<EventReminder[]>;
+  listUpcomingEventReminders(limit?: number): Promise<EventReminder[]>;
+  markEventReminderSent(id: number): Promise<boolean>;
+  cancelEventReminder(id: number): Promise<boolean>;
 
   // WhatsApp outbound safety and retained manual releases
   createWhatsAppOutboundJob(chatJid: string, kind: string, contentJson: string, optionsJson: string | null): Promise<WhatsAppOutboundJob>;

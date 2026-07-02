@@ -47,12 +47,29 @@ describe('owner support commands', () => {
     vi.doMock('../src/middleware/stats.js', () => ({ recordOwnerDM: vi.fn() }));
     vi.doMock('../src/core/response-router.js', () => ({ getResponse: vi.fn(async () => 'ai') }));
     vi.doMock('../src/platforms/whatsapp/outbound-safety.js', () => ({ getWhatsAppOutboundSafety: vi.fn(() => safety) }));
+    vi.doMock('../src/utils/db.js', () => ({
+      listUpcomingEventReminders: vi.fn(async () => [
+        {
+          id: 42,
+          chatJid: 'events@g.us',
+          activity: 'trivia night',
+          location: 'Tavern',
+          eventAt: 1767225600,
+          remindAt: 1767218400,
+          createdBy: 'sender@s.whatsapp.net',
+          status: 'pending',
+          createdAt: 1767000000,
+        },
+      ]),
+      cancelEventReminder: vi.fn(async (id: number) => id === 42),
+    }));
     vi.doMock('../src/core/groups-config.js', () => ({
       GROUP_IDS: {
         'g1@g.us': { name: 'General', enabled: true },
         'g2@g.us': { name: 'Offtopic', enabled: true },
         'g3@g.us': { name: 'Disabled', enabled: false },
       },
+      isFeatureEnabled: vi.fn(() => true),
     }));
   }
 
@@ -139,5 +156,33 @@ describe('owner support commands', () => {
     expect(safety.sendControlText).toHaveBeenCalledTimes(1);
     expect(String(safety.sendControlText.mock.calls[0]?.[1])).toContain('Held: 2');
     expect(sock.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('lists upcoming event reminders on !events', async () => {
+    mockOwnerDeps();
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
+    const sock = { sendMessage: vi.fn(async () => undefined) };
+
+    const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'owner@s.whatsapp.net', '!events');
+
+    expect(handled).toBe(true);
+    const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
+    expect(calls[0]?.[1]?.text).toContain('#42');
+    expect(calls[0]?.[1]?.text).toContain('trivia night');
+    expect(calls[0]?.[1]?.text).toContain('!events cancel 42');
+  });
+
+  it('cancels an event reminder by id on !events cancel', async () => {
+    mockOwnerDeps();
+    const db = await import('../src/utils/db.js');
+    const { handleOwnerDM } = await import('../src/platforms/whatsapp/owner-commands.js');
+    const sock = { sendMessage: vi.fn(async () => undefined) };
+
+    const handled = await handleOwnerDM(sock as never, 'owner@s.whatsapp.net', 'owner@s.whatsapp.net', '!events cancel 42');
+
+    expect(handled).toBe(true);
+    expect(db.cancelEventReminder).toHaveBeenCalledWith(42);
+    const calls = sock.sendMessage.mock.calls as unknown as Array<[string, { text?: string }]>;
+    expect(calls[0]?.[1]?.text).toContain('cancelled');
   });
 });

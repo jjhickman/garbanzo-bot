@@ -57,6 +57,23 @@ export interface DailyGroupActivity {
   activeUsers: number;
 }
 
+export type EventReminderStatus = 'pending' | 'sent' | 'cancelled';
+
+export interface NewEventReminder {
+  chatJid: string;
+  activity: string;
+  location: string | null;
+  eventAt: number;
+  remindAt: number;
+  createdBy: string;
+}
+
+export interface EventReminder extends NewEventReminder {
+  id: number;
+  status: EventReminderStatus;
+  createdAt: number;
+}
+
 export interface MemberProfile {
   jid: string;
   name: string | null;

@@ -9,11 +9,14 @@ export type {
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
+  EventReminder,
+  EventReminderStatus,
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  NewEventReminder,
   StrikeSummary,
   SessionSummaryHit,
   WhatsAppOutboundJob,
@@ -64,6 +67,13 @@ export const getRepeatOffenders = backend.getRepeatOffenders;
 export const saveDailyStats = backend.saveDailyStats;
 export const getDailyGroupActivity = backend.getDailyGroupActivity;
 export const loadDailyStatsRange = backend.loadDailyStatsRange;
+
+// Event reminders
+export const addEventReminder = backend.addEventReminder;
+export const listPendingEventReminders = backend.listPendingEventReminders;
+export const listUpcomingEventReminders = backend.listUpcomingEventReminders;
+export const markEventReminderSent = backend.markEventReminderSent;
+export const cancelEventReminder = backend.cancelEventReminder;
 
 // WhatsApp safety
 export const createWhatsAppOutboundJob = backend.createWhatsAppOutboundJob;

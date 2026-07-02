@@ -71,6 +71,8 @@ Copy `.env.example` to `.env` and configure:
 | `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
 | `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics/admin token instead of generating one per run (guards `/whatsapp/login*`, `/metrics`, and `/admin`) |
 | `ADMIN_PAGE_ENABLED` | No | Owner admin page at `/admin` + `/admin.json` on the health port (default: `true`; only served when a token exists) |
+| `EVENT_REMINDERS_ENABLED` | No | Enable Events-group reminder capture and scheduled reminder sends (default: `true`) |
+| `EVENT_REMINDER_LEAD_MINUTES` | No | Minutes before a parsed event start time to post a reminder (default: `120`) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
@@ -127,6 +129,13 @@ Loosening or disabling for testing: set `WHATSAPP_SAFETY_WARMUP_DAYS=0` to skip
 the warm-up ramp, raise the rate caps for a higher test ceiling, or set
 `WHATSAPP_SAFETY_ENABLED=false` to turn off rate limits, warm-up, and auto-pause.
 Only disable the full safety layer on an established number.
+
+## Event Reminders
+
+Event reminders are captured only from passively detected proposals in the
+configured Events group. `EVENT_REMINDERS_ENABLED` controls both capture and the
+WhatsApp scheduler. `EVENT_REMINDER_LEAD_MINUTES` sets how early the reminder is
+posted before the parsed event start time.
 
 ## AI Routing Profiles (Examples)
 

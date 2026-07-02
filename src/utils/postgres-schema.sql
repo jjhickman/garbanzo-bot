@@ -92,6 +92,25 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE INDEX IF NOT EXISTS idx_feedback_status
   ON feedback (status, timestamp DESC);
 
+CREATE TABLE IF NOT EXISTS event_reminders (
+  id BIGSERIAL PRIMARY KEY,
+  chat_jid TEXT NOT NULL,
+  activity TEXT NOT NULL,
+  location TEXT,
+  event_at BIGINT NOT NULL,
+  remind_at BIGINT NOT NULL,
+  created_by TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'sent', 'cancelled')),
+  created_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_reminders_status_remind
+  ON event_reminders (status, remind_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_event_reminders_status_event
+  ON event_reminders (status, event_at ASC);
+
 CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
   id BIGSERIAL PRIMARY KEY,
   chat_jid TEXT NOT NULL,
