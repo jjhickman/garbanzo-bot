@@ -6,6 +6,14 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-07-02
+
+### Changed
+
+- Grafana admin login defaults to the pinned `WHATSAPP_LOGIN_TOKEN` (one secret for the whole stack; `GRAFANA_ADMIN_PASSWORD` remains an optional override) — documented as a deliberate single-owner tradeoff.
+- README and Docker Hub overview/short-description refreshed for the 1.0.x feature set (tool calling, auto-memory, reminders, recaps, observability stack, GPT-5 Responses API, Baileys v7).
+
+
 ## [1.0.3] — 2026-07-02
 
 ### Added

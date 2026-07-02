@@ -85,7 +85,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:1.0.3
+# docker pull jjhickman/garbanzo:1.0.4
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
