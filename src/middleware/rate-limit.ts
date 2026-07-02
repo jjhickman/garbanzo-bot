@@ -12,6 +12,7 @@
 
 import { logger } from './logger.js';
 import { config } from '../utils/config.js';
+import { jidsMatch } from '../utils/jid.js';
 
 const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const USER_LIMIT = 10;
@@ -40,8 +41,8 @@ export function checkRateLimit(
   senderJid: string,
   groupJid: string,
 ): string | null {
-  // Owner is exempt
-  if (senderJid === config.OWNER_JID) return null;
+  // Owner is exempt (device-suffix tolerant — see jidsMatch)
+  if (jidsMatch(senderJid, config.OWNER_JID)) return null;
 
   const now = Date.now();
 

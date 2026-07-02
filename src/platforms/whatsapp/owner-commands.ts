@@ -11,6 +11,7 @@ import { handleRelease } from '../../features/release.js';
 import { handleMemory } from '../../features/memory.js';
 import { recordOwnerDM } from '../../middleware/stats.js';
 import { GROUP_IDS, isFeatureEnabled } from '../../core/groups-config.js';
+import { jidsMatch } from '../../utils/jid.js';
 import { getResponse } from '../../core/response-router.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
 
@@ -160,7 +161,7 @@ export async function handleOwnerDM(
   senderJid: string,
   text: string,
 ): Promise<boolean> {
-  if (senderJid !== config.OWNER_JID) return false;
+  if (!jidsMatch(senderJid, config.OWNER_JID)) return false;
 
   logger.info({ sender: senderJid, text }, 'Owner DM');
   recordOwnerDM();

@@ -3,8 +3,13 @@ import { describe, it, expect } from 'vitest';
 // These tests validate the utility modules without requiring
 // WhatsApp connection or API keys.
 
+// mentions.js transitively loads config, which validates required env.
+process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
+process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
+process.env.AI_PROVIDER_ORDER ??= 'openrouter';
+
 describe('JID utilities', async () => {
-  const { isGroupJid, isDmJid, phoneFromJid, phoneToJid } = await import('../src/utils/jid.js');
+  const { isGroupJid, isDmJid, isLidJid, phoneFromJid, phoneToJid, bareUserJid, jidsMatch } = await import('../src/utils/jid.js');
 
   it('identifies group JIDs', () => {
     expect(isGroupJid('120363423357339667@g.us')).toBe(true);
@@ -22,6 +27,24 @@ describe('JID utilities', async () => {
 
   it('converts phone to JID', () => {
     expect(phoneToJid('+1-555-123-4567')).toBe('15551234567@s.whatsapp.net');
+  });
+
+  it('identifies LID JIDs', () => {
+    expect(isLidJid('184468458393129@lid')).toBe(true);
+    expect(isLidJid('15551234567@s.whatsapp.net')).toBe(false);
+  });
+
+  it('strips device suffixes from user JIDs', () => {
+    expect(bareUserJid('15551234567:17@s.whatsapp.net')).toBe('15551234567@s.whatsapp.net');
+    expect(bareUserJid('15551234567@s.whatsapp.net')).toBe('15551234567@s.whatsapp.net');
+    expect(bareUserJid('U0123ABCD')).toBe('U0123ABCD'); // non-JID platform IDs untouched
+  });
+
+  it('matches JIDs across device suffixes', () => {
+    expect(jidsMatch('15551234567:17@s.whatsapp.net', '15551234567@s.whatsapp.net')).toBe(true);
+    expect(jidsMatch('15551234567@s.whatsapp.net', '15559999999@s.whatsapp.net')).toBe(false);
+    expect(jidsMatch('184468458393129@lid', '15551234567@s.whatsapp.net')).toBe(false);
+    expect(jidsMatch('U0123ABCD', 'U0123ABCD')).toBe(true); // non-JID plain equality
   });
 });
 
