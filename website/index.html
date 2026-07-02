@@ -37,7 +37,7 @@
       </a>
       <nav class="site-nav" aria-label="Site">
         <a href="#features">Features</a>
-        <a href="#gallery">In the wild</a>
+        <a href="#gallery">Screenshots</a>
         <a href="#deploy">Deploy</a>
         <a class="nav-github" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
@@ -48,11 +48,12 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Self-hosted · Open source · Apache-2.0</p>
-          <h1>Your community's AI,<br /> on <em>your</em> hardware.</h1>
+          <h1>A group chat bot<br /> you run <em>yourself</em>.</h1>
           <p class="lede">
-            Garbanzo is a chat bot that lives in your group chats. It answers questions with live transit and
-            weather data, welcomes new members, and keeps notes on what your community cares about. You run it
-            on your own server, with the AI providers you choose.
+            Garbanzo started as a bot for a Boston WhatsApp group. Somebody asks if the train is late,
+            it checks and answers. It welcomes people who introduce themselves, keeps notes on what the group
+            cares about, and reminds everyone before events. All of it runs on your own server, with whichever
+            AI provider you give it a key for.
           </p>
           <div class="actions">
             <a class="button button-primary" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">View on GitHub</a>
@@ -100,8 +101,8 @@
       <section class="deploy" id="deploy" aria-label="Deployment">
         <div class="deploy-inner">
           <div class="deploy-copy">
-            <h2>Set up in a few minutes</h2>
-            <p>Runs on any Docker host, including a Raspberry Pi. API keys and chat data stay on your machine.</p>
+            <h2>Running it</h2>
+            <p>The usual way is Docker Compose, on anything from a Raspberry Pi to a home server or a VPS. The repo also ships CDK stacks if you would rather host it on AWS, a systemd unit for running it as a plain Node service, and prebuilt binaries on every release. Your API keys and chat data stay on your machine either way.</p>
           </div>
           <pre class="deploy-code"><code><span class="c"># 1. configure</span>
 git clone https://github.com/jjhickman/garbanzo-bot.git
@@ -113,37 +114,37 @@ docker compose up -d</code></pre>
 
       <!-- ============ Features ============ -->
       <section class="features" id="features" aria-label="Features">
-        <h2>What it does all day</h2>
+        <h2>What it does</h2>
         <div class="feature-grid">
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M4 12h16M4 18h10" /><circle cx="17" cy="6" r="2.6" /><circle cx="8" cy="18" r="2.6" /></svg>
-            <h3>Answers with live data</h3>
-            <p>Ask about transit, weather, venues, news, or books in plain language. The bot looks the answer up and includes it in the reply, so there is no command syntax to learn.</p>
+            <h3>Live lookups</h3>
+            <p>Somebody asks whether the train is delayed; the bot checks and answers right there. Weather, news, venues, and book lookups work the same way. No command syntax.</p>
           </article>
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 1 7 7c0 2.5-1.2 4-2.5 5.5-.9 1-1.5 1.7-1.5 3.5h-6c0-1.8-.6-2.5-1.5-3.5C6.2 14 5 12.5 5 10a7 7 0 0 1 7-7z" /><path d="M9.5 22h5" /></svg>
-            <h3>Remembers your community</h3>
-            <p>The bot keeps notes: who runs book club, where trivia night happens, which park hosts the picnics. You can add facts yourself or let it pick them up from conversation.</p>
+            <h3>Group memory</h3>
+            <p>It keeps notes on the group: who runs book club, which park hosts the picnics. Add facts yourself or let it collect them from conversation. You can see and delete everything it stores.</p>
           </article>
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M3 9h18M8 3v4M16 3v4M8 14l2.5 2.5L15 12" /></svg>
-            <h3>Keeps plans on track</h3>
-            <p>When someone proposes a meetup, the bot adds weather and transit details, then reminds the chat before it starts. Owners also get a weekly summary on Sundays.</p>
+            <h3>Events</h3>
+            <p>When someone floats a meetup, the bot attaches the weather forecast and transit info, then reminds the chat before it starts. Owners get a summary of the week every Sunday.</p>
           </article>
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z" /><path d="M9 12l2 2 4-4.5" /></svg>
-            <h3>Moderation, human in charge</h3>
-            <p>Flagged messages go to the owner for review instead of triggering automatic punishment. Edited messages get checked again, and repeat problems are tracked per member.</p>
+            <h3>Moderation</h3>
+            <p>Flagged messages go to you, not to an auto-ban. Edited messages get re-checked. Repeat problems are tracked per member. The bot never punishes anyone on its own.</p>
           </article>
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v5a6 6 0 0 1-12 0z" /><path d="M18 5h2.5a1 1 0 0 1 1 1.2C21 9 19.5 10.5 18 10.8M6 5H3.5a1 1 0 0 0-1 1.2C3 9 4.5 10.5 6 10.8M12 15v3M8 21h8M9 18h6" /></svg>
-            <h3>Routes across providers</h3>
-            <p>Works with OpenAI, Anthropic, Google, AWS Bedrock, and OpenRouter. You pick the order; if one provider fails, the next takes over. Spending is tracked per provider, and you can serve simple replies from a local model through Ollama.</p>
+            <h3>AI providers</h3>
+            <p>Bring a key from OpenAI, Anthropic, Google, AWS Bedrock, or OpenRouter. Put them in whatever order you like; if one fails, the next answers. There is a cost readout so you know what you are spending, and Ollama works too if you want simple replies handled locally for free.</p>
           </article>
           <article class="feature">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18" /><path d="M6 20v-6M11 20V9M16 20v-9M21 20V5" /></svg>
-            <h3>Shows you everything</h3>
-            <p>An admin page shows daily spend and group activity. Prometheus metrics and a ready-made Grafana dashboard start alongside the bot with one extra compose flag.</p>
+            <h3>Dashboards</h3>
+            <p>An admin page shows daily spend and group activity. If you want more history, one compose flag starts Prometheus and Grafana with a dashboard already set up.</p>
           </article>
         </div>
       </section>
@@ -151,7 +152,7 @@ docker compose up -d</code></pre>
       <!-- ============ Real screenshots ============ -->
       <section class="gallery" id="gallery" aria-label="Real screenshots">
         <h2>From a live deployment</h2>
-        <p class="gallery-sub">Screenshots from a WhatsApp community that runs Garbanzo.</p>
+        <p class="gallery-sub">Screenshots from the WhatsApp group where Garbanzo runs.</p>
         <div class="shots">
           <figure>
             <a href="./assets/screenshots/introductions-welcome.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/introductions-welcome.jpg" alt="Garbanzo writing a personal welcome to a new member's introduction" loading="lazy" /></a>
@@ -175,6 +176,7 @@ docker compose up -d</code></pre>
       <!-- ============ Platforms ============ -->
       <section class="platforms" aria-label="Platform support">
         <h2>Where it runs</h2>
+        <p class="platforms-sub">WhatsApp is where Garbanzo has run longest. The Slack and Discord runtimes are newer and have seen less production use.</p>
         <ul class="platform-chips">
           <li><span class="dot dot-live"></span>WhatsApp <em>production</em></li>
           <li><span class="dot dot-beta"></span>Slack <em>official API runtime</em></li>
@@ -185,9 +187,9 @@ docker compose up -d</code></pre>
 
       <!-- ============ Support ============ -->
       <section class="support" aria-label="Support the project">
-        <h2>Back the roadmap</h2>
+        <h2>Supporting the project</h2>
         <p>
-          Garbanzo is an independent open-source project. Contributions pay for API costs and maintainer time.
+          Garbanzo is maintained in spare time. Contributions go toward API costs and keeping releases steady.
         </p>
         <div class="tiers">
           <div class="tier"><h3>Bean Sprout</h3><p>Roadmap updates and supporter shout-outs.</p><span>For individual supporters</span></div>

@@ -249,6 +249,7 @@ section > h2 { text-align: center; }
 
 /* ── Platforms ── */
 .platforms { padding-top: 3rem; padding-bottom: 3rem; }
+.platforms-sub { text-align: center; color: var(--slate); max-width: 38em; margin: -0.2rem auto 0; }
 .platform-chips {
   list-style: none; display: flex; flex-wrap: wrap; gap: 0.8rem;
   justify-content: center; padding: 0; margin: 1.8rem 0 0;
