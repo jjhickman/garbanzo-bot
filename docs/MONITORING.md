@@ -1,5 +1,5 @@
 # Monitoring
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 Three layers, all optional, all runnable on a Pi-class host:
 
@@ -10,6 +10,10 @@ Three layers, all optional, all runnable on a Pi-class host:
 | **Prometheus + Grafana** | Historical graphs of everything below, 30-day retention | Two containers, ~600MB RAM combined |
 
 ## Prometheus + Grafana (the `monitoring` profile)
+
+<p align="center">
+  <img src="assets/screenshots/site/grafana-community-ops.png" width="900" alt="The pre-provisioned Community Ops dashboard" />
+</p>
 
 ### Enable (two steps, once)
 

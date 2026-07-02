@@ -1,5 +1,5 @@
 # AWS Deployment Notes
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
 This document describes pragmatic ways to run Garbanzo on AWS using your own AWS account.
@@ -109,7 +109,7 @@ Notes:
 - This stack targets Slack/Discord runtimes, not Baileys WhatsApp.
 - RDS is the durable store (`DB_DIALECT=postgres`) for multi-service operation.
 - Use Route53 + ACM for `bot.garbanzobot.com` HTTPS termination on ALB.
-- Optional: enable `deployDemo=true` and `demoDomainName=demo.garbanzobot.com` for a public Slack-demo runtime that showcases features without local install.
+- Optional: enable `deployDemo=true` and `demoDomainName=garbanzobot.com` for a public Slack-demo runtime that showcases features without local install.
 - Demo runtime abuse controls include Turnstile challenge keys from `demoSecretArn`, demo-host scoped AWS WAF (rate + managed common/bot rules), CloudWatch alarms, and capped ECS autoscaling.
 - For deterministic synth/deploy in CI, pass both `hostedZoneName` and `hostedZoneId` to avoid Route53 lookup context resolution.
 

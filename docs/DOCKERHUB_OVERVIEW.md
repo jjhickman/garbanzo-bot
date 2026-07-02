@@ -1,5 +1,5 @@
 # Garbanzo Bot
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
 Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers (Claude/OpenAI/Gemini/Bedrock/OpenRouter) with optional local Ollama, then applies community workflows and integrations inside group chat.
@@ -52,7 +52,7 @@ curl -i http://127.0.0.1:3001/health/ready
 - **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
 - **Embedding providers:** deterministic hash embeddings by default, OpenAI `text-embedding-3-small` available with automatic fallback
 - **Storage:** SQLite (default) or Postgres with pgvector for semantic session retrieval
-- **Platforms:** WhatsApp (production), Slack, Discord (official API runtimes), unified demo at demo.garbanzobot.com
+- **Platforms:** WhatsApp (production), Slack, Discord (official API runtimes), unified demo at garbanzobot.com
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
 - **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
 
