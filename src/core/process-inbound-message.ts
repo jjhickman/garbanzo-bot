@@ -140,7 +140,9 @@ export async function processInboundMessage(
   if (env.introductionsChatId && inbound.chatId === env.introductionsChatId) {
     const isReply = !!inbound.quotedText;
     if (!isReply) {
-      const messageId = inbound.messageId;
+      // For an edit, dedup against the ORIGINAL message id: an already-welcomed
+      // intro stays welcomed, while a message edited INTO an intro gets one.
+      const messageId = inbound.editOfMessageId ?? inbound.messageId;
       if (messageId) {
         const introResponse = await env.handleIntroduction(text, messageId, inbound.senderId, inbound.chatId);
         if (introResponse) {
@@ -150,6 +152,12 @@ export async function processInboundMessage(
       }
     }
   }
+
+  // Edits stop here: moderation and intro classification have re-run against
+  // the corrected content (so editing a message can't dodge moderation), but
+  // event enrichment, acknowledgments, and mention dispatch must not fire a
+  // second reply for the same underlying message.
+  if (inbound.editOfMessageId) return;
 
   // Events group (passive detection, no @mention needed)
   if (env.eventsChatId && inbound.chatId === env.eventsChatId) {
