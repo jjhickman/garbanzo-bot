@@ -101,12 +101,17 @@ curl http://127.0.0.1:3001/health
 # 6. First AI response test (in chat)
 # @garbanzo !summary
 # @garbanzo plan dinner in somerville this friday
+
+# Optional: monitoring stack (Prometheus + Grafana dashboard)
+# In .env: METRICS_ENABLED=true and a pinned WHATSAPP_LOGIN_TOKEN
+docker compose --profile monitoring up -d
+# Grafana: http://<host>:3000 (login: admin / your WHATSAPP_LOGIN_TOKEN)
 ```
 
 If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/demo/chat`.
 
 ## Table of Contents
-[Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)
+[Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Monitoring & Observability](#monitoring--observability) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)
 
 ## Features
 ### AI Chat Capabilities
