@@ -14,7 +14,6 @@ import { GROUP_IDS, isFeatureEnabled } from '../../core/groups-config.js';
 import { jidsMatch } from '../../utils/jid.js';
 import { getResponse } from '../../core/response-router.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
-import { cancelEventReminder, listUpcomingEventReminders } from '../../utils/db.js';
 import type { EventReminder } from '../../utils/db-types.js';
 
 function buildSupportMessage(): string {
@@ -151,12 +150,16 @@ async function handleWhatsAppSafetyCommand(sock: WASocket, remoteJid: string, te
 }
 
 async function handleEventsOwnerCommand(sock: WASocket, remoteJid: string, text: string): Promise<boolean> {
+  // Lazy: the db layer is mocked per-module in command tests, and a static
+  // import would pull the real backend into every module graph that imports
+  // owner-commands (e.g. the LID owner-match tests on main).
+  const db = await import('../../utils/db.js');
   const args = text.trim().slice('!events'.length).trim();
   const cancelMatch = args.match(/^cancel\s+(\d+)$/i);
 
   if (cancelMatch) {
     const id = Number.parseInt(cancelMatch[1], 10);
-    const cancelled = await cancelEventReminder(id);
+    const cancelled = await db.cancelEventReminder(id);
     await sendOwnerControlMessage(
       sock,
       remoteJid,
@@ -170,7 +173,7 @@ async function handleEventsOwnerCommand(sock: WASocket, remoteJid: string, text:
     return true;
   }
 
-  const reminders = await listUpcomingEventReminders(10);
+  const reminders = await db.listUpcomingEventReminders(10);
   await sendOwnerControlMessage(sock, remoteJid, formatUpcomingEventReminders(reminders));
   return true;
 }
