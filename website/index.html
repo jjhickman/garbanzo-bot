@@ -49,10 +49,8 @@
         <div class="hero-copy">
           <h1>A group chat bot<br /> you run <em>yourself</em>.</h1>
           <p class="lede">
-            Garbanzo started as a bot for a Boston WhatsApp group. Somebody asks if the train is late,
-            it checks and answers. It welcomes people who introduce themselves, keeps notes on what the group
-            cares about, and reminds everyone before events. All of it runs on your own server, with whichever
-            AI provider you give it a key for.
+            Built for a Boston WhatsApp group. Live transit and weather answers, welcomes for
+            newcomers, group memory, event reminders. Runs on your own server.
           </p>
           <div class="actions">
             <a class="button button-primary" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">View on GitHub</a>
@@ -101,12 +99,12 @@
         <div class="deploy-inner">
           <div class="deploy-copy">
             <h2>Running it</h2>
-            <p>Your API keys and chat data stay on your machine, whichever way you host it:</p>
+            <p>API keys and chat data stay on your machine:</p>
           <ul class="deploy-ways">
-            <li><strong>Docker Compose</strong>: the usual way; runs on a Raspberry Pi, a home server, or a VPS</li>
-            <li><strong>Kubernetes</strong>: the published image works on any cluster</li>
-            <li><strong>AWS</strong>: CDK stacks for EC2 and ECS ship in the repo</li>
-            <li><strong>Bare metal</strong>: a systemd unit or prebuilt binaries, no container at all</li>
+            <li><strong>Docker Compose</strong>: Raspberry Pi, home server, or VPS</li>
+            <li><strong>Kubernetes</strong>: published image, any cluster</li>
+            <li><strong>AWS</strong>: CDK stacks for EC2 and ECS in the repo</li>
+            <li><strong>Bare metal</strong>: systemd unit or prebuilt binaries</li>
           </ul>
           </div>
           <pre class="deploy-code"><code><span class="c"># 1. configure</span>
@@ -123,35 +121,34 @@ docker compose up -d</code></pre>
         <div class="feature-grid">
           <article class="feature">
             <h3>Live lookups</h3>
-            <p>Somebody asks whether the train is delayed; the bot checks and answers right there. Weather, news, venues, and book lookups work the same way. No command syntax.</p>
+            <p>Transit, weather, news, venues, books. Plain-language questions, answered in the reply. No command syntax.</p>
           </article>
           <article class="feature">
             <h3>Group memory</h3>
-            <p>It keeps notes on the group: who runs book club, which park hosts the picnics. Add facts yourself or let it collect them from conversation. You can see and delete everything it stores.</p>
+            <p>Who runs book club, where the picnics are. Add facts yourself or let it collect them. Everything viewable and deletable.</p>
           </article>
           <article class="feature">
             <h3>Events</h3>
-            <p>When someone floats a meetup, the bot attaches the weather forecast and transit info, then reminds the chat before it starts. Owners get a summary of the week every Sunday.</p>
+            <p>Weather and transit attached to meetup plans. A reminder before start time. Sunday recap for owners.</p>
           </article>
           <article class="feature">
             <h3>Moderation</h3>
-            <p>Flagged messages go to you, not to an auto-ban. Edited messages get re-checked. Repeat problems are tracked per member. The bot never punishes anyone on its own.</p>
+            <p>Flags go to the owner for review. Edited messages get re-checked. Strikes tracked per member. No automatic punishment.</p>
           </article>
           <article class="feature">
             <h3>AI providers</h3>
-            <p>Bring a key from OpenAI, Anthropic, Google, AWS Bedrock, or OpenRouter. Put them in whatever order you like; if one fails, the next answers. There is a cost readout so you know what you are spending, and Ollama works too if you want simple replies handled locally for free.</p>
+            <p>OpenAI, Anthropic, Google, AWS Bedrock, OpenRouter. Any order, automatic failover. Cost readout included. Ollama for local replies.</p>
           </article>
           <article class="feature">
             <h3>Dashboards</h3>
-            <p>An admin page shows daily spend and group activity. If you want more history, one compose flag starts Prometheus and Grafana with a dashboard already set up.</p>
+            <p>Admin page for spend and activity. Prometheus and Grafana behind one compose flag.</p>
           </article>
         </div>
       </section>
 
       <!-- ============ Real screenshots ============ -->
       <section class="gallery" id="gallery" aria-label="Real screenshots">
-        <h2>From a live deployment</h2>
-        <p class="gallery-sub">Screenshots from the WhatsApp group where Garbanzo runs.</p>
+        <h2>Screenshots</h2>
         <div class="shots">
           <figure>
             <a href="./assets/screenshots/introductions-welcome.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/introductions-welcome.jpg" alt="Garbanzo writing a personal welcome to a new member's introduction" loading="lazy" /></a>
@@ -175,7 +172,6 @@ docker compose up -d</code></pre>
       <!-- ============ Platforms ============ -->
       <section class="platforms" aria-label="Platform support">
         <h2>Where it runs</h2>
-        <p class="platforms-sub">WhatsApp is where Garbanzo has run longest. The Slack and Discord runtimes are newer and have seen less production use.</p>
         <ul class="platform-chips">
           <li><span class="dot dot-live"></span>WhatsApp <em>production</em></li>
           <li><span class="dot dot-beta"></span>Slack <em>official API runtime</em></li>
@@ -188,7 +184,7 @@ docker compose up -d</code></pre>
       <section class="support" aria-label="Support the project">
         <h2>Supporting the project</h2>
         <p>
-          Garbanzo is maintained in spare time. Contributions go toward API costs and keeping releases steady.
+          Maintained in spare time. Contributions cover API costs.
         </p>
         <div class="tiers">
           <div class="tier"><h3>Bean Sprout</h3><p>Roadmap updates and supporter shout-outs.</p><span>For individual supporters</span></div>
