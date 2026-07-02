@@ -3,28 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Garbanzo — your community's AI, on your hardware</title>
+    <title>Garbanzo</title>
     <meta
       name="description"
-      content="Garbanzo is a self-hosted AI bot for community group chats. Multi-provider LLM routing, native tool calling, durable community memory, and built-in observability — deployed with one docker compose command."
+      content="Garbanzo is an AI-driven chat bot for group communities on WhatsApp, Slack, and Discord. It moderates and enriches messaging communities using models from OpenAI, Anthropic, Google Gemini, AWS Bedrock, or even self-hosted via Ollama or other similar platform!"
     />
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
     <link rel="canonical" href="https://garbanzobot.com/" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://garbanzobot.com/" />
-    <meta property="og:title" content="Garbanzo — your community's AI, on your hardware" />
-    <meta property="og:description" content="Self-hosted AI for group chats: LLM routing, tool calling, community memory, and observability. One docker compose command." />
+    <meta property="og:title" content="Garbanzo for the People" />
+    <meta property="og:description" content="The intelligent community bot to bring people together." />
     <meta property="og:image" content="https://garbanzobot.com/assets/og-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Garbanzo — your community's AI, on your hardware" />
-    <meta name="twitter:description" content="Self-hosted AI for group chats: LLM routing, tool calling, community memory, and observability." />
+    <meta name="twitter:title" content="Garbanzo for the People" />
+    <meta name="twitter:description" content="The intelligent community bot to bring people together." />
     <meta name="twitter:image" content="https://garbanzobot.com/assets/og-card.png" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -37,8 +37,8 @@
       </a>
       <nav class="site-nav" aria-label="Site">
         <a href="#features">Features</a>
-        <a href="#gallery">In the wild</a>
-        <a href="#deploy">Deploy</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#deploy">Deployment</a>
         <a class="nav-github" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
     </header>
@@ -47,18 +47,16 @@
       <!-- ============ Hero: headline + live chat panel ============ -->
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Self-hosted · Apache-2.0 · WhatsApp-first</p>
-          <h1>Your community's AI,<br /> on <em>your</em> hardware.</h1>
+          <h1>The community chat bot that brings people together, hosted anywhere.</h1>
           <p class="lede">
-            Garbanzo sits in your group chats and actually helps — answering with live transit and weather data,
-            welcoming newcomers, remembering what your community cares about. Multi-provider LLM routing with
-            failover, and every byte stays on a machine you own.
+            Live transit and weather answers, welcomes for
+            newcomers, group memory, event reminders, hosted anywhere.
           </p>
           <div class="actions">
-            <a class="button button-primary" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">Start building</a>
+            <a class="button button-primary" href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">View on GitHub</a>
             <a class="button button-ghost" href="#gallery">See it in chat</a>
           </div>
-          <p class="trust-line"><code>docker compose up -d</code> · runs on a Raspberry Pi 5 · SQLite or Postgres</p>
+          <p class="trust-line"><code>docker compose up -d</code> · WhatsApp, Slack, Discord, and Microsoft&nbsp;Teams&nbsp;(planned)</p>
         </div>
 
         <div class="chat-panel" role="img" aria-label="Example group chat: a member asks if the Red Line is running, and Garbanzo replies with live MBTA status.">
@@ -83,7 +81,7 @@
             <div class="typing b3" aria-hidden="true"><span></span><span></span><span></span></div>
             <div class="bubble bot b4">
               <span class="bubble-author">Garbanzo Bean</span>
-              🚇 Red Line is running with <strong>minor delays</strong> — an earlier signal problem at Harvard.
+              🚇 Red Line is running with <strong>minor delays</strong> after an earlier signal problem at Harvard.
               Next trains at Davis: <strong>4 min</strong> (Alewife) / <strong>7 min</strong> (Braintree). You'll make Porter fine. 🫘
               <span class="bubble-time">6:42 PM</span>
             </div>
@@ -100,8 +98,14 @@
       <section class="deploy" id="deploy" aria-label="Deployment">
         <div class="deploy-inner">
           <div class="deploy-copy">
-            <h2>Deployed before your coffee cools</h2>
-            <p>Three commands on any Docker host — a Raspberry Pi 5 is plenty. Your keys, your data, your volumes.</p>
+            <h2>Deployment</h2>
+            <p>Hosting Options</p>
+          <ul class="deploy-ways">
+            <li>Docker</li>
+            <li>Kubernetes</li>
+            <li>Amazon Web Services</li>
+            <li>Linux, WSL</li>
+          </ul>
           </div>
           <pre class="deploy-code"><code><span class="c"># 1. configure</span>
 git clone https://github.com/jjhickman/garbanzo-bot.git
@@ -113,61 +117,54 @@ docker compose up -d</code></pre>
 
       <!-- ============ Features ============ -->
       <section class="features" id="features" aria-label="Features">
-        <h2>What it does all day</h2>
+        <h2>Features</h2>
         <div class="feature-grid">
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M4 12h16M4 18h10" /><circle cx="17" cy="6" r="2.6" /><circle cx="8" cy="18" r="2.6" /></svg>
-            <h3>Answers with live data</h3>
-            <p>Native tool calling: ask about transit, weather, venues, news, or books in plain language — the model pulls real data mid-reply. No commands to memorize.</p>
+            <h3>Live lookups</h3>
+            <p>Transit, weather, news, venues, books. Requested in any natural language!</p>
           </article>
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 1 7 7c0 2.5-1.2 4-2.5 5.5-.9 1-1.5 1.7-1.5 3.5h-6c0-1.8-.6-2.5-1.5-3.5C6.2 14 5 12.5 5 10a7 7 0 0 1 7-7z" /><path d="M9.5 22h5" /></svg>
-            <h3>Remembers your community</h3>
-            <p>Durable facts — who runs book club, where trivia happens — extracted automatically or curated by you, recalled across every conversation with vector retrieval.</p>
+            <h3>Group memory</h3>
+            <p>Add community facts yourself or collect them automatically. Everything is viewable and removable.</p>
           </article>
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M3 9h18M8 3v4M16 3v4M8 14l2.5 2.5L15 12" /></svg>
-            <h3>Keeps plans on track</h3>
-            <p>Detects event proposals, enriches them with weather and transit, and nudges the chat before start time. Welcomes intros. Recaps the week for you every Sunday.</p>
+            <h3>Events</h3>
+            <p>Weather and transit attached to meetup plans. A reminder before start time. Sunday recap for owners.</p>
           </article>
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z" /><path d="M9 12l2 2 4-4.5" /></svg>
-            <h3>Moderates without drama</h3>
-            <p>Pattern + AI moderation with human-in-the-loop owner alerts, strike tracking, and rate limits. Edits can't dodge it — changed messages get re-checked.</p>
+            <h3>Moderation</h3>
+            <p>Flags go to the owner for review. Edited messages get re-checked. Strikes tracked per member. No automatic punishment.</p>
           </article>
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v5a6 6 0 0 1-12 0z" /><path d="M18 5h2.5a1 1 0 0 1 1 1.2C21 9 19.5 10.5 18 10.8M6 5H3.5a1 1 0 0 0-1 1.2C3 9 4.5 10.5 6 10.8M12 15v3M8 21h8M9 18h6" /></svg>
-            <h3>Routes across providers</h3>
-            <p>OpenAI GPT-5 family, Claude, Gemini, Bedrock, OpenRouter — configurable order with automatic failover, per-provider models, prompt caching, and cost tracking. Optional local Ollama for small talk.</p>
+            <h3>AI providers</h3>
+            <p>OpenAI, Anthropic, Google, AWS Bedrock, OpenRouter. Any order, automatic failover. Cost readout included. Ollama for local replies.</p>
           </article>
           <article class="feature">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18" /><path d="M6 20v-6M11 20V9M16 20v-9M21 20V5" /></svg>
-            <h3>Shows you everything</h3>
-            <p>A token-gated admin page for spend and activity, Prometheus metrics, and a pre-provisioned Grafana dashboard — one compose profile away, on the same Pi.</p>
+            <h3>Monitoring</h3>
+            <p>Prometheus and Grafana powered dashboards for observing community activity, token spend, and more.</p>
           </article>
         </div>
       </section>
 
       <!-- ============ Real screenshots ============ -->
       <section class="gallery" id="gallery" aria-label="Real screenshots">
-        <h2>Real outputs, not mockups</h2>
-        <p class="gallery-sub">Straight from a production deployment on WhatsApp.</p>
+        <h2>Gallery</h2>
         <div class="shots">
           <figure>
             <a href="./assets/screenshots/introductions-welcome.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/introductions-welcome.jpg" alt="Garbanzo writing a personal welcome to a new member's introduction" loading="lazy" /></a>
-            <figcaption>Personal welcomes for every intro</figcaption>
+            <figcaption>New member greetings</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/mbta-alerts.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/mbta-alerts.jpg" alt="Garbanzo reporting live MBTA transit alerts" loading="lazy" /></a>
-            <figcaption>Live transit status on request</figcaption>
+            <figcaption>Local Transit Updates</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/weather-report.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/weather-report.jpg" alt="Garbanzo giving a local weather report" loading="lazy" /></a>
-            <figcaption>Local weather for planning</figcaption>
+            <figcaption>Local Weather updates</figcaption>
           </figure>
           <figure>
             <a href="./assets/screenshots/dnd-character.jpg" target="_blank" rel="noreferrer"><img src="./assets/screenshots/dnd-character.jpg" alt="Garbanzo generating a Dungeons and Dragons character sheet PDF" loading="lazy" /></a>
-            <figcaption>D&amp;D sheets as real PDFs</figcaption>
+            <figcaption>D&amp;D (5e) character sheet generation, requested in natural language</figcaption>
           </figure>
         </div>
       </section>
@@ -185,10 +182,9 @@ docker compose up -d</code></pre>
 
       <!-- ============ Support ============ -->
       <section class="support" aria-label="Support the project">
-        <h2>Back the roadmap</h2>
+        <h2>Support</h2>
         <p>
-          Garbanzo is an independent open-source project. Support funds provider integrations, AI workflow
-          improvements, and reliable releases.
+          Maintained in spare time. Contributions cover API costs.
         </p>
         <div class="tiers">
           <div class="tier"><h3>Bean Sprout</h3><p>Roadmap updates and supporter shout-outs.</p><span>For individual supporters</span></div>
@@ -204,7 +200,7 @@ docker compose up -d</code></pre>
 
     <footer class="site-footer">
       <div class="footer-inner">
-        <p class="footer-brand">🫘 Garbanzo — built for communities and small teams. Apache-2.0.</p>
+        <p class="footer-brand">🫘 Garbanzo · Apache-2.0</p>
         <nav aria-label="Footer">
           <a href="https://github.com/jjhickman/garbanzo-bot" target="_blank" rel="noreferrer">GitHub</a>
           <a href="https://hub.docker.com/r/jjhickman/garbanzo" target="_blank" rel="noreferrer">Docker Hub</a>
