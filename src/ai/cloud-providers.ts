@@ -176,7 +176,12 @@ export function buildProviderRequest(
     // hidden reasoning as output — cap with max_completion_tokens and bound
     // the reasoning spend explicitly.
     body.max_completion_tokens = config.CLOUD_MAX_TOKENS;
-    body.reasoning_effort = config.OPENAI_REASONING_EFFORT;
+    // chat/completions 400s when reasoning_effort is combined with function
+    // tools ("use /v1/responses instead"), so with tools attached the model
+    // runs at its default reasoning depth.
+    if (!tools || tools.length === 0) {
+      body.reasoning_effort = config.OPENAI_REASONING_EFFORT;
+    }
   } else {
     body.max_tokens = config.CLOUD_MAX_TOKENS;
   }

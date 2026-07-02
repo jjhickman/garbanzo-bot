@@ -7,11 +7,21 @@ import { afterEach, describe, expect, it } from 'vitest';
 const { buildProviderRequest, isOpenAiReasoningModel } = await import('../src/ai/cloud-providers.js');
 const { config } = await import('../src/utils/config.js');
 
-function build(provider: 'openai' | 'openrouter') {
-  const req = buildProviderRequest(provider, 'sys', 'hello');
+function build(
+  provider: 'openai' | 'openrouter',
+  tools?: Parameters<typeof buildProviderRequest>[4],
+) {
+  const req = buildProviderRequest(provider, 'sys', 'hello', undefined, tools);
   if (!req) throw new Error(`expected ${provider} request to be built`);
   return req;
 }
+
+const dummyTool = {
+  name: 'get_weather',
+  description: 'd',
+  parameters: { type: 'object' as const, properties: {}, required: [] },
+  execute: async () => 'ok',
+};
 
 const original = {
   key: config.OPENAI_API_KEY,
@@ -65,6 +75,16 @@ describe('OpenAI reasoning-model request shape', () => {
 
     const req = build('openai');
     expect(req.body.reasoning_effort).toBe('minimal');
+  });
+
+  it('omits reasoning_effort when function tools are attached (chat/completions rejects the combination)', () => {
+    config.OPENAI_API_KEY = 'sk-test';
+    config.OPENAI_MODEL = 'gpt-5.4-mini';
+
+    const req = build('openai', [dummyTool]);
+    expect(req.body.max_completion_tokens).toBe(config.CLOUD_MAX_TOKENS);
+    expect(req.body.reasoning_effort).toBeUndefined();
+    expect(req.body.tools).toBeDefined();
   });
 
   it('leaves the OpenRouter path on max_tokens regardless of model name', () => {
