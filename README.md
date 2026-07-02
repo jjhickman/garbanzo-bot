@@ -216,6 +216,8 @@ This is what Garbanzo looks like on a basic Kuma HTTP monitor (tracking `/health
 </p>
 The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status. Use `/health/ready` for alerting on disconnected or stale chat state. Deep Kuma settings and LAN firewall examples: [docs/INFRASTRUCTURE.md#monitoring--lan-firewall](docs/INFRASTRUCTURE.md#monitoring--lan-firewall)
 
+Nightly off-machine backups of the WhatsApp credentials + database (systemd timer, verification, retention, one-command restore): [docs/BACKUPS.md](docs/BACKUPS.md)
+
 ## Customizing for Your Community
 Garbanzo was built for Boston, but the architecture is locale-agnostic. Customize the persona, transit provider, weather defaults, groups, mention patterns, icebreakers, and memory facts.
 Guide: [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)

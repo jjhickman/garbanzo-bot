@@ -112,4 +112,22 @@ describe('ops scripts', () => {
     expect(lynisOut).toContain('Usage: bash scripts/host/lynis-audit.sh');
     expect(fail2banOut).toContain('Usage: bash scripts/host/fail2ban-bootstrap.sh');
   });
+
+  it('backup scripts show usage with --help', () => {
+    const backupOut = runBashScript(join(root, 'scripts/host/garbanzo-backup.sh'), ['--help']);
+    const restoreOut = runBashScript(join(root, 'scripts/host/garbanzo-restore.sh'), ['--help']);
+
+    expect(backupOut).toContain('Usage: bash scripts/host/garbanzo-backup.sh');
+    expect(restoreOut).toContain('garbanzo-restore.sh');
+    expect(restoreOut).toContain('--promote-snapshot');
+  });
+
+  it('backup installer renders systemd units with --dry-run', () => {
+    const out = runBashScript(join(root, 'scripts/host/backup-install.sh'), ['--dry-run']);
+
+    expect(out).toContain('garbanzo-backup.service');
+    expect(out).toContain('OnCalendar=*-*-* 03:30:00');
+    expect(out).toContain('Persistent=true');
+    expect(out).toContain('BACKUP_DEST=/media/josh/T9/garbanzo-backups');
+  });
 });
