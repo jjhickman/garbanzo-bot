@@ -159,7 +159,7 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.registries.outputs.dockerhub_image }}
-          short-description: AI chat ops platform with provider routing, integrations, and Docker-first self-hosting.
+          short-description: Self-hosted AI community bot - LLM routing, tool calling, memory, and built-in observability.
           readme-filepath: ./docs/DOCKERHUB_OVERVIEW.md
 
   scan-image:
