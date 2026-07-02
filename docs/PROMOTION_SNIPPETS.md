@@ -1,5 +1,5 @@
 # Promotion Snippets
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
 Use these short posts when announcing Garbanzo updates.

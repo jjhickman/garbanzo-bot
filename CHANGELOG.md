@@ -1,5 +1,5 @@
 # Changelog
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
 All notable changes to Garbanzo are documented here.
@@ -77,7 +77,7 @@ First stable release. Every item below shipped as an individually reviewed PR (#
 - **Vector memory (Phase 2)** — contextualized embedding headers, OpenAI `text-embedding-3-small` provider with deterministic fallback, session embedding backfill job, lightweight post-retrieval reranker, offline eval harness with synthetic QA set and recall@K metrics.
 - **Embedding provider router** (`src/utils/embedding-provider.ts`) — graceful fallback from OpenAI to deterministic embeddings; logged once per provider to avoid log spam.
 - **Embedding pipeline metrics** — provider breakdown, latency, fallback counts exposed in stats and digest.
-- **Unified demo server** — single-service app at `demo.garbanzobot.com` with model transparency UI, platform switcher (Slack/Discord), and Turnstile protection.
+- **Unified demo server** — single-service app at `garbanzobot.com` with model transparency UI, platform switcher (Slack/Discord), and Turnstile protection.
 - **Slack professional persona** (`docs/personas/slack.md`) loaded at runtime for Slack-mode responses.
 - **CDK demo embedding overrides** — `demoVectorEmbeddingProvider`, `demoVectorEmbeddingModel` stack parameters; demo defaults to OpenAI embeddings.
 - **Feature API key wiring in CDK/preflight** — `featureSecretArn` support for GOOGLE_API_KEY, MBTA_API_KEY, NEWSAPI_KEY, BRAVE_SEARCH_API_KEY in ECS task definitions.

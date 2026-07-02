@@ -1,5 +1,5 @@
 # Garbanzo
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
@@ -9,6 +9,11 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 Garbanzo is an AI chat operations platform for communities and small teams. It combines multi-provider LLM routing, practical automations, and Docker-first deployment so you can run useful AI workflows directly in group chat.
+
+**Website:** [garbanzobot.com](https://garbanzobot.com)
+<p align="center">
+  <a href="https://garbanzobot.com"><img src="docs/assets/screenshots/site/garbanzobot-home.png" width="900" alt="garbanzobot.com — hero with a live WhatsApp-style chat panel showing Garbanzo answering a transit question" /></a>
+</p>
 
 ## Highlights
 - Multi-provider LLM routing (OpenAI GPT-5 via the Responses API, Claude, Gemini, Bedrock, OpenRouter) with failover, native tool calling, and optional local Ollama for low-cost/simple traffic.
@@ -158,6 +163,10 @@ If you want the fastest non-chat test path first, run Slack demo mode and post a
 - `!release internal <notes>` — keep update operator-only (no broadcast)
 - `!strikes` — view moderation strike counts
 - `!digest` — preview daily activity summary
+- `!recap` — weekly community recap (also DM'd every Sunday evening)
+- `!events` / `!events cancel <id>` — manage upcoming event reminders
+- `!whatsapp status|pause|resume|held|release|discard` — anti-ban outbound safety controls
+- `!support [broadcast]` — share support links (optionally to all groups)
 - `!catchup intros` — recent introduction summaries
 
 ## Configuration
@@ -181,14 +190,14 @@ Setup details: [docs/PLATFORMS.md](docs/PLATFORMS.md)
 
 | Provider | Primary Strength | Typical Role in Routing |
 |----------|------------------|-------------------------|
-| Anthropic Claude | nuanced reasoning, long-form quality | quality-first primary or complex fallback |
-| OpenAI | broad capability and tool reliability | balanced primary or secondary |
+| Anthropic Claude | nuanced reasoning, long-form quality | quality fallback or alternate primary |
+| OpenAI | GPT-5 family via the Responses API, strong tool calling | default primary (`openai,anthropic`) |
 | Gemini | speed and cost efficiency | fast primary for high-volume traffic |
 | OpenRouter | model marketplace flexibility | portability/fallback layer |
 | AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
 | Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
 OpenAI supports `OPENAI_AUTH_MODE=apikey` by default. Experimental `OPENAI_AUTH_MODE=oauth` can sign in with ChatGPT and store tokens in `data/openai-oauth.json`.
-> Warning: OAuth mode is unofficial, uses a private ChatGPT backend, can break without notice, and should never be your only provider.
+> Warning: OAuth mode is unofficial and against OpenAI's ToS — it uses a private ChatGPT backend (SSE) and can break without notice. Verified working 2026-07-02, but never make it your only provider.
 Headless/manual auth and Docker token injection: [docs/CONFIGURATION.md#openai-oauth-experimental](docs/CONFIGURATION.md#openai-oauth-experimental)
 
 ## Deployment
@@ -203,8 +212,8 @@ curl http://127.0.0.1:3001/health
 Pinned production pull:
 
 ```bash
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.0.4 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.0.4 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development build:
@@ -214,15 +223,28 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
 Cross-platform portable binaries are published on version tags (`v*`) as release assets. Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
-This is what Garbanzo looks like on a basic Kuma HTTP monitor (tracking `/health`):
+### Monitoring & Observability
+
+Three built-in layers, all optional (guide: [docs/MONITORING.md](docs/MONITORING.md)):
+
+1. **`/admin` page** — token-gated usage & cost snapshot (daily AI spend, provider mix, per-group activity, anti-ban counters) served from the health port. Zero setup.
+2. **Prometheus + Grafana** — a full stack that runs beside the bot on the same host (`docker compose --profile monitoring up -d`), with a pre-provisioned **Community Ops** dashboard: messages and replies by group, AI cost by provider, tool usage, anti-ban trends, and backup integrity, over 30 days of history.
+
+<p align="center">
+  <img src="docs/assets/screenshots/site/grafana-community-ops.png" width="900" alt="Pre-provisioned Grafana Community Ops dashboard for Garbanzo" />
+</p>
+
+3. **Uptime Kuma** (or any HTTP monitor) — `/health/ready` returns non-200 the moment WhatsApp disconnects, ideal for push alerting:
+
 <p align="center">
   <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
 </p>
-The health endpoint returns JSON with connection status, uptime, memory usage, message staleness, and backup integrity status. Use `/health/ready` for alerting on disconnected or stale chat state. Deep Kuma settings and LAN firewall examples: [docs/INFRASTRUCTURE.md#monitoring--lan-firewall](docs/INFRASTRUCTURE.md#monitoring--lan-firewall)
+
+The `/health` endpoint reports connection status, uptime, memory, message staleness, and backup integrity as JSON. Deep Kuma settings and LAN firewall examples: [docs/INFRASTRUCTURE.md#monitoring--lan-firewall](docs/INFRASTRUCTURE.md#monitoring--lan-firewall)
+
+### Backups
 
 Nightly off-machine backups of the WhatsApp credentials + database (systemd timer, verification, retention, one-command restore): [docs/BACKUPS.md](docs/BACKUPS.md)
-
-Full observability stack — a pre-provisioned Grafana dashboard (community activity, AI cost by provider, tool usage, anti-ban trends, backups) over Prometheus, running beside the bot with `docker compose --profile monitoring up -d`: [docs/MONITORING.md](docs/MONITORING.md)
 
 ## Customizing for Your Community
 Garbanzo was built for Boston, but the architecture is locale-agnostic. Customize the persona, transit provider, weather defaults, groups, mention patterns, icebreakers, and memory facts.
@@ -250,7 +272,7 @@ npm run start        # Production (from dist/)
 ## Docs
 Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md)
 
-Operations: [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
+Operations: [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
 
 Design & internals: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [IMPROVEMENTS.md](docs/IMPROVEMENTS.md), [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md), [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md), [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md), [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 

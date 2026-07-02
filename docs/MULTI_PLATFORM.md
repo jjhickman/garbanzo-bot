@@ -1,5 +1,5 @@
 # Multi-Platform Roadmap (Design)
-> Live demo: https://demo.garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
 Garbanzo currently ships a production WhatsApp runtime and local demo runtimes for Slack/Discord adapter verification.
