@@ -20,21 +20,40 @@ function waMessage(key: Record<string, unknown>, text = 'hello'): WAMessage {
 const sock = {} as WASocket;
 
 describe('LID sender resolution', () => {
-  it('resolves a LID group participant to the phone JID via participantPn', () => {
+  it('resolves a LID group participant to the phone JID via participantAlt', () => {
     const msg = waMessage({
       remoteJid: '120363423357339667@g.us',
       participant: '184468458393129@lid',
-      participantPn: '15551234567@s.whatsapp.net',
+      participantAlt: '15551234567@s.whatsapp.net',
       id: 'A1',
     });
     expect(resolveWhatsAppSenderJid(msg, '120363423357339667@g.us')).toBe('15551234567@s.whatsapp.net');
   });
 
-  it('resolves a LID DM sender to the phone JID via senderPn', () => {
+  it('resolves a LID group participant to the phone JID via legacy participantPn', () => {
+    const msg = waMessage({
+      remoteJid: '120363423357339667@g.us',
+      participant: '184468458393129@lid',
+      participantPn: '15551234567@s.whatsapp.net',
+      id: 'A1-legacy',
+    });
+    expect(resolveWhatsAppSenderJid(msg, '120363423357339667@g.us')).toBe('15551234567@s.whatsapp.net');
+  });
+
+  it('resolves a LID DM sender to the phone JID via remoteJidAlt', () => {
+    const msg = waMessage({
+      remoteJid: '184468458393129@lid',
+      remoteJidAlt: '15551234567@s.whatsapp.net',
+      id: 'A2',
+    });
+    expect(resolveWhatsAppSenderJid(msg, '184468458393129@lid')).toBe('15551234567@s.whatsapp.net');
+  });
+
+  it('resolves a LID DM sender to the phone JID via legacy senderPn', () => {
     const msg = waMessage({
       remoteJid: '184468458393129@lid',
       senderPn: '15551234567@s.whatsapp.net',
-      id: 'A2',
+      id: 'A2-legacy',
     });
     expect(resolveWhatsAppSenderJid(msg, '184468458393129@lid')).toBe('15551234567@s.whatsapp.net');
   });
@@ -60,7 +79,7 @@ describe('LID sender resolution', () => {
   it('normalizeWhatsAppInboundMessage uses the resolved phone JID but keeps LID chatId for reply routing', () => {
     const msg = waMessage({
       remoteJid: '184468458393129@lid',
-      senderPn: '15551234567@s.whatsapp.net',
+      remoteJidAlt: '15551234567@s.whatsapp.net',
       id: 'A5',
     });
     const inbound = normalizeWhatsAppInboundMessage(sock, msg);

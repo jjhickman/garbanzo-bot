@@ -10,6 +10,11 @@ import type { InboundMessage } from '../../core/inbound-message.js';
 import type { MessageRef } from '../../core/message-ref.js';
 import { createWhatsAppInboundMessageRef } from './message-ref.js';
 
+type MessageKeyWithLegacyPn = WAMessage['key'] & {
+  senderPn?: string;
+  participantPn?: string;
+};
+
 export interface WhatsAppInbound extends InboundMessage {
   platform: 'whatsapp';
 
@@ -67,17 +72,17 @@ export function extractWhatsAppMentionedJids(content: WAMessageContent | undefin
 /**
  * Resolve the sender to a phone-number JID when WhatsApp delivers a LID
  * (privacy alias, `<n>@lid`). The message key carries the real phone JID in
- * `participantPn` (groups) / `senderPn` (DMs); preferring it keeps owner
- * matching, rate-limit exemption, and profile/strike keys stable regardless
- * of which form WhatsApp chose for this message.
+ * `participantAlt` (groups) / `remoteJidAlt` (DMs) in Baileys v7, with
+ * `participantPn` / `senderPn` retained as v6 fallbacks. Preferring it keeps
+ * owner matching, rate-limit exemption, and profile/strike keys stable
+ * regardless of which form WhatsApp chose for this message.
  */
 export function resolveWhatsAppSenderJid(msg: WAMessage, chatId: string): string {
-  const key = msg.key;
+  const key = msg.key as MessageKeyWithLegacyPn;
   const sender = getSenderJid(chatId, key.participant);
   if (!isLidJid(sender)) return sender;
-  if (isGroupJid(chatId) && key.participantPn) return key.participantPn;
-  if (!isGroupJid(chatId) && key.senderPn) return key.senderPn;
-  return sender;
+  if (isGroupJid(chatId)) return key.participantAlt ?? key.participantPn ?? sender;
+  return key.remoteJidAlt ?? key.senderPn ?? sender;
 }
 
 // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT — an incoming edit arrives

@@ -1,4 +1,4 @@
-import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
+import type { GroupParticipant, WASocket, WAMessage } from '@whiskeysockets/baileys';
 
 import { logger } from '../../middleware/logger.js';
 import { isGroupEnabled, getGroupName, getEnabledGroupJidByName, isFeatureEnabled } from '../../core/groups-config.js';
@@ -8,6 +8,11 @@ import { setRetryHandler, type RetryEntry } from '../../middleware/retry.js';
 import { getResponse } from '../../core/response-router.js';
 
 import { processWhatsAppRawMessage } from './processor.js';
+
+function participantJid(participant: GroupParticipant | string): string {
+  if (typeof participant === 'string') return participant;
+  return participant.phoneNumber ?? participant.id;
+}
 
 /**
  * Register WhatsApp socket event handlers.
@@ -51,7 +56,7 @@ export function registerWhatsAppHandlers(sock: WASocket): void {
     );
 
     if (update.action === 'add' && isGroupEnabled(update.id)) {
-      const welcome = buildWelcomeMessage(update.id, update.participants);
+      const welcome = buildWelcomeMessage(update.id, update.participants.map(participantJid));
       if (welcome) {
         try {
           await sock.sendMessage(update.id, { text: welcome });
