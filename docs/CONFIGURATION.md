@@ -189,8 +189,9 @@ OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
   and `docker compose exec -u root garbanzo chown garbanzo:garbanzo /app/data/openai-oauth.json`.
 
   > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
-  > OAuth client to call OpenAI's private ChatGPT backend, can break without
-  > notice, and is **not validated end-to-end**. It is isolated and always falls
+  > OAuth client to call OpenAI's private ChatGPT backend (SSE streaming) and
+  > can break without notice. Verified end-to-end against a live token on
+  > 2026-07-02. It is isolated and always falls
   > back to the next provider in `AI_PROVIDER_ORDER` on any failure — never make
   > it your only provider. Tokens are stored in `data/openai-oauth.json`
   > (gitignored, mode `0600`). In oauth mode `OPENAI_MODEL` must be a

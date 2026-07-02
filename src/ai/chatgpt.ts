@@ -4,9 +4,10 @@
  *
  * Two auth modes (config.OPENAI_AUTH_MODE):
  * - apikey (default): api.openai.com chat/completions with OPENAI_API_KEY.
- * - oauth (EXPERIMENTAL, ToS-grey): a ChatGPT-subscription token calls the
- *   private ChatGPT Responses backend. Any failure (missing/expired token or a
- *   4xx/5xx) throws so the router fails over to the next provider.
+ * - oauth (EXPERIMENTAL, ToS-grey; verified end-to-end against a live token
+ *   2026-07-02): a ChatGPT-subscription token calls the private ChatGPT
+ *   Responses backend over SSE. Any failure (missing/expired token, 4xx/5xx,
+ *   or a stream error) throws so the router fails over to the next provider.
  */
 
 import { config } from '../utils/config.js';
@@ -15,6 +16,7 @@ import {
   buildOpenAIResponsesRequest,
   buildProviderRequest,
   performHttpRequest,
+  performSseRequest,
   type CloudResponse,
 } from './cloud-providers.js';
 import { callCloudProvider } from './cloud-call.js';
@@ -35,7 +37,8 @@ export async function callChatGPT(
       perform: async (signal) => {
         const { accessToken, accountId } = await getOpenAIAccessToken();
         const req = buildOpenAIResponsesRequest(systemPrompt, userMessage, visionImages, accessToken, accountId);
-        return performHttpRequest(req, signal);
+        // The /wham backend is SSE-only (400 "Stream must be set to true" otherwise).
+        return performSseRequest(req, signal);
       },
     });
   }

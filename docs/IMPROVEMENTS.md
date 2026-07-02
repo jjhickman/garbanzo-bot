@@ -38,7 +38,7 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
 |------|--------|
 | **WhatsApp browser login** (QR via SSE + pairing code, token-gated, `WHATSAPP_LOGIN_MODE`) | ✅ Done — Phase 2 |
 | Remote/headless linking over the network (`HEALTH_BIND_HOST=0.0.0.0` → LAN-IP login URLs + exposure warning; SSH-tunnel documented) | ✅ Done — Phase 2 follow-up |
-| **OpenAI "Sign in with ChatGPT" OAuth** (`OPENAI_AUTH_MODE=oauth`, `npm run openai:login`) | ✅ Done — Phase 3 (**experimental, ToS-grey, fallback-protected**; runtime `/wham` shape unverified against a live token) |
+| **OpenAI "Sign in with ChatGPT" OAuth** (`OPENAI_AUTH_MODE=oauth`, `npm run openai:login`) | ✅ Done — Phase 3 (**experimental, ToS-grey, fallback-protected**; runtime `/wham` verified against a live token 2026-07-02 — the backend is SSE-only, fixed in the same pass) |
 
 ## DX / code quality
 
@@ -60,10 +60,11 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
 
 ## Notes
 
-- **OpenAI OAuth** is isolated and always falls back to the next provider in `AI_PROVIDER_ORDER`; it has
-  **not** been validated end-to-end against a live ChatGPT token and should not be a sole provider.
-  A malformed HTTP-200 `/wham` payload (neither `output_text` nor `output`) now throws → fallback,
-  rather than returning a fake reply.
+- **OpenAI OAuth** is isolated and always falls back to the next provider in `AI_PROVIDER_ORDER`;
+  verified end-to-end against a live ChatGPT token (2026-07-02). The `/wham` backend rejects
+  non-streaming requests (400 "Stream must be set to true"), so the runtime speaks SSE and treats
+  stream failures or an output-less stream as errors → fallback, rather than returning a fake reply.
+  Still ToS-grey — do not make it the sole provider.
 - **`/metrics` token gate** (Sec-4) is a behavior change for existing scrapers: append `?token=<T>` or
   pin `WHATSAPP_LOGIN_TOKEN`.
 - **DX-10 Postgres coverage:** `tests/postgres-backend.test.ts` requires a live `DATABASE_URL` and is
