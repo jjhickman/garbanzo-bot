@@ -45,12 +45,39 @@ curl http://127.0.0.1:3001/health
 docker compose logs -f garbanzo
 ```
 
+## Updating & Auto-Update
+
+Manual (recommended while you want a human in the loop):
+
+```bash
+# with APP_VERSION pinned in .env: bump it, then
+docker compose pull && docker compose up -d
+# running `latest`: the same two commands pick up the newest release
+```
+
+`docker compose up -d` recreates only what changed — no `down` needed, and
+never `down -v` (it deletes the auth/database volumes).
+
+Optional hands-off updates via Watchtower: uncomment the `watchtower`
+service in `docker-compose.yml` (label-filtered so it only touches
+garbanzo, nightly at 05:30, prunes old images). Two things to accept
+before enabling:
+
+- It only acts when the container runs the `latest` tag. A pinned
+  `APP_VERSION` (the safer default) makes Watchtower a no-op — pick one
+  model, don't mix them.
+- A bad release deploys itself while you sleep. Keep the `/health`
+  monitor (Kuma) alerting and backups (see below) enabled if you turn
+  this on; rollback is `APP_VERSION=<previous> docker compose up -d`.
+
 ## Storage & Backups
 
 - Runtime data lives in `data/` (SQLite by default)
 - Auth state lives in `baileys_auth/`
 - Nightly backups are written to `data/backups/`
-- Backups should be copied to external storage with encryption in production
+- Backups should be copied to external storage with encryption in production —
+  the shipped host-side path (systemd timer, verification, restore runbook) is
+  documented in [BACKUPS.md](BACKUPS.md)
 
 ## Capacity Planning (Pragmatic)
 
