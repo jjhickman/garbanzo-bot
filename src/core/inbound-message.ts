@@ -16,6 +16,13 @@ export interface InboundMessage {
   /** Platform message id, when available. */
   messageId?: string;
 
+  /**
+   * When this message is an edit of an earlier message, the original
+   * message's id. Edits re-run moderation and intro classification against
+   * the new content but never trigger replies/acknowledgments.
+   */
+  editOfMessageId?: string;
+
   /** True when the message was sent by the bot itself. */
   fromSelf: boolean;
 

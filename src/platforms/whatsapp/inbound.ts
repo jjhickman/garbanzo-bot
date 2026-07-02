@@ -80,11 +80,34 @@ export function resolveWhatsAppSenderJid(msg: WAMessage, chatId: string): string
   return sender;
 }
 
+// proto.Message.ProtocolMessage.Type.MESSAGE_EDIT — an incoming edit arrives
+// as a protocolMessage envelope that normalizeMessageContent does NOT unwrap
+// (it only unwraps ephemeral/viewOnce/editedMessage wrappers on outbound).
+const PROTOCOL_MESSAGE_EDIT = 14;
+
+/**
+ * Detect an incoming message edit and unwrap the replacement content.
+ * Returns the edited content + the original message id, or null when the
+ * message is not an edit.
+ */
+export function unwrapWhatsAppEdit(
+  content: WAMessageContent | undefined,
+): { content: WAMessageContent | undefined; editOfMessageId: string | undefined } | null {
+  const protocol = content?.protocolMessage;
+  if (!protocol || protocol.type !== PROTOCOL_MESSAGE_EDIT || !protocol.editedMessage) return null;
+  return {
+    content: normalizeMessageContent(protocol.editedMessage),
+    editOfMessageId: protocol.key?.id ?? undefined,
+  };
+}
+
 export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage): WhatsAppInbound | null {
   const chatId = msg.key.remoteJid;
   if (!chatId) return null;
 
-  const content = unwrapWhatsAppMessage(msg);
+  let content = unwrapWhatsAppMessage(msg);
+  const edit = unwrapWhatsAppEdit(content);
+  if (edit) content = edit.content;
   const text = extractWhatsAppText(content);
   const senderId = resolveWhatsAppSenderJid(msg, chatId);
 
@@ -99,6 +122,7 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     chatId,
     senderId,
     messageId: msg.key.id ?? undefined,
+    editOfMessageId: edit?.editOfMessageId,
     fromSelf: !!msg.key.fromMe,
     isStatusBroadcast: chatId === 'status@broadcast',
     isGroupChat: isGroupJid(chatId),
