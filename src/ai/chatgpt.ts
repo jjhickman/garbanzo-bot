@@ -21,6 +21,8 @@ import {
 } from './cloud-providers.js';
 import { callCloudProvider } from './cloud-call.js';
 import { getOpenAIAccessToken } from './openai-oauth.js';
+import { runOpenAiCompatToolLoop } from './tool-loop.js';
+import { getEnabledTools } from './tools.js';
 
 /**
  * Call OpenAI as a cloud fallback.
@@ -43,7 +45,16 @@ export async function callChatGPT(
     });
   }
 
-  const req = buildProviderRequest('openai', systemPrompt, userMessage, visionImages);
+  const tools = config.AI_TOOL_CALLING && (!visionImages || visionImages.length === 0)
+    ? getEnabledTools()
+    : [];
+  const req = buildProviderRequest(
+    'openai',
+    systemPrompt,
+    userMessage,
+    visionImages,
+    tools.length > 0 ? tools : undefined,
+  );
   if (!req) {
     throw new Error('OPENAI_API_KEY not configured');
   }
@@ -51,6 +62,8 @@ export async function callChatGPT(
   return callCloudProvider({
     provider: 'openai',
     model: req.model,
-    perform: (signal) => performHttpRequest(req, signal),
+    perform: (signal) => tools.length > 0
+      ? runOpenAiCompatToolLoop(req, tools, signal)
+      : performHttpRequest(req, signal),
   });
 }

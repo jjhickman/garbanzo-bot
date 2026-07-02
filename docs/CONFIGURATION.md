@@ -18,6 +18,8 @@ Copy `.env.example` to `.env` and configure:
 | `OPENAI_PRICING_INPUT_PER_M` | No | OpenAI input pricing (USD per 1M tokens; default `0.75` = gpt-5.4-mini) |
 | `OPENAI_PRICING_OUTPUT_PER_M` | No | OpenAI output pricing (USD per 1M tokens; default `4.5` = gpt-5.4-mini) |
 | `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |
+| `AI_TOOL_CALLING` | No | Enable native LLM tool calling for OpenRouter, Anthropic, and OpenAI API-key mode (default: `false`) |
+| `AI_TOOL_MAX_ITERATIONS` | No | Max tool-call rounds per response, 1-5 (default: `3`) |
 | `GEMINI_MODEL` | No | Gemini model override (default: `gemini-1.5-flash`) |
 | `GEMINI_PRICING_INPUT_PER_M` | No | Gemini input pricing (USD per 1M tokens, for cost tracking) |
 | `GEMINI_PRICING_OUTPUT_PER_M` | No | Gemini output pricing (USD per 1M tokens, for cost tracking) |
@@ -131,6 +133,18 @@ Hybrid local/cloud routing (keep simple prompts local):
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 AI_PROVIDER_ORDER=openrouter,gemini,openai
 ```
+
+## Native LLM Tool Calling
+
+`AI_TOOL_CALLING=false` by default. When enabled, OpenRouter, Anthropic, and
+OpenAI API-key mode can call configured Garbanzo integrations while drafting a
+reply. That lets a member ask `@garbanzo is the L running?` and get live transit
+data without needing `!transit`.
+
+Available tools mirror existing feature handlers: weather and venue search need
+`GOOGLE_API_KEY`, transit needs `MBTA_API_KEY`, news needs `NEWSAPI_KEY`, and
+book lookup plus community memory search are available without extra API keys.
+`AI_TOOL_MAX_ITERATIONS` limits tool-call rounds per model response from 1 to 5.
 
 ## Group Configuration
 
