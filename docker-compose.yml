@@ -59,6 +59,22 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # Optional: automatic image updates via Watchtower.
+  # Only meaningful when running the `latest` tag — with a pinned APP_VERSION
+  # Watchtower has nothing to do, which makes pinning the safe default.
+  # Tradeoff: a bad release deploys itself. See docs/INFRASTRUCTURE.md
+  # ("Updating & Auto-Update") before enabling.
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: garbanzo-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --label-enable --cleanup --schedule "0 30 5 * * *"
+  # (and add to the garbanzo service:)
+  #   labels:
+  #     - com.centurylinklabs.watchtower.enable=true
+
 volumes:
   baileys_auth:
     name: garbanzo-bot-auth
