@@ -15,6 +15,7 @@ Copy `.env.example` to `.env` and configure:
 | `ANTHROPIC_PROMPT_CACHING` | No | Mark the static persona system prompt cacheable so repeat calls read it at ~10% input price (default: `true`) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: `anthropic/claude-sonnet-4-5`) |
 | `OPENAI_MODEL` | No | OpenAI model override (default: `gpt-5.4-mini`; oauth mode uses a ChatGPT-backend slug) |
+| `OPENAI_REASONING_EFFORT` | No | GPT-5/o-series reasoning depth on chat replies: `minimal`/`low`/`medium`/`high` (default: `low`; bounds hidden reasoning-token spend) |
 | `OPENAI_PRICING_INPUT_PER_M` | No | OpenAI input pricing (USD per 1M tokens; default `0.75` = gpt-5.4-mini) |
 | `OPENAI_PRICING_OUTPUT_PER_M` | No | OpenAI output pricing (USD per 1M tokens; default `4.5` = gpt-5.4-mini) |
 | `OPENAI_AUTH_MODE` | No | `apikey` (default) or `oauth` ("Sign in with ChatGPT", experimental — see below) |

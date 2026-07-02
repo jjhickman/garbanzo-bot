@@ -6,6 +6,12 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-07-02
+
+### Fixed
+
+- **OpenAI GPT-5-family request shape** — the chat/completions path sent `max_tokens`, which GPT-5-series/o-series reasoning models reject; they now get `max_completion_tokens` plus an explicit `reasoning_effort` (new env `OPENAI_REASONING_EFFORT`, default `low`) so hidden reasoning-token spend is bounded. Older OpenAI models and the OpenRouter path keep `max_tokens`; the OAuth path is untouched.
+
 ## [1.0.0] — 2026-07-02
 
 First stable release. Every item below shipped as an individually reviewed PR (#183–#202) and runs in production on a Raspberry Pi 5.
