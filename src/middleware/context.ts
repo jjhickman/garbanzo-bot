@@ -21,6 +21,7 @@ import {
   searchRelevantSessionSummaries,
   type DbMessage,
 } from '../utils/db.js';
+import { indexMessage } from '../utils/vector-memory.js';
 import { rerankCandidates } from '../utils/reranker.js';
 import { logger } from './logger.js';
 import { config } from '../utils/config.js';
@@ -62,6 +63,9 @@ export async function recordMessage(
   text: string,
 ): Promise<void> {
   await storeMessage(chatJid, sender, text);
+  const createdAt = Math.floor(Date.now() / 1000);
+  void indexMessage({ chatJid, refId: `${createdAt}:${sender}`, sender, text, createdAt })
+    .catch((err) => logger.warn({ err }, 'message vector index failed'));
 }
 
 /**

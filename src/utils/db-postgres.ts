@@ -8,6 +8,7 @@ import { PROJECT_ROOT, config } from './config.js';
 import { embedTextDeterministic, toPgvectorLiteral } from './text-embedding.js';
 import { embedTextForVectorSearch } from './embedding-provider.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
+import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
@@ -315,6 +316,13 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     const participants = parseJsonArray(session.participants);
     const summary = summarizeSession(messagesRes.rows.map(mapDbMessage), participants);
+    const embeddingInput = buildContextualizedEmbeddingInput(summary.summaryText, {
+      chatJid,
+      startedAt,
+      endedAt,
+      participants,
+      topicTags: summary.topicTags,
+    });
 
     await client.query(
       `UPDATE conversation_sessions
@@ -331,13 +339,6 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     );
 
     if (pgvectorEnabled && shouldVectorizeText(summary.summaryText)) {
-      const embeddingInput = buildContextualizedEmbeddingInput(summary.summaryText, {
-        chatJid,
-        startedAt,
-        endedAt,
-        participants,
-        topicTags: summary.topicTags,
-      });
       const embeddingResult = await embedTextForVectorSearch(embeddingInput, CONTEXT_VECTOR_DIMENSIONS);
       const vectorLiteral = toPgvectorLiteral(embeddingResult.vector);
       await client.query(
@@ -356,6 +357,14 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     }
 
     recordSessionSummaryLifecycle(chatJid, 'created');
+    void indexSession({
+      chatJid,
+      refId: String(sessionId),
+      embeddingInput,
+      summaryText: summary.summaryText,
+      createdAt: endedAt,
+      extra: { topics: summary.topicTags, timeRange: [startedAt, endedAt] },
+    }).catch((err) => logger.warn({ err }, 'session vector index failed'));
   };
 
   const upsertConversationSession = async (chatJid: string, sender: string, timestamp: number): Promise<void> => {

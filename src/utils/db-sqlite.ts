@@ -9,7 +9,8 @@ import { stopMaintenance } from './db-maintenance.js';
 import { logger } from '../middleware/logger.js';
 import { config } from './config.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
-import { summarizeSession, scoreSessionMatch } from './session-summary.js';
+import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
+import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
@@ -320,6 +321,20 @@ function finalizeSessionSummary(chatJid: string, session: OpenSessionRow): void 
     session.id,
   );
   recordSessionSummaryLifecycle(chatJid, 'created');
+  void indexSession({
+    chatJid,
+    refId: String(session.id),
+    embeddingInput: buildContextualizedEmbeddingInput(summary.summaryText, {
+      chatJid,
+      startedAt: session.started_at,
+      endedAt: session.ended_at,
+      participants,
+      topicTags: summary.topicTags,
+    }),
+    summaryText: summary.summaryText,
+    createdAt: session.ended_at,
+    extra: { topics: summary.topicTags, timeRange: [session.started_at, session.ended_at] },
+  }).catch((err) => logger.warn({ err }, 'session vector index failed'));
 }
 
 function upsertConversationSession(chatJid: string, sender: string, timestamp: number): void {

@@ -3,7 +3,10 @@
  */
 
 import { config } from './config.js';
+import { logger } from '../middleware/logger.js';
 import type { DbBackend } from './db-backend.js';
+import type { MemoryEntry } from './db-types.js';
+import { deleteFact, indexFact } from './vector-memory.js';
 
 export type {
   BackupIntegrityStatus,
@@ -96,9 +99,27 @@ export const upvoteFeedback = backend.upvoteFeedback;
 export const linkFeedbackToGitHubIssue = backend.linkFeedbackToGitHubIssue;
 
 // Memory
-export const addMemory = backend.addMemory;
+export async function addMemory(
+  fact: string,
+  category?: string,
+  source?: string,
+): Promise<MemoryEntry> {
+  const entry = await backend.addMemory(fact, category, source);
+  void indexFact({
+    refId: String(entry.id),
+    text: entry.fact,
+    category: entry.category,
+    createdAt: entry.created_at,
+  }).catch((err) => logger.warn({ err }, 'memory fact vector index failed'));
+  return entry;
+}
 export const getAllMemories = backend.getAllMemories;
-export const deleteMemory = backend.deleteMemory;
+export async function deleteMemory(id: number): Promise<boolean> {
+  const deleted = await backend.deleteMemory(id);
+  void deleteFact(String(id))
+    .catch((err) => logger.warn({ err }, 'memory fact vector delete failed'));
+  return deleted;
+}
 export const searchMemory = backend.searchMemory;
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
 
