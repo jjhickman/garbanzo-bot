@@ -5,11 +5,12 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type SearchConfig = {
+  FIRECRAWL_API_KEY?: string;
   BRAVE_SEARCH_API_KEY?: string;
   GOOGLE_API_KEY?: string;
   GOOGLE_SEARCH_ENGINE_ID?: string;
   SEARXNG_BASE_URL?: string;
-  WEB_SEARCH_PROVIDER?: 'brave' | 'google' | 'searxng';
+  WEB_SEARCH_PROVIDER?: 'firecrawl' | 'brave' | 'google' | 'searxng';
 };
 
 const warnSpy = vi.fn();
@@ -113,6 +114,115 @@ describe('web search feature', () => {
     expect(url.searchParams.get('num')).toBe('5');
   });
 
+  it('parses Firecrawl v2 results with markdown content', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      data: {
+        web: [
+          {
+            title: 'Best sellers',
+            url: 'https://example.test/books',
+            description: 'Weekly fiction rankings.',
+            markdown: '# Fiction\n\n1. Novel One\n2. Novel Two',
+          },
+        ],
+      },
+      extra: 'ignored',
+    }));
+
+    const { webSearch } = await importWebSearch({ FIRECRAWL_API_KEY: 'firecrawl_key' });
+
+    await expect(webSearch('top fiction')).resolves.toEqual([
+      {
+        title: 'Best sellers',
+        url: 'https://example.test/books',
+        description: 'Weekly fiction rankings.',
+        content: '# Fiction\n\n1. Novel One\n2. Novel Two',
+      },
+    ]);
+
+    const [requestUrl, requestInit] = fetchMock.mock.calls[0];
+    expect(requestUrl).toBe('https://api.firecrawl.dev/v2/search');
+    expect(requestInit?.headers).toMatchObject({
+      Authorization: 'Bearer firecrawl_key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(requestInit?.body))).toEqual({
+      query: 'top fiction',
+      limit: 5,
+      sources: ['web'],
+      scrapeOptions: { formats: ['markdown'], onlyMainContent: true },
+    });
+  });
+
+  it('prefers Firecrawl over Brave when both are configured', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, data: { web: [] } }));
+
+    const { getSearchProviderName, webSearch } = await importWebSearch({
+      FIRECRAWL_API_KEY: 'firecrawl_key',
+      BRAVE_SEARCH_API_KEY: 'brave_key',
+    });
+
+    expect(getSearchProviderName()).toBe('firecrawl');
+    await webSearch('priority check');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.firecrawl.dev/v2/search');
+  });
+
+  it('honors WEB_SEARCH_PROVIDER=firecrawl override', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({ success: true, data: { web: [] } }));
+
+    const { getSearchProviderName, webSearch } = await importWebSearch({
+      FIRECRAWL_API_KEY: 'firecrawl_key',
+      BRAVE_SEARCH_API_KEY: 'brave_key',
+      WEB_SEARCH_PROVIDER: 'firecrawl',
+    });
+
+    expect(getSearchProviderName()).toBe('firecrawl');
+    await webSearch('override check');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.firecrawl.dev/v2/search');
+  });
+
+  it('falls back from Firecrawl v2 404 to v1 search shape', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        data: [
+          {
+            title: 'Fallback result',
+            url: 'https://example.test/fallback',
+            description: 'From v1.',
+            markdown: 'Recovered markdown',
+          },
+        ],
+      }));
+
+    const { webSearch } = await importWebSearch({ FIRECRAWL_API_KEY: 'firecrawl_key' });
+
+    await expect(webSearch('fallback')).resolves.toEqual([
+      {
+        title: 'Fallback result',
+        url: 'https://example.test/fallback',
+        description: 'From v1.',
+        content: 'Recovered markdown',
+      },
+    ]);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.firecrawl.dev/v2/search');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.firecrawl.dev/v1/search');
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      query: 'fallback',
+      limit: 5,
+      scrapeOptions: { formats: ['markdown'], onlyMainContent: true },
+    });
+  });
+
   it('selects SearXNG when only its base URL is configured', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(mockJsonResponse({
@@ -200,6 +310,51 @@ describe('web search feature', () => {
     const { webSearch } = await importWebSearch({ BRAVE_SEARCH_API_KEY: 'brave_key' });
 
     await expect(webSearch('outage')).rejects.toThrow('Brave Search error 503: provider down');
+  });
+
+  it('throws when Firecrawl returns success false', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({
+      success: false,
+      error: 'quota exceeded',
+      data: { web: [] },
+    }));
+
+    const { webSearch } = await importWebSearch({ FIRECRAWL_API_KEY: 'firecrawl_key' });
+
+    await expect(webSearch('quota')).rejects.toThrow('Firecrawl Search error: quota exceeded');
+  });
+
+  it('formats condensed Firecrawl content for only the first three results', async () => {
+    const longContent = `${'x'.repeat(1600)}tail`;
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      data: {
+        web: [
+          {
+            title: 'One',
+            url: 'https://example.test/one',
+            description: 'First.',
+            markdown: `A\n\n\n\nB\n\n${longContent}`,
+          },
+          { title: 'Two', url: 'https://example.test/two', description: 'Second.', markdown: 'Two content' },
+          { title: 'Three', url: 'https://example.test/three', description: 'Third.', markdown: 'Three content' },
+          { title: 'Four', url: 'https://example.test/four', description: 'Fourth.', markdown: 'Four content' },
+        ],
+      },
+    }));
+
+    const { handleWebSearch } = await importWebSearch({ FIRECRAWL_API_KEY: 'firecrawl_key' });
+
+    const output = await handleWebSearch('content formatting');
+
+    expect(output).toContain(['*One*', 'https://example.test/one', 'First.', 'A\n\nB'].join('\n'));
+    expect(output).toContain('x'.repeat(1590));
+    expect(output).toContain('…');
+    expect(output).toContain('Two content');
+    expect(output).toContain('Three content');
+    expect(output).not.toContain('Four content');
   });
 
   it('returns an empty-results message', async () => {

@@ -27,9 +27,9 @@ function stringInput(input: Record<string, unknown>, key: string): string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function truncateToolResult(text: string): string {
-  if (text.length <= TOOL_RESULT_MAX_CHARS) return text;
-  return `${text.slice(0, TOOL_RESULT_MAX_CHARS - 3)}...`;
+function truncateToolResult(text: string, max = TOOL_RESULT_MAX_CHARS): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 3)}...`;
 }
 
 function errorMessage(name: string, err: unknown): string {
@@ -43,6 +43,7 @@ function queryTool(
   parameterName: 'query' | 'keyword',
   parameterDescription: string,
   run: (value: string) => Promise<string>,
+  options: { maxResultChars?: number } = {},
 ): AiTool {
   return {
     name,
@@ -62,12 +63,12 @@ function queryTool(
       }
 
       try {
-        const result = truncateToolResult(await run(value));
+        const result = truncateToolResult(await run(value), options.maxResultChars);
         recordToolCall(name, 'ok');
         return result;
       } catch (err) {
         recordToolCall(name, 'error');
-        return truncateToolResult(errorMessage(name, err));
+        return truncateToolResult(errorMessage(name, err), options.maxResultChars);
       }
     },
   };
@@ -126,13 +127,14 @@ const tools: AiTool[] = [
   ),
   queryTool(
     'web_search',
-    'Search the live web. Use this for ANY factual question without a dedicated tool — dates, prices, schedules, rankings, how-tos, anything current, local, niche, or uncertain. Prefer searching over answering from your own knowledge: your training data is out of date.',
+    'Search the live web. Use this for ANY factual question without a dedicated tool — dates, prices, schedules, rankings, how-tos, anything current, local, niche, or uncertain. Prefer searching over answering from your own knowledge: your training data is out of date. Results may include extracted page content — use it to answer directly instead of just giving links.',
     'query',
     'Free-text web search, for example "next full moon date" or "tallest building in New England".',
     async (query) => {
       const { handleWebSearch } = await import('../features/web-search.js');
       return handleWebSearch(query);
     },
+    { maxResultChars: 6000 },
   ),
   queryTool(
     'search_community_memory',
