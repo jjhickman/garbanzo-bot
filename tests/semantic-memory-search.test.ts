@@ -51,6 +51,8 @@ function createBackend(): DbBackend {
     getMessages: vi.fn(async () => []),
     searchRelevantMessages: vi.fn(async () => []),
     searchRelevantSessionSummaries: vi.fn(async () => []),
+    listMessageChatJids: vi.fn(async () => []),
+    listSummarizedSessions: vi.fn(async () => []),
     logModeration: vi.fn(async () => undefined),
     getStrikeCount: vi.fn(async () => 0),
     getRepeatOffenders: vi.fn(async () => []),
