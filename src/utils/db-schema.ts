@@ -196,6 +196,23 @@ db.exec(`
 
   INSERT OR IGNORE INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
     VALUES (1, 0, 'low', 0, '[]', 0);
+
+  CREATE TABLE IF NOT EXISTS songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    song_key TEXT,
+    tempo INTEGER,
+    status TEXT NOT NULL DEFAULT 'idea',
+    notes TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_songs_title_lower
+    ON songs (lower(title));
+
+  CREATE INDEX IF NOT EXISTS idx_songs_status
+    ON songs (status);
 `);
 
 interface TableColumnInfo {

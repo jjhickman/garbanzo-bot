@@ -19,6 +19,7 @@ import {
   mapFeedbackEntry,
   mapMemoryEntry,
   mapSessionSummaryHit,
+  mapSong,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
@@ -28,6 +29,7 @@ import {
   type MemoryRow,
   type MessageRow,
   type SessionSummaryRow,
+  type SongRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
   type WhatsAppSafetyStateRow,
@@ -52,6 +54,8 @@ import type {
   ModerationEntry,
   NewEventReminder,
   SessionSummaryHit,
+  Song,
+  SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
   WhatsAppOutboundStatus,
@@ -106,6 +110,8 @@ export type {
   MemoryEntry,
   ModerationEntry,
   SessionSummaryHit,
+  Song,
+  SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
   WhatsAppOutboundStatus,
@@ -243,6 +249,17 @@ const insertMemory = db.prepare(
 const selectAllMemories = db.prepare(`SELECT * FROM memory ORDER BY category, created_at DESC`);
 const deleteMemoryById = db.prepare(`DELETE FROM memory WHERE id = ?`);
 const searchMemories = db.prepare(`SELECT * FROM memory WHERE fact LIKE ? ORDER BY created_at DESC LIMIT ?`);
+const insertSong = db.prepare(
+  `INSERT INTO songs (title, song_key, tempo, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+const selectSongById = db.prepare(`SELECT * FROM songs WHERE id = ?`);
+const selectSongByTitleLower = db.prepare(`SELECT * FROM songs WHERE lower(title) = lower(?)`);
+const selectAllSongs = db.prepare(`SELECT * FROM songs ORDER BY title ASC`);
+const selectSongsByStatus = db.prepare(`SELECT * FROM songs WHERE status = ? ORDER BY title ASC`);
+const updateSongRow = db.prepare(
+  `UPDATE songs SET title = ?, song_key = ?, tempo = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
+);
+const deleteSongById = db.prepare(`DELETE FROM songs WHERE id = ?`);
 const insertWhatsAppOutboundJob = db.prepare(
   `INSERT INTO whatsapp_outbound_jobs
    (chat_jid, kind, content_json, options_json, status, created_at, updated_at)
@@ -719,6 +736,77 @@ export function formatMemoriesForPrompt(): string {
   return formatMemoriesForPromptEntries(memories);
 }
 
+// ── Public API: Songs (shared band memory) ──────────────────────────
+
+export interface NewSong {
+  title: string;
+  key?: string | null;
+  tempo?: number | null;
+  status?: SongStatus;
+  notes?: string | null;
+}
+
+/** Add a new song to the shared band memory. Defaults status to 'idea'. */
+export function addSong(input: NewSong): Song {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertSong.run(
+    input.title,
+    input.key ?? null,
+    input.tempo ?? null,
+    input.status ?? 'idea',
+    input.notes ?? null,
+    ts,
+    ts,
+  );
+  return mapSong(selectSongById.get(result.lastInsertRowid) as SongRow);
+}
+
+/** Get a song by ID. */
+export function getSongById(id: number): Song | undefined {
+  const row = selectSongById.get(id) as SongRow | undefined;
+  return row ? mapSong(row) : undefined;
+}
+
+/** Get a song by title (case-insensitive). */
+export function getSongByTitle(title: string): Song | undefined {
+  const row = selectSongByTitleLower.get(title) as SongRow | undefined;
+  return row ? mapSong(row) : undefined;
+}
+
+/** List all songs, optionally filtered by status. */
+export function listSongs(status?: SongStatus): Song[] {
+  const rows = status
+    ? (selectSongsByStatus.all(status) as SongRow[])
+    : (selectAllSongs.all() as SongRow[]);
+  return rows.map(mapSong);
+}
+
+/** Update only the provided fields on a song and bump updated_at. */
+export function updateSong(
+  id: number,
+  patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>,
+): Song | undefined {
+  const existing = selectSongById.get(id) as SongRow | undefined;
+  if (!existing) return undefined;
+
+  const ts = Math.floor(Date.now() / 1000);
+  updateSongRow.run(
+    patch.title ?? existing.title,
+    patch.key !== undefined ? patch.key : existing.song_key,
+    patch.tempo !== undefined ? patch.tempo : existing.tempo,
+    patch.status ?? existing.status,
+    patch.notes !== undefined ? patch.notes : existing.notes,
+    ts,
+    id,
+  );
+  return mapSong(selectSongById.get(id) as SongRow);
+}
+
+/** Delete a song by ID. */
+export function deleteSong(id: number): boolean {
+  return deleteSongById.run(id).changes > 0;
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────
 
 /** Stop scheduled maintenance and close SQLite handle for shutdown. */
@@ -829,6 +917,16 @@ export function createSqliteBackend(): DbBackend {
     deleteMemory: async (id: number) => deleteMemory(id),
     searchMemory: async (keyword: string, limit?: number) => searchMemory(keyword, limit),
     formatMemoriesForPrompt: async () => formatMemoriesForPrompt(),
+
+    addSong: async (input: NewSong) => addSong(input),
+    getSongById: async (id: number) => getSongById(id),
+    getSongByTitle: async (title: string) => getSongByTitle(title),
+    listSongs: async (status?: SongStatus) => listSongs(status),
+    updateSong: async (
+      id: number,
+      patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>,
+    ) => updateSong(id, patch),
+    deleteSong: async (id: number) => deleteSong(id),
 
     closeDb: async (): Promise<void> => {
       closeDb();

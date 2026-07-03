@@ -51,6 +51,19 @@ export interface MemoryEntry {
   created_at: number;
 }
 
+export type SongStatus = 'idea' | 'rough' | 'tight' | 'gig-ready';
+
+export interface Song {
+  id: number;
+  title: string;
+  key: string | null;
+  tempo: number | null;
+  status: SongStatus;
+  notes: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

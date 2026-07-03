@@ -21,6 +21,8 @@ export type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Song,
+  SongStatus,
   StrikeSummary,
   SessionSummaryHit,
   WhatsAppOutboundJob,
@@ -138,6 +140,14 @@ export async function searchMemory(keyword: string, limit = 10): Promise<MemoryE
   return backend.searchMemory(keyword, limit);
 }
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
+
+// Songs (shared band memory)
+export const addSong = backend.addSong;
+export const getSongById = backend.getSongById;
+export const getSongByTitle = backend.getSongByTitle;
+export const listSongs = backend.listSongs;
+export const updateSong = backend.updateSong;
+export const deleteSong = backend.deleteSong;
 
 // Lifecycle
 export const closeDb = backend.closeDb;

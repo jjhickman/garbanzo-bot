@@ -16,6 +16,7 @@ import {
   mapMemoryEntry,
   mapMemberProfile,
   mapSessionSummaryHit,
+  mapSong,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
@@ -26,6 +27,7 @@ import {
   type MessageRow,
   type ProfileRow,
   type SessionSummaryRow,
+  type SongRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
   type WhatsAppSafetyStateRow,
@@ -53,6 +55,8 @@ import type {
   ModerationEntry,
   NewEventReminder,
   SessionSummaryHit,
+  Song,
+  SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
   WhatsAppOutboundStatus,
@@ -77,6 +81,7 @@ const REQUIRED_CORE_TABLES = [
   'memory',
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
+  'songs',
 ] as const;
 
 interface DbCountRow {
@@ -994,6 +999,74 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       const res = await pool.query<MemoryRow>('SELECT * FROM memory ORDER BY category, created_at DESC');
       const memories = res.rows.map(mapMemoryEntry);
       return formatMemoriesForPromptEntries(memories);
+    },
+
+    async addSong(input: {
+      title: string;
+      key?: string | null;
+      tempo?: number | null;
+      status?: SongStatus;
+      notes?: string | null;
+    }): Promise<Song> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongRow>(
+        `INSERT INTO songs (title, song_key, tempo, status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $6)
+         RETURNING *`,
+        [input.title, input.key ?? null, input.tempo ?? null, input.status ?? 'idea', input.notes ?? null, ts],
+      );
+      return mapSong(res.rows[0]);
+    },
+
+    async getSongById(id: number): Promise<Song | undefined> {
+      const res = await pool.query<SongRow>('SELECT * FROM songs WHERE id = $1', [id]);
+      const row = res.rows[0];
+      return row ? mapSong(row) : undefined;
+    },
+
+    async getSongByTitle(title: string): Promise<Song | undefined> {
+      const res = await pool.query<SongRow>('SELECT * FROM songs WHERE lower(title) = lower($1)', [title]);
+      const row = res.rows[0];
+      return row ? mapSong(row) : undefined;
+    },
+
+    async listSongs(status?: SongStatus): Promise<Song[]> {
+      const res = status
+        ? await pool.query<SongRow>('SELECT * FROM songs WHERE status = $1 ORDER BY title ASC', [status])
+        : await pool.query<SongRow>('SELECT * FROM songs ORDER BY title ASC');
+      return res.rows.map(mapSong);
+    },
+
+    async updateSong(
+      id: number,
+      patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>,
+    ): Promise<Song | undefined> {
+      const existingRes = await pool.query<SongRow>('SELECT * FROM songs WHERE id = $1', [id]);
+      const existing = existingRes.rows[0];
+      if (!existing) return undefined;
+
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongRow>(
+        `UPDATE songs
+         SET title = $1, song_key = $2, tempo = $3, status = $4, notes = $5, updated_at = $6
+         WHERE id = $7
+         RETURNING *`,
+        [
+          patch.title ?? existing.title,
+          patch.key !== undefined ? patch.key : existing.song_key,
+          patch.tempo !== undefined ? patch.tempo : existing.tempo,
+          patch.status ?? existing.status,
+          patch.notes !== undefined ? patch.notes : existing.notes,
+          ts,
+          id,
+        ],
+      );
+      return mapSong(res.rows[0]);
+    },
+
+    async deleteSong(id: number): Promise<boolean> {
+      const res = await pool.query('DELETE FROM songs WHERE id = $1', [id]);
+      return (res.rowCount ?? 0) > 0;
     },
 
     async closeDb(): Promise<void> {

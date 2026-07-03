@@ -7,6 +7,8 @@ import type {
   MemberProfile,
   MemoryEntry,
   SessionSummaryHit,
+  Song,
+  SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
   WhatsAppOutboundStatus,
@@ -79,6 +81,17 @@ export interface MemoryRow {
   category: string;
   source: string;
   created_at: DbNumeric | null;
+}
+
+export interface SongRow {
+  id: DbNumeric | null;
+  title: string;
+  song_key: string | null;
+  tempo: DbNumeric | null;
+  status: SongStatus;
+  notes: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -190,6 +203,19 @@ export function mapMemoryEntry(row: MemoryRow): MemoryEntry {
     category: row.category,
     source: row.source,
     created_at: toNumber(row.created_at),
+  };
+}
+
+export function mapSong(row: SongRow): Song {
+  return {
+    id: toNumber(row.id),
+    title: row.title,
+    key: row.song_key,
+    tempo: row.tempo === null ? null : toNumber(row.tempo),
+    status: row.status,
+    notes: row.notes,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
   };
 }
 
