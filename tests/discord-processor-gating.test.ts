@@ -152,6 +152,31 @@ describe('Discord processor config gating', () => {
     expect(outbox[0]?.chatId).toBe('dm-channel');
   });
 
+  it('demo path bypasses channel + feature gating (public demo works without config)', async () => {
+    // 'disabled' is reported disabled by isDiscordChannelEnabled and its
+    // weather feature is off in isDiscordFeatureEnabled — but the demo entry
+    // must still process it. If the demo bypass override were dropped, this
+    // fails (the other tests would not, since they use "enabled" channels).
+    const mocks = setupMocks();
+    const { createDiscordDemoAdapter, normalizeDiscordDemoInbound, processDiscordDemoInbound } = await importDiscordProcessor();
+    const outbox: DiscordDemoOutboxEntry[] = [];
+    const messenger = createDiscordDemoAdapter(outbox);
+    const inbound = normalizeDiscordDemoInbound({
+      chatId: 'disabled',
+      senderId: 'user-9',
+      text: '@garbanzo weather please',
+      isGroupChat: true,
+    });
+
+    await processDiscordDemoInbound(messenger, inbound, { ownerId: 'owner-dm', ownerUserId: 'owner-user' });
+
+    // Processed despite the channel being disabled and its feature off.
+    expect(mocks.getResponse).toHaveBeenCalledTimes(1);
+    expect(outbox).toHaveLength(1);
+    // weather=on proves the feature predicate was bypassed (real predicate → off for 'disabled').
+    expect(outbox[0]?.payload).toMatchObject({ text: 'assistant:weather please:weather=on' });
+  });
+
   it('routes feature checks through the Discord feature predicate (production path)', async () => {
     // Feature gating is a PRODUCTION behavior; the demo path deliberately
     // bypasses it (public demo works without channel config), so this is
