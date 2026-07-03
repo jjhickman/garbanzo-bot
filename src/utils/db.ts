@@ -9,6 +9,7 @@ import type { MemoryEntry } from './db-types.js';
 import { deleteFact, indexFact } from './vector-memory.js';
 
 export type {
+  BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
@@ -60,6 +61,8 @@ export const storeMessage = backend.storeMessage;
 export const getMessages = backend.getMessages;
 export const searchRelevantMessages = backend.searchRelevantMessages;
 export const searchRelevantSessionSummaries = backend.searchRelevantSessionSummaries;
+export const listMessageChatJids = backend.listMessageChatJids;
+export const listSummarizedSessions = backend.listSummarizedSessions;
 
 // Moderation
 export const logModeration = backend.logModeration;

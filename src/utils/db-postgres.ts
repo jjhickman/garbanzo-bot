@@ -47,6 +47,7 @@ import type {
   DailyGroupActivity,
   DbMessage,
   EventReminder,
+  BackfillSession,
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
@@ -626,6 +627,32 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [chatJid, limit],
       );
       return res.rows.map(mapDbMessage).reverse();
+    },
+
+    async listMessageChatJids(): Promise<string[]> {
+      const res = await pool.query<{ chat_jid: string }>('SELECT DISTINCT chat_jid FROM messages');
+      return res.rows.map((row) => row.chat_jid);
+    },
+
+    async listSummarizedSessions(limit: number = Number.MAX_SAFE_INTEGER): Promise<BackfillSession[]> {
+      const res = await pool.query<SessionSummaryRow & { chat_jid: string }>(
+        `SELECT id, chat_jid, started_at, ended_at, message_count, participants, summary_text, topic_tags
+         FROM conversation_sessions
+         WHERE status = 'summarized' AND summary_text IS NOT NULL
+         ORDER BY ended_at DESC, id DESC
+         LIMIT $1`,
+        [limit],
+      );
+      return res.rows.map((row) => ({
+        sessionId: toNumber(row.id),
+        chatJid: row.chat_jid,
+        startedAt: toNumber(row.started_at),
+        endedAt: toNumber(row.ended_at),
+        messageCount: toNumber(row.message_count),
+        participants: parseJsonArray(row.participants),
+        topicTags: parseJsonArray(row.topic_tags),
+        summaryText: row.summary_text,
+      }));
     },
 
     async searchRelevantMessages(chatJid: string, query: string, limit: number = CONTEXT_RELEVANT_LIMIT): Promise<DbMessage[]> {

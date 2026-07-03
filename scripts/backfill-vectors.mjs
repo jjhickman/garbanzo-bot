@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { backfillVectors } from '../dist/utils/vector-backfill.js';
 
 try {

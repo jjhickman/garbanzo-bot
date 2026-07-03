@@ -1,4 +1,5 @@
 import type {
+  BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
@@ -45,6 +46,10 @@ export interface DbBackend {
   getMessages(chatJid: string, limit?: number): Promise<DbMessage[]>;
   searchRelevantMessages(chatJid: string, query: string, limit?: number): Promise<DbMessage[]>;
   searchRelevantSessionSummaries(chatJid: string, query: string, limit?: number): Promise<SessionSummaryHit[]>;
+  /** All distinct chat JIDs that have stored messages (for vector backfill enumeration). */
+  listMessageChatJids(): Promise<string[]>;
+  /** All summarized sessions across every chat (for vector backfill enumeration). */
+  listSummarizedSessions(limit?: number): Promise<BackfillSession[]>;
 
   // Moderation
   logModeration(entry: ModerationEntry): Promise<void>;

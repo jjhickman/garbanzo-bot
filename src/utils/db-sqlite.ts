@@ -43,6 +43,7 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  BackfillSession,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -165,6 +166,16 @@ const selectSessionSummaryCandidates = db.prepare(
    WHERE chat_jid = ? AND status = 'summarized' AND summary_text IS NOT NULL
    ORDER BY ended_at DESC, id DESC
    LIMIT ?`,
+);
+const selectAllSummarizedSessions = db.prepare(
+  `SELECT id, chat_jid, started_at, ended_at, message_count, participants, summary_text, topic_tags
+   FROM conversation_sessions
+   WHERE status = 'summarized' AND summary_text IS NOT NULL
+   ORDER BY ended_at DESC, id DESC
+   LIMIT ?`,
+);
+const selectDistinctMessageChats = db.prepare(
+  `SELECT DISTINCT chat_jid FROM messages`,
 );
 const insertModerationLog = db.prepare(
   `INSERT INTO moderation_log (chat_jid, sender, text, reason, severity, source, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -441,6 +452,27 @@ export function searchRelevantSessionSummaries(
     .slice(0, limit);
 
   return scored;
+}
+
+/** Distinct chat JIDs that have stored messages — for vector backfill enumeration. */
+export function listMessageChatJids(): string[] {
+  const rows = selectDistinctMessageChats.all() as Array<{ chat_jid: string }>;
+  return rows.map((row) => row.chat_jid);
+}
+
+/** All summarized sessions across every chat — for vector backfill enumeration. */
+export function listSummarizedSessions(limit: number = Number.MAX_SAFE_INTEGER): BackfillSession[] {
+  const rows = selectAllSummarizedSessions.all(limit) as Array<SessionSummaryRow & { chat_jid: string }>;
+  return rows.map((row) => ({
+    sessionId: toNumber(row.id),
+    chatJid: row.chat_jid,
+    startedAt: toNumber(row.started_at),
+    endedAt: toNumber(row.ended_at),
+    messageCount: toNumber(row.message_count),
+    participants: parseJsonArray(row.participants),
+    topicTags: parseJsonArray(row.topic_tags),
+    summaryText: row.summary_text,
+  }));
 }
 
 // ── Public API: Moderation ──────────────────────────────────────────
@@ -729,6 +761,8 @@ export function createSqliteBackend(): DbBackend {
       searchRelevantMessages(chatJid, query, limit),
     searchRelevantSessionSummaries: async (chatJid: string, query: string, limit?: number) =>
       searchRelevantSessionSummaries(chatJid, query, limit),
+    listMessageChatJids: async () => listMessageChatJids(),
+    listSummarizedSessions: async (limit?: number) => listSummarizedSessions(limit),
 
     logModeration: async (entry: ModerationEntry): Promise<void> => {
       logModeration(entry);

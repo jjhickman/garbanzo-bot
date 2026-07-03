@@ -1,4 +1,3 @@
-import { GROUP_IDS } from '../core/groups-config.js';
 import { logger } from '../middleware/logger.js';
 import * as db from './db.js';
 import { buildContextualizedEmbeddingInput } from './session-summary.js';
@@ -20,7 +19,14 @@ export interface BackfillOptions {
   batchSize?: number;
   /** Delay between batches in ms (default 500) */
   batchDelayMs?: number;
-  /** Accepted for parity with session-backfill; Qdrant upserts keep repeated runs idempotent. */
+  /**
+   * RESERVED — currently a no-op. Re-running backfill is always safe and does
+   * not duplicate points (indexing derives stable point-ids from record
+   * identifiers, so re-runs upsert in place), but embeddings are still
+   * recomputed for every record. A true skip-if-already-present mode would
+   * need an existence primitive the VectorStore does not yet expose, so this
+   * flag does not currently save any work.
+   */
   missingOnly?: boolean;
   /** Progress callback invoked after each batch */
   onProgress?: (progress: BackfillProgress) => void;
@@ -30,20 +36,6 @@ type BackfillJob = {
   kind: 'fact' | 'message' | 'session';
   run: () => Promise<'indexed' | 'skipped'>;
 };
-
-type SessionRow = {
-  id: number;
-  chatJid: string;
-  startedAt: number;
-  endedAt: number;
-  messageCount: number;
-  participants: string[];
-  topicTags: string[];
-  summaryText: string;
-};
-
-type SessionListForChat = (chatJid: string, limit?: number) => Promise<unknown[]>;
-type SessionListGlobal = (limit?: number) => Promise<unknown[]>;
 
 function createProgress(total: number): BackfillProgress {
   return {
@@ -56,121 +48,7 @@ function createProgress(total: number): BackfillProgress {
   };
 }
 
-function toJsonArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string');
-  }
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === 'string')
-        : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function getNumberField(row: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return null;
-}
-
-function getStringField(row: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === 'string') return value;
-  }
-  return null;
-}
-
-function normalizeSessionRow(value: unknown): SessionRow | null {
-  if (!value || typeof value !== 'object') return null;
-
-  const row = value as Record<string, unknown>;
-  const id = getNumberField(row, ['id', 'sessionId', 'session_id']);
-  const chatJid = getStringField(row, ['chatJid', 'chat_jid']);
-  const startedAt = getNumberField(row, ['startedAt', 'started_at']) ?? 0;
-  const endedAt = getNumberField(row, ['endedAt', 'ended_at']);
-  const messageCount = getNumberField(row, ['messageCount', 'message_count']) ?? 0;
-  const summaryText = getStringField(row, ['summaryText', 'summary_text']);
-
-  if (id === null || chatJid === null || endedAt === null || summaryText === null) {
-    return null;
-  }
-
-  return {
-    id,
-    chatJid,
-    startedAt,
-    endedAt,
-    messageCount,
-    participants: toJsonArray(row.participants),
-    topicTags: toJsonArray(row.topicTags ?? row.topic_tags),
-    summaryText,
-  };
-}
-
-function getDbExport(name: string): unknown {
-  const exportsRecord = db as unknown as Record<string, unknown>;
-  return Object.prototype.hasOwnProperty.call(exportsRecord, name)
-    ? exportsRecord[name]
-    : undefined;
-}
-
-function isSessionListForChat(value: unknown): value is SessionListForChat {
-  return typeof value === 'function';
-}
-
-function isSessionListGlobal(value: unknown): value is SessionListGlobal {
-  return typeof value === 'function';
-}
-
-async function loadSessions(chatJids: string[]): Promise<SessionRow[]> {
-  const rows: unknown[] = [];
-  const listAllSessionSummaries = getDbExport('listAllSessionSummaries');
-
-  if (isSessionListGlobal(listAllSessionSummaries)) {
-    rows.push(...await listAllSessionSummaries(MAX_BACKFILL_ROWS));
-  } else {
-    const listSessionsForVectorBackfill = getDbExport('listSessionsForVectorBackfill');
-    const listSessionSummaries = getDbExport('listSessionSummaries');
-    const listForChat = isSessionListForChat(listSessionsForVectorBackfill)
-      ? listSessionsForVectorBackfill
-      : listSessionSummaries;
-
-    if (isSessionListForChat(listForChat)) {
-      for (const chatJid of chatJids) {
-        rows.push(...await listForChat(chatJid, MAX_BACKFILL_ROWS));
-      }
-    } else {
-      for (const chatJid of chatJids) {
-        const hits = await db.searchRelevantSessionSummaries(
-          chatJid,
-          '__vector_backfill_all__',
-          MAX_BACKFILL_ROWS,
-        );
-        rows.push(...hits.map((hit) => ({ ...hit, chatJid })));
-      }
-    }
-  }
-
-  return rows
-    .map(normalizeSessionRow)
-    .filter((row): row is SessionRow => row !== null);
-}
-
 async function buildJobs(): Promise<BackfillJob[]> {
-  const chatJids = Object.keys(GROUP_IDS);
   const jobs: BackfillJob[] = [];
 
   const facts = await db.getAllMemories();
@@ -190,6 +68,9 @@ async function buildJobs(): Promise<BackfillJob[]> {
     });
   }
 
+  // Enumerate every chat that has stored messages (groups AND DMs), so backfill
+  // covers the same message set that live ingest indexes.
+  const chatJids = await db.listMessageChatJids();
   for (const chatJid of chatJids) {
     const messages = await db.getMessages(chatJid, MAX_BACKFILL_ROWS);
     for (const row of messages) {
@@ -199,6 +80,9 @@ async function buildJobs(): Promise<BackfillJob[]> {
           if (row.text.trim().length === 0) return 'skipped';
           await indexMessage({
             chatJid,
+            // Must match live ingest's refId derivation (stored ts + bare
+            // sender) so re-indexing upserts the same point rather than
+            // duplicating.
             refId: `${row.timestamp}:${row.sender}`,
             sender: row.sender,
             text: row.text,
@@ -210,7 +94,7 @@ async function buildJobs(): Promise<BackfillJob[]> {
     }
   }
 
-  const sessions = await loadSessions(chatJids);
+  const sessions = await db.listSummarizedSessions(MAX_BACKFILL_ROWS);
   for (const session of sessions) {
     jobs.push({
       kind: 'session',
@@ -218,7 +102,7 @@ async function buildJobs(): Promise<BackfillJob[]> {
         if (session.summaryText.trim().length < 8) return 'skipped';
         await indexSession({
           chatJid: session.chatJid,
-          refId: String(session.id),
+          refId: String(session.sessionId),
           embeddingInput: buildContextualizedEmbeddingInput(session.summaryText, {
             chatJid: session.chatJid,
             startedAt: session.startedAt,
@@ -270,7 +154,7 @@ export async function backfillVectors(options: BackfillOptions = {}): Promise<Ba
   const startedAt = Date.now();
 
   if (options.missingOnly) {
-    logger.info('Vector backfill missingOnly requested; stable Qdrant upserts will refresh matching points');
+    logger.info('Vector backfill missingOnly is a no-op today; all records will be re-embedded and upserted');
   }
 
   const jobs = await buildJobs();
