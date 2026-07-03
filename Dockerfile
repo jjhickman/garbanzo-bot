@@ -26,7 +26,7 @@ COPY config/ ./config/
 RUN npm run build
 
 # Remove devDependencies, keep only production deps
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev && rm -rf node_modules/typescript
 
 
 # ─── Stage 2: Production ──────────────────────────────────────────────────────

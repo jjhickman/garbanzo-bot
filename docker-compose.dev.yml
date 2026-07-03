@@ -17,3 +17,6 @@ services:
 
     environment:
       - GARBANZO_VERSION=${APP_VERSION:-dev}
+
+    depends_on:
+      - qdrant

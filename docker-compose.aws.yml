@@ -16,3 +16,6 @@ services:
         awslogs-region: ${AWS_REGION}
         awslogs-group: ${AWS_LOG_GROUP:-/garbanzo/prod}
         awslogs-stream: ${AWS_LOG_STREAM:-garbanzo/${AWS_INSTANCE_ID}}
+
+    depends_on:
+      - qdrant

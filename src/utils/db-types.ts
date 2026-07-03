@@ -112,6 +112,22 @@ export interface SessionSummaryHit {
   score: number;
 }
 
+/**
+ * A summarized conversation session enumerated for vector backfill. Unlike
+ * SessionSummaryHit, it carries chatJid (backfill runs across all chats) and
+ * has no relevance score (it's a full listing, not a query result).
+ */
+export interface BackfillSession {
+  sessionId: number;
+  chatJid: string;
+  startedAt: number;
+  endedAt: number;
+  messageCount: number;
+  participants: string[];
+  topicTags: string[];
+  summaryText: string;
+}
+
 export type WhatsAppOutboundStatus = 'pending' | 'sent' | 'held' | 'failed' | 'discarded';
 export type WhatsAppRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 

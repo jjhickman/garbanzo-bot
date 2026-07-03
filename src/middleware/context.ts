@@ -20,8 +20,12 @@ import {
   searchRelevantMessages,
   searchRelevantSessionSummaries,
   type DbMessage,
+  type SessionSummaryHit,
 } from '../utils/db.js';
+import { indexMessage, searchMessages, searchSessions } from '../utils/vector-memory.js';
+import type { VectorHit } from '../utils/vector-store.js';
 import { rerankCandidates } from '../utils/reranker.js';
+import { toBareJid } from '../utils/db-query-shape.js';
 import { logger } from './logger.js';
 import { config } from '../utils/config.js';
 import { recordSessionSummaryRetrieval } from './stats.js';
@@ -51,6 +55,51 @@ interface CacheEntry {
 
 const summaryCache = new Map<string, CacheEntry>();
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(String);
+}
+
+function numericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function messageHitToDbMessage(hit: VectorHit): DbMessage {
+  return {
+    sender: String(hit.payload.extra?.sender ?? ''),
+    text: hit.payload.text,
+    timestamp: numericValue(hit.payload.createdAt) ?? 0,
+  };
+}
+
+function sessionHitToSummary(hit: VectorHit): SessionSummaryHit {
+  const extra = hit.payload.extra ?? {};
+  const timeRange = Array.isArray(extra.timeRange) ? extra.timeRange : [];
+  const startedAt = numericValue(timeRange[0]) ?? hit.payload.createdAt;
+  const endedAt = numericValue(timeRange[1]) ?? hit.payload.createdAt;
+  const sessionId = numericValue(hit.payload.refId);
+
+  if (sessionId === null) {
+    logger.warn({ refId: hit.payload.refId, vectorHitId: hit.id }, 'session vector hit has non-numeric refId');
+  }
+
+  return {
+    sessionId: sessionId ?? 0,
+    startedAt,
+    endedAt,
+    messageCount: numericValue(extra.messageCount) ?? 0,
+    participants: stringArray(extra.participants),
+    topicTags: stringArray(extra.topics),
+    summaryText: hit.payload.text,
+    score: hit.score,
+  };
+}
+
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
@@ -61,7 +110,10 @@ export async function recordMessage(
   sender: string,
   text: string,
 ): Promise<void> {
-  await storeMessage(chatJid, sender, text);
+  const createdAt = await storeMessage(chatJid, sender, text);
+  const bareSender = toBareJid(sender);
+  void indexMessage({ chatJid, refId: `${createdAt}:${bareSender}`, sender: bareSender, text, createdAt })
+    .catch((err) => logger.warn({ err }, 'message vector index failed'));
 }
 
 /**
@@ -84,14 +136,16 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
 
   const recentKeys = new Set(recent.map((m) => `${m.timestamp}:${m.sender}:${m.text}`));
 
-  const relevantRaw = queryText.trim()
-    ? await searchRelevantMessages(chatJid, queryText, RELEVANT_COUNT)
-    : [];
+  const vectorMsgHits = queryText.trim() ? await searchMessages(chatJid, queryText, RELEVANT_COUNT) : [];
+  const relevantRaw = vectorMsgHits.length > 0
+    ? vectorMsgHits.map(messageHitToDbMessage)
+    : (queryText.trim() ? await searchRelevantMessages(chatJid, queryText, RELEVANT_COUNT) : []);
   const relevant = relevantRaw.filter((m) => !recentKeys.has(`${m.timestamp}:${m.sender}:${m.text}`));
 
-  const sessionHits = queryText.trim()
-    ? await searchRelevantSessionSummaries(chatJid, queryText, SESSION_RELEVANT_COUNT)
-    : [];
+  const vectorSessionHits = queryText.trim() ? await searchSessions(chatJid, queryText, SESSION_RELEVANT_COUNT) : [];
+  const sessionHits = vectorSessionHits.length > 0
+    ? vectorSessionHits.map(sessionHitToSummary)
+    : (queryText.trim() ? await searchRelevantSessionSummaries(chatJid, queryText, SESSION_RELEVANT_COUNT) : []);
 
   const parts: string[] = [];
 
@@ -120,7 +174,10 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
         sessionInjectedChars += summaryText.length;
         sessionCount += 1;
         const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
-        sessionParts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        const participants = hit.participants.length > 0
+          ? `participants: ${hit.participants.join(', ')}`
+          : 'participants: n/a';
+        sessionParts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics} | ${participants}`);
         sessionParts.push(`  ${summaryText}`);
       }
     }
@@ -156,7 +213,10 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
         const summaryText = hit.summaryText.length > 420 ? `${hit.summaryText.slice(0, 417)}...` : hit.summaryText;
         injectedChars += summaryText.length;
         const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
-        parts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        const participants = hit.participants.length > 0
+          ? `participants: ${hit.participants.join(', ')}`
+          : 'participants: n/a';
+        parts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics} | ${participants}`);
         parts.push(`  ${summaryText}`);
       }
       recordSessionSummaryRetrieval(chatJid, sessionHits.length, injectedChars);

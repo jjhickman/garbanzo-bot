@@ -32,6 +32,8 @@
     "db:postgres:init": "node scripts/postgres-init.mjs",
     "db:sqlite:migrate:postgres": "node scripts/sqlite-to-postgres.mjs",
     "db:sqlite:verify:postgres": "node scripts/postgres-verify.mjs",
+    "prebackfill:vectors": "npm run build",
+    "backfill:vectors": "node scripts/backfill-vectors.mjs",
     "release:plan": "node scripts/release-plan.mjs",
     "release:checklist": "node scripts/release-checklist.mjs",
     "release:deploy:verify": "bash scripts/release-deploy-verify.sh",
@@ -56,6 +58,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1058.0",
     "@hapi/boom": "^10.0.1",
+    "@qdrant/js-client-rest": "^1.18.0",
     "@whiskeysockets/baileys": "7.0.0-rc13",
     "baileys-antiban": "4.10.0",
     "better-sqlite3": "^12.6.2",

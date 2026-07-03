@@ -9,7 +9,8 @@ import { stopMaintenance } from './db-maintenance.js';
 import { logger } from '../middleware/logger.js';
 import { config } from './config.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
-import { summarizeSession, scoreSessionMatch } from './session-summary.js';
+import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
+import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
@@ -42,6 +43,7 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  BackfillSession,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -164,6 +166,16 @@ const selectSessionSummaryCandidates = db.prepare(
    WHERE chat_jid = ? AND status = 'summarized' AND summary_text IS NOT NULL
    ORDER BY ended_at DESC, id DESC
    LIMIT ?`,
+);
+const selectAllSummarizedSessions = db.prepare(
+  `SELECT id, chat_jid, started_at, ended_at, message_count, participants, summary_text, topic_tags
+   FROM conversation_sessions
+   WHERE status = 'summarized' AND summary_text IS NOT NULL
+   ORDER BY ended_at DESC, id DESC
+   LIMIT ?`,
+);
+const selectDistinctMessageChats = db.prepare(
+  `SELECT DISTINCT chat_jid FROM messages`,
 );
 const insertModerationLog = db.prepare(
   `INSERT INTO moderation_log (chat_jid, sender, text, reason, severity, source, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -320,6 +332,25 @@ function finalizeSessionSummary(chatJid: string, session: OpenSessionRow): void 
     session.id,
   );
   recordSessionSummaryLifecycle(chatJid, 'created');
+  void indexSession({
+    chatJid,
+    refId: String(session.id),
+    embeddingInput: buildContextualizedEmbeddingInput(summary.summaryText, {
+      chatJid,
+      startedAt: session.started_at,
+      endedAt: session.ended_at,
+      participants,
+      topicTags: summary.topicTags,
+    }),
+    summaryText: summary.summaryText,
+    createdAt: session.ended_at,
+    extra: {
+      topics: summary.topicTags,
+      timeRange: [session.started_at, session.ended_at],
+      messageCount: session.message_count,
+      participants,
+    },
+  }).catch((err) => logger.warn({ err }, 'session vector index failed'));
 }
 
 function upsertConversationSession(chatJid: string, sender: string, timestamp: number): void {
@@ -352,13 +383,14 @@ function upsertConversationSession(chatJid: string, sender: string, timestamp: n
 // ── Public API: Messages ────────────────────────────────────────────
 
 /** Store a message and prune old ones beyond the limit. */
-export function storeMessage(chatJid: string, sender: string, text: string): void {
+export function storeMessage(chatJid: string, sender: string, text: string): number {
   const bare = toBareJid(sender);
   const truncated = text.length > 500 ? text.slice(0, 497) + '...' : text;
   const ts = Math.floor(Date.now() / 1000);
   insertMessage.run(chatJid, bare, truncated, ts);
   pruneOldMessages.run(chatJid, chatJid, MAX_MESSAGES_PER_CHAT);
   upsertConversationSession(chatJid, bare, ts);
+  return ts;
 }
 
 /** Get recent messages for a chat (returned oldest-first for prompt context). */
@@ -420,6 +452,27 @@ export function searchRelevantSessionSummaries(
     .slice(0, limit);
 
   return scored;
+}
+
+/** Distinct chat JIDs that have stored messages — for vector backfill enumeration. */
+export function listMessageChatJids(): string[] {
+  const rows = selectDistinctMessageChats.all() as Array<{ chat_jid: string }>;
+  return rows.map((row) => row.chat_jid);
+}
+
+/** All summarized sessions across every chat — for vector backfill enumeration. */
+export function listSummarizedSessions(limit: number = Number.MAX_SAFE_INTEGER): BackfillSession[] {
+  const rows = selectAllSummarizedSessions.all(limit) as Array<SessionSummaryRow & { chat_jid: string }>;
+  return rows.map((row) => ({
+    sessionId: toNumber(row.id),
+    chatJid: row.chat_jid,
+    startedAt: toNumber(row.started_at),
+    endedAt: toNumber(row.ended_at),
+    messageCount: toNumber(row.message_count),
+    participants: parseJsonArray(row.participants),
+    topicTags: parseJsonArray(row.topic_tags),
+    summaryText: row.summary_text,
+  }));
 }
 
 // ── Public API: Moderation ──────────────────────────────────────────
@@ -701,14 +754,15 @@ export function createSqliteBackend(): DbBackend {
     scheduleMaintenance,
     stopMaintenance,
 
-    storeMessage: async (chatJid: string, sender: string, text: string): Promise<void> => {
-      storeMessage(chatJid, sender, text);
-    },
+    storeMessage: async (chatJid: string, sender: string, text: string): Promise<number> =>
+      storeMessage(chatJid, sender, text),
     getMessages: async (chatJid: string, limit?: number) => getMessages(chatJid, limit),
     searchRelevantMessages: async (chatJid: string, query: string, limit?: number) =>
       searchRelevantMessages(chatJid, query, limit),
     searchRelevantSessionSummaries: async (chatJid: string, query: string, limit?: number) =>
       searchRelevantSessionSummaries(chatJid, query, limit),
+    listMessageChatJids: async () => listMessageChatJids(),
+    listSummarizedSessions: async (limit?: number) => listSummarizedSessions(limit),
 
     logModeration: async (entry: ModerationEntry): Promise<void> => {
       logModeration(entry);

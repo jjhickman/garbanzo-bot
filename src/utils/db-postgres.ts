@@ -3,11 +3,10 @@ import { resolve } from 'path';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 import { logger } from '../middleware/logger.js';
-import { recordSessionEmbedding, recordSessionSummaryLifecycle } from '../middleware/stats.js';
+import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
 import { PROJECT_ROOT, config } from './config.js';
-import { embedTextDeterministic, toPgvectorLiteral } from './text-embedding.js';
-import { embedTextForVectorSearch } from './embedding-provider.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
+import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapDailyGroupActivity,
@@ -46,6 +45,7 @@ import type {
   DailyGroupActivity,
   DbMessage,
   EventReminder,
+  BackfillSession,
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
@@ -63,9 +63,7 @@ import type {
 
 const MAX_MESSAGES_PER_CHAT = 5000;
 const MESSAGE_RETENTION_DAYS = 30;
-const CONTEXT_VECTOR_DIMENSIONS = 256;
 const CONTEXT_RELEVANT_LIMIT = 6;
-const CONTEXT_MIN_EMBED_CHARS = 8;
 const SESSION_FETCH_LIMIT = 160;
 
 const REQUIRED_CORE_TABLES = [
@@ -93,13 +91,7 @@ interface OpenSessionRow {
   participants: unknown;
 }
 
-interface ExistsRow {
-  exists: boolean;
-}
-
-function shouldVectorizeText(text: string): boolean {
-  return text.trim().length >= CONTEXT_MIN_EMBED_CHARS;
-}
+type SessionIndexPayload = Parameters<typeof indexSession>[0];
 
 function createMaintenanceScheduler(
   backupDatabase: () => Promise<string>,
@@ -216,64 +208,14 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
   await validateCoreTables(pool);
 
-  let pgvectorEnabled = false;
-  try {
-    const extensionCheck = await pool.query<ExistsRow>(
-      "SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') AS exists",
-    );
-
-    if (extensionCheck.rows[0]?.exists) {
-      await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS message_vectors (
-          id BIGSERIAL PRIMARY KEY,
-          chat_jid TEXT NOT NULL,
-          sender TEXT NOT NULL,
-          text TEXT NOT NULL,
-          timestamp BIGINT NOT NULL,
-          embedding vector(${CONTEXT_VECTOR_DIMENSIONS}) NOT NULL
-        )`,
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS conversation_session_vectors (
-          session_id BIGINT PRIMARY KEY REFERENCES conversation_sessions(id) ON DELETE CASCADE,
-          chat_jid TEXT NOT NULL,
-          embedding vector(${CONTEXT_VECTOR_DIMENSIONS}) NOT NULL
-        )`,
-      );
-      await pool.query(
-        'CREATE INDEX IF NOT EXISTS idx_message_vectors_chat_ts ON message_vectors (chat_jid, timestamp DESC)',
-      );
-      await pool.query(
-        'CREATE INDEX IF NOT EXISTS idx_session_vectors_chat ON conversation_session_vectors (chat_jid)',
-      );
-
-      try {
-        await pool.query(
-          'CREATE INDEX IF NOT EXISTS idx_message_vectors_hnsw_cos ON message_vectors USING hnsw (embedding vector_cosine_ops)',
-        );
-        await pool.query(
-          'CREATE INDEX IF NOT EXISTS idx_session_vectors_hnsw_cos ON conversation_session_vectors USING hnsw (embedding vector_cosine_ops)',
-        );
-      } catch (err) {
-        logger.warn({ err }, 'pgvector HNSW index unavailable; continuing without ANN index');
-      }
-
-      pgvectorEnabled = true;
-      logger.info({ dims: CONTEXT_VECTOR_DIMENSIONS }, 'pgvector context retrieval enabled');
-    }
-  } catch (err) {
-    logger.warn({ err }, 'Failed to initialize pgvector; using keyword context fallback');
-  }
-
   await pool.query('SELECT 1');
-  logger.info({ pgvectorEnabled, postgresSsl: config.POSTGRES_SSL }, 'Postgres backend initialized');
+  logger.info({ postgresSsl: config.POSTGRES_SSL }, 'Postgres backend initialized');
 
   const finalizeSessionSummary = async (
     client: PoolClient,
     chatJid: string,
     session: OpenSessionRow,
-  ): Promise<void> => {
+  ): Promise<SessionIndexPayload | null> => {
     const sessionId = toNumber(session.id);
     const startedAt = toNumber(session.started_at);
     const endedAt = toNumber(session.ended_at);
@@ -289,7 +231,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
       );
       recordSessionSummaryLifecycle(chatJid, 'skipped');
-      return;
+      return null;
     }
 
     const messagesRes = await client.query<MessageRow>(
@@ -310,11 +252,18 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
       );
       recordSessionSummaryLifecycle(chatJid, 'skipped');
-      return;
+      return null;
     }
 
     const participants = parseJsonArray(session.participants);
     const summary = summarizeSession(messagesRes.rows.map(mapDbMessage), participants);
+    const embeddingInput = buildContextualizedEmbeddingInput(summary.summaryText, {
+      chatJid,
+      startedAt,
+      endedAt,
+      participants,
+      topicTags: summary.topicTags,
+    });
 
     await client.query(
       `UPDATE conversation_sessions
@@ -330,32 +279,20 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       ],
     );
 
-    if (pgvectorEnabled && shouldVectorizeText(summary.summaryText)) {
-      const embeddingInput = buildContextualizedEmbeddingInput(summary.summaryText, {
-        chatJid,
-        startedAt,
-        endedAt,
-        participants,
-        topicTags: summary.topicTags,
-      });
-      const embeddingResult = await embedTextForVectorSearch(embeddingInput, CONTEXT_VECTOR_DIMENSIONS);
-      const vectorLiteral = toPgvectorLiteral(embeddingResult.vector);
-      await client.query(
-        `INSERT INTO conversation_session_vectors (session_id, chat_jid, embedding)
-         VALUES ($1, $2, $3::vector)
-         ON CONFLICT (session_id)
-         DO UPDATE SET chat_jid = EXCLUDED.chat_jid, embedding = EXCLUDED.embedding`,
-        [sessionId, chatJid, vectorLiteral],
-      );
-      recordSessionEmbedding(
-        chatJid,
-        embeddingResult.provider,
-        embeddingResult.latencyMs,
-        embeddingResult.usedFallback,
-      );
-    }
-
     recordSessionSummaryLifecycle(chatJid, 'created');
+    return {
+      chatJid,
+      refId: String(sessionId),
+      embeddingInput,
+      summaryText: summary.summaryText,
+      createdAt: endedAt,
+      extra: {
+        topics: summary.topicTags,
+        timeRange: [startedAt, endedAt],
+        messageCount,
+        participants,
+      },
+    };
   };
 
   const upsertConversationSession = async (chatJid: string, sender: string, timestamp: number): Promise<void> => {
@@ -405,7 +342,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         return;
       }
 
-      await finalizeSessionSummary(client, chatJid, openSession);
+      const sessionIndexPayload = await finalizeSessionSummary(client, chatJid, openSession);
 
       await client.query(
         `INSERT INTO conversation_sessions
@@ -415,6 +352,9 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       );
 
       await client.query('COMMIT');
+      if (sessionIndexPayload) {
+        void indexSession(sessionIndexPayload).catch((err) => logger.warn({ err }, 'session vector index failed'));
+      }
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
       recordSessionSummaryLifecycle(chatJid, 'failed');
@@ -439,10 +379,6 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     const cutoff = Math.floor(Date.now() / 1000) - (MESSAGE_RETENTION_DAYS * 24 * 60 * 60);
     const pruneRes = await pool.query('DELETE FROM messages WHERE timestamp < $1', [cutoff]);
     const pruned = pruneRes.rowCount ?? 0;
-
-    if (pgvectorEnabled) {
-      await pool.query('DELETE FROM message_vectors WHERE timestamp < $1', [cutoff]);
-    }
 
     const afterRes = await pool.query<DbCountRow>('SELECT COUNT(*)::bigint as count FROM messages');
     const afterCount = toNumber(afterRes.rows[0]?.count);
@@ -550,7 +486,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     scheduleMaintenance: scheduler.scheduleMaintenance,
     stopMaintenance: scheduler.stopMaintenance,
 
-    async storeMessage(chatJid: string, sender: string, text: string): Promise<void> {
+    async storeMessage(chatJid: string, sender: string, text: string): Promise<number> {
       const bare = toBareJid(sender);
       const truncated = text.length > 500 ? text.slice(0, 497) + '...' : text;
       const ts = Math.floor(Date.now() / 1000);
@@ -573,31 +509,8 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [chatJid, MAX_MESSAGES_PER_CHAT],
       );
 
-      if (pgvectorEnabled && shouldVectorizeText(truncated)) {
-        const embedding = embedTextDeterministic(truncated, CONTEXT_VECTOR_DIMENSIONS);
-        const vectorLiteral = toPgvectorLiteral(embedding);
-
-        await pool.query(
-          `INSERT INTO message_vectors (chat_jid, sender, text, timestamp, embedding)
-           VALUES ($1, $2, $3, $4, $5::vector)`,
-          [chatJid, bare, truncated, ts, vectorLiteral],
-        );
-
-        await pool.query(
-          `DELETE FROM message_vectors
-           WHERE id IN (
-             SELECT id FROM (
-               SELECT id, ROW_NUMBER() OVER (PARTITION BY chat_jid ORDER BY timestamp DESC, id DESC) AS row_num
-               FROM message_vectors
-               WHERE chat_jid = $1
-             ) ranked
-             WHERE ranked.row_num > $2
-           )`,
-          [chatJid, MAX_MESSAGES_PER_CHAT],
-        );
-      }
-
       await upsertConversationSession(chatJid, bare, ts);
+      return ts;
     },
 
     async getMessages(chatJid: string, limit: number = 15): Promise<DbMessage[]> {
@@ -608,25 +521,35 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return res.rows.map(mapDbMessage).reverse();
     },
 
+    async listMessageChatJids(): Promise<string[]> {
+      const res = await pool.query<{ chat_jid: string }>('SELECT DISTINCT chat_jid FROM messages');
+      return res.rows.map((row) => row.chat_jid);
+    },
+
+    async listSummarizedSessions(limit: number = Number.MAX_SAFE_INTEGER): Promise<BackfillSession[]> {
+      const res = await pool.query<SessionSummaryRow & { chat_jid: string }>(
+        `SELECT id, chat_jid, started_at, ended_at, message_count, participants, summary_text, topic_tags
+         FROM conversation_sessions
+         WHERE status = 'summarized' AND summary_text IS NOT NULL
+         ORDER BY ended_at DESC, id DESC
+         LIMIT $1`,
+        [limit],
+      );
+      return res.rows.map((row) => ({
+        sessionId: toNumber(row.id),
+        chatJid: row.chat_jid,
+        startedAt: toNumber(row.started_at),
+        endedAt: toNumber(row.ended_at),
+        messageCount: toNumber(row.message_count),
+        participants: parseJsonArray(row.participants),
+        topicTags: parseJsonArray(row.topic_tags),
+        summaryText: row.summary_text,
+      }));
+    },
+
     async searchRelevantMessages(chatJid: string, query: string, limit: number = CONTEXT_RELEVANT_LIMIT): Promise<DbMessage[]> {
       const trimmed = query.trim();
       if (!trimmed) return [];
-
-      if (pgvectorEnabled) {
-        const embedding = embedTextDeterministic(trimmed, CONTEXT_VECTOR_DIMENSIONS);
-        const vectorLiteral = toPgvectorLiteral(embedding);
-
-        const vectorResults = await pool.query<MessageRow>(
-          `SELECT sender, text, timestamp
-           FROM message_vectors
-           WHERE chat_jid = $1
-           ORDER BY embedding <=> $2::vector, timestamp DESC
-           LIMIT $3`,
-          [chatJid, vectorLiteral, limit],
-        );
-
-        return vectorResults.rows.map(mapDbMessage);
-      }
 
       const directResults = await pool.query<MessageRow>(
         `SELECT sender, text, timestamp
@@ -677,28 +600,6 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
       const trimmed = query.trim();
       if (!trimmed) return [];
-
-      if (pgvectorEnabled) {
-        const queryEmbeddingInput = buildContextualizedEmbeddingInput(trimmed, { chatJid });
-        const embeddingResult = await embedTextForVectorSearch(queryEmbeddingInput, CONTEXT_VECTOR_DIMENSIONS);
-        const vectorLiteral = toPgvectorLiteral(embeddingResult.vector);
-
-        const res = await pool.query<SessionSummaryRow>(
-          `SELECT s.id, s.started_at, s.ended_at, s.message_count, s.participants, s.summary_text, s.topic_tags
-           FROM conversation_session_vectors v
-           JOIN conversation_sessions s ON s.id = v.session_id
-           WHERE s.chat_jid = $1 AND s.status = 'summarized' AND s.summary_text IS NOT NULL
-           ORDER BY v.embedding <=> $2::vector, s.ended_at DESC
-           LIMIT $3`,
-          [chatJid, vectorLiteral, limit],
-        );
-
-        return res.rows.map((row) => {
-          const topicTags = parseJsonArray(row.topic_tags);
-          const summaryText = row.summary_text;
-          return mapSessionSummaryHit(row, scoreSessionMatch(summaryText, topicTags, trimmed, toNumber(row.ended_at)));
-        });
-      }
 
       const candidates = await pool.query<SessionSummaryRow>(
         `SELECT id, started_at, ended_at, message_count, participants, summary_text, topic_tags
