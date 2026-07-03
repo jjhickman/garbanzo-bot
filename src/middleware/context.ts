@@ -20,8 +20,10 @@ import {
   searchRelevantMessages,
   searchRelevantSessionSummaries,
   type DbMessage,
+  type SessionSummaryHit,
 } from '../utils/db.js';
-import { indexMessage } from '../utils/vector-memory.js';
+import { indexMessage, searchMessages, searchSessions } from '../utils/vector-memory.js';
+import type { VectorHit } from '../utils/vector-store.js';
 import { rerankCandidates } from '../utils/reranker.js';
 import { toBareJid } from '../utils/db-query-shape.js';
 import { logger } from './logger.js';
@@ -52,6 +54,46 @@ interface CacheEntry {
 }
 
 const summaryCache = new Map<string, CacheEntry>();
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(String);
+}
+
+function numericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function messageHitToDbMessage(hit: VectorHit): DbMessage {
+  return {
+    sender: String(hit.payload.extra?.sender ?? ''),
+    text: hit.payload.text,
+    timestamp: hit.payload.createdAt,
+  };
+}
+
+function sessionHitToSummary(hit: VectorHit): SessionSummaryHit {
+  const extra = hit.payload.extra ?? {};
+  const timeRange = Array.isArray(extra.timeRange) ? extra.timeRange : [];
+  const startedAt = numericValue(timeRange[0]) ?? hit.payload.createdAt;
+  const endedAt = numericValue(timeRange[1]) ?? hit.payload.createdAt;
+
+  return {
+    sessionId: numericValue(hit.payload.refId) ?? 0,
+    startedAt,
+    endedAt,
+    messageCount: numericValue(extra.messageCount) ?? 0,
+    participants: stringArray(extra.participants),
+    topicTags: stringArray(extra.topics),
+    summaryText: hit.payload.text,
+    score: hit.score,
+  };
+}
 
 // ── Public API ──────────────────────────────────────────────────────
 
@@ -89,14 +131,16 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
 
   const recentKeys = new Set(recent.map((m) => `${m.timestamp}:${m.sender}:${m.text}`));
 
-  const relevantRaw = queryText.trim()
-    ? await searchRelevantMessages(chatJid, queryText, RELEVANT_COUNT)
-    : [];
+  const vectorMsgHits = queryText.trim() ? await searchMessages(chatJid, queryText, RELEVANT_COUNT) : [];
+  const relevantRaw = vectorMsgHits.length > 0
+    ? vectorMsgHits.map(messageHitToDbMessage)
+    : (queryText.trim() ? await searchRelevantMessages(chatJid, queryText, RELEVANT_COUNT) : []);
   const relevant = relevantRaw.filter((m) => !recentKeys.has(`${m.timestamp}:${m.sender}:${m.text}`));
 
-  const sessionHits = queryText.trim()
-    ? await searchRelevantSessionSummaries(chatJid, queryText, SESSION_RELEVANT_COUNT)
-    : [];
+  const vectorSessionHits = queryText.trim() ? await searchSessions(chatJid, queryText, SESSION_RELEVANT_COUNT) : [];
+  const sessionHits = vectorSessionHits.length > 0
+    ? vectorSessionHits.map(sessionHitToSummary)
+    : (queryText.trim() ? await searchRelevantSessionSummaries(chatJid, queryText, SESSION_RELEVANT_COUNT) : []);
 
   const parts: string[] = [];
 
