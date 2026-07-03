@@ -6,6 +6,12 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-07-03
+
+### Fixed
+
+- The model now prefers `web_search` (and other tools) over training-data answers for factual questions: tool-use directive added to the system prompt and the `web_search` tool description made prescriptive.
+
 ## [1.0.5] — 2026-07-03
 
 ### Added

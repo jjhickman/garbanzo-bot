@@ -90,7 +90,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:1.0.5
+# docker pull jjhickman/garbanzo:1.0.6
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
@@ -217,8 +217,8 @@ curl http://127.0.0.1:3001/health
 Pinned production pull:
 
 ```bash
-APP_VERSION=1.0.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=1.0.5 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.0.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.0.6 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development build:
