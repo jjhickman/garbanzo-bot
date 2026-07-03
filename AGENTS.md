@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Garbanzo** is a WhatsApp community bot for a 120+ member Boston-area meetup group. It uses the Baileys library (unofficial WhatsApp Web API) to connect to WhatsApp, and routes messages to AI models (configurable cloud failover order + local Ollama) for intelligent responses.
+**Garbanzo** is a multi-platform community bot serving a 120+ member Boston-area meetup group. WhatsApp (via the Baileys unofficial WhatsApp Web API) is the production platform; Discord, Slack, and Teams adapters exist behind a shared platform abstraction (`src/core/` + `src/platforms/`). Messages route to AI models via a configurable cloud failover order (`AI_PROVIDER_ORDER`) plus local Ollama for simple queries.
 
 The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy community connector.
 
@@ -121,80 +121,86 @@ npm run rotate:gh-secrets
 ```
 garbanzo-bot/
 ├── src/
-│   ├── index.ts              # Entry point — starts bot
-│   ├── bot/
-│   │   ├── connection.ts     # Baileys socket setup, auth, reconnect
-│   │   ├── handlers.ts       # Top-level message dispatcher
-│   │   ├── group-handler.ts  # Group message routing + mention handling
-│   │   ├── owner-commands.ts # Owner DM command routing
-│   │   ├── response-router.ts # Bang commands + natural language feature routing
-│   │   ├── reactions.ts      # Emoji reactions (🫘 for acknowledgments)
-│   │   └── groups.ts         # Group config, JID mapping, mention patterns
+│   ├── index.ts              # Entry point — selects platform runtime, starts bot
+│   ├── core/                 # Platform-agnostic message pipeline
+│   │   ├── messaging-platform.ts / messaging-adapter.ts / platform-messenger.ts
+│   │   │                     # Platform abstraction: adapter contract + outbound messenger
+│   │   ├── inbound-message.ts / process-inbound-message.ts / process-group-message.ts
+│   │   │                     # Normalized inbound shape + shared processing pipeline
+│   │   ├── response-router.ts # Bang commands + natural-language feature routing
+│   │   ├── groups-config.ts  # Group config, JID mapping, per-group personas
+│   │   └── vision.ts, poll-payload.ts, message-ref.ts
+│   ├── platforms/            # One directory per platform, each with adapter + runtime
+│   │   ├── whatsapp/         # PRODUCTION. Baileys socket, anti-ban outbound safety,
+│   │   │                     #   owner commands, login server/store, digest, recaps,
+│   │   │                     #   event reminders, media, mentions, reactions
+│   │   ├── discord/          # Gateway runtime + demo server
+│   │   ├── slack/            # Events server, token manager, demo servers
+│   │   └── teams/            # Runtime stub
 │   ├── ai/
 │   │   ├── router.ts         # Model selection (cloud vs Ollama) + cost tracking
-│   │   ├── claude.ts         # Claude-family caller (OpenRouter/Anthropic)
-│   │   ├── chatgpt.ts        # OpenAI fallback caller
-│   │   ├── cloud-providers.ts # Shared cloud request builders/parsers
-│   │   ├── ollama.ts         # Local Ollama client
-│   │   └── persona.ts        # System prompt builder (loads PERSONA.md)
+│   │   ├── cloud-providers.ts / cloud-call.ts # Shared request builders/parsers per provider API
+│   │   ├── claude.ts, chatgpt.ts, gemini.ts, bedrock.ts, ollama.ts # Provider callers
+│   │   ├── openai-oauth.ts   # OpenAI PKCE OAuth flow
+│   │   ├── persona.ts        # System prompt builder (loads docs/PERSONA.md + docs/personas/<platform>.md)
+│   │   ├── tools.ts          # AI tool definitions (weather, transit, venues, news, books, web_search, memory)
+│   │   └── tool-loop.ts      # Provider-agnostic tool-calling loop
 │   ├── features/             # Each feature = one file (or directory), max ~300 lines
-│   │   ├── character/        # D&D 5e character sheet generator (6 files)
-│   │   ├── weather.ts        # Google Weather API
-│   │   ├── transit.ts        # MBTA schedule/alerts
-│   │   ├── transit-data.ts   # Station/route aliases, emoji maps, types
-│   │   ├── moderation.ts     # Content moderation (human-in-the-loop)
-│   │   ├── moderation-patterns.ts # Regex rules, category maps, thresholds
-│   │   ├── introductions.ts  # Auto-respond to new member intros
-│   │   ├── intro-classifier.ts # Signal-based intro detection logic
-│   │   ├── dnd.ts            # D&D dice roller + command handler
-│   │   ├── dnd-lookups.ts    # SRD API lookups (spell, monster, class, item)
-│   │   └── ...               # events, news, books, venues, polls, fun, etc.
+│   │                         # weather, transit, venues, news, books, web-search, events,
+│   │                         # moderation, introductions, memory(+extract), polls, profiles,
+│   │                         # recap, digest, dnd, character/, voice, language, fun, help, …
 │   ├── middleware/
 │   │   ├── rate-limit.ts     # Per-user/per-group rate limiting
 │   │   ├── logger.ts         # Structured logging (Pino)
 │   │   ├── context.ts        # Two-tier context compression + caching
-│   │   ├── stats.ts          # Token estimation, daily cost tracking
-│   │   ├── health.ts         # HTTP health endpoint + memory watchdog
+│   │   ├── stats.ts          # Token estimation, cost tracking, tool-call counters
+│   │   ├── health.ts         # HTTP health/metrics endpoints + memory watchdog
+│   │   ├── admin-page.ts     # Token-gated owner admin page (/admin)
 │   │   ├── retry.ts          # Dead letter retry queue
 │   │   └── sanitize.ts       # Input sanitization + prompt injection detection
 │   └── utils/
 │       ├── config.ts         # Env var loading + Zod validation
-│       ├── formatting.ts     # WhatsApp text formatting helpers
-│       ├── jid.ts            # JID parsing/comparison utilities
-│       ├── db.ts             # SQLite barrel (re-exports schema, profiles, maintenance)
-│       ├── db-schema.ts      # Database init, table definitions
-│       ├── db-profiles.ts    # Member profile queries
-│       └── db-maintenance.ts # Backup, vacuum, prune, scheduled maintenance
-├── config/
-│   └── groups.json           # Group ID → name mapping + per-group settings
-├── docs/
-│   ├── PERSONA.md            # Garbanzo Bean character doc (loaded at runtime)
-│   ├── SECURITY.md           # Security audit findings + recommendations
-│   ├── ROADMAP.md            # Phased implementation plan
-│   ├── ARCHITECTURE.md       # Data flow, routing, multimedia pipeline docs
-│   ├── INFRASTRUCTURE.md     # Hardware/network reference
-│   ├── SETUP_EXAMPLES.md     # Reusable setup command recipes
-│   └── RELEASES.md           # Versioning and Docker release workflow
+│       ├── db.ts             # DB barrel; db-backend.ts selects SQLite (default) or Postgres
+│       ├── db-sqlite.ts, db-postgres.ts, db-schema.ts, db-profiles.ts, db-maintenance.ts, …
+│       ├── embedding-provider.ts, text-embedding.ts, reranker.ts, eval-retrieval.ts
+│       │                     # Retrieval/vector-memory groundwork (see docs/VECTOR_DB_PLAN.md)
+│       ├── session-summary.ts, session-backfill.ts
+│       └── formatting.ts, jid.ts
+├── config/groups.json        # Group ID → name mapping + per-group settings
+├── docs/                     # PERSONA.md (runtime prompt), personas/<platform>.md overrides,
+│                             # ARCHITECTURE, SECURITY, MONITORING, PLATFORMS, RELEASES,
+│                             # ADR-0001 (outbound safety), POSTGRES_MIGRATION_RUNBOOK, …
+├── monitoring/               # Self-hosted Prometheus + Grafana stack
+├── infra/                    # Deployment infrastructure
+├── website/                  # garbanzobot.com static site
 ├── data/                     # Runtime data (gitignored DBs, persisted state)
-├── scripts/
-│   ├── setup.mjs             # Interactive setup wizard
-│   ├── setup.sh              # Wrapper for setup wizard
-│   ├── gh-workflow.sh        # GitHub account switch helpers
-│   ├── rotate-gh-secrets.sh  # Rotate GitHub Actions secrets from env vars
-│   └── audit-secrets.sh      # Local gitleaks wrapper
-├── tests/
-│   └── *.test.ts             # Vitest test files (12 files, 446 tests)
+├── scripts/                  # setup wizard, gh account helpers, secret rotation/audit
+├── tests/                    # Vitest, 66 test files / 700+ tests
+│   └── evals/                # Prompt-behavior eval set (see tests/evals/README.md)
 ├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)
-├── docker-compose.yml        # Named volumes, env_file, health check
-├── .dockerignore             # Excludes .git, node_modules, tests, etc.
+├── docker-compose*.yml       # dev / prod / aws variants
 ├── baileys_auth/             # Baileys auth state (gitignored)
-├── .env                      # Secrets (gitignored)
-├── .env.example              # Template for .env
-├── .gitleaks.toml            # Secret scanning config (gitleaks)
-├── package.json
-├── tsconfig.json
+├── .env / .env.example       # Secrets (gitignored) / template
+├── .gitleaks.toml            # Secret + PII scanning config
 └── AGENTS.md                 # This file
 ```
+
+## Decisions Log
+
+Settled questions — **do not relitigate these**; propose a change only with new evidence, and note it here when a decision changes.
+
+- **OpenAI is the primary AI provider** (owner decision, 2026-06). Anthropic/Gemini/Bedrock/Ollama are failover via `AI_PROVIDER_ORDER`. When an integration misbehaves, fix the integration — do not propose switching primary provider.
+- **Production models: `gpt-5.4-mini` primary, `claude-haiku-4-5` fallback, prompt caching on** (2026-07-01).
+- **One deployment = one platform** (`MESSAGING_PLATFORM`). WhatsApp is production; Discord/Slack are demo-grade; Teams is a stub. Multi-tenant single-deployment was not chosen.
+- **Web search is multi-provider with priority Firecrawl → Brave → Google PSE → SearXNG** (PRs #216, #220). `web_search` tool results get a 6,000-char budget vs 1,500 for other tools, to allow extracted page content.
+- **The system prompt must explicitly direct models to prefer tools over training data** (PR #218) — without it, models answer factual questions from stale memory. Preserve this directive in any prompt rewrite.
+- **Storage: SQLite is the default backend**; Postgres exists behind `db-backend.ts` (runbook: `docs/POSTGRES_MIGRATION_RUNBOOK.md`). Vector memory is planned, not enabled (`docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md`).
+- **WhatsApp anti-ban is load-bearing**: Baileys 7.x + baileys-antiban, outbound safety rules in `docs/ADR-0001-whatsapp-outbound-safety.md`, warm-up limits `day1Limit`/`maxPerDay` = 2000. Never bypass the outbound-safety layer.
+- **Moderation is human-in-the-loop**: the bot warns in-group and DMs the owner; only the owner acts. Never auto-ban, never let members direct moderation.
+- **Git/GitHub: PRs only, the owner merges** — agents never self-merge or bypass branch protection. Commits use the GitHub noreply email (`25596491+jjhickman@users.noreply.github.com`); personal emails are blocked by the gitleaks PII rule.
+- **Public-facing copy (README, website, Docker Hub) carries no AI-writing tells** (PRs #212–#214): no em-dash chains, no "X, not Y" constructions, no model-name dropping; plain register.
+- **Releases**: tagged versions publish images to GHCR + Docker Hub; production runs on a Raspberry Pi 5 via Docker Compose. Grafana admin password intentionally defaults to `WHATSAPP_LOGIN_TOKEN` (PR #209).
+- **Prompt changes are regression-tested against `tests/evals/prompt-eval-set.json`** (2026-07-03) — when changing PERSONA.md, persona.ts, or tools.ts, check the relevant eval categories before merging.
 
 ## Code Style
 
