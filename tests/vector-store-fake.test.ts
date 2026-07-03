@@ -30,6 +30,30 @@ describe('in-memory vector store', () => {
     expect(g1.map((h) => h.id)).toEqual(['m']);
   });
 
+  it('filters explicit null chatJid to global payloads only', async () => {
+    const store = createInMemoryVectorStore();
+    await store.upsert([
+      pt('global', [1, 0], { kind: 'fact', scope: 'global', chatJid: null }),
+      pt('chat', [1, 0], { kind: 'message', scope: 'chat', chatJid: 'g1' }),
+    ]);
+
+    const hits = await store.search([1, 0], { limit: 5, filter: { chatJid: null } });
+
+    expect(hits.map((h) => h.id)).toEqual(['global']);
+  });
+
+  it('filters by refId', async () => {
+    const store = createInMemoryVectorStore();
+    await store.upsert([
+      pt('a', [1, 0], { refId: 'same-vector-a' }),
+      pt('b', [1, 0], { refId: 'same-vector-b' }),
+    ]);
+
+    const hits = await store.search([1, 0], { limit: 5, filter: { refId: 'same-vector-b' } });
+
+    expect(hits.map((h) => h.id)).toEqual(['b']);
+  });
+
   it('upsert overwrites by id and delete removes by filter', async () => {
     const store = createInMemoryVectorStore();
     await store.upsert([pt('a', [1, 0])]);

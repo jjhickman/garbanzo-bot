@@ -21,6 +21,7 @@ export interface VectorFilter {
   kind?: VectorKind;
   scope?: VectorScope;
   chatJid?: string | null;
+  refId?: string;
 }
 
 export interface VectorSearchOpts {
@@ -58,6 +59,7 @@ function matchesFilter(payload: VectorPayload, filter?: VectorFilter): boolean {
   if (filter.kind !== undefined && payload.kind !== filter.kind) return false;
   if (filter.scope !== undefined && payload.scope !== filter.scope) return false;
   if (filter.chatJid !== undefined && payload.chatJid !== filter.chatJid) return false;
+  if (filter.refId !== undefined && payload.refId !== filter.refId) return false;
   return true;
 }
 

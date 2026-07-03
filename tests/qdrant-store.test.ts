@@ -18,6 +18,16 @@ describe('buildQdrantFilter', () => {
     });
     expect(buildQdrantFilter(undefined)).toBeUndefined();
   });
+
+  it('maps refId when present', () => {
+    expect(buildQdrantFilter({ kind: 'fact', chatJid: null, refId: 'fact-1' })).toEqual({
+      must: [
+        { key: 'kind', match: { value: 'fact' } },
+        { key: 'chatJid', match: { value: null } },
+        { key: 'refId', match: { value: 'fact-1' } },
+      ],
+    });
+  });
 });
 
 describe('createQdrantVectorStore', () => {

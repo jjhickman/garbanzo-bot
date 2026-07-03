@@ -24,6 +24,7 @@ export function buildQdrantFilter(filter?: VectorFilter): { must: unknown[] } | 
   if (filter.kind !== undefined) must.push({ key: 'kind', match: { value: filter.kind } });
   if (filter.scope !== undefined) must.push({ key: 'scope', match: { value: filter.scope } });
   if (filter.chatJid !== undefined) must.push({ key: 'chatJid', match: { value: filter.chatJid } });
+  if (filter.refId !== undefined) must.push({ key: 'refId', match: { value: filter.refId } });
 
   return must.length > 0 ? { must } : undefined;
 }
