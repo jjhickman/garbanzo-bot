@@ -6,6 +6,8 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-07-03
+
 ### Added
 
 - `web_search` AI tool with a reusable multi-provider wrapper (Brave default; Google Programmable Search and SearXNG supported via env vars).
