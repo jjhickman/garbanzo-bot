@@ -86,7 +86,7 @@ describe('Unified demo server', () => {
     const discordRes = await fetch(`${baseUrl}/demo/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ platform: 'discord', text: '@garbanzo !help' }),
+      body: JSON.stringify({ platform: 'discord', text: '!help' }),
     });
     expect(discordRes.status).toBe(200);
     const discordBody = await discordRes.json() as {

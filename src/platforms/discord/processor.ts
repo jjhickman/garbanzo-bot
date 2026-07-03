@@ -12,6 +12,7 @@ import { handleEventPassive } from '../../features/events.js';
 import type { DiscordInbound } from './inbound.js';
 import {
   discordChannelRequiresMention,
+  getDiscordChannelName,
   getDiscordEventsChannelId,
   getDiscordIntroductionsChannelId,
   isDiscordChannelEnabled,
@@ -93,10 +94,10 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
 function buildDiscordMentionRegex(botUserId: string | undefined): RegExp {
   if (botUserId && botUserId.trim().length > 0) {
     const escaped = botUserId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^<@!?${escaped}>\\b[:\\s]*`, 'i');
+    return new RegExp(`^<@!?${escaped}>[:\\s]*`, 'i');
   }
 
-  return /^<@!?\d+>\b[:\s]*/i;
+  return /^<@!?\d+>[:\s]*/i;
 }
 
 async function processDiscordInbound(
@@ -124,11 +125,15 @@ async function processDiscordInbound(
 
     handleGroupMessage: async ({ inbound: m, text, hasMedia }) => {
       const trimmed = text.trim();
-      const mentionMatch = mentionRegex.exec(trimmed) ?? /^@garbanzo\b[:\s]*/i.exec(trimmed);
+      const mentionMatch = mentionRegex.exec(trimmed);
+      const mentionedInline = !!env.botUserId
+        && Array.isArray(m.mentionedIds)
+        && m.mentionedIds.includes(env.botUserId);
       const isBang = trimmed.startsWith('!');
+      const isAddressed = Boolean(mentionMatch) || mentionedInline || isBang;
       const requiresMention = discordChannelRequiresMention(m.chatId);
 
-      if (requiresMention && !mentionMatch && !isBang) return;
+      if (requiresMention && !isAddressed) return;
 
       let query = trimmed;
       if (!requiresMention) {
@@ -145,7 +150,7 @@ async function processDiscordInbound(
         messenger,
         chatId: m.chatId,
         senderId: m.senderId,
-        groupName: `Discord ${m.chatId}`,
+        groupName: getDiscordChannelName(m.chatId) ?? `Discord ${m.chatId}`,
         ownerId: env.ownerId,
         query,
         isFeatureEnabled: featureEnabled,

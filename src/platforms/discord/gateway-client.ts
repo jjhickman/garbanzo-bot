@@ -259,7 +259,10 @@ export function createDiscordGatewayClient(deps: DiscordGatewayClientDeps): {
   async function handleReady(): Promise<void> {
     try {
       const discordClient = await getClient();
-      botUserId = discordClient.user?.id ?? undefined;
+      const nextBotUserId = discordClient.user?.id ?? undefined;
+      if (botUserId === nextBotUserId) return;
+
+      botUserId = nextBotUserId;
       logger.info({ botUserId }, 'Discord Gateway client ready');
     } catch (err) {
       logger.error({ err }, 'Discord ready handler failed');
@@ -271,6 +274,7 @@ export function createDiscordGatewayClient(deps: DiscordGatewayClientDeps): {
       const discordClient = await getClient();
       discordClient.on('messageCreate', handleMessageCreate);
       discordClient.on('guildMemberAdd', handleGuildMemberAdd);
+      discordClient.once('clientReady', handleReady);
       discordClient.once('ready', handleReady);
       await discordClient.login(deps.token);
     },

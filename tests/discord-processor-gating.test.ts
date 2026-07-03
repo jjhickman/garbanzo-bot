@@ -27,6 +27,9 @@ function setupMocks() {
   );
   const getDiscordIntroductionsChannelId = vi.fn<() => string | null>(() => 'intros');
   const getDiscordEventsChannelId = vi.fn<() => string | null>(() => 'events');
+  const getDiscordChannelName = vi.fn<(channelId: string) => string | undefined>(
+    (channelId) => channelId === 'enabled' ? 'general' : undefined,
+  );
   const getResponse = vi.fn<MockGetResponse>(async (query, ctx, featureEnabled) => {
     const weatherEnabled = featureEnabled(ctx.groupJid, 'weather');
     return `assistant:${query}:weather=${weatherEnabled ? 'on' : 'off'}`;
@@ -36,6 +39,7 @@ function setupMocks() {
     isDiscordChannelEnabled,
     discordChannelRequiresMention,
     isDiscordFeatureEnabled,
+    getDiscordChannelName,
     getDiscordIntroductionsChannelId,
     getDiscordEventsChannelId,
   }));
@@ -48,6 +52,7 @@ function setupMocks() {
     isDiscordChannelEnabled,
     discordChannelRequiresMention,
     isDiscordFeatureEnabled,
+    getDiscordChannelName,
     getResponse,
   };
 }
@@ -81,16 +86,114 @@ describe('Discord processor config gating', () => {
         id: 'message-1',
         channel_id: 'disabled',
         guild_id: 'guild-1',
-        content: '@garbanzo hello',
+        content: '<@bot-user> hello',
         author: { id: 'user-1' },
         timestamp: new Date().toISOString(),
+        mentions: [{ id: 'bot-user' }],
       },
-      { ownerId: 'owner-dm', ownerUserId: 'owner-user' },
+      { ownerId: 'owner-dm', ownerUserId: 'owner-user', botUserId: 'bot-user' },
     );
 
     expect(mocks.isDiscordChannelEnabled).toHaveBeenCalledWith('disabled');
     expect(outbox).toHaveLength(0);
     expect(mocks.getResponse).not.toHaveBeenCalled();
+  });
+
+  it('processes mid-sentence structured mentions in require-mention production channels', async () => {
+    const mocks = setupMocks();
+    const { createDiscordDemoAdapter, processDiscordEvent } = await importDiscordProcessor();
+    const outbox: DiscordDemoOutboxEntry[] = [];
+    const messenger = createDiscordDemoAdapter(outbox);
+
+    await processDiscordEvent(
+      messenger,
+      {
+        id: 'message-mid-mention',
+        channel_id: 'enabled',
+        guild_id: 'guild-1',
+        content: 'hey <@bot-user> can you help?',
+        author: { id: 'user-4' },
+        timestamp: new Date().toISOString(),
+        mentions: [{ id: 'bot-user' }],
+      },
+      { ownerId: 'owner-dm', ownerUserId: 'owner-user', botUserId: 'bot-user' },
+    );
+
+    expect(mocks.discordChannelRequiresMention).toHaveBeenCalledWith('enabled');
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      'hey <@bot-user> can you help?',
+      expect.objectContaining({
+        groupName: 'general',
+        groupJid: 'enabled',
+        senderJid: 'user-4',
+      }),
+      expect.any(Function),
+      undefined,
+    );
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.payload).toMatchObject({
+      text: 'assistant:hey <@bot-user> can you help?:weather=off',
+    });
+  });
+
+  it('strips leading structured mentions in require-mention production channels', async () => {
+    const mocks = setupMocks();
+    const { createDiscordDemoAdapter, processDiscordEvent } = await importDiscordProcessor();
+    const outbox: DiscordDemoOutboxEntry[] = [];
+    const messenger = createDiscordDemoAdapter(outbox);
+
+    await processDiscordEvent(
+      messenger,
+      {
+        id: 'message-leading-mention',
+        channel_id: 'enabled',
+        guild_id: 'guild-1',
+        content: '<@12345> help please',
+        author: { id: 'user-6' },
+        timestamp: new Date().toISOString(),
+        mentions: [{ id: '12345' }],
+      },
+      { ownerId: 'owner-dm', ownerUserId: 'owner-user', botUserId: '12345' },
+    );
+
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      'help please',
+      expect.objectContaining({
+        groupName: 'general',
+        groupJid: 'enabled',
+        senderJid: 'user-6',
+      }),
+      expect.any(Function),
+      undefined,
+    );
+    expect(outbox[0]?.payload).toMatchObject({
+      text: 'assistant:help please:weather=off',
+    });
+  });
+
+  it('ignores require-mention production messages without a mention or bang', async () => {
+    const mocks = setupMocks();
+    const { createDiscordDemoAdapter, processDiscordEvent } = await importDiscordProcessor();
+    const outbox: DiscordDemoOutboxEntry[] = [];
+    const messenger = createDiscordDemoAdapter(outbox);
+
+    await processDiscordEvent(
+      messenger,
+      {
+        id: 'message-no-address',
+        channel_id: 'enabled',
+        guild_id: 'guild-1',
+        content: 'can you help?',
+        author: { id: 'user-5' },
+        timestamp: new Date().toISOString(),
+        mentions: [],
+      },
+      { ownerId: 'owner-dm', ownerUserId: 'owner-user', botUserId: 'bot-user' },
+    );
+
+    expect(mocks.discordChannelRequiresMention).toHaveBeenCalledWith('enabled');
+    expect(mocks.getResponse).not.toHaveBeenCalled();
+    expect(outbox).toHaveLength(0);
   });
 
   it('processes non-mention messages in channels that do not require mentions', async () => {
@@ -164,7 +267,7 @@ describe('Discord processor config gating', () => {
     const inbound = normalizeDiscordDemoInbound({
       chatId: 'disabled',
       senderId: 'user-9',
-      text: '@garbanzo weather please',
+      text: '!weather please',
       isGroupChat: true,
     });
 
@@ -174,7 +277,7 @@ describe('Discord processor config gating', () => {
     expect(mocks.getResponse).toHaveBeenCalledTimes(1);
     expect(outbox).toHaveLength(1);
     // weather=on proves the feature predicate was bypassed (real predicate → off for 'disabled').
-    expect(outbox[0]?.payload).toMatchObject({ text: 'assistant:weather please:weather=on' });
+    expect(outbox[0]?.payload).toMatchObject({ text: 'assistant:!weather please:weather=on' });
   });
 
   it('routes feature checks through the Discord feature predicate (production path)', async () => {
@@ -192,7 +295,7 @@ describe('Discord processor config gating', () => {
         id: 'message-2',
         channel_id: 'open',
         guild_id: 'guild-1',
-        content: '@garbanzo should I bring an umbrella?',
+        content: 'should I bring an umbrella?',
         author: { id: 'user-3' },
         timestamp: new Date().toISOString(),
       },
@@ -201,7 +304,7 @@ describe('Discord processor config gating', () => {
 
     expect(mocks.isDiscordFeatureEnabled).toHaveBeenCalledWith('open', 'weather');
     expect(outbox[0]?.payload).toMatchObject({
-      text: 'assistant:@garbanzo should I bring an umbrella?:weather=on',
+      text: 'assistant:should I bring an umbrella?:weather=on',
     });
   });
 });

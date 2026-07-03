@@ -112,6 +112,7 @@ describe('Discord Gateway client', () => {
     expect(createDiscordAdapter).toHaveBeenCalledWith('test_tok');
     expect(fakeClient.onHandlers.has('messageCreate')).toBe(true);
     expect(fakeClient.onHandlers.has('guildMemberAdd')).toBe(true);
+    expect(fakeClient.onceHandlers.has('clientReady')).toBe(true);
     expect(fakeClient.onceHandlers.has('ready')).toBe(true);
     expect(fakeClient.login).toHaveBeenCalledWith('test_tok');
   });
@@ -120,6 +121,7 @@ describe('Discord Gateway client', () => {
     const { fakeClient, gateway, processDiscordEvent } = await setup();
 
     await gateway.start();
+    await fakeClient.onceHandlers.get('clientReady')?.();
     await fakeClient.onceHandlers.get('ready')?.();
     await fakeClient.onHandlers.get('messageCreate')?.(createFakeMessage());
 
