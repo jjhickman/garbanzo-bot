@@ -126,9 +126,9 @@ const tools: AiTool[] = [
   ),
   queryTool(
     'web_search',
-    'Search the web for anything not covered by other tools: facts, current events, local info, how-tos, or follow-up research.',
+    'Search the live web. Use this for ANY factual question without a dedicated tool — dates, prices, schedules, rankings, how-tos, anything current, local, niche, or uncertain. Prefer searching over answering from your own knowledge: your training data is out of date.',
     'query',
-    'Free-text web search, for example "best hiking trails near Boston" or "what is the capital of Mongolia".',
+    'Free-text web search, for example "next full moon date" or "tallest building in New England".',
     async (query) => {
       const { handleWebSearch } = await import('../features/web-search.js');
       return handleWebSearch(query);

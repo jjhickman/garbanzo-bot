@@ -8,6 +8,7 @@ import { getGroupPersona, getEnabledGroupJidByName } from '../core/groups-config
 import { formatContext } from '../middleware/context.js';
 import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPrompt } from '../utils/db.js';
+import { getSearchProviderName } from '../features/web-search.js';
 
 // Load persona at startup
 const defaultPersonaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
@@ -34,6 +35,22 @@ export interface MessageContext {
  * Includes the complete PERSONA.md and all context.
  * Optionally accepts the user's message text for language detection.
  */
+/**
+ * Tool-use directive appended when tool calling is on. Without it, models
+ * answer factual questions from stale training data instead of calling
+ * tools (observed with web_search in production).
+ */
+function buildToolInstruction(): string {
+  if (!config.AI_TOOL_CALLING) return '';
+  const parts = [
+    'For factual questions — dates, schedules, prices, statistics, or anything current, local, or uncertain — call the relevant tool instead of answering from memory.',
+  ];
+  if (getSearchProviderName() !== null) {
+    parts.push('Use web_search when no dedicated tool fits. Live results beat recalled answers.');
+  }
+  return parts.join(' ');
+}
+
 export async function buildSystemPrompt(ctx: MessageContext, userMessage?: string): Promise<string> {
   const introductionsChatId = getEnabledGroupJidByName('Introductions');
   const isIntroGroup = !!introductionsChatId && ctx.groupJid === introductionsChatId;
@@ -41,6 +58,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
   const memories = await formatMemoriesForPrompt();
   const groupPersona = getGroupPersona(ctx.groupJid);
+  const toolInstruction = buildToolInstruction();
 
   return [
     personaDoc,
@@ -56,7 +74,8 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
     memories ? `\n${memories}` : '',
     '',
     'Keep responses concise and use WhatsApp formatting (*bold*, _italic_, ~strike~).',
-    'If you are unsure about something, say so honestly.',
+    toolInstruction,
+    'If you are still unsure about something after using your tools, say so honestly.',
     isIntroGroup ? INTRO_SYSTEM_ADDENDUM : '',
     langInstruction,
   ]
