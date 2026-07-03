@@ -145,7 +145,7 @@ export async function deleteFact(refId: string): Promise<void> {
   if (!s) return;
 
   try {
-    await s.delete({ kind: 'fact', chatJid: null, refId });
+    await s.delete({ kind: 'fact', refId });
   } catch (err) {
     logger.warn({ err, refId }, 'Vector fact delete failed');
   }

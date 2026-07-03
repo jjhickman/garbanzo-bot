@@ -23,6 +23,8 @@ describe.skipIf(!RUN)('qdrant integration', () => {
     }]);
     const hits = await store.search(vec, { limit: 1, filter: { kind: 'fact' } });
     expect(hits[0]?.payload.refId).toBe('itest');
-    await store.delete({ kind: 'fact' });
+    await store.delete({ kind: 'fact', refId: 'itest' });
+    const afterDeleteHits = await store.search(vec, { limit: 10, filter: { kind: 'fact' } });
+    expect(afterDeleteHits.some((hit) => hit.payload.refId === 'itest')).toBe(false);
   });
 });

@@ -1,4 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('../src/middleware/logger.js', () => ({ logger }));
+
 import { buildQdrantFilter, createQdrantVectorStore } from '../src/utils/qdrant-store.js';
 
 describe('buildQdrantFilter', () => {
@@ -31,9 +41,14 @@ describe('buildQdrantFilter', () => {
 });
 
 describe('createQdrantVectorStore', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('creates the collection when missing', async () => {
     const client = {
       getCollections: vi.fn().mockResolvedValue({ collections: [] }),
+      getCollection: vi.fn(),
       createCollection: vi.fn().mockResolvedValue(true),
       upsert: vi.fn(),
       search: vi.fn(),
@@ -47,11 +62,39 @@ describe('createQdrantVectorStore', () => {
         vectors: expect.objectContaining({ size: 1536, distance: 'Cosine' }),
       }),
     );
+    expect(client.getCollection).not.toHaveBeenCalled();
+  });
+
+  it('logs a dimension mismatch for an existing collection and skips creation', async () => {
+    const client = {
+      getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      getCollection: vi.fn().mockResolvedValue({
+        config: {
+          params: {
+            vectors: { size: 3072, distance: 'Cosine' },
+          },
+        },
+      }),
+      createCollection: vi.fn(),
+      upsert: vi.fn(),
+      search: vi.fn(),
+      delete: vi.fn(),
+    };
+    const store = createQdrantVectorStore({ client });
+
+    await store.ensureCollection();
+
+    expect(client.createCollection).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      { collection: 'garbanzo_memory', existing: 3072, expected: 1536 },
+      'Qdrant collection dimension mismatch; re-create the collection or run backfill after changing embedding model/dims',
+    );
   });
 
   it('upserts points into the configured collection', async () => {
     const client = {
       getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      getCollection: vi.fn(),
       createCollection: vi.fn(),
       upsert: vi.fn(),
       search: vi.fn(),
@@ -86,6 +129,7 @@ describe('createQdrantVectorStore', () => {
   it('maps Qdrant search results to VectorHit', async () => {
     const client = {
       getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      getCollection: vi.fn(),
       createCollection: vi.fn(),
       upsert: vi.fn(),
       search: vi.fn().mockResolvedValue([
@@ -131,6 +175,7 @@ describe('createQdrantVectorStore', () => {
   it('deletes by filter and returns the unknown-count contract', async () => {
     const client = {
       getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      getCollection: vi.fn(),
       createCollection: vi.fn(),
       upsert: vi.fn(),
       search: vi.fn(),
@@ -154,6 +199,7 @@ describe('createQdrantVectorStore', () => {
   it('health returns ok:false when the client throws', async () => {
     const client = {
       getCollections: vi.fn().mockRejectedValue(new Error('conn refused')),
+      getCollection: vi.fn(),
       createCollection: vi.fn(),
       upsert: vi.fn(),
       search: vi.fn(),

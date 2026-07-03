@@ -1,5 +1,6 @@
 import { logger } from '../middleware/logger.js';
 import { config } from './config.js';
+import type { QdrantClient } from '@qdrant/js-client-rest';
 import type {
   VectorFilter,
   VectorHit,
@@ -9,8 +10,11 @@ import type {
   VectorStore,
 } from './vector-store.js';
 
+type QdrantCollectionInfo = Awaited<ReturnType<QdrantClient['getCollection']>>;
+
 export interface QdrantClientLike {
   getCollections(): Promise<{ collections: Array<{ name: string }> }>;
+  getCollection(name: string): Promise<QdrantCollectionInfo>;
   createCollection(name: string, opts: unknown): Promise<unknown>;
   upsert(name: string, opts: unknown): Promise<unknown>;
   search(name: string, opts: unknown): Promise<Array<{ id: string | number; score: number; payload: unknown }>>;
@@ -37,6 +41,32 @@ async function defaultClient(): Promise<QdrantClientLike> {
   }) as unknown as QdrantClientLike;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function numberField(value: unknown, key: string): number | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  return typeof field === 'number' ? field : undefined;
+}
+
+function getVectorSize(info: QdrantCollectionInfo): number | undefined {
+  const vectors = info.config.params.vectors;
+  if (!isRecord(vectors)) return undefined;
+
+  const vectorConfigs: Record<string, unknown> = vectors;
+  const directSize = numberField(vectorConfigs, 'size');
+  if (directSize !== undefined) return directSize;
+
+  for (const vectorConfig of Object.values(vectorConfigs)) {
+    const size = numberField(vectorConfig, 'size');
+    if (size !== undefined) return size;
+  }
+
+  return undefined;
+}
+
 export function createQdrantVectorStore(deps: { client?: QdrantClientLike } = {}): VectorStore {
   const collection = config.QDRANT_COLLECTION;
   let clientPromise: Promise<QdrantClientLike> | null = deps.client ? Promise.resolve(deps.client) : null;
@@ -46,7 +76,16 @@ export function createQdrantVectorStore(deps: { client?: QdrantClientLike } = {}
     async ensureCollection() {
       const c = await client();
       const { collections } = await c.getCollections();
-      if (collections.some((col) => col.name === collection)) return;
+      if (collections.some((col) => col.name === collection)) {
+        const existing = getVectorSize(await c.getCollection(collection));
+        if (existing !== undefined && existing !== config.VECTOR_EMBEDDING_DIMENSIONS) {
+          logger.error(
+            { collection, existing, expected: config.VECTOR_EMBEDDING_DIMENSIONS },
+            'Qdrant collection dimension mismatch; re-create the collection or run backfill after changing embedding model/dims',
+          );
+        }
+        return;
+      }
 
       await c.createCollection(collection, {
         vectors: { size: config.VECTOR_EMBEDDING_DIMENSIONS, distance: 'Cosine' },
