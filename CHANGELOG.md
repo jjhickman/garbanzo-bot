@@ -6,9 +6,12 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-07-03
+
 ### Added
 
 - Firecrawl is now the top-priority `web_search` provider with extracted page-content results, plus a larger `web_search` tool-result budget for direct answers from scraped content.
+
 
 ## [1.0.6] — 2026-07-03
 
