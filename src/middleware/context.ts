@@ -73,7 +73,7 @@ function messageHitToDbMessage(hit: VectorHit): DbMessage {
   return {
     sender: String(hit.payload.extra?.sender ?? ''),
     text: hit.payload.text,
-    timestamp: hit.payload.createdAt,
+    timestamp: numericValue(hit.payload.createdAt) ?? 0,
   };
 }
 
@@ -82,9 +82,14 @@ function sessionHitToSummary(hit: VectorHit): SessionSummaryHit {
   const timeRange = Array.isArray(extra.timeRange) ? extra.timeRange : [];
   const startedAt = numericValue(timeRange[0]) ?? hit.payload.createdAt;
   const endedAt = numericValue(timeRange[1]) ?? hit.payload.createdAt;
+  const sessionId = numericValue(hit.payload.refId);
+
+  if (sessionId === null) {
+    logger.warn({ refId: hit.payload.refId, vectorHitId: hit.id }, 'session vector hit has non-numeric refId');
+  }
 
   return {
-    sessionId: numericValue(hit.payload.refId) ?? 0,
+    sessionId: sessionId ?? 0,
     startedAt,
     endedAt,
     messageCount: numericValue(extra.messageCount) ?? 0,
@@ -169,7 +174,10 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
         sessionInjectedChars += summaryText.length;
         sessionCount += 1;
         const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
-        sessionParts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        const participants = hit.participants.length > 0
+          ? `participants: ${hit.participants.join(', ')}`
+          : 'participants: n/a';
+        sessionParts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics} | ${participants}`);
         sessionParts.push(`  ${summaryText}`);
       }
     }
@@ -205,7 +213,10 @@ export async function formatContext(chatJid: string, queryText: string = ''): Pr
         const summaryText = hit.summaryText.length > 420 ? `${hit.summaryText.slice(0, 417)}...` : hit.summaryText;
         injectedChars += summaryText.length;
         const topics = hit.topicTags.length > 0 ? `topics: ${hit.topicTags.join(', ')}` : 'topics: n/a';
-        parts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics}`);
+        const participants = hit.participants.length > 0
+          ? `participants: ${hit.participants.join(', ')}`
+          : 'participants: n/a';
+        parts.push(`- ${startIso} to ${endIso} | ${hit.messageCount} msgs | ${topics} | ${participants}`);
         parts.push(`  ${summaryText}`);
       }
       recordSessionSummaryRetrieval(chatJid, sessionHits.length, injectedChars);

@@ -333,7 +333,12 @@ function finalizeSessionSummary(chatJid: string, session: OpenSessionRow): void 
     }),
     summaryText: summary.summaryText,
     createdAt: session.ended_at,
-    extra: { topics: summary.topicTags, timeRange: [session.started_at, session.ended_at] },
+    extra: {
+      topics: summary.topicTags,
+      timeRange: [session.started_at, session.ended_at],
+      messageCount: session.message_count,
+      participants,
+    },
   }).catch((err) => logger.warn({ err }, 'session vector index failed'));
 }
 

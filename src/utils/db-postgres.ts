@@ -365,7 +365,12 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       embeddingInput,
       summaryText: summary.summaryText,
       createdAt: endedAt,
-      extra: { topics: summary.topicTags, timeRange: [startedAt, endedAt] },
+      extra: {
+        topics: summary.topicTags,
+        timeRange: [startedAt, endedAt],
+        messageCount,
+        participants,
+      },
     };
   };
 

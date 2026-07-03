@@ -116,6 +116,9 @@ describe('retrieval wiring', () => {
     expect(searchSessions).toHaveBeenCalled();
     expect(out).toContain('red line is delayed');
     expect(out).toContain('The group discussed the red line delay and shuttle buses.');
+    expect(out).toContain('4 msgs');
+    expect(out).toContain('participants: s1, s2');
+    expect(out).not.toContain('0 msgs');
     expect(keywordSearch).not.toHaveBeenCalled();
     expect(keywordSessionSearch).not.toHaveBeenCalled();
   });
