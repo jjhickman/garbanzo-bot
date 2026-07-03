@@ -105,6 +105,9 @@ const envSchema = z.object({
   MBTA_API_KEY: z.string().optional(),
   NEWSAPI_KEY: z.string().optional(),
   BRAVE_SEARCH_API_KEY: z.string().optional(),
+  GOOGLE_SEARCH_ENGINE_ID: z.string().optional(),
+  SEARXNG_BASE_URL: optionalUrl,
+  WEB_SEARCH_PROVIDER: z.enum(['brave', 'google', 'searxng']).optional(),
 
   // Optional external links for owner messaging
   GITHUB_SPONSORS_URL: optionalUrl,

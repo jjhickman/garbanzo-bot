@@ -32,7 +32,10 @@ Copy `.env.example` to `.env` and configure:
 | `GOOGLE_API_KEY` | No | Weather + venue search |
 | `MBTA_API_KEY` | No | Transit data (Boston-specific) |
 | `NEWSAPI_KEY` | No | News search |
-| `BRAVE_SEARCH_API_KEY` | No | Brave Search API (venue/web search fallback) |
+| `BRAVE_SEARCH_API_KEY` | No | Brave Search API — powers the web_search AI tool (default search provider) |
+| `GOOGLE_SEARCH_ENGINE_ID` | No | Google Programmable Search engine ID for the web_search AI tool |
+| `SEARXNG_BASE_URL` | No | Self-hosted SearXNG base URL for the web_search AI tool |
+| `WEB_SEARCH_PROVIDER` | No | Optional web_search provider override: `brave`, `google`, or `searxng` |
 | `SLACK_BOT_TOKEN` | Slack only | Official Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack only | Slack Events API signing secret (Basic Information -> App Credentials) |
 | `SLACK_BOT_USER_ID` | Optional | Bot user id for mention matching (`U...`) |

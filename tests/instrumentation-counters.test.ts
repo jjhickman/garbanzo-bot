@@ -52,4 +52,25 @@ describe('instrumentation lifetime counters', () => {
     expect(calls.get('search_community_memory')?.ok).toBe(1);
     expect(calls.get('search_community_memory')?.error).toBe(1);
   });
+
+  it('gates web search tools by configured search provider', async () => {
+    vi.doMock('../src/utils/config.js', () => ({
+      config: { AI_TOOL_CALLING: true, LOG_LEVEL: 'silent' },
+    }));
+
+    let toolsModule = await import('../src/ai/tools.js');
+    expect(toolsModule.getEnabledTools().some((tool) => tool.name === 'web_search')).toBe(false);
+
+    vi.resetModules();
+    vi.doMock('../src/utils/config.js', () => ({
+      config: {
+        AI_TOOL_CALLING: true,
+        LOG_LEVEL: 'silent',
+        BRAVE_SEARCH_API_KEY: 'brave_key',
+      },
+    }));
+
+    toolsModule = await import('../src/ai/tools.js');
+    expect(toolsModule.getEnabledTools().some((tool) => tool.name === 'web_search')).toBe(true);
+  });
 });
