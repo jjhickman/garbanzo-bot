@@ -1,5 +1,6 @@
 import { config } from '../utils/config.js';
 import { recordToolCall } from '../middleware/stats.js';
+import { getSearchProviderName } from '../features/web-search.js';
 
 const TOOL_RESULT_MAX_CHARS = 1500;
 
@@ -124,6 +125,16 @@ const tools: AiTool[] = [
     },
   ),
   queryTool(
+    'web_search',
+    'Search the web for anything not covered by other tools: facts, current events, local info, how-tos, or follow-up research.',
+    'query',
+    'Free-text web search, for example "best hiking trails near Boston" or "what is the capital of Mongolia".',
+    async (query) => {
+      const { handleWebSearch } = await import('../features/web-search.js');
+      return handleWebSearch(query);
+    },
+  ),
+  queryTool(
     'search_community_memory',
     'Search saved community memory facts that Garbanzo has been asked to remember.',
     'keyword',
@@ -147,6 +158,7 @@ export function getEnabledTools(): AiTool[] {
     if (tool.name === 'find_venues') return !!config.GOOGLE_API_KEY;
     if (tool.name === 'get_transit_status') return !!config.MBTA_API_KEY;
     if (tool.name === 'get_news') return !!config.NEWSAPI_KEY;
+    if (tool.name === 'web_search') return getSearchProviderName() !== null;
     return true;
   });
 }
