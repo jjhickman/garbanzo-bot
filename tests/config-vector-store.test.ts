@@ -3,7 +3,7 @@ process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 async function loadConfig(env: Record<string, string>) {
   vi.resetModules();
@@ -13,7 +13,12 @@ async function loadConfig(env: Record<string, string>) {
 }
 
 describe('vector store config', () => {
+  afterEach(() => {
+    delete process.env.VECTOR_STORE;
+  });
+
   it('defaults to qdrant with openai 1536-dim embeddings', async () => {
+    delete process.env.VECTOR_STORE;
     const config = await loadConfig({});
     expect(config.VECTOR_STORE).toBe('qdrant');
     expect(config.QDRANT_URL).toBe('http://qdrant:6333');

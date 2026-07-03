@@ -94,6 +94,8 @@ interface OpenSessionRow {
   participants: unknown;
 }
 
+type SessionIndexPayload = Parameters<typeof indexSession>[0];
+
 interface ExistsRow {
   exists: boolean;
 }
@@ -274,7 +276,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     client: PoolClient,
     chatJid: string,
     session: OpenSessionRow,
-  ): Promise<void> => {
+  ): Promise<SessionIndexPayload | null> => {
     const sessionId = toNumber(session.id);
     const startedAt = toNumber(session.started_at);
     const endedAt = toNumber(session.ended_at);
@@ -290,7 +292,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
       );
       recordSessionSummaryLifecycle(chatJid, 'skipped');
-      return;
+      return null;
     }
 
     const messagesRes = await client.query<MessageRow>(
@@ -311,7 +313,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [config.CONTEXT_SESSION_SUMMARY_VERSION, summaryCreatedAt, sessionId],
       );
       recordSessionSummaryLifecycle(chatJid, 'skipped');
-      return;
+      return null;
     }
 
     const participants = parseJsonArray(session.participants);
@@ -357,14 +359,14 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     }
 
     recordSessionSummaryLifecycle(chatJid, 'created');
-    void indexSession({
+    return {
       chatJid,
       refId: String(sessionId),
       embeddingInput,
       summaryText: summary.summaryText,
       createdAt: endedAt,
       extra: { topics: summary.topicTags, timeRange: [startedAt, endedAt] },
-    }).catch((err) => logger.warn({ err }, 'session vector index failed'));
+    };
   };
 
   const upsertConversationSession = async (chatJid: string, sender: string, timestamp: number): Promise<void> => {
@@ -414,7 +416,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         return;
       }
 
-      await finalizeSessionSummary(client, chatJid, openSession);
+      const sessionIndexPayload = await finalizeSessionSummary(client, chatJid, openSession);
 
       await client.query(
         `INSERT INTO conversation_sessions
@@ -424,6 +426,9 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       );
 
       await client.query('COMMIT');
+      if (sessionIndexPayload) {
+        void indexSession(sessionIndexPayload).catch((err) => logger.warn({ err }, 'session vector index failed'));
+      }
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
       recordSessionSummaryLifecycle(chatJid, 'failed');
@@ -559,7 +564,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     scheduleMaintenance: scheduler.scheduleMaintenance,
     stopMaintenance: scheduler.stopMaintenance,
 
-    async storeMessage(chatJid: string, sender: string, text: string): Promise<void> {
+    async storeMessage(chatJid: string, sender: string, text: string): Promise<number> {
       const bare = toBareJid(sender);
       const truncated = text.length > 500 ? text.slice(0, 497) + '...' : text;
       const ts = Math.floor(Date.now() / 1000);
@@ -607,6 +612,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       }
 
       await upsertConversationSession(chatJid, bare, ts);
+      return ts;
     },
 
     async getMessages(chatJid: string, limit: number = 15): Promise<DbMessage[]> {

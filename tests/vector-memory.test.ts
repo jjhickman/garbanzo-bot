@@ -3,7 +3,7 @@ process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryVectorStore, type VectorStore } from '../src/utils/vector-store.js';
 import type { EmbeddingResult } from '../src/utils/embedding-provider.js';
 
@@ -41,6 +41,10 @@ async function loadModuleWithStats(embedMock: EmbedMock) {
 
 async function loadModuleWithStoreFactory(store: VectorStore) {
   vi.resetModules();
+  // This path exercises getVectorStore()'s real construction via the mocked
+  // factory, so it needs VECTOR_STORE=qdrant (the suite default is 'none',
+  // set in tests/vitest.setup.ts to keep unit tests off the network).
+  process.env.VECTOR_STORE = 'qdrant';
   mockEmbedding(defaultEmbedMock);
   vi.doMock('../src/utils/qdrant-store.js', () => ({
     createQdrantVectorStore: () => store,
@@ -51,6 +55,12 @@ async function loadModuleWithStoreFactory(store: VectorStore) {
 describe('vector-memory orchestrator', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    // Restore the suite-wide default so a factory-path test doesn't leak
+    // VECTOR_STORE=qdrant into later tests/files sharing this worker.
+    process.env.VECTOR_STORE = 'none';
   });
 
   it('indexes a fact then retrieves it by semantic query', async () => {

@@ -41,7 +41,7 @@ export interface DbBackend {
   stopMaintenance(): void;
 
   // Context
-  storeMessage(chatJid: string, sender: string, text: string): Promise<void>;
+  storeMessage(chatJid: string, sender: string, text: string): Promise<number>;
   getMessages(chatJid: string, limit?: number): Promise<DbMessage[]>;
   searchRelevantMessages(chatJid: string, query: string, limit?: number): Promise<DbMessage[]>;
   searchRelevantSessionSummaries(chatJid: string, query: string, limit?: number): Promise<SessionSummaryHit[]>;

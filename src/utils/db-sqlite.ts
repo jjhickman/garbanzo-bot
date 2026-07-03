@@ -367,13 +367,14 @@ function upsertConversationSession(chatJid: string, sender: string, timestamp: n
 // ── Public API: Messages ────────────────────────────────────────────
 
 /** Store a message and prune old ones beyond the limit. */
-export function storeMessage(chatJid: string, sender: string, text: string): void {
+export function storeMessage(chatJid: string, sender: string, text: string): number {
   const bare = toBareJid(sender);
   const truncated = text.length > 500 ? text.slice(0, 497) + '...' : text;
   const ts = Math.floor(Date.now() / 1000);
   insertMessage.run(chatJid, bare, truncated, ts);
   pruneOldMessages.run(chatJid, chatJid, MAX_MESSAGES_PER_CHAT);
   upsertConversationSession(chatJid, bare, ts);
+  return ts;
 }
 
 /** Get recent messages for a chat (returned oldest-first for prompt context). */
@@ -716,9 +717,8 @@ export function createSqliteBackend(): DbBackend {
     scheduleMaintenance,
     stopMaintenance,
 
-    storeMessage: async (chatJid: string, sender: string, text: string): Promise<void> => {
-      storeMessage(chatJid, sender, text);
-    },
+    storeMessage: async (chatJid: string, sender: string, text: string): Promise<number> =>
+      storeMessage(chatJid, sender, text),
     getMessages: async (chatJid: string, limit?: number) => getMessages(chatJid, limit),
     searchRelevantMessages: async (chatJid: string, query: string, limit?: number) =>
       searchRelevantMessages(chatJid, query, limit),

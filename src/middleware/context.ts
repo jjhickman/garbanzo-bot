@@ -23,6 +23,7 @@ import {
 } from '../utils/db.js';
 import { indexMessage } from '../utils/vector-memory.js';
 import { rerankCandidates } from '../utils/reranker.js';
+import { toBareJid } from '../utils/db-query-shape.js';
 import { logger } from './logger.js';
 import { config } from '../utils/config.js';
 import { recordSessionSummaryRetrieval } from './stats.js';
@@ -62,9 +63,9 @@ export async function recordMessage(
   sender: string,
   text: string,
 ): Promise<void> {
-  await storeMessage(chatJid, sender, text);
-  const createdAt = Math.floor(Date.now() / 1000);
-  void indexMessage({ chatJid, refId: `${createdAt}:${sender}`, sender, text, createdAt })
+  const createdAt = await storeMessage(chatJid, sender, text);
+  const bareSender = toBareJid(sender);
+  void indexMessage({ chatJid, refId: `${createdAt}:${bareSender}`, sender: bareSender, text, createdAt })
     .catch((err) => logger.warn({ err }, 'message vector index failed'));
 }
 
