@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../src/platforms/discord/discord-config.js', () => ({
+  isDiscordChannelEnabled: vi.fn((channelId: string) => channelId === 'C123'),
+  discordChannelRequiresMention: vi.fn(() => true),
+  isDiscordFeatureEnabled: vi.fn(() => true),
+  getDiscordIntroductionsChannelId: vi.fn(() => null),
+  getDiscordEventsChannelId: vi.fn(() => null),
+}));
 
 import { createDiscordDemoAdapter } from '../src/platforms/discord/adapter.js';
 import { normalizeDiscordDemoInbound, processDiscordDemoInbound } from '../src/platforms/discord/processor.js';
