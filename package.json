@@ -32,6 +32,7 @@
     "db:postgres:init": "node scripts/postgres-init.mjs",
     "db:sqlite:migrate:postgres": "node scripts/sqlite-to-postgres.mjs",
     "db:sqlite:verify:postgres": "node scripts/postgres-verify.mjs",
+    "backfill:vectors": "node scripts/backfill-vectors.mjs",
     "release:plan": "node scripts/release-plan.mjs",
     "release:checklist": "node scripts/release-checklist.mjs",
     "release:deploy:verify": "bash scripts/release-deploy-verify.sh",
