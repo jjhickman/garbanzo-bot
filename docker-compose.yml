@@ -59,6 +59,20 @@ services:
         max-size: "50m"
         max-file: "5"
 
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:6333/readyz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # Optional: automatic image updates via Watchtower.
   # Only meaningful when running the `latest` tag — with a pinned APP_VERSION
   # Watchtower has nothing to do, which makes pinning the safe default.
@@ -157,6 +171,8 @@ volumes:
     name: garbanzo-bot-auth
   garbanzo_data:
     name: garbanzo-bot-data
+  qdrant_data:
+    name: garbanzo-bot-qdrant
   prom_data:
     name: garbanzo-bot-prometheus
   grafana_data:
