@@ -1,9 +1,9 @@
 import { logger } from '../../middleware/logger.js';
-import { buildWelcomeMessage } from '../../features/welcome.js';
 
 import { createDiscordAdapter } from './adapter.js';
 import { getDiscordIntroductionsChannelId } from './discord-config.js';
 import { processDiscordEvent } from './processor.js';
+import { buildDiscordWelcomeMessage } from './welcome.js';
 
 type DiscordEventHandler = (payload?: unknown) => void | Promise<void>;
 
@@ -194,12 +194,18 @@ async function defaultClientFactory(): Promise<DiscordClientLike> {
   }) as DiscordClientLike;
 }
 
-function readMemberIdentifier(member: unknown): string | null {
+function readMemberUserId(member: unknown): string | null {
   if (!isRecord(member)) return null;
   const user = readRecord(member, 'user');
   return user
-    ? readString(user, 'id') ?? readString(user, 'username') ?? null
-    : readString(member, 'id') ?? readString(member, 'displayName') ?? null;
+    ? readString(user, 'id') ?? null
+    : readString(member, 'id') ?? null;
+}
+
+function readMemberDisplayName(member: unknown): string | undefined {
+  if (!isRecord(member)) return undefined;
+  const user = readRecord(member, 'user');
+  return readString(member, 'displayName') ?? (user ? readString(user, 'username') : undefined);
 }
 
 export function createDiscordGatewayClient(deps: DiscordGatewayClientDeps): {
@@ -235,11 +241,14 @@ export function createDiscordGatewayClient(deps: DiscordGatewayClientDeps): {
       const channelId = getDiscordIntroductionsChannelId();
       if (!channelId) return;
 
-      const memberIdentifier = readMemberIdentifier(member);
-      if (!memberIdentifier) return;
+      const memberUserId = readMemberUserId(member);
+      if (!memberUserId) return;
 
-      const welcome = buildWelcomeMessage(channelId, [memberIdentifier]);
-      if (!welcome) return;
+      const welcome = buildDiscordWelcomeMessage({
+        channelId,
+        memberUserId,
+        memberDisplayName: readMemberDisplayName(member),
+      });
 
       await adapter.sendText(channelId, welcome);
     } catch (err) {
@@ -248,9 +257,13 @@ export function createDiscordGatewayClient(deps: DiscordGatewayClientDeps): {
   }
 
   async function handleReady(): Promise<void> {
-    const discordClient = await getClient();
-    botUserId = discordClient.user?.id ?? undefined;
-    logger.info({ botUserId }, 'Discord Gateway client ready');
+    try {
+      const discordClient = await getClient();
+      botUserId = discordClient.user?.id ?? undefined;
+      logger.info({ botUserId }, 'Discord Gateway client ready');
+    } catch (err) {
+      logger.error({ err }, 'Discord ready handler failed');
+    }
   }
 
   return {

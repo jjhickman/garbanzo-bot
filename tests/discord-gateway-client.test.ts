@@ -65,7 +65,7 @@ async function setup() {
   const createDiscordAdapter = vi.fn(() => adapter);
   const processDiscordEvent = vi.fn(async () => undefined);
   const getDiscordIntroductionsChannelId = vi.fn<() => string | null>(() => 'intro-chan');
-  const buildWelcomeMessage = vi.fn(() => 'Welcome <@new-user>');
+  const getDiscordChannelName = vi.fn(() => 'introductions');
 
   vi.doMock('../src/platforms/discord/adapter.js', () => ({
     createDiscordAdapter,
@@ -74,10 +74,8 @@ async function setup() {
     processDiscordEvent,
   }));
   vi.doMock('../src/platforms/discord/discord-config.js', () => ({
+    getDiscordChannelName,
     getDiscordIntroductionsChannelId,
-  }));
-  vi.doMock('../src/features/welcome.js', () => ({
-    buildWelcomeMessage,
   }));
 
   const module = await import('../src/platforms/discord/gateway-client.js');
@@ -91,10 +89,10 @@ async function setup() {
 
   return {
     adapter,
-    buildWelcomeMessage,
     createDiscordAdapter,
     fakeClient,
     gateway,
+    getDiscordChannelName,
     getDiscordIntroductionsChannelId,
     processDiscordEvent,
     sendText,
@@ -154,9 +152,9 @@ describe('Discord Gateway client', () => {
 
   it('sends configured introduction welcomes on guildMemberAdd', async () => {
     const {
-      buildWelcomeMessage,
       fakeClient,
       gateway,
+      getDiscordChannelName,
       getDiscordIntroductionsChannelId,
       sendText,
     } = await setup();
@@ -169,8 +167,11 @@ describe('Discord Gateway client', () => {
     });
 
     expect(getDiscordIntroductionsChannelId).toHaveBeenCalled();
-    expect(buildWelcomeMessage).toHaveBeenCalledWith('intro-chan', ['new-user']);
-    expect(sendText).toHaveBeenCalledWith('intro-chan', 'Welcome <@new-user>');
+    expect(getDiscordChannelName).toHaveBeenCalledWith('intro-chan');
+    expect(sendText).toHaveBeenCalledWith(
+      'intro-chan',
+      expect.stringContaining('<@new-user>'),
+    );
   });
 
   it('destroys the client on stop', async () => {
