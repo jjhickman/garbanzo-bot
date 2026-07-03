@@ -17,18 +17,3 @@ services:
 
     depends_on:
       - qdrant
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    restart: unless-stopped
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:6333/readyz || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-volumes:
-  qdrant_data:
-    name: garbanzo-bot-qdrant
