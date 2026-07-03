@@ -120,7 +120,20 @@ export async function deleteMemory(id: number): Promise<boolean> {
     .catch((err) => logger.warn({ err }, 'memory fact vector delete failed'));
   return deleted;
 }
-export const searchMemory = backend.searchMemory;
+export async function searchMemory(keyword: string, limit = 10): Promise<MemoryEntry[]> {
+  const { searchFacts } = await import('./vector-memory.js');
+  const hits = await searchFacts(keyword, limit);
+  if (hits.length > 0) {
+    return hits.map((h) => ({
+      id: Number(h.payload.refId),
+      fact: h.payload.text,
+      category: String(h.payload.extra?.category ?? 'general'),
+      source: 'auto',
+      created_at: h.payload.createdAt,
+    }));
+  }
+  return backend.searchMemory(keyword, limit);
+}
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
 
 // Lifecycle
