@@ -25,6 +25,7 @@ import {
 } from '../utils/db.js';
 import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
 import { getGroupName } from '../core/groups-config.js';
+import { getVectorStore } from '../utils/vector-memory.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -110,6 +111,12 @@ interface HealthServerOptions {
   extraHandler?: (req: IncomingMessage, res: ServerResponse) => boolean;
 }
 
+interface VectorStoreHealth {
+  ok: boolean;
+  disabled?: boolean;
+  detail?: string;
+}
+
 export function normalizeIp(ip: string): string {
   return ip.startsWith('::ffff:') ? ip.slice('::ffff:'.length) : ip;
 }
@@ -163,6 +170,18 @@ async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; 
     };
   }
   return backupStatusCache;
+}
+
+async function getVectorStoreHealth(): Promise<VectorStoreHealth> {
+  const vectorStore = getVectorStore();
+  if (!vectorStore) return { ok: true, disabled: true };
+
+  try {
+    return await vectorStore.health();
+  } catch (err) {
+    logger.warn({ err }, 'Vector store health check failed');
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 function escapePrometheusLabelValue(value: string): string {
@@ -386,6 +405,37 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   return lines.join('\n') + '\n';
 }
 
+async function buildHealthPayload(now: number) {
+  const stale = isConnectionStale();
+  const mem = process.memoryUsage();
+  const backup = await getCachedBackupStatus(now);
+  const whatsappSafety = await getWhatsAppSafetyMetrics(
+    Math.floor((now - 60 * 60 * 1000) / 1000),
+    Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+  );
+  const vectorStore = await getVectorStoreHealth();
+
+  return {
+    status: state.status,
+    stale,
+    uptime: Math.floor((now - state.startedAt) / 1000),
+    connectedFor: state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : null,
+    lastMessageAgo: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
+    reconnectCount: state.reconnectCount,
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024),
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+    },
+    backup: {
+      ...backup.status,
+      checkedAt: backup.checkedAt,
+    },
+    whatsappSafety,
+    vectorStore,
+  };
+}
+
 export function startHealthServer(
   port: number = 3001,
   host: string = '127.0.0.1',
@@ -471,31 +521,7 @@ export function startHealthServer(
           return;
         }
 
-        const mem = process.memoryUsage();
-        const backup = await getCachedBackupStatus(now);
-        const whatsappSafety = await getWhatsAppSafetyMetrics(
-          Math.floor((now - 60 * 60 * 1000) / 1000),
-          Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
-        );
-
-        const body = JSON.stringify({
-          status: state.status,
-          stale,
-          uptime: Math.floor((now - state.startedAt) / 1000),
-          connectedFor: state.connectedAt ? Math.floor((now - state.connectedAt) / 1000) : null,
-          lastMessageAgo: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
-          reconnectCount: state.reconnectCount,
-          memory: {
-            rss: Math.round(mem.rss / 1024 / 1024),
-            heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
-            heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
-          },
-          backup: {
-            ...backup.status,
-            checkedAt: backup.checkedAt,
-          },
-          whatsappSafety,
-        });
+        const body = JSON.stringify(await buildHealthPayload(now));
 
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(body);
@@ -577,4 +603,4 @@ function stopMemoryWatchdog(): void {
   }
 }
 
-export const __testing = { normalizeIp, renderPrometheusMetrics, requestHasValidToken };
+export const __testing = { buildHealthPayload, normalizeIp, renderPrometheusMetrics, requestHasValidToken };
