@@ -55,6 +55,15 @@ export interface DailyStats {
   totalCost: number;
 }
 
+export interface VectorStats {
+  vectorUpsertsOk: number;
+  vectorUpsertFailures: number;
+  vectorSearchesOk: number;
+  vectorSearchFailures: number;
+}
+
+export type StatsSnapshot = DailyStats & VectorStats;
+
 export interface LifetimeCounters {
   messagesByGroupJid: ReadonlyMap<string, number>;
   botResponsesByGroupJid: ReadonlyMap<string, number>;
@@ -68,7 +77,7 @@ export interface LifetimeCounters {
   eventRemindersSentTotal: number;
 }
 
-let current: DailyStats = freshStats();
+let current: StatsSnapshot = freshStats();
 
 const lifetime = {
   messagesByGroupJid: new Map<string, number>(),
@@ -83,13 +92,17 @@ const lifetime = {
   eventRemindersSentTotal: 0,
 };
 
-function freshStats(): DailyStats {
+function freshStats(): StatsSnapshot {
   return {
     date: todayISO(),
     groups: new Map(),
     ownerDMs: 0,
     costs: [],
     totalCost: 0,
+    vectorUpsertsOk: 0,
+    vectorUpsertFailures: 0,
+    vectorSearchesOk: 0,
+    vectorSearchFailures: 0,
   };
 }
 
@@ -248,6 +261,18 @@ export function recordSessionEmbedding(
   stats.sessionEmbeddingLatencyMs += Math.max(0, Math.round(latencyMs));
 }
 
+export function recordVectorUpsert(outcome: 'ok' | 'error'): void {
+  maybeRollover();
+  if (outcome === 'ok') current.vectorUpsertsOk++;
+  else current.vectorUpsertFailures++;
+}
+
+export function recordVectorSearch(outcome: 'ok' | 'empty' | 'error'): void {
+  maybeRollover();
+  if (outcome === 'error') current.vectorSearchFailures++;
+  else current.vectorSearchesOk++;
+}
+
 // ── Cost tracking ───────────────────────────────────────────────────
 
 /**
@@ -378,7 +403,7 @@ export const DAILY_COST_ALERT_THRESHOLD = 1.00;
 // ── Public query functions ──────────────────────────────────────────
 
 /** Get current day's stats (triggers rollover if needed) */
-export function getCurrentStats(): DailyStats {
+export function getCurrentStats(): StatsSnapshot {
   maybeRollover();
   return current;
 }
@@ -402,7 +427,7 @@ export function getLifetimeCounters(): LifetimeCounters {
 }
 
 /** Snapshot and reset — used by digest to get final stats for the day */
-export function snapshotAndReset(): DailyStats {
+export function snapshotAndReset(): StatsSnapshot {
   const snapshot = current;
   current = freshStats();
   return snapshot;
