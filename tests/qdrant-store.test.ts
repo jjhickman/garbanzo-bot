@@ -39,6 +39,40 @@ describe('createQdrantVectorStore', () => {
     );
   });
 
+  it('upserts points into the configured collection', async () => {
+    const client = {
+      getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      createCollection: vi.fn(),
+      upsert: vi.fn(),
+      search: vi.fn(),
+      delete: vi.fn(),
+    };
+    const store = createQdrantVectorStore({ client });
+    const payload = {
+      kind: 'message' as const,
+      scope: 'chat' as const,
+      chatJid: 'g1',
+      refId: '1',
+      text: 'hi',
+      createdAt: 5,
+    };
+
+    await store.upsert([{ id: 'p1', vector: [1, 0], payload }]);
+
+    expect(client.upsert).toHaveBeenCalledWith(
+      'garbanzo_memory',
+      expect.objectContaining({
+        points: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'p1',
+            vector: [1, 0],
+            payload,
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('maps Qdrant search results to VectorHit', async () => {
     const client = {
       getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
@@ -82,6 +116,29 @@ describe('createQdrantVectorStore', () => {
       with_payload: true,
       filter: { must: [{ key: 'chatJid', match: { value: 'g1' } }] },
     }));
+  });
+
+  it('deletes by filter and returns the unknown-count contract', async () => {
+    const client = {
+      getCollections: vi.fn().mockResolvedValue({ collections: [{ name: 'garbanzo_memory' }] }),
+      createCollection: vi.fn(),
+      upsert: vi.fn(),
+      search: vi.fn(),
+      delete: vi.fn(),
+    };
+    const store = createQdrantVectorStore({ client });
+
+    const deleted = await store.delete({ kind: 'fact', chatJid: null });
+
+    expect(client.delete).toHaveBeenCalledWith('garbanzo_memory', {
+      filter: {
+        must: [
+          { key: 'kind', match: { value: 'fact' } },
+          { key: 'chatJid', match: { value: null } },
+        ],
+      },
+    });
+    expect(deleted).toBe(0);
   });
 
   it('health returns ok:false when the client throws', async () => {
