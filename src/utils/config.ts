@@ -153,6 +153,11 @@ const envSchema = z.object({
   // Discord runtime
   DISCORD_BOT_TOKEN: z.string().optional(),
   DISCORD_PUBLIC_KEY: z.string().optional(),
+  DISCORD_OWNER_ID: z.string().optional(),
+  DISCORD_GATEWAY_ENABLED: booleanFromEnv.default(true),
+  DISCORD_DIGEST_CHANNEL_ID: z.string().optional(),
+  DISCORD_RECAP_CHANNEL_ID: z.string().optional(),
+  DISCORD_CHANNELS_CONFIG_PATH: z.string().default('config/discord-channels.json'),
   DISCORD_INTERACTIONS_PORT: z.coerce.number().int().min(1).max(65535).default(3003),
   DISCORD_INTERACTIONS_BIND_HOST: z.string().min(1).default('127.0.0.1'),
   // Discord demo runtime (non-production)

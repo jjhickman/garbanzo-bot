@@ -6,9 +6,18 @@ import { processGroupMessage } from '../../core/process-group-message.js';
 import { getResponse } from '../../core/response-router.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
-import { isFeatureEnabled } from '../../core/groups-config.js';
+import { handleIntroduction } from '../../features/introductions.js';
+import { handleEventPassive } from '../../features/events.js';
 
 import type { DiscordInbound } from './inbound.js';
+import {
+  discordChannelRequiresMention,
+  getDiscordChannelName,
+  getDiscordEventsChannelId,
+  getDiscordIntroductionsChannelId,
+  isDiscordChannelEnabled,
+  isDiscordFeatureEnabled,
+} from './discord-config.js';
 
 const DiscordAuthorSchema = z.object({
   id: z.string(),
@@ -35,6 +44,7 @@ const DiscordMessageCreateSchema = z.object({
 });
 
 type DiscordMessageCreate = z.infer<typeof DiscordMessageCreateSchema>;
+type DiscordChannelEnabled = (chatId: string) => boolean;
 
 const DiscordDemoMessageSchema = z.object({
   chatId: z.string().min(1),
@@ -84,18 +94,25 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
 function buildDiscordMentionRegex(botUserId: string | undefined): RegExp {
   if (botUserId && botUserId.trim().length > 0) {
     const escaped = botUserId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^<@!?${escaped}>\\b[:\\s]*`, 'i');
+    return new RegExp(`^<@!?${escaped}>[:\\s]*`, 'i');
   }
 
-  return /^<@!?\d+>\b[:\s]*/i;
+  return /^<@!?\d+>[:\s]*/i;
 }
 
 async function processDiscordInbound(
   messenger: PlatformMessenger,
   inbound: DiscordInbound,
-  env: { ownerId: string; botUserId?: string },
+  env: { ownerId: string; ownerUserId?: string; botUserId?: string },
+  options: {
+    channelEnabled?: DiscordChannelEnabled;
+    featureEnabled?: (chatId: string, feature: string) => boolean;
+  } = {},
 ): Promise<void> {
   const mentionRegex = buildDiscordMentionRegex(env.botUserId);
+  const channelEnabled = options.channelEnabled ?? isDiscordChannelEnabled;
+  const featureEnabled = options.featureEnabled
+    ?? ((chatId: string, feature: string) => isDiscordFeatureEnabled(chatId, feature));
 
   await processInboundMessage(messenger, inbound, {
     isReplyToBot: () => false,
@@ -108,13 +125,20 @@ async function processDiscordInbound(
 
     handleGroupMessage: async ({ inbound: m, text, hasMedia }) => {
       const trimmed = text.trim();
-      const mentionMatch = mentionRegex.exec(trimmed) ?? /^@garbanzo\b[:\s]*/i.exec(trimmed);
+      const mentionMatch = mentionRegex.exec(trimmed);
+      const mentionedInline = !!env.botUserId
+        && Array.isArray(m.mentionedIds)
+        && m.mentionedIds.includes(env.botUserId);
       const isBang = trimmed.startsWith('!');
+      const isAddressed = Boolean(mentionMatch) || mentionedInline || isBang;
+      const requiresMention = discordChannelRequiresMention(m.chatId);
 
-      if (!mentionMatch && !isBang) return;
+      if (requiresMention && !isAddressed) return;
 
       let query = trimmed;
-      if (isBang) {
+      if (!requiresMention) {
+        query = trimmed;
+      } else if (isBang) {
         query = trimmed;
       } else if (mentionMatch) {
         query = trimmed.slice(mentionMatch[0].length).trim();
@@ -126,10 +150,10 @@ async function processDiscordInbound(
         messenger,
         chatId: m.chatId,
         senderId: m.senderId,
-        groupName: `Discord ${m.chatId}`,
+        groupName: getDiscordChannelName(m.chatId) ?? `Discord ${m.chatId}`,
         ownerId: env.ownerId,
         query,
-        isFeatureEnabled,
+        isFeatureEnabled: featureEnabled,
         getResponse,
         messageId: m.messageId,
         replyTo: m.raw,
@@ -137,6 +161,8 @@ async function processDiscordInbound(
     },
 
     handleOwnerDM: async ({ inbound: m, text }) => {
+      if (!env.ownerUserId || m.senderId !== env.ownerUserId) return;
+
       const response = await getResponse(
         text,
         {
@@ -144,7 +170,7 @@ async function processDiscordInbound(
           groupJid: m.chatId,
           senderJid: m.senderId,
         },
-        isFeatureEnabled,
+        featureEnabled,
       );
 
       if (response) {
@@ -153,11 +179,11 @@ async function processDiscordInbound(
     },
   }, {
     ownerId: env.ownerId,
-    isGroupEnabled: () => true,
-    introductionsChatId: null,
-    eventsChatId: null,
-    handleIntroduction: async () => null,
-    handleEventPassive: async () => null,
+    isGroupEnabled: channelEnabled,
+    introductionsChatId: getDiscordIntroductionsChannelId(),
+    eventsChatId: getDiscordEventsChannelId(),
+    handleIntroduction,
+    handleEventPassive,
   });
 }
 
@@ -167,7 +193,7 @@ async function processDiscordInbound(
 export async function processDiscordEvent(
   messenger: PlatformMessenger,
   eventPayload: unknown,
-  env: { ownerId: string; botUserId?: string },
+  env: { ownerId: string; ownerUserId?: string; botUserId?: string },
 ): Promise<void> {
   const parsed = DiscordMessageCreateSchema.safeParse(eventPayload);
   if (!parsed.success) {
@@ -217,7 +243,12 @@ export async function processDiscordDemoInbound(
   inbound: DiscordInbound,
   env: {
     ownerId: string;
+    ownerUserId?: string;
+    botUserId?: string;
   },
 ): Promise<void> {
-  await processDiscordInbound(messenger, inbound, env);
+  await processDiscordInbound(messenger, inbound, env, {
+    channelEnabled: () => true,
+    featureEnabled: () => true,
+  });
 }

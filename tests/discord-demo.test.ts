@@ -1,17 +1,26 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../src/platforms/discord/discord-config.js', () => ({
+  isDiscordChannelEnabled: vi.fn((channelId: string) => channelId === 'C123'),
+  discordChannelRequiresMention: vi.fn(() => true),
+  isDiscordFeatureEnabled: vi.fn(() => true),
+  getDiscordChannelName: vi.fn(() => 'general'),
+  getDiscordIntroductionsChannelId: vi.fn(() => null),
+  getDiscordEventsChannelId: vi.fn(() => null),
+}));
 
 import { createDiscordDemoAdapter } from '../src/platforms/discord/adapter.js';
 import { normalizeDiscordDemoInbound, processDiscordDemoInbound } from '../src/platforms/discord/processor.js';
 
 describe('Discord demo runtime', () => {
-  it('routes @garbanzo !help through the core pipeline', async () => {
+  it('routes !help through the core pipeline', async () => {
     const outbox: Array<{ type: string; chatId: string; payload: unknown }> = [];
     const messenger = createDiscordDemoAdapter(outbox);
 
     const inbound = normalizeDiscordDemoInbound({
       chatId: 'C123',
       senderId: 'U123',
-      text: '@garbanzo !help',
+      text: '!help',
       isGroupChat: true,
     });
 
@@ -35,7 +44,7 @@ describe('Discord demo runtime', () => {
     const inbound = normalizeDiscordDemoInbound({
       chatId: 'C123',
       senderId: 'U123',
-      text: '@garbanzo !help',
+      text: '!help',
       isGroupChat: true,
       threadId: 'th-1',
     });
