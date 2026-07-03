@@ -192,6 +192,7 @@ Settled questions — **do not relitigate these**; propose a change only with ne
 - **OpenAI is the primary AI provider** (owner decision, 2026-06). Anthropic/Gemini/Bedrock/Ollama are failover via `AI_PROVIDER_ORDER`. When an integration misbehaves, fix the integration — do not propose switching primary provider.
 - **Production models: `gpt-5.4-mini` primary, `claude-haiku-4-5` fallback, prompt caching on** (2026-07-01).
 - **One deployment = one platform** (`MESSAGING_PLATFORM`). WhatsApp is production; Discord/Slack are demo-grade; Teams is a stub. Multi-tenant single-deployment was not chosen.
+- **Discord runs a real discord.js Gateway** (opt-in channels, `requireMention` default true); owner model = `DISCORD_OWNER_ID` (user id) + resolved DM channel for escalation; schedulers/welcome bound in the Discord runtime; WhatsApp login bootstrap is whatsapp-only.
 - **Web search is multi-provider with priority Firecrawl → Brave → Google PSE → SearXNG** (PRs #216, #220). `web_search` tool results get a 6,000-char budget vs 1,500 for other tools, to allow extracted page content.
 - **The system prompt must explicitly direct models to prefer tools over training data** (PR #218) — without it, models answer factual questions from stale memory. Preserve this directive in any prompt rewrite.
 - **Storage: SQLite is the default backend**; Postgres exists behind `db-backend.ts` (runbook: `docs/POSTGRES_MIGRATION_RUNBOOK.md`). Vector memory is planned, not enabled (`docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md`).

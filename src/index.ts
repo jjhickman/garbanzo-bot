@@ -7,7 +7,7 @@ import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './midd
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
 import { createLoginRequestHandler } from './platforms/whatsapp/login-server.js';
-import { isNetworkExposedHost, resolveLoginHosts } from './platforms/whatsapp/login-url.js';
+import { isNetworkExposedHost, resolveLoginHosts, shouldEnableWhatsAppLogin } from './platforms/whatsapp/login-url.js';
 import type { PlatformRuntime } from './platforms/types.js';
 
 let activeRuntime: PlatformRuntime | null = null;
@@ -45,7 +45,12 @@ async function main(): Promise<void> {
   }, 'Configuration loaded');
 
   const loginToken = config.WHATSAPP_LOGIN_TOKEN ?? randomBytes(24).toString('hex');
-  const loginHandler = createLoginRequestHandler({ token: loginToken });
+  const whatsAppLoginEnabled = shouldEnableWhatsAppLogin(
+    config.MESSAGING_PLATFORM,
+    config.WHATSAPP_LOGIN_MODE,
+    healthOnlyMode,
+  );
+  const loginHandler = whatsAppLoginEnabled ? createLoginRequestHandler({ token: loginToken }) : undefined;
 
   // Start health check server + memory watchdog for monitoring
   startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
@@ -56,7 +61,7 @@ async function main(): Promise<void> {
   });
   startMemoryWatchdog();
 
-  if (!healthOnlyMode && (config.WHATSAPP_LOGIN_MODE === 'web' || config.WHATSAPP_LOGIN_MODE === 'both')) {
+  if (whatsAppLoginEnabled) {
     // A wildcard bind (0.0.0.0/::) listens on every interface, so surface the
     // machine's LAN address(es) a remote browser can actually reach — e.g. when
     // garbanzo runs on a Raspberry Pi and you link from a laptop on the network.

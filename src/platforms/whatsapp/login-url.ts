@@ -1,4 +1,7 @@
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
+import type { MessagingPlatform } from '../../core/messaging-platform.js';
+
+type WhatsAppLoginMode = 'web' | 'terminal' | 'both';
 
 const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]']);
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
@@ -16,6 +19,14 @@ export function isLoopbackHost(host: string): boolean {
 /** True when the login routes would be reachable from other machines. */
 export function isNetworkExposedHost(host: string): boolean {
   return !isLoopbackHost(host);
+}
+
+export function shouldEnableWhatsAppLogin(
+  platform: MessagingPlatform,
+  loginMode: WhatsAppLoginMode,
+  healthOnlyMode: boolean,
+): boolean {
+  return platform === 'whatsapp' && !healthOnlyMode && (loginMode === 'web' || loginMode === 'both');
 }
 
 /**
