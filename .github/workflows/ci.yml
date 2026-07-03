@@ -94,3 +94,44 @@ jobs:
           AI_PROVIDER_ORDER: openrouter
           DATABASE_URL: postgres://garbanzo:garbanzo@127.0.0.1:5432/garbanzo_test
         run: npm run test:postgres
+
+  vector-integration:
+    name: Vector Integration (Qdrant)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Qdrant integration test
+        env:
+          MESSAGING_PLATFORM: whatsapp
+          OWNER_JID: test_owner@s.whatsapp.net
+          OPENROUTER_API_KEY: test_key_ci
+          AI_PROVIDER_ORDER: openrouter
+          QDRANT_URL: http://127.0.0.1:6333
+          VECTOR_STORE: qdrant
+          VECTOR_EMBEDDING_PROVIDER: deterministic
+          VECTOR_EMBEDDING_DIMENSIONS: "256"
+        run: npx vitest run tests/vector-memory-integration.test.ts
