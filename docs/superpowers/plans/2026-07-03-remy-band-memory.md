@@ -74,6 +74,24 @@
 
 ---
 
+## Task 3b: Discord band-role plumbing (let band members use `!song`)
+
+**Files:** Modify `src/core/inbound-message.ts` (add `senderRoleIds?`), `src/platforms/discord/gateway-client.ts` (extract member roles), `src/platforms/discord/processor.ts` (thread roles → band-member check), `src/core/process-group-message.ts` (gate on owner OR band member). Test: `tests/songs-routing.test.ts` (extend) + `tests/discord-gateway-client.test.ts` (role mapping).
+
+**Interfaces:**
+- Consumes: `isBandMember(roleIds: string[]): boolean` (src/platforms/discord/discord-config.ts:77), the existing `InboundMessage`, and the T3 `!song` gate in `process-group-message.ts`.
+- Produces: `InboundMessage.senderRoleIds?: string[]` (platform-agnostic); `processGroupMessage` accepts `senderIsBandMember?: boolean`; the `!song` gate becomes `isOwner || senderIsBandMember`.
+
+**Context:** T3 gated `!song` to owner-only because the sender's Discord roles were never plumbed to the dispatch point (`TODO(band-role-plumbing)`). Spec goal 4 wants band members — not just the owner — to add/update songs. Keep `discord-config` OUT of core: the Discord processor resolves the boolean and passes it in; WhatsApp passes nothing (owner-only there, which is correct — no band roles on WhatsApp).
+
+- [ ] **Step 1: Write failing tests.** (a) In `tests/discord-gateway-client.test.ts`, assert `mapMessageToPayload` copies the member's role ids into `senderRoleIds` (feed a message whose `member.roles` resolves to `['role-1','role-2']`). (b) In `tests/songs-routing.test.ts`, assert that with `BAND_FEATURES_ENABLED=true` a NON-owner whose `senderIsBandMember` is true routes `!song` to `handleSongCommand`, and a non-owner non-band-member still declines.
+- [ ] **Step 2: Run → FAIL.**
+- [ ] **Step 3: Implement.** Add `senderRoleIds?: string[]` to `InboundMessage`. In `gateway-client.ts` `mapMessageToPayload`, read the author's guild-member role ids from the discord.js message via the existing `unknown`-narrowing helpers (discord.js exposes them at `message.member.roles.cache` (a Collection → keys) or the raw `member.roles` array — narrow defensively, default `[]`). In `processor.ts`: carry `senderRoleIds` through `normalizeDiscordInboundFromMessage`, then in `processDiscordInbound` compute `senderIsBandMember = isBandMember(inbound.senderRoleIds ?? [])` and pass it into `processGroupMessage`. In `process-group-message.ts`: add optional `senderIsBandMember?: boolean` and change the `!song` owner gate to `isOwner || senderIsBandMember === true`. Remove the `TODO(band-role-plumbing)` comment.
+- [ ] **Step 4: Run → PASS + full check.**
+- [ ] **Step 5: Commit** `feat(band): let Discord band members use !song via role plumbing`
+
+---
+
 ## Task 4: Band read tools (`list_band_songs`, `find_band_song`)
 
 **Files:** Modify `src/ai/tools.ts`. Test: `tests/band-tools.test.ts`.
