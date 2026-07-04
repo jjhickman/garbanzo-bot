@@ -187,13 +187,12 @@ describe('handleSetlistCommand', () => {
 
   describe('add', () => {
     it('resolves setlist by name and song by title, then appends', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
       dbMocks.addSongToSetlist.mockResolvedValueOnce({ id: 1, setlistId: 1, songId: 7, position: 1 });
 
       const result = await handleSetlistCommand('add SummerGig Sundown');
 
-      expect(dbMocks.getSetlistByName).toHaveBeenCalledWith('SummerGig');
       expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Sundown');
       expect(dbMocks.addSongToSetlist).toHaveBeenCalledWith(1, 7, undefined);
       expect(result).toMatch(/added/i);
@@ -201,7 +200,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('parses a multi-word song title and an explicit position', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 8, title: 'Chickpea Boogie' }));
       dbMocks.addSongToSetlist.mockResolvedValueOnce({ id: 2, setlistId: 1, songId: 8, position: 2 });
 
@@ -212,8 +211,48 @@ describe('handleSetlistCommand', () => {
       expect(result).toMatch(/added/i);
     });
 
+    it('resolves a multi-word setlist name by longest-prefix match', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'Summer Gig' })]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
+      dbMocks.addSongToSetlist.mockResolvedValueOnce({ id: 1, setlistId: 1, songId: 7, position: 1 });
+
+      const result = await handleSetlistCommand('add Summer Gig Sundown');
+
+      expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Sundown');
+      expect(dbMocks.addSongToSetlist).toHaveBeenCalledWith(1, 7, undefined);
+      expect(result).toMatch(/added/i);
+      expect(result).toContain('Summer Gig');
+    });
+
+    it('resolves a multi-word setlist name AND a multi-word song title together', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'Summer Gig' })]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 8, title: 'Chickpea Boogie' }));
+      dbMocks.addSongToSetlist.mockResolvedValueOnce({ id: 2, setlistId: 1, songId: 8, position: 2 });
+
+      const result = await handleSetlistCommand('add Summer Gig Chickpea Boogie position=2');
+
+      expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Chickpea Boogie');
+      expect(dbMocks.addSongToSetlist).toHaveBeenCalledWith(1, 8, 2);
+      expect(result).toMatch(/added/i);
+    });
+
+    it('picks the longer of two setlists sharing a leading word (longest-prefix wins)', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([
+        makeSetlist({ id: 1, name: 'Summer' }),
+        makeSetlist({ id: 2, name: 'Summer Gig' }),
+      ]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
+      dbMocks.addSongToSetlist.mockResolvedValueOnce({ id: 1, setlistId: 2, songId: 7, position: 1 });
+
+      const result = await handleSetlistCommand('add Summer Gig Sundown');
+
+      expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Sundown');
+      expect(dbMocks.addSongToSetlist).toHaveBeenCalledWith(2, 7, undefined);
+      expect(result).toContain('Summer Gig');
+    });
+
     it('returns a not-found message for an unknown setlist without calling getSongByTitle', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(undefined);
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
 
       const result = await handleSetlistCommand('add Nonexistent Sundown');
 
@@ -223,7 +262,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a not-found message for an unknown song', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(undefined);
 
       const result = await handleSetlistCommand('add SummerGig Nonexistent Song');
@@ -232,12 +271,10 @@ describe('handleSetlistCommand', () => {
       expect(result).toMatch(/not found|no song/i);
     });
 
-    it('rejects an invalid position without calling addSongToSetlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
-      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
-
+    it('rejects an invalid position without calling listSetlists or addSongToSetlist', async () => {
       const result = await handleSetlistCommand('add SummerGig Sundown position=0');
 
+      expect(dbMocks.listSetlists).not.toHaveBeenCalled();
       expect(dbMocks.addSongToSetlist).not.toHaveBeenCalled();
       expect(result).toMatch(/position/i);
     });
@@ -245,7 +282,7 @@ describe('handleSetlistCommand', () => {
 
   describe('remove', () => {
     it('removes a song from a setlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
       dbMocks.removeSongFromSetlist.mockResolvedValueOnce(true);
 
@@ -255,8 +292,35 @@ describe('handleSetlistCommand', () => {
       expect(result).toMatch(/removed/i);
     });
 
+    it('resolves a multi-word setlist name by longest-prefix match', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'Summer Gig' })]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
+      dbMocks.removeSongFromSetlist.mockResolvedValueOnce(true);
+
+      const result = await handleSetlistCommand('remove Summer Gig Sundown');
+
+      expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Sundown');
+      expect(dbMocks.removeSongFromSetlist).toHaveBeenCalledWith(1, 7);
+      expect(result).toMatch(/removed/i);
+      expect(result).toContain('Summer Gig');
+    });
+
+    it('picks the longer of two setlists sharing a leading word (longest-prefix wins)', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([
+        makeSetlist({ id: 1, name: 'Summer' }),
+        makeSetlist({ id: 2, name: 'Summer Gig' }),
+      ]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
+      dbMocks.removeSongFromSetlist.mockResolvedValueOnce(true);
+
+      const result = await handleSetlistCommand('remove Summer Gig Sundown');
+
+      expect(dbMocks.removeSongFromSetlist).toHaveBeenCalledWith(2, 7);
+      expect(result).toContain('Summer Gig');
+    });
+
     it('returns a not-found message for an unknown setlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(undefined);
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
 
       const result = await handleSetlistCommand('remove Nonexistent Sundown');
 
@@ -265,7 +329,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a not-found message for an unknown song', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(undefined);
 
       const result = await handleSetlistCommand('remove SummerGig Nonexistent Song');
@@ -275,7 +339,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a friendly message when the song is not on the setlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
       dbMocks.removeSongFromSetlist.mockResolvedValueOnce(false);
 
@@ -287,7 +351,7 @@ describe('handleSetlistCommand', () => {
 
   describe('move', () => {
     it('reorders a song to a new position', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
       dbMocks.moveSetlistSong.mockResolvedValueOnce(true);
 
@@ -299,7 +363,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('parses a multi-word song title with a trailing position', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 8, title: 'Chickpea Boogie' }));
       dbMocks.moveSetlistSong.mockResolvedValueOnce(true);
 
@@ -310,8 +374,24 @@ describe('handleSetlistCommand', () => {
       expect(result).toMatch(/moved|updated/i);
     });
 
+    it('resolves a multi-word setlist name, picking the longer of two setlists sharing a leading word', async () => {
+      dbMocks.listSetlists.mockResolvedValueOnce([
+        makeSetlist({ id: 1, name: 'Summer' }),
+        makeSetlist({ id: 2, name: 'Summer Gig' }),
+      ]);
+      dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
+      dbMocks.moveSetlistSong.mockResolvedValueOnce(true);
+
+      const result = await handleSetlistCommand('move Summer Gig Sundown 2');
+
+      expect(dbMocks.getSongByTitle).toHaveBeenCalledWith('Sundown');
+      expect(dbMocks.moveSetlistSong).toHaveBeenCalledWith(2, 7, 2);
+      expect(result).toMatch(/moved|updated/i);
+      expect(result).toContain('Summer Gig');
+    });
+
     it('rejects a bad (non-integer, zero, or negative) position without calling moveSetlistSong', async () => {
-      dbMocks.getSetlistByName.mockResolvedValue(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValue([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValue(makeSong({ id: 7, title: 'Sundown' }));
 
       for (const bad of ['move SummerGig Sundown', 'move SummerGig Sundown 0', 'move SummerGig Sundown -1', 'move SummerGig Sundown abc']) {
@@ -323,7 +403,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a not-found message for an unknown setlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(undefined);
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
 
       const result = await handleSetlistCommand('move Nonexistent Sundown 1');
 
@@ -332,7 +412,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a not-found message for an unknown song', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(undefined);
 
       const result = await handleSetlistCommand('move SummerGig Nonexistent Song 1');
@@ -342,7 +422,7 @@ describe('handleSetlistCommand', () => {
     });
 
     it('returns a friendly message when the song is not on the setlist', async () => {
-      dbMocks.getSetlistByName.mockResolvedValueOnce(makeSetlist({ id: 1, name: 'SummerGig' }));
+      dbMocks.listSetlists.mockResolvedValueOnce([makeSetlist({ id: 1, name: 'SummerGig' })]);
       dbMocks.getSongByTitle.mockResolvedValueOnce(makeSong({ id: 7, title: 'Sundown' }));
       dbMocks.moveSetlistSong.mockResolvedValueOnce(false);
 

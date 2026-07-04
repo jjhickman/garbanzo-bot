@@ -11,12 +11,17 @@
  *   !setlist move <name> <songTitle> <position>         — reorder a song
  *   !setlist delete <name>                               — delete a setlist
  *
- * Parsing convention: `create`/`show`/`delete` take a single free-text `<name>`
- * (like `!song show <title>`, it may contain spaces). `add`/`remove`/`move`
- * need BOTH a setlist name AND a song title in one string, so to keep parsing
- * deterministic the setlist `<name>` there is the first whitespace-delimited
- * token only; everything after it is the song title (plus a trailing
- * `position=N` field for `add`, or a trailing integer for `move`).
+ * Parsing convention: every subcommand's `<name>` is free-text and may
+ * contain spaces (like `!song show <title>`). `create`/`show`/`delete` only
+ * ever see a single free-text field, so there's nothing to disambiguate.
+ * `add`/`remove`/`move` pack a setlist name AND a song title into one string
+ * (plus a trailing `position=N` field for `add`, or a trailing integer for
+ * `move`, both parsed out first). To split what's left between name and
+ * title, we load all existing setlists and greedily match the LONGEST
+ * whitespace-token prefix of the remaining text against a setlist name
+ * (case-insensitive) — so "Summer Gig Sundown" resolves to the setlist
+ * "Summer Gig" (not "Summer") when both exist, and everything after the
+ * matched name is the song title.
  */
 
 import {
@@ -101,17 +106,38 @@ function usage(): string {
     '  `!setlist move <name> <songTitle> <position>` — reorder a song',
     '  `!setlist delete <name>` — delete a setlist',
     '',
-    'Note: for `add`/`remove`/`move`, `<name>` is a single word (the first token) — song titles may still be multiple words.',
+    'Note: for `add`/`remove`/`move`, `<name>` may be multiple words (e.g. "Summer Gig") — it\'s matched against your existing setlist names, longest match wins.',
   ].join('\n');
 }
 
-/** Split `rest` into a leading single-word token and the remainder. */
-function splitFirstToken(rest: string): { first: string; remainder: string } {
-  const trimmed = rest.trim();
-  const spaceIdx = trimmed.indexOf(' ');
-  return spaceIdx === -1
-    ? { first: trimmed, remainder: '' }
-    : { first: trimmed.slice(0, spaceIdx), remainder: trimmed.slice(spaceIdx + 1).trim() };
+/**
+ * Resolve a setlist name from the start of `text` by longest-prefix match:
+ * among all existing setlists whose (case-insensitive) name is a
+ * whitespace-token prefix of `text`, pick the one with the most tokens. This
+ * lets a longer, more specific setlist name (e.g. "Summer Gig") win over a
+ * shorter one sharing the same leading word (e.g. "Summer") when both exist.
+ *
+ * Returns the matched setlist and the remaining text (the song title), or
+ * `null` if no existing setlist name is a prefix of `text`.
+ */
+async function resolveSetlistPrefix(text: string): Promise<{ setlist: Setlist; remainder: string } | null> {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  const setlists = await listSetlists();
+  let best: { setlist: Setlist; tokenCount: number } | null = null;
+  for (const setlist of setlists) {
+    const nameTokens = setlist.name.trim().split(/\s+/).filter(Boolean);
+    if (nameTokens.length === 0 || nameTokens.length > tokens.length) continue;
+
+    const isPrefix = nameTokens.every((token, i) => token.toLowerCase() === tokens[i].toLowerCase());
+    if (isPrefix && (best === null || nameTokens.length > best.tokenCount)) {
+      best = { setlist, tokenCount: nameTokens.length };
+    }
+  }
+
+  if (best === null) return null;
+  return { setlist: best.setlist, remainder: tokens.slice(best.tokenCount).join(' ') };
 }
 
 function parsePosition(value: string): number | null {
@@ -158,9 +184,8 @@ async function handleShow(name: string): Promise<string> {
 }
 
 async function handleAdd(rest: string): Promise<string> {
-  const { first: name, remainder } = splitFirstToken(rest);
-  const { title, fields } = parseTitleAndFields(remainder, ADD_FIELDS);
-  if (!name || !title) {
+  const { title: nameAndTitle, fields } = parseTitleAndFields(rest, ADD_FIELDS);
+  if (!nameAndTitle) {
     return '❌ Usage: `!setlist add <name> <songTitle> [position=..]`';
   }
 
@@ -171,8 +196,13 @@ async function handleAdd(rest: string): Promise<string> {
     position = parsed;
   }
 
-  const setlist = await getSetlistByName(name);
-  if (!setlist) return `❌ No setlist found named "${name}".`;
+  const resolved = await resolveSetlistPrefix(nameAndTitle);
+  if (!resolved) return `❌ No setlist found named "${nameAndTitle}".`;
+
+  const { setlist, remainder: title } = resolved;
+  if (!title) {
+    return '❌ Usage: `!setlist add <name> <songTitle> [position=..]`';
+  }
 
   const song = await getSongByTitle(title);
   if (!song) return `❌ No song found named "${title}".`;
@@ -182,13 +212,18 @@ async function handleAdd(rest: string): Promise<string> {
 }
 
 async function handleRemove(rest: string): Promise<string> {
-  const { first: name, remainder: title } = splitFirstToken(rest);
-  if (!name || !title) {
+  const trimmed = rest.trim();
+  if (!trimmed) {
     return '❌ Usage: `!setlist remove <name> <songTitle>`';
   }
 
-  const setlist = await getSetlistByName(name);
-  if (!setlist) return `❌ No setlist found named "${name}".`;
+  const resolved = await resolveSetlistPrefix(trimmed);
+  if (!resolved) return `❌ No setlist found named "${trimmed}".`;
+
+  const { setlist, remainder: title } = resolved;
+  if (!title) {
+    return '❌ Usage: `!setlist remove <name> <songTitle>`';
+  }
 
   const song = await getSongByTitle(title);
   if (!song) return `❌ No song found named "${title}".`;
@@ -200,20 +235,25 @@ async function handleRemove(rest: string): Promise<string> {
 }
 
 async function handleMove(rest: string): Promise<string> {
-  const { first: name, remainder } = splitFirstToken(rest);
-  const match = /^(.*\S)\s+(-?\S+)$/.exec(remainder);
-  if (!name || !match) {
+  const trimmed = rest.trim();
+  const match = /^(.*\S)\s+(-?\S+)$/.exec(trimmed);
+  if (!trimmed || !match) {
     return '❌ Usage: `!setlist move <name> <songTitle> <position>`';
   }
 
-  const title = match[1].trim();
+  const nameAndTitle = match[1].trim();
   const position = parsePosition(match[2]);
   if (position === null) {
-    return `❌ Invalid position "${match[2]}". Use a positive whole number, e.g. \`!setlist move ${name} ${title} 1\`.`;
+    return `❌ Invalid position "${match[2]}". Use a positive whole number, e.g. \`!setlist move ${nameAndTitle} 1\`.`;
   }
 
-  const setlist = await getSetlistByName(name);
-  if (!setlist) return `❌ No setlist found named "${name}".`;
+  const resolved = await resolveSetlistPrefix(nameAndTitle);
+  if (!resolved) return `❌ No setlist found named "${nameAndTitle}".`;
+
+  const { setlist, remainder: title } = resolved;
+  if (!title) {
+    return '❌ Usage: `!setlist move <name> <songTitle> <position>`';
+  }
 
   const song = await getSongByTitle(title);
   if (!song) return `❌ No song found named "${title}".`;
