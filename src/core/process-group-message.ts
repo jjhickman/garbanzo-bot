@@ -9,6 +9,7 @@ import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } fro
 import { handleSongCommand } from '../features/songs.js';
 import { handleAvailabilityCommand, handleRehearsalCommand } from '../features/rehearsals.js';
 import { handleSetlistCommand } from '../features/setlists.js';
+import { handleAgendaCommand } from '../features/practice-agenda.js';
 import { extractUrls, processUrl } from '../features/links.js';
 import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
@@ -204,6 +205,19 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     return;
   }
 
+  // Band feature — !agenda (read-only: any sender in a band-enabled context
+  // may view the practice agenda; no owner/band-member gate needed since it
+  // can't mutate anything).
+  if (featureCheck?.feature === 'agenda' && config.BAND_FEATURES_ENABLED) {
+    await handleAgendaFeature({
+      messenger,
+      chatId,
+      senderId,
+      replyTo,
+    });
+    return;
+  }
+
   // URL context enrichment
   let urlContext = '';
   const urls = extractUrls(query);
@@ -376,6 +390,20 @@ async function handleSetlistFeature(params: {
   }
 
   const result = await handleSetlistCommand(featureQuery);
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleAgendaFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, replyTo } = params;
+
+  const result = await handleAgendaCommand();
   await messenger.sendText(chatId, result, { replyTo });
   recordBotResponse(chatId);
   recordResponse(senderId, chatId);
