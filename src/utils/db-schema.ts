@@ -214,6 +214,59 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_songs_status
     ON songs (status);
+
+  CREATE TABLE IF NOT EXISTS rehearsals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scheduled_at INTEGER NOT NULL,
+    location TEXT,
+    agenda TEXT,
+    status TEXT NOT NULL DEFAULT 'scheduled'
+      CHECK (status IN ('scheduled','done','cancelled')),
+    reminder_sent INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_rehearsals_status_scheduled
+    ON rehearsals (status, scheduled_at);
+
+  CREATE TABLE IF NOT EXISTS availability (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rehearsal_id INTEGER NOT NULL REFERENCES rehearsals(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL,
+    member_name TEXT,
+    response TEXT NOT NULL CHECK (response IN ('yes','no','maybe')),
+    responded_at INTEGER NOT NULL,
+    UNIQUE(rehearsal_id, member_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS setlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    notes TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_setlists_name_lower
+    ON setlists (lower(name));
+
+  -- NOTE: sqlite does not run with PRAGMA foreign_keys=ON (see db-schema.ts
+  -- history / sub-project 2 Task 3), so ON DELETE CASCADE below is inert on
+  -- the default sqlite backend. deleteSong()/deleteSetlist() in db-sqlite.ts
+  -- do the cascading cleanup in code; the FK stays for postgres correctness
+  -- and as documentation of the relationship.
+  CREATE TABLE IF NOT EXISTS setlist_songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    setlist_id INTEGER NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
+    song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    UNIQUE(setlist_id, position)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_setlist_songs_setlist
+    ON setlist_songs (setlist_id);
 `);
 
 interface TableColumnInfo {

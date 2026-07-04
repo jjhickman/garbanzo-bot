@@ -1,4 +1,6 @@
 import type {
+  Availability,
+  AvailabilityResponse,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -6,7 +8,12 @@ import type {
   FeedbackEntry,
   MemberProfile,
   MemoryEntry,
+  Rehearsal,
+  RehearsalStatus,
   SessionSummaryHit,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -92,6 +99,47 @@ export interface SongRow {
   notes: string | null;
   created_at: DbNumeric | null;
   updated_at: DbNumeric | null;
+}
+
+export interface RehearsalRow {
+  id: DbNumeric | null;
+  scheduled_at: DbNumeric | null;
+  location: string | null;
+  agenda: string | null;
+  status: RehearsalStatus;
+  reminder_sent: DbNumeric | boolean | null;
+  created_by: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
+}
+
+export interface AvailabilityRow {
+  id: DbNumeric | null;
+  rehearsal_id: DbNumeric | null;
+  member_id: string;
+  member_name: string | null;
+  response: AvailabilityResponse;
+  responded_at: DbNumeric | null;
+}
+
+export interface SetlistRow {
+  id: DbNumeric | null;
+  name: string;
+  notes: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
+}
+
+export interface SetlistSongRow {
+  id: DbNumeric | null;
+  setlist_id: DbNumeric | null;
+  song_id: DbNumeric | null;
+  position: DbNumeric | null;
+}
+
+/** A setlist_songs row JOINed with its referenced songs row (position + full song columns). */
+export interface SetlistEntryRow extends SongRow {
+  position: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -216,6 +264,61 @@ export function mapSong(row: SongRow): Song {
     notes: row.notes,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapRehearsal(row: RehearsalRow): Rehearsal {
+  const reminderSent = typeof row.reminder_sent === 'boolean'
+    ? row.reminder_sent
+    : toNumber(row.reminder_sent) === 1;
+
+  return {
+    id: toNumber(row.id),
+    scheduledAt: toNumber(row.scheduled_at),
+    location: row.location,
+    agenda: row.agenda,
+    status: row.status,
+    reminderSent,
+    createdBy: row.created_by,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapAvailability(row: AvailabilityRow): Availability {
+  return {
+    id: toNumber(row.id),
+    rehearsalId: toNumber(row.rehearsal_id),
+    memberId: row.member_id,
+    memberName: row.member_name,
+    response: row.response,
+    respondedAt: toNumber(row.responded_at),
+  };
+}
+
+export function mapSetlist(row: SetlistRow): Setlist {
+  return {
+    id: toNumber(row.id),
+    name: row.name,
+    notes: row.notes,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapSetlistSong(row: SetlistSongRow): SetlistSong {
+  return {
+    id: toNumber(row.id),
+    setlistId: toNumber(row.setlist_id),
+    songId: toNumber(row.song_id),
+    position: toNumber(row.position),
+  };
+}
+
+export function mapSetlistEntry(row: SetlistEntryRow): SetlistEntry {
+  return {
+    position: toNumber(row.position),
+    song: mapSong(row),
   };
 }
 

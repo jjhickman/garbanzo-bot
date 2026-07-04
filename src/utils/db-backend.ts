@@ -1,4 +1,6 @@
 import type {
+  Availability,
+  AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
@@ -10,6 +12,11 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -105,6 +112,30 @@ export interface DbBackend {
   listSongs(status?: SongStatus): Promise<Song[]>;
   updateSong(id: number, patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>): Promise<Song | undefined>;
   deleteSong(id: number): Promise<boolean>;
+
+  // Rehearsals (shared band practice memory)
+  addRehearsal(input: { scheduledAt: number; location?: string | null; agenda?: string | null; createdBy?: string | null }): Promise<Rehearsal>;
+  getRehearsalById(id: number): Promise<Rehearsal | undefined>;
+  listUpcomingRehearsals(nowSeconds: number, limit?: number): Promise<Rehearsal[]>;
+  getNextRehearsal(nowSeconds: number): Promise<Rehearsal | undefined>;
+  updateRehearsal(id: number, patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>): Promise<Rehearsal | undefined>;
+  cancelRehearsal(id: number): Promise<boolean>;
+  listRehearsalsNeedingReminder(nowSeconds: number): Promise<Rehearsal[]>;
+  markRehearsalReminderSent(id: number): Promise<boolean>;
+
+  // Availability (per-rehearsal band member RSVPs)
+  setAvailability(rehearsalId: number, memberId: string, memberName: string | null, response: AvailabilityResponse): Promise<Availability>;
+  listAvailability(rehearsalId: number): Promise<Availability[]>;
+
+  // Setlists (ordered song lists referencing shared band songs)
+  addSetlist(input: { name: string; notes?: string | null }): Promise<Setlist>;
+  getSetlistByName(name: string): Promise<Setlist | undefined>;
+  listSetlists(): Promise<Setlist[]>;
+  deleteSetlist(id: number): Promise<boolean>;
+  addSongToSetlist(setlistId: number, songId: number, position?: number): Promise<SetlistSong>;
+  removeSongFromSetlist(setlistId: number, songId: number): Promise<boolean>;
+  moveSetlistSong(setlistId: number, songId: number, newPosition: number): Promise<boolean>;
+  getSetlistSongs(setlistId: number): Promise<SetlistEntry[]>;
 
   // Lifecycle
   closeDb(): Promise<void>;

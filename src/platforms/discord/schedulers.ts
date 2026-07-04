@@ -1,19 +1,27 @@
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { archiveDailyDigest, formatDigest } from '../../features/digest.js';
+import { buildPracticeAgenda } from '../../features/practice-agenda.js';
 import { buildWeeklyRecap } from '../../features/recap.js';
+import { formatRehearsalLine } from '../../features/rehearsals.js';
 import { logger } from '../../middleware/logger.js';
 import { recordEventReminderSent, snapshotAndReset } from '../../middleware/stats.js';
 import { config } from '../../utils/config.js';
 import {
   cancelEventReminder,
   listPendingEventReminders,
+  listRehearsalsNeedingReminder,
   markEventReminderSent,
+  markRehearsalReminderSent,
 } from '../../utils/db.js';
-import type { EventReminder } from '../../utils/db-types.js';
+import type { EventReminder, Rehearsal } from '../../utils/db-types.js';
 
 const DIGEST_HOUR = 21;
 const RECAP_WEEKDAY = 0;
 const RECAP_HOUR = 18;
+// Monday morning — ahead of the week's rehearsals, so the band sees what
+// needs work before they're in the room.
+const PRACTICE_AGENDA_WEEKDAY = 1;
+const PRACTICE_AGENDA_HOUR = 9;
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const CANCEL_AFTER_SECONDS = 30 * 60;
 const MAX_FAILED_POLLS_AFTER_GRACE = 3;
@@ -129,6 +137,112 @@ export function scheduleDiscordEventReminders(messenger: PlatformMessenger): () 
       timer = null;
     }
   };
+}
+
+export function scheduleDiscordRehearsalReminders(
+  messenger: PlatformMessenger,
+  targetChannelId: string,
+): () => void {
+  if (!config.EVENT_REMINDERS_ENABLED) {
+    logger.info('Rehearsal reminders disabled');
+    return () => undefined;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+
+  function arm(): void {
+    if (cancelled) return;
+    timer = setTimeout(async () => {
+      try {
+        await pollRehearsalReminders(messenger, targetChannelId);
+      } catch (err) {
+        logger.error({ err }, 'Discord rehearsal reminder poll failed');
+      }
+      arm();
+    }, POLL_INTERVAL_MS);
+    timer.unref?.();
+  }
+
+  arm();
+
+  return () => {
+    cancelled = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+
+export function scheduleDiscordPracticeAgenda(
+  messenger: PlatformMessenger,
+  targetChannelId: string,
+): () => void {
+  if (!config.DISCORD_PRACTICE_CHANNEL_ID) {
+    logger.info('Practice agenda auto-post disabled (no DISCORD_PRACTICE_CHANNEL_ID)');
+    return () => undefined;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+
+  function arm(): void {
+    if (cancelled) return;
+    const msUntil = msUntilWeekdayHour(PRACTICE_AGENDA_WEEKDAY, PRACTICE_AGENDA_HOUR);
+    const hoursUntil = Math.round((msUntil / 1000 / 60 / 60) * 10) / 10;
+    logger.info(
+      { nextAgendaIn: `${hoursUntil}h`, targetChannelId },
+      'Discord practice agenda scheduled',
+    );
+
+    timer = setTimeout(async () => {
+      try {
+        const text = await buildPracticeAgenda();
+        await messenger.sendText(targetChannelId, text);
+        logger.info({ targetChannelId }, 'Discord practice agenda sent');
+      } catch (err) {
+        logger.error({ err, targetChannelId }, 'Failed to send Discord practice agenda');
+      }
+      arm();
+    }, msUntil);
+    timer.unref?.();
+  }
+
+  arm();
+
+  return () => {
+    cancelled = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+
+async function pollRehearsalReminders(
+  messenger: PlatformMessenger,
+  targetChannelId: string,
+): Promise<void> {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const due = await listRehearsalsNeedingReminder(nowSeconds);
+
+  for (const rehearsal of due) {
+    try {
+      await messenger.sendText(targetChannelId, formatRehearsalReminder(rehearsal));
+      await markRehearsalReminderSent(rehearsal.id);
+      logger.info(
+        { rehearsalId: rehearsal.id, targetChannelId },
+        'Discord rehearsal reminder sent',
+      );
+    } catch (err) {
+      logger.warn({ err, rehearsalId: rehearsal.id }, 'Discord rehearsal reminder send failed');
+    }
+  }
+}
+
+function formatRehearsalReminder(rehearsal: Rehearsal): string {
+  return `🎸 Rehearsal reminder: ${formatRehearsalLine(rehearsal)}`;
 }
 
 async function sendDigest(

@@ -110,12 +110,16 @@ describe('Discord runtime gateway wiring', () => {
     const digestDispose = vi.fn();
     const recapDispose = vi.fn();
     const remindersDispose = vi.fn();
+    const rehearsalDispose = vi.fn();
+    const agendaDispose = vi.fn();
     const createGatewayClient = vi.fn<(params: GatewayClientParams) => GatewayClientStub>(() => gatewayClient);
     const resolveOwnerDmChannelId = vi.fn(async () => 'dm-222');
     const getOwnerId = vi.fn(() => '111');
     const scheduleDigest = vi.fn(() => digestDispose);
     const scheduleWeeklyRecap = vi.fn(() => recapDispose);
     const scheduleEventReminders = vi.fn(() => remindersDispose);
+    const scheduleRehearsalReminders = vi.fn(() => rehearsalDispose);
+    const schedulePracticeAgenda = vi.fn(() => agendaDispose);
     const { createDiscordRuntime } = await import('../src/platforms/discord/runtime.js');
 
     const runtime = createDiscordRuntime({
@@ -126,6 +130,8 @@ describe('Discord runtime gateway wiring', () => {
       scheduleDigest,
       scheduleWeeklyRecap,
       scheduleEventReminders,
+      scheduleRehearsalReminders,
+      schedulePracticeAgenda,
     });
 
     await runtime.start();
@@ -140,12 +146,17 @@ describe('Discord runtime gateway wiring', () => {
     expect(scheduleDigest).toHaveBeenCalledWith(adapter, 'dm-222');
     expect(scheduleWeeklyRecap).toHaveBeenCalledWith(adapter, 'dm-222');
     expect(scheduleEventReminders).toHaveBeenCalledWith(adapter);
+    // Practice schedulers target DISCORD_PRACTICE_CHANNEL_ID ?? ownerDmChannelId (dm-222 here).
+    expect(scheduleRehearsalReminders).toHaveBeenCalledWith(adapter, 'dm-222');
+    expect(schedulePracticeAgenda).toHaveBeenCalledWith(adapter, 'dm-222');
 
     await runtime.stop();
 
     expect(digestDispose).toHaveBeenCalledTimes(1);
     expect(recapDispose).toHaveBeenCalledTimes(1);
     expect(remindersDispose).toHaveBeenCalledTimes(1);
+    expect(rehearsalDispose).toHaveBeenCalledTimes(1);
+    expect(agendaDispose).toHaveBeenCalledTimes(1);
     expect(gatewayClient.stop).toHaveBeenCalledTimes(1);
   });
 

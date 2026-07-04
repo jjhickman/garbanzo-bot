@@ -64,6 +64,51 @@ export interface Song {
   updatedAt: number;
 }
 
+export type RehearsalStatus = 'scheduled' | 'done' | 'cancelled';
+
+export interface Rehearsal {
+  id: number;
+  scheduledAt: number;
+  location: string | null;
+  agenda: string | null;
+  status: RehearsalStatus;
+  reminderSent: boolean;
+  createdBy: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AvailabilityResponse = 'yes' | 'no' | 'maybe';
+
+export interface Availability {
+  id: number;
+  rehearsalId: number;
+  memberId: string;
+  memberName: string | null;
+  response: AvailabilityResponse;
+  respondedAt: number;
+}
+
+export interface Setlist {
+  id: number;
+  name: string;
+  notes: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SetlistSong {
+  id: number;
+  setlistId: number;
+  songId: number;
+  position: number;
+}
+
+export interface SetlistEntry {
+  position: number;
+  song: Song;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

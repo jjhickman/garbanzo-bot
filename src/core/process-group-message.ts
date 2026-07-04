@@ -7,6 +7,9 @@ import { handleCharacter } from '../features/character.js';
 import { handleFeedbackSubmit, handleUpvote } from '../features/feedback.js';
 import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } from '../features/voice.js';
 import { handleSongCommand } from '../features/songs.js';
+import { handleAvailabilityCommand, handleRehearsalCommand } from '../features/rehearsals.js';
+import { handleSetlistCommand } from '../features/setlists.js';
+import { handleAgendaCommand } from '../features/practice-agenda.js';
 import { extractUrls, processUrl } from '../features/links.js';
 import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
@@ -160,6 +163,61 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     return;
   }
 
+  // Band feature — !rehearsal (shared band practice tracking)
+  if (featureCheck?.feature === 'rehearsal' && config.BAND_FEATURES_ENABLED) {
+    await handleRehearsalFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
+      replyTo,
+    });
+    return;
+  }
+
+  // Band feature — !available (any band member sets their own availability)
+  if (featureCheck?.feature === 'available' && config.BAND_FEATURES_ENABLED) {
+    await handleAvailabilityFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
+      replyTo,
+    });
+    return;
+  }
+
+  // Band feature — !setlist (shared band memory: ordered song lists)
+  if (featureCheck?.feature === 'setlist' && config.BAND_FEATURES_ENABLED) {
+    await handleSetlistFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
+      replyTo,
+    });
+    return;
+  }
+
+  // Band feature — !agenda (read-only: any sender in a band-enabled context
+  // may view the practice agenda; no owner/band-member gate needed since it
+  // can't mutate anything).
+  if (featureCheck?.feature === 'agenda' && config.BAND_FEATURES_ENABLED) {
+    await handleAgendaFeature({
+      messenger,
+      chatId,
+      senderId,
+      replyTo,
+    });
+    return;
+  }
+
   // URL context enrichment
   let urlContext = '';
   const urls = extractUrls(query);
@@ -286,6 +344,92 @@ async function handleSongFeature(params: {
   }
 
   const result = await handleSongCommand(featureQuery);
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleRehearsalFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can manage rehearsals right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleRehearsalCommand(featureQuery, { senderId });
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleSetlistFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can manage setlists right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleSetlistCommand(featureQuery);
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleAgendaFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, replyTo } = params;
+
+  const result = await handleAgendaCommand();
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleAvailabilityFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can set availability right now.', { replyTo });
+    return;
+  }
+
+  // process-group-message only carries senderId today (no display name available
+  // for any platform) — handleAvailabilityCommand falls back to memberId when
+  // senderName is undefined.
+  const result = await handleAvailabilityCommand(featureQuery, { senderId });
   await messenger.sendText(chatId, result, { replyTo });
   recordBotResponse(chatId);
   recordResponse(senderId, chatId);

@@ -9,6 +9,8 @@ import type { MemoryEntry } from './db-types.js';
 import { deleteFact, indexFact } from './vector-memory.js';
 
 export type {
+  Availability,
+  AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
@@ -21,6 +23,11 @@ export type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -148,6 +155,30 @@ export const getSongByTitle = backend.getSongByTitle;
 export const listSongs = backend.listSongs;
 export const updateSong = backend.updateSong;
 export const deleteSong = backend.deleteSong;
+
+// Rehearsals (shared band practice memory)
+export const addRehearsal = backend.addRehearsal;
+export const getRehearsalById = backend.getRehearsalById;
+export const listUpcomingRehearsals = backend.listUpcomingRehearsals;
+export const getNextRehearsal = backend.getNextRehearsal;
+export const updateRehearsal = backend.updateRehearsal;
+export const cancelRehearsal = backend.cancelRehearsal;
+export const listRehearsalsNeedingReminder = backend.listRehearsalsNeedingReminder;
+export const markRehearsalReminderSent = backend.markRehearsalReminderSent;
+
+// Availability (per-rehearsal band member RSVPs)
+export const setAvailability = backend.setAvailability;
+export const listAvailability = backend.listAvailability;
+
+// Setlists (ordered song lists referencing shared band songs)
+export const addSetlist = backend.addSetlist;
+export const getSetlistByName = backend.getSetlistByName;
+export const listSetlists = backend.listSetlists;
+export const deleteSetlist = backend.deleteSetlist;
+export const addSongToSetlist = backend.addSongToSetlist;
+export const removeSongFromSetlist = backend.removeSongFromSetlist;
+export const moveSetlistSong = backend.moveSetlistSong;
+export const getSetlistSongs = backend.getSetlistSongs;
 
 // Lifecycle
 export const closeDb = backend.closeDb;

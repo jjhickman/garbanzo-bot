@@ -163,3 +163,51 @@ CREATE INDEX IF NOT EXISTS idx_songs_title_lower
 
 CREATE INDEX IF NOT EXISTS idx_songs_status
   ON songs (status);
+
+CREATE TABLE IF NOT EXISTS rehearsals (
+  id BIGSERIAL PRIMARY KEY,
+  scheduled_at BIGINT NOT NULL,
+  location TEXT,
+  agenda TEXT,
+  status TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK (status IN ('scheduled','done','cancelled')),
+  reminder_sent BOOLEAN NOT NULL DEFAULT false,
+  created_by TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rehearsals_status_scheduled
+  ON rehearsals (status, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS availability (
+  id BIGSERIAL PRIMARY KEY,
+  rehearsal_id BIGINT NOT NULL REFERENCES rehearsals(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL,
+  member_name TEXT,
+  response TEXT NOT NULL CHECK (response IN ('yes','no','maybe')),
+  responded_at BIGINT NOT NULL,
+  UNIQUE(rehearsal_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS setlists (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  notes TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_setlists_name_lower
+  ON setlists (lower(name));
+
+CREATE TABLE IF NOT EXISTS setlist_songs (
+  id BIGSERIAL PRIMARY KEY,
+  setlist_id BIGINT NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  UNIQUE(setlist_id, position)
+);
+
+CREATE INDEX IF NOT EXISTS idx_setlist_songs_setlist
+  ON setlist_songs (setlist_id);
