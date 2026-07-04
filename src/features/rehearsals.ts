@@ -19,6 +19,7 @@ import {
   updateRehearsal,
   type Rehearsal,
 } from '../utils/db.js';
+import { parseTitleAndFields } from './songs.js';
 
 const SCHEDULE_FIELDS = ['when', 'location', 'agenda'] as const;
 const DATE_ONLY_DEFAULT_HOUR = 19;
@@ -124,36 +125,6 @@ function usage(): string {
     '  `!rehearsal cancel <id>` — cancel a rehearsal',
     '  `!rehearsal note <id> <text>` — update the agenda',
   ].join('\n');
-}
-
-function parseTitleAndFields(
-  rest: string,
-  allowedFields: readonly string[],
-): { title: string; fields: Record<string, string> } {
-  if (!rest) return { title: '', fields: {} };
-
-  const pattern = new RegExp(`\\b(?:${allowedFields.join('|')})=`, 'gi');
-  const matches: { field: string; start: number; valueStart: number }[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(rest)) !== null) {
-    matches.push({
-      field: match[0].slice(0, -1).toLowerCase(),
-      start: match.index,
-      valueStart: match.index + match[0].length,
-    });
-  }
-
-  if (matches.length === 0) {
-    return { title: rest.trim(), fields: {} };
-  }
-
-  const title = rest.slice(0, matches[0].start).trim();
-  const fields: Record<string, string> = {};
-  for (let i = 0; i < matches.length; i++) {
-    const end = i + 1 < matches.length ? matches[i + 1].start : rest.length;
-    fields[matches[i].field] = rest.slice(matches[i].valueStart, end).trim();
-  }
-  return { title, fields };
 }
 
 async function handleSchedule(rest: string, ctx: { senderId: string }): Promise<string> {

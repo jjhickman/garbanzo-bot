@@ -100,7 +100,7 @@ function invalidStatusMessage(value: string): string {
  * with spaces (e.g. `notes=needs a bridge`) are supported as long as they
  * aren't followed by another field marker.
  */
-function parseTitleAndFields(
+export function parseTitleAndFields(
   rest: string,
   allowedFields: readonly string[],
 ): { title: string; fields: Record<string, string> } {
