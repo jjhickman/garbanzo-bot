@@ -33,6 +33,22 @@ function parseCompose(file: string): ComposeFile {
   return parsed as ComposeFile;
 }
 
+function parseEnvExample(file: string): Map<string, string> {
+  const entries = new Map<string, string>();
+
+  for (const line of readFileSync(file, 'utf-8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const delimiterIndex = trimmed.indexOf('=');
+    if (delimiterIndex <= 0) continue;
+
+    entries.set(trimmed.slice(0, delimiterIndex), trimmed.slice(delimiterIndex + 1));
+  }
+
+  return entries;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -184,5 +200,42 @@ describe('platform-profile compose contract', () => {
     expect(envEntries(service(compose, 'grafana'))).toContain('MONITORING_TOKEN=${MONITORING_TOKEN:-}');
     expect(String(service(compose, 'prometheus').command)).toContain('PROM_BEARER_TOKEN');
     expect(String(service(compose, 'grafana').command)).toContain('MONITORING_TOKEN');
+  });
+});
+
+describe('layered env example coherence', () => {
+  const sharedExample = parseEnvExample('.env.example');
+  const discordExample = parseEnvExample('.env.discord.example');
+  const whatsappExample = parseEnvExample('.env.whatsapp.example');
+  const discordExampleText = readFileSync('.env.discord.example', 'utf-8');
+
+  it('keeps shared and instance examples from defining the same keys', () => {
+    for (const [instanceName, instanceExample] of [
+      ['discord', discordExample],
+      ['whatsapp', whatsappExample],
+    ] as const) {
+      const duplicatedKeys = [...instanceExample.keys()].filter((key) => sharedExample.has(key));
+
+      expect(duplicatedKeys, `${instanceName} example duplicates shared keys`).toEqual([]);
+    }
+  });
+
+  it('keeps compose profile and monitoring token guidance in the shared example', () => {
+    expect(sharedExample.has('COMPOSE_PROFILES')).toBe(true);
+    expect(sharedExample.has('MONITORING_TOKEN')).toBe(true);
+  });
+
+  it('keeps Discord-only guidance in the Discord example', () => {
+    expect(discordExampleText).toContain('WHISPER_URL');
+  });
+
+  it('keeps OWNER_JID scoped to the WhatsApp example', () => {
+    expect(whatsappExample.has('OWNER_JID')).toBe(true);
+    expect(sharedExample.has('OWNER_JID')).toBe(false);
+    expect(discordExample.has('OWNER_JID')).toBe(false);
+  });
+
+  it('removes the retired Remy env example', () => {
+    expect(existsSync('.env.remy.example')).toBe(false);
   });
 });
