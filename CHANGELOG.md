@@ -6,6 +6,22 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-04
+
+### Added
+
+- Discord runs a real Gateway connection (discord.js), so the bot observes and responds to channel messages, welcomes members, runs scheduled digests and recaps, and escalates to the owner by DM. Configure per-channel behavior and band roles in `config/discord-channels.json`.
+- Self-hosted Qdrant vector memory for semantic recall of community facts. `VECTOR_STORE=qdrant` by default and falls back to keyword search when Qdrant is unavailable; `VECTOR_STORE=none` keeps keyword-only.
+- Remy band-assistant features, all gated behind `BAND_FEATURES_ENABLED` (default off, so the WhatsApp community bot is unaffected):
+  - Song catalog (`!song`) with key, tempo, and status.
+  - Practice tools: rehearsals with reminders (`!rehearsal`), availability (`!available`), setlists (`!setlist`), and a practice agenda (`!agenda`).
+  - Songwriting: idea capture from text or a dropped audio clip transcribed via Whisper (`!idea`), and per-song sections, lyrics, and chords (`!section`, `!lyrics`).
+- `docker-compose.remy.yml` to run Remy beside Garbanzo on one host, and setup wizard support for provisioning a Discord deployment.
+
+### Changed
+
+- pgvector support removed in favor of Qdrant as the single vector store.
+
 ## [1.0.7] — 2026-07-03
 
 ### Added
