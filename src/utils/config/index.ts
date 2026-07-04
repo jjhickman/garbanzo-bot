@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { config as loadDotenv } from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { aiSchema } from './ai.js';
@@ -8,6 +7,7 @@ import { coreSchema } from './core.js';
 import { discordSchema } from './discord.js';
 import { integrationsSchema } from './integrations.js';
 import { monitoringSchema } from './monitoring.js';
+import { applyEnvLayers } from './shared.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
 
@@ -17,7 +17,9 @@ const PROJECT_ROOT = processWithPkg.pkg
   ? dirname(process.execPath)
   : resolve(__dirname, '../../..');
 
-loadDotenv({ path: resolve(PROJECT_ROOT, '.env') });
+const realEnv = { ...process.env };
+const envLayerResult = applyEnvLayers({ baseDir: PROJECT_ROOT, realEnv });
+export const loadedEnvFiles = envLayerResult.loadedEnvFiles;
 
 const envSchema = coreSchema
   .merge(aiSchema)

@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { closeDb, scheduleMaintenance } from './utils/db.js';
 import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
-import { config } from './utils/config.js';
+import { config, loadedEnvFiles } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
@@ -43,6 +43,7 @@ async function main(): Promise<void> {
     healthBindHost: config.HEALTH_BIND_HOST,
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
+    envFiles: loadedEnvFiles,
   }, 'Configuration loaded');
 
   const monitoringToken = config.MONITORING_TOKEN ?? randomBytes(24).toString('hex');

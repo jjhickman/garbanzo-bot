@@ -41,6 +41,7 @@ async function importIndexWithMocks(overrides: IndexConfigOverrides = {}): Promi
   vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
 
   vi.doMock('../src/utils/config.js', () => ({
+    loadedEnvFiles: ['/tmp/test/.env', '/tmp/test/.env.whatsapp'],
     config: {
       OPENROUTER_API_KEY: 'test_key_ci',
       ANTHROPIC_API_KEY: undefined,

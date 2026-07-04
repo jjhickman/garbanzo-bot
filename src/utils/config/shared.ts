@@ -1,4 +1,54 @@
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
+
+const DEFAULT_MESSAGING_PLATFORM = 'discord';
+
+export type EnvLayerResult = {
+  env: NodeJS.ProcessEnv;
+  loadedEnvFiles: string[];
+  platform: string;
+};
+
+export type EnvLayerOptions = {
+  baseDir: string;
+  env?: NodeJS.ProcessEnv;
+  realEnv: NodeJS.ProcessEnv;
+  platform?: string;
+};
+
+function restoreRealEnv(env: NodeJS.ProcessEnv, realEnv: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(realEnv)) {
+    const value = realEnv[key];
+    if (value === undefined) {
+      delete env[key];
+    } else {
+      env[key] = value;
+    }
+  }
+}
+
+export function applyEnvLayers(options: EnvLayerOptions): EnvLayerResult {
+  const env = options.env ?? process.env;
+  const loadedEnvFiles: string[] = [];
+
+  const loadFile = (path: string, override: boolean): void => {
+    if (!existsSync(path)) return;
+    loadDotenv({ path, override, processEnv: env });
+    loadedEnvFiles.push(path);
+    restoreRealEnv(env, options.realEnv);
+  };
+
+  loadFile(resolve(options.baseDir, '.env'), false);
+
+  const platform = options.platform ?? env.MESSAGING_PLATFORM ?? DEFAULT_MESSAGING_PLATFORM;
+  loadFile(resolve(options.baseDir, `.env.${platform}`), true);
+
+  restoreRealEnv(env, options.realEnv);
+
+  return { env, loadedEnvFiles, platform };
+}
 
 export const optionalUrl = z.preprocess(
   (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
