@@ -230,6 +230,16 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_rehearsals_status_scheduled
     ON rehearsals (status, scheduled_at);
+
+  CREATE TABLE IF NOT EXISTS availability (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rehearsal_id INTEGER NOT NULL REFERENCES rehearsals(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL,
+    member_name TEXT,
+    response TEXT NOT NULL CHECK (response IN ('yes','no','maybe')),
+    responded_at INTEGER NOT NULL,
+    UNIQUE(rehearsal_id, member_id)
+  );
 `);
 
 interface TableColumnInfo {

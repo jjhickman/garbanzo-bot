@@ -9,6 +9,7 @@ import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput 
 import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
+  mapAvailability,
   mapDailyGroupActivity,
   mapDbMessage,
   mapEventReminder,
@@ -21,6 +22,7 @@ import {
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
+  type AvailabilityRow,
   type DailyGroupActivityRow,
   type EventReminderRow,
   type FeedbackRow,
@@ -45,6 +47,8 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  Availability,
+  AvailabilityResponse,
   BackupIntegrityStatus,
   DailyGroupActivity,
   DbMessage,
@@ -87,6 +91,7 @@ const REQUIRED_CORE_TABLES = [
   'whatsapp_safety_state',
   'songs',
   'rehearsals',
+  'availability',
 ] as const;
 
 interface DbCountRow {
@@ -1175,6 +1180,34 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [ts, id],
       );
       return (res.rowCount ?? 0) > 0;
+    },
+
+    async setAvailability(
+      rehearsalId: number,
+      memberId: string,
+      memberName: string | null,
+      response: AvailabilityResponse,
+    ): Promise<Availability> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<AvailabilityRow>(
+        `INSERT INTO availability (rehearsal_id, member_id, member_name, response, responded_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (rehearsal_id, member_id) DO UPDATE SET
+           response = EXCLUDED.response,
+           member_name = EXCLUDED.member_name,
+           responded_at = EXCLUDED.responded_at
+         RETURNING *`,
+        [rehearsalId, memberId, memberName, response, ts],
+      );
+      return mapAvailability(res.rows[0]);
+    },
+
+    async listAvailability(rehearsalId: number): Promise<Availability[]> {
+      const res = await pool.query<AvailabilityRow>(
+        `SELECT * FROM availability WHERE rehearsal_id = $1 ORDER BY response ASC, responded_at ASC`,
+        [rehearsalId],
+      );
+      return res.rows.map(mapAvailability);
     },
 
     async closeDb(): Promise<void> {

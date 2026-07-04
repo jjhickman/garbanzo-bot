@@ -9,6 +9,8 @@ import type { MemoryEntry } from './db-types.js';
 import { deleteFact, indexFact } from './vector-memory.js';
 
 export type {
+  Availability,
+  AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
@@ -160,6 +162,10 @@ export const updateRehearsal = backend.updateRehearsal;
 export const cancelRehearsal = backend.cancelRehearsal;
 export const listRehearsalsNeedingReminder = backend.listRehearsalsNeedingReminder;
 export const markRehearsalReminderSent = backend.markRehearsalReminderSent;
+
+// Availability (per-rehearsal band member RSVPs)
+export const setAvailability = backend.setAvailability;
+export const listAvailability = backend.listAvailability;
 
 // Lifecycle
 export const closeDb = backend.closeDb;

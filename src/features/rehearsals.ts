@@ -8,6 +8,9 @@
  *   !rehearsal cancel <id>                                     — cancel a rehearsal
  *   !rehearsal note <id> <text>                                — replace agenda/notes
  *
+ * Any band member command:
+ *   !available <rehearsalId> yes|no|maybe                      — RSVP to a rehearsal
+ *
  * Dates: YYYY-MM-DD HH:MM (24h) or YYYY-MM-DD (defaults to 7:00pm).
  */
 
@@ -15,8 +18,12 @@ import {
   addRehearsal,
   cancelRehearsal,
   getRehearsalById,
+  listAvailability,
   listUpcomingRehearsals,
+  setAvailability,
   updateRehearsal,
+  type Availability,
+  type AvailabilityResponse,
   type Rehearsal,
 } from '../utils/db.js';
 import { parseTitleAndFields } from './songs.js';
@@ -168,7 +175,33 @@ async function handleShow(idText: string): Promise<string> {
 
   const lines = [`🎸 ${formatRehearsalLine(rehearsal)}`];
   if (rehearsal.agenda) lines.push('', rehearsal.agenda);
+
+  const availability = await listAvailability(id);
+  const summary = formatAvailabilitySummary(availability);
+  if (summary) lines.push('', summary);
+
   return lines.join('\n');
+}
+
+function formatAvailabilitySummary(responses: Availability[]): string | null {
+  if (responses.length === 0) return null;
+
+  const namesFor = (response: AvailabilityResponse): string[] =>
+    responses
+      .filter((entry) => entry.response === response)
+      .map((entry) => entry.memberName ?? entry.memberId);
+
+  const groups: Array<[string, string[]]> = [
+    ['Coming', namesFor('yes')],
+    ['Out', namesFor('no')],
+    ['Maybe', namesFor('maybe')],
+  ];
+
+  const parts = groups
+    .filter(([, names]) => names.length > 0)
+    .map(([label, names]) => `${label}: ${names.join(', ')}`);
+
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 async function handleCancel(idText: string): Promise<string> {
@@ -191,6 +224,42 @@ async function handleNote(rest: string): Promise<string> {
   if (!updated) return `❌ No rehearsal found with id #${id}.`;
 
   return [`✅ Updated: ${formatRehearsalLine(updated)}`, '', agenda].join('\n');
+}
+
+export async function handleAvailabilityCommand(
+  args: string,
+  ctx: { senderId: string; senderName?: string },
+): Promise<string> {
+  const parts = args.trim().split(/\s+/).filter(Boolean);
+  if (parts.length !== 2) return availabilityUsage();
+
+  const id = parseRehearsalId(parts[0]);
+  const response = parseAvailabilityResponse(parts[1]);
+  if (id === null || response === null) return availabilityUsage();
+
+  const rehearsal = await getRehearsalById(id);
+  if (!rehearsal) return `❌ No rehearsal found with id #${id}.`;
+
+  if (rehearsal.status !== 'scheduled') {
+    return `❌ Rehearsal #${id} is ${rehearsal.status}, so there's nothing to RSVP to.`;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (rehearsal.scheduledAt <= nowSeconds) {
+    return `❌ Rehearsal #${id} already happened.`;
+  }
+
+  await setAvailability(id, ctx.senderId, ctx.senderName ?? null, response);
+  return `✅ Got it — you're down as *${response}* for ${formatRehearsalLine(rehearsal)}`;
+}
+
+function parseAvailabilityResponse(value: string): AvailabilityResponse | null {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'yes' || normalized === 'no' || normalized === 'maybe' ? normalized : null;
+}
+
+function availabilityUsage(): string {
+  return '❌ Usage: `!available <rehearsalId> <yes|no|maybe>`';
 }
 
 function parseRehearsalId(value: string): number | null {

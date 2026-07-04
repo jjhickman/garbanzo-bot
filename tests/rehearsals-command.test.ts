@@ -15,6 +15,7 @@ const dbMocks = vi.hoisted(() => ({
   listUpcomingRehearsals: vi.fn(),
   updateRehearsal: vi.fn(),
   cancelRehearsal: vi.fn(),
+  listAvailability: vi.fn(),
 }));
 
 vi.mock('../src/utils/db.js', () => dbMocks);
@@ -87,6 +88,8 @@ describe('handleRehearsalCommand', () => {
     dbMocks.listUpcomingRehearsals.mockReset();
     dbMocks.updateRehearsal.mockReset();
     dbMocks.cancelRehearsal.mockReset();
+    dbMocks.listAvailability.mockReset();
+    dbMocks.listAvailability.mockResolvedValue([]);
   });
 
   describe('schedule', () => {

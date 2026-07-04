@@ -13,6 +13,7 @@ import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput 
 import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
+  mapAvailability,
   mapDailyGroupActivity,
   mapDbMessage,
   mapEventReminder,
@@ -24,6 +25,7 @@ import {
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
+  type AvailabilityRow,
   type DailyGroupActivityRow,
   type EventReminderRow,
   type FeedbackRow,
@@ -47,6 +49,8 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  Availability,
+  AvailabilityResponse,
   BackfillSession,
   DailyGroupActivity,
   DbMessage,
@@ -299,6 +303,20 @@ const selectRehearsalsNeedingReminder = db.prepare(
 );
 const updateRehearsalReminderSent = db.prepare(
   `UPDATE rehearsals SET reminder_sent = 1, updated_at = ? WHERE id = ?`,
+);
+const upsertAvailability = db.prepare(
+  `INSERT INTO availability (rehearsal_id, member_id, member_name, response, responded_at)
+   VALUES (?, ?, ?, ?, ?)
+   ON CONFLICT(rehearsal_id, member_id) DO UPDATE SET
+     response = excluded.response,
+     member_name = excluded.member_name,
+     responded_at = excluded.responded_at`,
+);
+const selectAvailabilityByRehearsalAndMember = db.prepare(
+  `SELECT * FROM availability WHERE rehearsal_id = ? AND member_id = ?`,
+);
+const selectAvailabilityByRehearsal = db.prepare(
+  `SELECT * FROM availability WHERE rehearsal_id = ? ORDER BY response ASC, responded_at ASC`,
 );
 const insertWhatsAppOutboundJob = db.prepare(
   `INSERT INTO whatsapp_outbound_jobs
@@ -926,6 +944,27 @@ export function markRehearsalReminderSent(id: number): boolean {
   return updateRehearsalReminderSent.run(ts, id).changes > 0;
 }
 
+// ── Public API: Availability (per-rehearsal band member RSVPs) ─────
+
+/** Set (or update) a member's availability response for a rehearsal. Upserts on (rehearsal, member). */
+export function setAvailability(
+  rehearsalId: number,
+  memberId: string,
+  memberName: string | null,
+  response: AvailabilityResponse,
+): Availability {
+  const ts = Math.floor(Date.now() / 1000);
+  upsertAvailability.run(rehearsalId, memberId, memberName, response, ts);
+  return mapAvailability(
+    selectAvailabilityByRehearsalAndMember.get(rehearsalId, memberId) as AvailabilityRow,
+  );
+}
+
+/** List all availability responses for a rehearsal, grouped by response then response time. */
+export function listAvailability(rehearsalId: number): Availability[] {
+  return (selectAvailabilityByRehearsal.all(rehearsalId) as AvailabilityRow[]).map(mapAvailability);
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────
 
 /** Stop scheduled maintenance and close SQLite handle for shutdown. */
@@ -1060,6 +1099,14 @@ export function createSqliteBackend(): DbBackend {
     listRehearsalsNeedingReminder: async (nowSeconds: number) =>
       listRehearsalsNeedingReminder(nowSeconds),
     markRehearsalReminderSent: async (id: number) => markRehearsalReminderSent(id),
+
+    setAvailability: async (
+      rehearsalId: number,
+      memberId: string,
+      memberName: string | null,
+      response: AvailabilityResponse,
+    ) => setAvailability(rehearsalId, memberId, memberName, response),
+    listAvailability: async (rehearsalId: number) => listAvailability(rehearsalId),
 
     closeDb: async (): Promise<void> => {
       closeDb();

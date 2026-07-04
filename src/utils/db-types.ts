@@ -78,6 +78,17 @@ export interface Rehearsal {
   updatedAt: number;
 }
 
+export type AvailabilityResponse = 'yes' | 'no' | 'maybe';
+
+export interface Availability {
+  id: number;
+  rehearsalId: number;
+  memberId: string;
+  memberName: string | null;
+  response: AvailabilityResponse;
+  respondedAt: number;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

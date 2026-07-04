@@ -1,4 +1,6 @@
 import type {
+  Availability,
+  AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
   DailyGroupActivity,
@@ -117,6 +119,10 @@ export interface DbBackend {
   cancelRehearsal(id: number): Promise<boolean>;
   listRehearsalsNeedingReminder(nowSeconds: number): Promise<Rehearsal[]>;
   markRehearsalReminderSent(id: number): Promise<boolean>;
+
+  // Availability (per-rehearsal band member RSVPs)
+  setAvailability(rehearsalId: number, memberId: string, memberName: string | null, response: AvailabilityResponse): Promise<Availability>;
+  listAvailability(rehearsalId: number): Promise<Availability[]>;
 
   // Lifecycle
   closeDb(): Promise<void>;

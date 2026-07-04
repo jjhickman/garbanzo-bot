@@ -1,4 +1,6 @@
 import type {
+  Availability,
+  AvailabilityResponse,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -106,6 +108,15 @@ export interface RehearsalRow {
   created_by: string | null;
   created_at: DbNumeric | null;
   updated_at: DbNumeric | null;
+}
+
+export interface AvailabilityRow {
+  id: DbNumeric | null;
+  rehearsal_id: DbNumeric | null;
+  member_id: string;
+  member_name: string | null;
+  response: AvailabilityResponse;
+  responded_at: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -248,6 +259,17 @@ export function mapRehearsal(row: RehearsalRow): Rehearsal {
     createdBy: row.created_by,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapAvailability(row: AvailabilityRow): Availability {
+  return {
+    id: toNumber(row.id),
+    rehearsalId: toNumber(row.rehearsal_id),
+    memberId: row.member_id,
+    memberName: row.member_name,
+    response: row.response,
+    respondedAt: toNumber(row.responded_at),
   };
 }
 
