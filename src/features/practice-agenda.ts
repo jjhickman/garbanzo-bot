@@ -17,10 +17,9 @@ const EMPTY_AGENDA_MESSAGE = 'No practice items yet — add songs with !song and
 
 /**
  * Build the practice agenda text: next rehearsal, songs needing work
- * (status `rough` or `idea`), and the setlist to run (the first one
- * returned by `listSetlists()` — when only one exists, that's the only
- * choice; when several exist, we just take the first rather than guessing
- * at "most recent" without a recency-ordered query).
+ * (status `rough` or `idea`), and the setlist to run (the most recently
+ * created setlist — `listSetlists()` orders alphabetically, so we re-sort
+ * by `createdAt` here rather than surface whichever name sorts first).
  */
 export async function buildPracticeAgenda(now: Date = new Date()): Promise<string> {
   const nowSeconds = Math.floor(now.getTime() / 1000);
@@ -33,7 +32,8 @@ export async function buildPracticeAgenda(now: Date = new Date()): Promise<strin
   ]);
 
   const needsWork = [...roughSongs, ...ideaSongs];
-  const setlist = setlists[0];
+  // listSetlists() is alphabetical; surface the most recently created setlist.
+  const setlist = [...setlists].sort((a, b) => b.createdAt - a.createdAt)[0];
 
   if (!nextRehearsal && needsWork.length === 0 && !setlist) {
     return EMPTY_AGENDA_MESSAGE;

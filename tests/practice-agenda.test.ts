@@ -134,6 +134,20 @@ describe('buildPracticeAgenda', () => {
     expect(result.indexOf('Sundown')).toBeLessThan(result.indexOf('Chickpea Boogie'));
   });
 
+  it('picks the most recently created setlist, not the alphabetically-first', async () => {
+    // listSetlists() returns alphabetical order; the agenda must re-sort by createdAt.
+    const older = makeSetlist({ id: 10, name: 'Autumn Set', createdAt: 100 });
+    const newer = makeSetlist({ id: 20, name: 'Zephyr Set', createdAt: 200 });
+    dbMocks.listSetlists.mockResolvedValue([older, newer]);
+    dbMocks.getSetlistSongs.mockResolvedValue([]);
+
+    const result = await buildPracticeAgenda(new Date('2026-07-03T12:00:00'));
+
+    expect(dbMocks.getSetlistSongs).toHaveBeenCalledWith(newer.id);
+    expect(dbMocks.getSetlistSongs).not.toHaveBeenCalledWith(older.id);
+    expect(result).toContain('Zephyr Set');
+  });
+
   it('says "none scheduled" when there is no next rehearsal', async () => {
     dbMocks.getNextRehearsal.mockResolvedValue(undefined);
     dbMocks.listSongs.mockResolvedValue([]);
