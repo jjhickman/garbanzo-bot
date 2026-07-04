@@ -205,7 +205,10 @@ function readAudioAttachment(attachments: unknown[]): { url: string; contentType
     }
 
     if (inferredContentType) {
-      return { url, contentType: declaredContentType ?? inferredContentType };
+      // Extension says audio but the declared type isn't audio/* (Discord emits
+      // e.g. application/octet-stream for some containers) — trust the inferred
+      // audio type so the transcription consumer gets a usable MIME.
+      return { url, contentType: inferredContentType };
     }
   }
 

@@ -68,6 +68,26 @@ describe('Discord audio attachment plumbing', () => {
       expect(payload.audio?.contentType).toMatch(/^audio\//);
     });
 
+    it('prefers the inferred audio type when the declared contentType is non-audio', async () => {
+      const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
+
+      // Discord sometimes declares application/octet-stream for .m4a etc. — the
+      // extension makes it audio, so the returned contentType must be audio/*.
+      const payload = mapMessageToPayload(createFakeMessage({
+        attachments: new Map<string, unknown>([
+          ['att-1', {
+            url: 'https://cdn.discordapp.com/attachments/1/2/riff.m4a',
+            name: 'riff.m4a',
+            contentType: 'application/octet-stream',
+          }],
+        ]),
+      }));
+
+      expect(payload.audio?.url).toBe('https://cdn.discordapp.com/attachments/1/2/riff.m4a');
+      expect(payload.audio?.contentType).toMatch(/^audio\//);
+      expect(payload.audio?.contentType).not.toBe('application/octet-stream');
+    });
+
     it('picks the first audio attachment when multiple attachments are present', async () => {
       const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
 
