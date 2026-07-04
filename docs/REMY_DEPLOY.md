@@ -4,7 +4,14 @@ Run Remy beside the WhatsApp Garbanzo container with the compose overlay:
 
 ```bash
 cp .env.remy.example .env.remy
-# Fill in Discord and AI provider values, then:
+# Fill in Discord and AI provider values.
+
+# The remy service bind-mounts config/discord-channels.json read-only, so it
+# must exist as a FILE before you start (Docker would otherwise create an empty
+# directory at that path and channel config would fail to load):
+cp config/discord-channels.example.json config/discord-channels.json
+# Fill in your channel/role ids, then:
+
 docker compose -f docker-compose.yml -f docker-compose.remy.yml up -d
 ```
 

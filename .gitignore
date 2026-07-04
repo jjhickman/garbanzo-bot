@@ -2,6 +2,7 @@ node_modules
 node_modules/
 dist/
 .env
+.env.remy
 opencode.json
 baileys_auth/
 data/
