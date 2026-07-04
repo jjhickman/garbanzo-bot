@@ -106,15 +106,51 @@
 
 ---
 
-## Task 6: Final review + PR
+## Task 6: Setup wizard — Discord/Remy provisioning (owner-requested)
 
-- [ ] **Step 1:** AGENTS.md decisions entry (band memory: songs table + fact reuse + BAND_FEATURES_ENABLED gate). Commit.
-- [ ] **Step 2:** Push `feat/remy-band-memory`; open PR (base: the foundation branch, since stacked — or main with a note that #224 merges first). Body: what it delivers, that it's Remy sub-project 1 stacked on #224, `BAND_FEATURES_ENABLED` usage, test evidence, follow-ups (setlists→practice, sections/lyrics→songwriting, semantic song search deferred). Do NOT merge.
+**Files:** Modify `scripts/setup-fields.mjs` (declarative field table + resolvers — the unit-tested seam), `scripts/setup.mjs` (interactive Discord branch + channel-file scaffold). Test: `tests/setup-fields.test.ts`.
+
+**Interfaces:**
+- Consumes: the existing `FIELD_TABLE` + `resolveField`/non-interactive resolver pattern in `setup-fields.mjs`, and `promptChoice`/`rl.question`/`yn` in `setup.mjs`.
+- Produces: the wizard collects the Discord/Remy env and can scaffold `config/discord-channels.json`.
+
+**Context:** Today the wizard only *selects* the platform (`setup.mjs:255-282`) and writes `MESSAGING_PLATFORM`; it never prompts for Discord creds or band config, and `setup-fields.mjs`'s `FIELD_TABLE` has no `DISCORD_*` entries. Config keys already exist and are validated in `src/utils/config.ts`: `DISCORD_BOT_TOKEN`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`, `DISCORD_GATEWAY_ENABLED` (default true), `DISCORD_DIGEST_CHANNEL_ID`, `DISCORD_RECAP_CHANNEL_ID`, `DISCORD_CHANNELS_CONFIG_PATH`, `BAND_FEATURES_ENABLED` (default false), `QDRANT_COLLECTION` (default `garbanzo_memory`).
+
+- [ ] **Step 1: Write failing test** in `tests/setup-fields.test.ts` (mirror the existing non-interactive + secret-masking cases): assert the new Discord field rows resolve from CLI/existing/default correctly, that `DISCORD_BOT_TOKEN` is `secret: true` (never rendered in a prompt hint), and that `DISCORD_GATEWAY_ENABLED` defaults to `true` / `BAND_FEATURES_ENABLED` to `false`.
+- [ ] **Step 2: Run → FAIL.**
+- [ ] **Step 3: Implement.** Add a `DISCORD_FIELDS` table (or extend `FIELD_TABLE` with a `platform: 'discord'` tag) covering the keys above with the right defaults + `secret` flags + `cli` names. In `setup.mjs`, when `messagingPlatform === 'discord'`: resolve those fields (interactive prompts + non-interactive CLI flags, mirroring the Slack demo branch), ask "Is this a band deployment (Remy)?" → sets `BAND_FEATURES_ENABLED`, and suggest `QDRANT_COLLECTION=remy_memory` as the default for a band deployment so Remy's vectors don't mix with a co-hosted Garbanzo. If band selected and `config/discord-channels.json` is absent, offer to copy `config/discord-channels.example.json` → `config/discord-channels.json` (never overwrite an existing file; print next-step guidance to fill in ids). Write the collected keys into the generated `.env`.
+- [ ] **Step 4: Run → PASS + full check** (`npm run check`). Confirm the whatsapp path is unchanged (Discord fields only resolved when discord is selected).
+- [ ] **Step 5: Commit** `feat(setup): Discord/Remy provisioning in the setup wizard`
+
+---
+
+## Task 7: Compose deploy kit — Remy alongside Garbanzo (owner-requested)
+
+**Files:** Create `docker-compose.remy.yml`, `.env.remy.example`, `docs/REMY_DEPLOY.md`. Test: `tests/remy-compose.test.ts`.
+
+**Interfaces:**
+- Consumes: the existing `garbanzo` + `qdrant` services in `docker-compose.yml` (same image `ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}`, shared `qdrant` service, `garbanzo_data`/`qdrant_data` volumes).
+- Produces: an overlay that adds a second `remy` service running the same image as `MESSAGING_PLATFORM=discord`, isolated from the WhatsApp instance.
+
+**Context:** "One deployment = one platform," so Remy is a second container on the same host (Pi 5). The base compose defines only `garbanzo` (`docker-compose.yml:15-41`, `HEALTH_PORT=${HEALTH_PORT:-3001}`), the shared `qdrant` (`:65-69`), and named volumes (`:169-175`). The overlay must NOT collide on port, data volume, or vector collection.
+
+- [ ] **Step 1: Write failing test** `tests/remy-compose.test.ts`: read `docker-compose.remy.yml` and assert the `remy` service exists with `MESSAGING_PLATFORM=discord`, a `HEALTH_PORT`/published port distinct from the base `3001` (use `3002`), its own data volume (`remy_data`, NOT `garbanzo_data`), `QDRANT_COLLECTION=remy_memory` (distinct from `garbanzo_memory`), a mount of `config/discord-channels.json`, `env_file: .env.remy`, and `depends_on: [qdrant]`. Parse with the repo's available YAML parser if one is a dependency; otherwise assert against the file text for these invariants (dependency-free). Also assert `.env.remy.example` documents `MESSAGING_PLATFORM=discord`, `DISCORD_BOT_TOKEN`, `DISCORD_OWNER_ID`, `BAND_FEATURES_ENABLED=true`, `QDRANT_COLLECTION=remy_memory`, `HEALTH_PORT=3002`.
+- [ ] **Step 2: Run → FAIL.**
+- [ ] **Step 3: Implement.** `docker-compose.remy.yml`: a `remy` service (same image + `restart`/`logging` as `garbanzo`), `env_file: .env.remy`, environment overrides (`MESSAGING_PLATFORM=discord`, `HEALTH_PORT=3002`, `QDRANT_COLLECTION=remy_memory`), `ports: ["127.0.0.1:3002:3002"]`, `volumes: [remy_data:/app/data, ./config/discord-channels.json:/app/config/discord-channels.json:ro]`, `depends_on: [qdrant]`; declare the `remy_data` named volume. It is an **overlay** (run `docker compose -f docker-compose.yml -f docker-compose.remy.yml up -d`) so it reuses the base `qdrant`. `.env.remy.example`: Remy's env template (as asserted above; keep provider keys as placeholders). `docs/REMY_DEPLOY.md`: the run command + the isolation rationale (separate volume/port/collection, shared Qdrant, distinct Discord app + `config/discord-channels.json`).
+- [ ] **Step 4: Run → PASS + full check.** If `docker` is available, additionally run `docker compose -f docker-compose.yml -f docker-compose.remy.yml config -q` to validate the merged file (skip if docker absent — the parse test is the CI-safe gate).
+- [ ] **Step 5: Commit** `feat(deploy): compose overlay to run Remy alongside Garbanzo`
+
+---
+
+## Task 8: Final review + PR
+
+- [ ] **Step 1:** AGENTS.md decisions entry (band memory: songs table + fact reuse + `BAND_FEATURES_ENABLED` gate; the setup wizard now provisions Discord/Remy; `docker-compose.remy.yml` overlay runs Remy beside Garbanzo with a separate volume/port/`remy_memory` collection). Commit.
+- [ ] **Step 2:** Push `feat/remy-band-memory`; open PR against `main` (the foundation merged, so this is no longer stacked). Body: what it delivers (songs catalog + `!song` + band tools + prompt injection + the Remy deploy kit), `BAND_FEATURES_ENABLED` usage, the exact `docker compose -f docker-compose.yml -f docker-compose.remy.yml up -d` run command, test evidence, follow-ups (setlists→practice, sections/lyrics→songwriting, semantic song search deferred). Do NOT merge.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:** songs table (T1) ✓; `!song` mutations + routing/perm (T2, T3) ✓; read tools (T4) ✓; prompt injection (T5) ✓; band gate everywhere (T1 flag used in T3/T4/T5) ✓; facts reuse (no task — deliberately unchanged) ✓; no-regression (flag default false) ✓.
+**Spec coverage:** songs table (T1) ✓; `!song` mutations + routing/perm (T2, T3) ✓; read tools (T4) ✓; prompt injection (T5) ✓; band gate everywhere (T1 flag used in T3/T4/T5) ✓; facts reuse (no task — deliberately unchanged) ✓; no-regression (flag default false) ✓. **Deploy kit (owner-requested, additive to the spec):** setup wizard Discord/Remy provisioning (T6) + `docker-compose.remy.yml` overlay (T7) — these make Remy runnable without hand-editing; they touch scripts/compose/docs only, no band-feature runtime code.
 **Placeholder scan:** T3 says "find where !memory is routed" — a named-grep directive (`handleMemory`), not a vague TODO; the router location is discovered, not guessed.
 **Type consistency:** `Song`/`SongStatus`, barrel fn names, `handleSongCommand`, `formatSongLine`, `formatBandKnowledgeForPrompt`, the two tool names, and `BAND_FEATURES_ENABLED` are used verbatim across tasks. `song_key` column ↔ `key` domain field noted in T1.
