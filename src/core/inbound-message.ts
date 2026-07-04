@@ -50,6 +50,12 @@ export interface InboundMessage {
   /** True if the message includes visual media. */
   hasVisualMedia: boolean;
 
+  /**
+   * An audio attachment on the message, where the platform surfaces it
+   * (Discord); undefined otherwise.
+   */
+  audio?: { url: string; contentType: string };
+
   /** Platform-specific raw message for advanced operations. */
   raw: MessageRef;
 }

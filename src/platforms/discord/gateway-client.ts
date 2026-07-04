@@ -39,6 +39,7 @@ interface DiscordMessagePayload {
   };
   senderRoleIds: string[];
   attachments: unknown[];
+  audio?: { url: string; contentType: string };
 }
 
 type DiscordClientConstructor = new (options: { intents: unknown[] }) => DiscordClientLike;
@@ -172,6 +173,45 @@ function readReferencedMessage(message: Record<string, unknown>): DiscordMessage
   };
 }
 
+const AUDIO_EXTENSION_CONTENT_TYPES: Record<string, string> = {
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.webm': 'audio/webm',
+};
+
+function inferAudioContentTypeFromName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const lower = name.toLowerCase();
+  const extension = Object.keys(AUDIO_EXTENSION_CONTENT_TYPES).find((ext) => lower.endsWith(ext));
+  return extension ? AUDIO_EXTENSION_CONTENT_TYPES[extension] : undefined;
+}
+
+function readAudioAttachment(attachments: unknown[]): { url: string; contentType: string } | undefined {
+  for (const attachment of attachments) {
+    if (!isRecord(attachment)) continue;
+
+    const url = readString(attachment, 'url');
+    if (!url) continue;
+
+    const declaredContentType = readString(attachment, 'contentType') ?? readString(attachment, 'content_type');
+    const filename = readString(attachment, 'name') ?? readString(attachment, 'filename');
+    const isDeclaredAudio = declaredContentType?.startsWith('audio/') ?? false;
+    const inferredContentType = inferAudioContentTypeFromName(filename) ?? inferAudioContentTypeFromName(url);
+
+    if (isDeclaredAudio) {
+      return { url, contentType: declaredContentType! };
+    }
+
+    if (inferredContentType) {
+      return { url, contentType: declaredContentType ?? inferredContentType };
+    }
+  }
+
+  return undefined;
+}
+
 export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
   const record = isRecord(message) ? message : {};
   const author = readRecord(record, 'author') ?? {};
@@ -179,6 +219,8 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
     ?? readString(record, 'guild_id')
     ?? readNestedString(record, 'guild', 'id');
   const referencedMessage = readReferencedMessage(record);
+  const attachments = readCollectionValues(record.attachments);
+  const audio = readAudioAttachment(attachments);
 
   return {
     id: readString(record, 'id') ?? '',
@@ -196,7 +238,8 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
     mentions: readMentions(record),
     ...(referencedMessage ? { referenced_message: referencedMessage } : {}),
     senderRoleIds: readMemberRoleIds(record),
-    attachments: readCollectionValues(record.attachments),
+    attachments,
+    ...(audio ? { audio } : {}),
   };
 }
 

@@ -59,6 +59,13 @@ export interface ProcessGroupMessageParams {
   replyTo?: MessageRef;
 
   visionImages?: VisionImage[];
+
+  /**
+   * A dropped audio attachment on the message, where the sending platform
+   * surfaces it (Discord). Not yet consumed here — threaded through for
+   * feature handlers (e.g. the songwriting `!idea` handler) to transcribe.
+   */
+  audio?: { url: string; contentType: string };
 }
 
 /**

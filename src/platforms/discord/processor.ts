@@ -46,6 +46,10 @@ const DiscordMessageCreateSchema = z.object({
     roles: z.array(z.string()).optional(),
   }).optional(),
   attachments: z.array(z.unknown()).optional(),
+  audio: z.object({
+    url: z.string(),
+    contentType: z.string(),
+  }).optional(),
 });
 
 type DiscordMessageCreate = z.infer<typeof DiscordMessageCreateSchema>;
@@ -83,6 +87,7 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
     mentionedIds: event.mentions?.map((mention) => mention.id),
     senderRoleIds: event.senderRoleIds ?? event.member?.roles ?? [],
     hasVisualMedia: (event.attachments?.length ?? 0) > 0,
+    audio: event.audio,
     raw: createMessageRef({
       platform: 'discord',
       chatId: event.channel_id,
@@ -130,7 +135,7 @@ async function processDiscordInbound(
       // no-op
     },
 
-    handleGroupMessage: async ({ inbound: m, text, hasMedia }) => {
+    handleGroupMessage: async ({ inbound: m, text, hasMedia, audio }) => {
       const trimmed = text.trim();
       const mentionMatch = mentionRegex.exec(trimmed);
       const mentionedInline = !!env.botUserId
@@ -166,6 +171,7 @@ async function processDiscordInbound(
         getResponse,
         messageId: m.messageId,
         replyTo: m.raw,
+        audio,
       });
     },
 
