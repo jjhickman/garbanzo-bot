@@ -19,10 +19,11 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 - Multi-provider LLM routing (OpenAI GPT-5 via the Responses API, Claude, Gemini, Bedrock, OpenRouter) with failover, native tool calling, and optional local Ollama for low-cost/simple traffic.
 - Community workflows for introductions, summaries, events + reminders, polls, recommendations, feedback, curated **and automatic** community memory, weekly recaps, and owner digests.
 - Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs — callable by name or invoked naturally by the model when tool calling is on.
-- WhatsApp-first runtime (Baileys v7) with browser login, plus Slack and Discord scaffolds with demo modes.
+- WhatsApp production runtime (Baileys v7) with browser login, a full Discord runtime (discord.js Gateway) that reads and replies in channels, and a Slack scaffold with demo mode.
+- Band mode (`BAND_FEATURES_ENABLED`): the same image also runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription.
 - Operational guardrails: health/readiness endpoints, verified off-machine backups, anti-ban outbound safety, retry queue, moderation review (edit-aware), rate limits, and per-group feature allowlists.
 - Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard (`docker compose --profile monitoring up -d`).
-- Docker-first deployment with SQLite by default and Postgres support for semantic session retrieval.
+- Docker-first deployment with SQLite by default, optional Postgres, and a self-hosted Qdrant vector store for semantic recall.
 
 ## See it in action
 A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
@@ -90,7 +91,7 @@ npm run setup
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly
-# docker pull jjhickman/garbanzo:1.0.7
+# docker pull jjhickman/garbanzo:1.1.0
 
 # 4. Watch logs (and complete platform auth/linking if prompted)
 docker compose logs -f garbanzo
@@ -122,7 +123,7 @@ If you want the fastest non-chat test path first, run Slack demo mode and post a
 - Conversation context from SQLite or Postgres — remembers recent messages per group
 - **Session memory** — conversations are sessionized by inactivity gap, extractively summarized, and stored with vector embeddings for long-horizon recall (e.g., "what did we decide about trivia last week?")
 - **Semantic retrieval** — session summaries and message hits are merged and reranked with a unified scoring model (recency decay, token overlap, coverage deduplication) before injection into the AI prompt
-- **Embedding provider routing** — deterministic hash embeddings by default, OpenAI `text-embedding-3-small` available with automatic fallback
+- **Vector memory (Qdrant)** — session summaries and community facts are embedded with OpenAI `text-embedding-3-small` into a self-hosted Qdrant store; keyword search takes over automatically when Qdrant is unavailable, and `VECTOR_STORE=none` keeps keyword-only
 - Multi-language detection (14 languages) — responds in the user's language
 - Custom per-group persona — different tone per group (casual in General, structured in Events)
 - Context compression — recent messages verbatim, older messages extractively compressed, session summaries for long-range context
@@ -152,6 +153,17 @@ If you want the fastest non-chat test path first, run Slack demo mode and post a
 - `!fact` — random fun fact
 - `!today` — this day in history
 - `!icebreaker` — conversation starters (40 curated, Boston-themed)
+### Band Mode (Remy)
+Run the same bot as a band assistant on Discord. Everything below stays off unless `BAND_FEATURES_ENABLED=true`, so community deployments are unaffected.
+- **Song catalog** — `!song add/list/show/set/delete` with key, tempo, and status (idea, rough, tight, gig-ready)
+- **Rehearsals** — `!rehearsal schedule/list/show/cancel/note`, with a Discord reminder before each one
+- **Availability** — `!available <id> yes|no|maybe`, read back in `!rehearsal show`
+- **Setlists** — `!setlist create/add/remove/move/show`, ordered lists built from the song catalog
+- **Practice agenda** — `!agenda` shows the next rehearsal, songs needing work, and the current setlist
+- **Song ideas** — `!idea capture` from text or a dropped audio clip (transcribed via a Whisper server at `WHISPER_URL`); `!idea promote` turns an idea into a catalog song
+- **Sections and lyrics** — `!section` and `!lyrics` organize each song's structure, words, and chords
+
+Deploy Remy beside a community instance with `docker-compose.remy.yml`: [docs/REMY_DEPLOY.md](docs/REMY_DEPLOY.md)
 ### Moderation & Safety
 - Content moderation: regex patterns + OpenAI Moderation API (human-in-the-loop)
 - Strike tracking with soft-mute after threshold
@@ -182,7 +194,7 @@ Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 <a id="platforms--login"></a>
 
 ## Platforms & Login
-WhatsApp is the default runtime and links through a token-gated browser page on the health server. Slack and Discord have official runtime scaffolds plus local demo modes for pipeline verification without a full app setup.
+WhatsApp is the default runtime and links through a token-gated browser page on the health server. Discord runs a full Gateway connection: the bot reads and replies in opt-in channels, welcomes new members, and posts scheduled digests, recaps, and reminders (channel and role config lives in `config/discord-channels.json`). Slack has a runtime scaffold plus a local demo mode for pipeline verification without a full app setup.
 Setup details: [docs/PLATFORMS.md](docs/PLATFORMS.md)
 
 <a id="ai-providers--routing"></a>
@@ -217,8 +229,8 @@ curl http://127.0.0.1:3001/health
 Pinned production pull:
 
 ```bash
-APP_VERSION=1.0.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=1.0.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development build:
@@ -258,7 +270,7 @@ Guide: [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)
 <a id="architecture--stack"></a>
 
 ## Architecture & Stack
-Garbanzo separates a platform-agnostic core pipeline from runtime adapters under `src/platforms/*`. It runs on Node.js 20+ and TypeScript ES Modules with Zod validation, Pino structured logging, Vitest tests, and SQLite by default. Postgres with pgvector supports semantic session retrieval for larger deployments.
+Garbanzo separates a platform-agnostic core pipeline from runtime adapters under `src/platforms/*`. It runs on Node.js 20+ and TypeScript ES Modules with Zod validation, Pino structured logging, Vitest tests, and SQLite by default. Postgres is available for larger deployments, and a self-hosted Qdrant store handles vector memory and semantic retrieval.
 Full walkthrough: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Development
@@ -277,7 +289,7 @@ npm run start        # Production (from dist/)
 ## Docs
 Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md)
 
-Operations: [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
+Operations: [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
 
 Design & internals: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [IMPROVEMENTS.md](docs/IMPROVEMENTS.md), [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md), [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md), [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md), [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 
