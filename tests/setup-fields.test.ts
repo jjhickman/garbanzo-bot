@@ -5,11 +5,18 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DISCORD_FIELDS,
+  SHARED_FIELDS,
+  WHATSAPP_FIELDS,
+  FIELD_TABLE,
   getField,
   promptHint,
   resolveEnvField,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
+  generateMonitoringToken,
+  resolveComposeProfiles,
+  resolveMessagingPlatform,
+  DEFAULT_MESSAGING_PLATFORM,
 } from '../scripts/setup-fields.mjs';
 
 function cli(options: Record<string, string>): { options: Record<string, string>; flags: Set<string> } {
@@ -91,5 +98,56 @@ describe('setup field resolver', () => {
     expect(OPENAI_AUTH_MODES).toEqual(['apikey', 'oauth']);
     expect(WHATSAPP_LOGIN_MODES).toEqual(['web', 'terminal', 'both']);
     expect(() => getField('NOPE')).toThrow(/Unknown setup field/);
+  });
+
+  it('adds a secret-masked MONITORING_TOKEN field to the shared field list', () => {
+    const field = getField('MONITORING_TOKEN');
+    expect(field.secret).toBe(true);
+    expect(SHARED_FIELDS.map((f) => f.env)).toContain('MONITORING_TOKEN');
+    expect(promptHint(field, { MONITORING_TOKEN: 'super-secret-token' })).toBe('set');
+    expect(promptHint(field, {})).toBe('empty');
+    expect(promptHint(field, { MONITORING_TOKEN: 'super-secret-token' })).not.toContain('super-secret-token');
+  });
+
+  it('generateMonitoringToken returns a 48-character hex string, freshly random each call', () => {
+    const first = generateMonitoringToken();
+    const second = generateMonitoringToken();
+    expect(first).toMatch(/^[0-9a-f]{48}$/);
+    expect(second).toMatch(/^[0-9a-f]{48}$/);
+    expect(first).not.toBe(second);
+  });
+
+  it('resolveComposeProfiles derives COMPOSE_PROFILES from platform + monitoring toggle', () => {
+    expect(resolveComposeProfiles('discord', true)).toBe('discord,monitoring');
+    expect(resolveComposeProfiles('discord', false)).toBe('discord');
+    expect(resolveComposeProfiles('whatsapp', true)).toBe('whatsapp,monitoring');
+    expect(resolveComposeProfiles('whatsapp', false)).toBe('whatsapp');
+  });
+
+  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD_FIELDS', () => {
+    const sharedKeys = SHARED_FIELDS.map((f) => f.env);
+    const whatsappKeys = WHATSAPP_FIELDS.map((f) => f.env);
+    const discordKeys = DISCORD_FIELDS.map((f) => f.env);
+    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys];
+
+    // No duplicates across the three lists (disjoint partition).
+    expect(new Set(allKeys).size).toBe(allKeys.length);
+
+    // Spot-check expected homes for a few keys per the brief.
+    expect(sharedKeys).not.toContain('OWNER_JID');
+    expect(sharedKeys).not.toContain('BOT_PHONE_NUMBER');
+    expect(whatsappKeys).toEqual(expect.arrayContaining(['OWNER_JID', 'BOT_PHONE_NUMBER']));
+    expect(discordKeys).toContain('DISCORD_BOT_TOKEN');
+
+    // FIELD_TABLE is exactly the union of the three partitioned lists.
+    expect(FIELD_TABLE.map((f) => f.env).sort()).toEqual(allKeys.slice().sort());
+  });
+
+  it('resolves the non-interactive messaging platform with a discord default', () => {
+    expect(DEFAULT_MESSAGING_PLATFORM).toBe('discord');
+    expect(resolveMessagingPlatform(cli({}), {})).toBe('discord');
+    expect(resolveMessagingPlatform(cli({ platform: 'whatsapp' }), {})).toBe('whatsapp');
+    expect(resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'whatsapp' })).toBe('whatsapp');
+    expect(resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toBe('discord');
   });
 });

@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 /**
  * Declarative field table + pure resolvers for the setup wizard.
  *
@@ -11,8 +13,14 @@
  *   { env, cli, default, secret? }
  * `secret: true` fields never render their raw value in a prompt hint.
  * (APP_VERSION is intentionally omitted — its default is computed at runtime.)
+ *
+ * SHARED_FIELDS / WHATSAPP_FIELDS / DISCORD_FIELDS partition every
+ * FIELD_TABLE entry by which env file the wizard emits it into: `.env`
+ * (shared across every platform instance), `.env.whatsapp`, or
+ * `.env.discord` — see docs/superpowers/specs/2026-07-04-modular-config-design.md.
+ * Every env key belongs to exactly one of these three lists.
  */
-export const COMMON_FIELDS = [
+export const SHARED_FIELDS = [
   { env: 'ANTHROPIC_API_KEY', cli: 'anthropic-key', default: '', secret: true },
   { env: 'OPENROUTER_API_KEY', cli: 'openrouter-key', default: '', secret: true },
   { env: 'OPENAI_API_KEY', cli: 'openai-key', default: '', secret: true },
@@ -29,7 +37,6 @@ export const COMMON_FIELDS = [
   { env: 'BEDROCK_PRICING_INPUT_PER_M', cli: 'bedrock-pricing-input-per-m', default: '0', note: '(USD per 1M tokens)' },
   { env: 'BEDROCK_PRICING_OUTPUT_PER_M', cli: 'bedrock-pricing-output-per-m', default: '0', note: '(USD per 1M tokens)' },
   { env: 'OLLAMA_BASE_URL', cli: 'ollama-base-url', default: 'http://127.0.0.1:11434' },
-  { env: 'OWNER_JID', cli: 'owner-jid', default: 'your_number@s.whatsapp.net' },
   { env: 'HEALTH_PORT', cli: 'health-port', default: '3001' },
   { env: 'HEALTH_BIND_HOST', cli: 'health-bind-host', default: '127.0.0.1' },
   { env: 'GITHUB_SPONSORS_URL', cli: 'github-sponsors-url', default: '' },
@@ -39,6 +46,13 @@ export const COMMON_FIELDS = [
   { env: 'SUPPORT_MESSAGE', cli: 'support-message', default: '' },
   { env: 'GITHUB_ISSUES_TOKEN', cli: 'github-issues-token', default: '', secret: true },
   { env: 'GITHUB_ISSUES_REPO', cli: 'github-issues-repo', default: 'owner/repo' },
+  { env: 'MONITORING_TOKEN', cli: 'monitoring-token', default: '', secret: true },
+];
+
+export const WHATSAPP_FIELDS = [
+  { env: 'OWNER_JID', cli: 'owner-jid', default: 'your_number@s.whatsapp.net' },
+  { env: 'BOT_PHONE_NUMBER', cli: 'bot-phone-number', default: '' },
+  { env: 'WHATSAPP_LOGIN_MODE', cli: 'whatsapp-login-mode', default: 'web' },
 ];
 
 export const DISCORD_FIELDS = [
@@ -52,7 +66,8 @@ export const DISCORD_FIELDS = [
 ];
 
 export const FIELD_TABLE = [
-  ...COMMON_FIELDS,
+  ...SHARED_FIELDS,
+  ...WHATSAPP_FIELDS,
   ...DISCORD_FIELDS,
 ];
 
@@ -85,4 +100,40 @@ export function promptHint(field, existing) {
     return existing[field.env] ? 'set' : 'empty';
   }
   return existing[field.env] ?? field.default;
+}
+
+/**
+ * Generates a fresh MONITORING_TOKEN: 24 random bytes as hex (48 chars).
+ * Used by the wizard when monitoring is enabled and no token was supplied
+ * via CLI flag or an existing .env — mirrors the per-run fallback in
+ * src/index.ts, but persisted so it survives restarts and Prometheus/Grafana
+ * (which need a stable, shared token) can be configured against it.
+ */
+export function generateMonitoringToken() {
+  return randomBytes(24).toString('hex');
+}
+
+/**
+ * Derives COMPOSE_PROFILES from the chosen platform and whether monitoring
+ * was enabled. Pure so the four-combination matrix is unit-testable without
+ * touching docker-compose.yml or spawning a real compose process.
+ */
+export function resolveComposeProfiles(platform, monitoringEnabled) {
+  return monitoringEnabled ? `${platform},monitoring` : platform;
+}
+
+export const MESSAGING_PLATFORMS = ['discord', 'whatsapp', 'slack', 'teams'];
+export const DEFAULT_MESSAGING_PLATFORM = 'discord';
+
+/**
+ * Non-interactive messaging platform resolution: CLI flag wins, then the
+ * existing .env value, then the Discord-first default. Unrecognized values
+ * fall back to the default rather than erroring, mirroring the prior inline
+ * ternary in setup.mjs.
+ */
+export function resolveMessagingPlatform(cli, existing) {
+  const requested = (cli.options.platform || existing.MESSAGING_PLATFORM || DEFAULT_MESSAGING_PLATFORM)
+    .trim()
+    .toLowerCase();
+  return MESSAGING_PLATFORMS.includes(requested) ? requested : DEFAULT_MESSAGING_PLATFORM;
 }
