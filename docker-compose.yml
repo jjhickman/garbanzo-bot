@@ -1,69 +1,17 @@
-# docker-compose.yml — Garbanzo
+# docker-compose.yml - Garbanzo
 #
 # Quick start:
-#   1. cp .env.example .env && edit .env with your API keys
-#   2. docker compose up -d
-#   3. docker compose logs -f   (scan QR code on first run)
+#   1. cp .env.example .env && edit .env with shared API keys
+#   2. set COMPOSE_PROFILES in .env, for example: discord or discord,whatsapp,monitoring
+#   3. docker compose up -d
 #
-# The bot persists WhatsApp auth and SQLite data in named volumes,
-# so it survives container rebuilds and restarts.
+# Bot auth, SQLite data, vectors, and dashboards persist in named volumes,
+# so they survive container rebuilds and restarts.
 
 services:
-  garbanzo:
-    # Production default: run published release images (no local builds).
-    # If APP_VERSION is not set, we use `latest`.
-    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
-    container_name: garbanzo
-    restart: unless-stopped
-
-    # Load secrets from .env file (gitignored)
-    env_file:
-      - .env
-
-    # Override specific env vars if needed
-    environment:
-      - NODE_ENV=production
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - GARBANZO_VERSION=${APP_VERSION:-latest}
-      - HEALTH_PORT=${HEALTH_PORT:-3001}
-      - HEALTH_BIND_HOST=0.0.0.0
-
-    # Health check port (reachable on LAN for external monitoring).
-    # If you publish this to your LAN, restrict it to trusted hosts (e.g., iptables `DOCKER-USER` allowlist).
-    ports:
-      - "0.0.0.0:3001:3001"
-
-    # Persistent data volumes
-    volumes:
-      # WhatsApp auth state — MUST persist across restarts
-      - baileys_auth:/app/baileys_auth
-      # SQLite database + backups
-      - garbanzo_data:/app/data
-      # Runtime config from the host (wizard-generated) — overrides the image's
-      # baked-in default so `npm run setup` edits take effect without a rebuild.
-      - ./config/groups.json:/app/config/groups.json:ro
-      # Optional: mount local voice models (Piper TTS)
-      # Uncomment if you have Piper voice models on the host:
-      # - ./data/voices:/app/data/voices:ro
-
-    # Memory limit — matches the bot's built-in watchdog (exits at 1GB)
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-
-    # Logging — structured JSON from Pino
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-    depends_on:
-      - qdrant
-
   qdrant:
     image: qdrant/qdrant:latest
+    profiles: ["discord", "whatsapp"]
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
@@ -73,34 +21,93 @@ services:
       timeout: 5s
       retries: 3
 
-  # Optional: automatic image updates via Watchtower.
-  # Only meaningful when running the `latest` tag — with a pinned APP_VERSION
-  # Watchtower has nothing to do, which makes pinning the safe default.
-  # Tradeoff: a bad release deploys itself. See docs/INFRASTRUCTURE.md
-  # ("Updating & Auto-Update") before enabling.
-  # watchtower:
-  #   image: containrrr/watchtower
-  #   container_name: garbanzo-watchtower
-  #   restart: unless-stopped
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   command: --label-enable --cleanup --schedule "0 30 5 * * *"
-  # (and add to the garbanzo service:)
-  #   labels:
-  #     - com.centurylinklabs.watchtower.enable=true
+  discord:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
+    container_name: garbanzo-discord
+    profiles: ["discord"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+      - path: .env.discord
+        required: false
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
+      - MESSAGING_PLATFORM=discord
+      - HEALTH_PORT=3002
+      - HEALTH_BIND_HOST=0.0.0.0
+    ports:
+      - "127.0.0.1:3002:3002"
+    volumes:
+      - discord_data:/app/data
+      - ./config/discord-channels.json:/app/config/discord-channels.json:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+
+  whatsapp:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
+    container_name: garbanzo-whatsapp
+    profiles: ["whatsapp"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+      - path: .env.whatsapp
+        required: false
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
+      - MESSAGING_PLATFORM=whatsapp
+      - HEALTH_PORT=3001
+      - HEALTH_BIND_HOST=0.0.0.0
+    ports:
+      - "0.0.0.0:3001:3001"
+    volumes:
+      - baileys_auth:/app/baileys_auth
+      - garbanzo_data:/app/data
+      - ./config/groups.json:/app/config/groups.json:ro
+      # Optional: mount local voice models (Piper TTS)
+      # Uncomment if you have Piper voice models on the host:
+      # - ./data/voices:/app/data/voices:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
 
   # Optional monitoring stack (Prometheus + Grafana), sized for a Pi-class host.
-  # Enable with:  docker compose --profile monitoring up -d
-  # One-time setup (scrape token + METRICS_ENABLED=true): see docs/MONITORING.md
+  # Enable by including monitoring in COMPOSE_PROFILES.
+  # One-time setup: set MONITORING_TOKEN and METRICS_ENABLED=true in .env.
   prometheus:
     image: prom/prometheus:v3.4.1
     container_name: garbanzo-prometheus
     profiles: ["monitoring"]
     restart: unless-stopped
     environment:
-      # Interpolated from .env — the same token that guards /metrics.
-      # Must be PINNED there (a per-boot generated token can't be scraped).
-      - PROM_BEARER_TOKEN=${WHATSAPP_LOGIN_TOKEN:-}
+      # Interpolated from .env - the same pinned token that guards /metrics.
+      - PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}
     # Materialize the scrape token from the env var, then start Prometheus.
     # Written to the data volume because /etc/prometheus is root-owned and
     # the image runs as nobody.
@@ -108,7 +115,7 @@ services:
     command:
       - |
         if [ -z "$$PROM_BEARER_TOKEN" ]; then
-          echo "WHATSAPP_LOGIN_TOKEN must be set in .env to enable monitoring (it authenticates /metrics scrapes)" >&2
+          echo "MONITORING_TOKEN must be set in .env to enable monitoring (it authenticates /metrics scrapes)" >&2
           exit 1
         fi
         printf '%s' "$$PROM_BEARER_TOKEN" > /prometheus/token
@@ -116,7 +123,6 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
-    # LAN-reachable for debugging; Grafana is the intended UI
     ports:
       - "127.0.0.1:9090:9090"
     mem_limit: 300m
@@ -131,23 +137,18 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
-      - WHATSAPP_LOGIN_TOKEN=${WHATSAPP_LOGIN_TOKEN:-}
+      - MONITORING_TOKEN=${MONITORING_TOKEN:-}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
-    # Admin password: GRAFANA_ADMIN_PASSWORD if set, else the pinned
-    # WHATSAPP_LOGIN_TOKEN (one secret gates the whole stack — it already
-    # guards /metrics and /admin). Deliberate single-owner tradeoff: the
-    # token can also re-link WhatsApp via /whatsapp/login, so compromising
-    # the Grafana login yields it — set GRAFANA_ADMIN_PASSWORD for separate
-    # credentials if that matters in your environment. Refuses to start when
-    # neither is set; enforced here (not via ${VAR:?}) so plain
-    # `docker compose up` without the monitoring profile keeps working.
+    # Admin password: GRAFANA_ADMIN_PASSWORD if set, else MONITORING_TOKEN.
+    # Refuses to start when neither is set; enforced here (not via ${VAR:?})
+    # so plain `docker compose up` without the monitoring profile keeps working.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        PASSWORD="$${GRAFANA_ADMIN_PASSWORD:-$$WHATSAPP_LOGIN_TOKEN}"
+        PASSWORD="$${GRAFANA_ADMIN_PASSWORD:-$$MONITORING_TOKEN}"
         if [ -z "$$PASSWORD" ]; then
-          echo "Set WHATSAPP_LOGIN_TOKEN (or GRAFANA_ADMIN_PASSWORD) in .env to enable monitoring — it becomes the Grafana admin login" >&2
+          echo "Set MONITORING_TOKEN (or GRAFANA_ADMIN_PASSWORD) in .env to enable monitoring - it becomes the Grafana admin login" >&2
           exit 1
         fi
         export GF_SECURITY_ADMIN_PASSWORD="$$PASSWORD"
@@ -157,9 +158,8 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     # LAN-reachable by design: dashboards are meant to be viewed from other
-    # devices (same documented posture as the /health port). Anonymous access
-    # is read-only; restrict with an iptables DOCKER-USER allowlist or bind to
-    # 127.0.0.1 + reverse proxy if your LAN is untrusted — see docs/MONITORING.md.
+    # devices. Anonymous access is read-only; restrict with an iptables
+    # DOCKER-USER allowlist or bind to 127.0.0.1 + reverse proxy if needed.
     ports:
       - "0.0.0.0:3000:3000"
     mem_limit: 300m
@@ -171,6 +171,8 @@ volumes:
     name: garbanzo-bot-auth
   garbanzo_data:
     name: garbanzo-bot-data
+  discord_data:
+    name: garbanzo-bot-remy-data
   qdrant_data:
     name: garbanzo-bot-qdrant
   prom_data:

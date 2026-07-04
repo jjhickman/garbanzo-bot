@@ -1,6 +1,6 @@
 # Prometheus config for the garbanzo monitoring profile.
 # The scrape token is written automatically at container start from the
-# WHATSAPP_LOGIN_TOKEN in your .env (see the prometheus service entrypoint
+# MONITORING_TOKEN in your .env (see the prometheus service entrypoint
 # in docker-compose.yml) — no manual setup needed. The token must be PINNED
 # in .env; /metrics also still accepts ?token= for manual curls.
 
@@ -15,7 +15,7 @@ scrape_configs:
       type: Bearer
       credentials_file: /prometheus/token
     static_configs:
-      - targets: ["garbanzo:3001"]
+      - targets: ["whatsapp:3001"]
 
   - job_name: prometheus
     static_configs:

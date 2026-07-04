@@ -7,7 +7,21 @@
 # - Enables local image builds for development.
 
 services:
-  garbanzo:
+  whatsapp:
+    image: garbanzo-local:${APP_VERSION:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+
+    environment:
+      - GARBANZO_VERSION=${APP_VERSION:-dev}
+
+    depends_on:
+      - qdrant
+
+  discord:
     image: garbanzo-local:${APP_VERSION:-dev}
     build:
       context: .

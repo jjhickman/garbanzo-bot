@@ -2,7 +2,9 @@ node_modules
 node_modules/
 dist/
 .env
+.env.discord
 .env.remy
+.env.whatsapp
 opencode.json
 baileys_auth/
 data/
