@@ -1,0 +1,241 @@
+/**
+ * Remy band practice tracking.
+ *
+ * Owner/band commands:
+ *   !rehearsal schedule when=<date> [location=..] [agenda=..]  — add a rehearsal
+ *   !rehearsal list                                            — list upcoming rehearsals
+ *   !rehearsal show <id>                                       — show rehearsal details
+ *   !rehearsal cancel <id>                                     — cancel a rehearsal
+ *   !rehearsal note <id> <text>                                — replace agenda/notes
+ *
+ * Dates: YYYY-MM-DD HH:MM (24h) or YYYY-MM-DD (defaults to 7:00pm).
+ */
+
+import {
+  addRehearsal,
+  cancelRehearsal,
+  getRehearsalById,
+  listUpcomingRehearsals,
+  updateRehearsal,
+  type Rehearsal,
+} from '../utils/db.js';
+
+const SCHEDULE_FIELDS = ['when', 'location', 'agenda'] as const;
+const DATE_ONLY_DEFAULT_HOUR = 19;
+const DATE_ONLY_DEFAULT_MINUTE = 0;
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+export async function handleRehearsalCommand(args: string, ctx: { senderId: string }): Promise<string> {
+  const trimmed = args.trim();
+  if (!trimmed) return usage();
+
+  const spaceIdx = trimmed.indexOf(' ');
+  const sub = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)).toLowerCase();
+  const rest = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+
+  switch (sub) {
+    case 'schedule':
+      return handleSchedule(rest, ctx);
+    case 'list':
+      return handleList();
+    case 'show':
+      return handleShow(rest);
+    case 'cancel':
+      return handleCancel(rest);
+    case 'note':
+      return handleNote(rest);
+    default:
+      return usage();
+  }
+}
+
+export function formatRehearsalLine(rehearsal: Rehearsal): string {
+  const parts = [`#${rehearsal.id}`, formatScheduledAt(rehearsal.scheduledAt)];
+  if (rehearsal.location) parts.push(rehearsal.location);
+  parts.push(rehearsal.status);
+  return parts.join(' · ');
+}
+
+export function parseRehearsalWhen(value: string, now: Date = new Date()): number | null {
+  const trimmed = value.trim();
+  const relative = /^(today|tomorrow)(?:\s+(\d{2}):(\d{2}))?$/i.exec(trimmed);
+  if (relative) {
+    const dayOffset = relative[1].toLowerCase() === 'tomorrow' ? 1 : 0;
+    const hour = relative[2] === undefined ? DATE_ONLY_DEFAULT_HOUR : Number(relative[2]);
+    const minute = relative[3] === undefined ? DATE_ONLY_DEFAULT_MINUTE : Number(relative[3]);
+    if (!isValidTime(hour, minute)) return null;
+
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, hour, minute, 0, 0);
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?$/.exec(trimmed);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = match[4] === undefined ? DATE_ONLY_DEFAULT_HOUR : Number(match[4]);
+  const minute = match[5] === undefined ? DATE_ONLY_DEFAULT_MINUTE : Number(match[5]);
+
+  if (
+    !Number.isInteger(year)
+    || !Number.isInteger(month)
+    || !Number.isInteger(day)
+    || !Number.isInteger(hour)
+    || !Number.isInteger(minute)
+    || month < 1
+    || month > 12
+    || day < 1
+    || day > 31
+    || !isValidTime(hour, minute)
+  ) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (
+    date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+    || date.getHours() !== hour
+    || date.getMinutes() !== minute
+  ) {
+    return null;
+  }
+
+  return Math.floor(date.getTime() / 1000);
+}
+
+function isValidTime(hour: number, minute: number): boolean {
+  return Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+function usage(): string {
+  return [
+    '🎸 *Remy Rehearsals*',
+    '',
+    'Commands:',
+    '  `!rehearsal schedule when=YYYY-MM-DD HH:MM [location=..] [agenda=..]` — add a rehearsal',
+    '  `!rehearsal list` — list upcoming rehearsals',
+    '  `!rehearsal show <id>` — show rehearsal details',
+    '  `!rehearsal cancel <id>` — cancel a rehearsal',
+    '  `!rehearsal note <id> <text>` — update the agenda',
+  ].join('\n');
+}
+
+function parseTitleAndFields(
+  rest: string,
+  allowedFields: readonly string[],
+): { title: string; fields: Record<string, string> } {
+  if (!rest) return { title: '', fields: {} };
+
+  const pattern = new RegExp(`\\b(?:${allowedFields.join('|')})=`, 'gi');
+  const matches: { field: string; start: number; valueStart: number }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(rest)) !== null) {
+    matches.push({
+      field: match[0].slice(0, -1).toLowerCase(),
+      start: match.index,
+      valueStart: match.index + match[0].length,
+    });
+  }
+
+  if (matches.length === 0) {
+    return { title: rest.trim(), fields: {} };
+  }
+
+  const title = rest.slice(0, matches[0].start).trim();
+  const fields: Record<string, string> = {};
+  for (let i = 0; i < matches.length; i++) {
+    const end = i + 1 < matches.length ? matches[i + 1].start : rest.length;
+    fields[matches[i].field] = rest.slice(matches[i].valueStart, end).trim();
+  }
+  return { title, fields };
+}
+
+async function handleSchedule(rest: string, ctx: { senderId: string }): Promise<string> {
+  const { fields } = parseTitleAndFields(rest, SCHEDULE_FIELDS);
+  if (!fields.when) {
+    return '❌ Usage: `!rehearsal schedule when=YYYY-MM-DD HH:MM [location=..] [agenda=..]`';
+  }
+
+  const scheduledAt = parseRehearsalWhen(fields.when);
+  if (scheduledAt === null) {
+    return `❌ I couldn't parse "${fields.when}". Use \`when=YYYY-MM-DD HH:MM\` or \`when=YYYY-MM-DD\`.`;
+  }
+
+  const rehearsal = await addRehearsal({
+    scheduledAt,
+    location: fields.location || undefined,
+    agenda: fields.agenda || undefined,
+    createdBy: ctx.senderId,
+  });
+  return `✅ Added: ${formatRehearsalLine(rehearsal)}`;
+}
+
+async function handleList(): Promise<string> {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const rehearsals = await listUpcomingRehearsals(nowSeconds);
+  if (rehearsals.length === 0) {
+    return '🎸 No upcoming rehearsals. Add one: `!rehearsal schedule when=YYYY-MM-DD HH:MM`';
+  }
+
+  const lines = [`🎸 *Upcoming Rehearsals* (${rehearsals.length})`, ''];
+  for (const rehearsal of rehearsals) lines.push(`  ${formatRehearsalLine(rehearsal)}`);
+  return lines.join('\n');
+}
+
+async function handleShow(idText: string): Promise<string> {
+  const id = parseRehearsalId(idText);
+  if (id === null) return '❌ Usage: `!rehearsal show <id>`';
+
+  const rehearsal = await getRehearsalById(id);
+  if (!rehearsal) return `❌ No rehearsal found with id #${id}.`;
+
+  const lines = [`🎸 ${formatRehearsalLine(rehearsal)}`];
+  if (rehearsal.agenda) lines.push('', rehearsal.agenda);
+  return lines.join('\n');
+}
+
+async function handleCancel(idText: string): Promise<string> {
+  const id = parseRehearsalId(idText);
+  if (id === null) return '❌ Usage: `!rehearsal cancel <id>`';
+
+  const cancelled = await cancelRehearsal(id);
+  if (!cancelled) return `❌ No rehearsal found with id #${id}.`;
+  return `🗑️ Cancelled rehearsal #${id}.`;
+}
+
+async function handleNote(rest: string): Promise<string> {
+  const spaceIdx = rest.trim().indexOf(' ');
+  const idText = spaceIdx === -1 ? rest.trim() : rest.trim().slice(0, spaceIdx);
+  const agenda = spaceIdx === -1 ? '' : rest.trim().slice(spaceIdx + 1).trim();
+  const id = parseRehearsalId(idText);
+  if (id === null || !agenda) return '❌ Usage: `!rehearsal note <id> <text>`';
+
+  const updated = await updateRehearsal(id, { agenda });
+  if (!updated) return `❌ No rehearsal found with id #${id}.`;
+
+  return [`✅ Updated: ${formatRehearsalLine(updated)}`, '', agenda].join('\n');
+}
+
+function parseRehearsalId(value: string): number | null {
+  const id = Number(value.trim().replace(/^#/, ''));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function formatScheduledAt(seconds: number): string {
+  const date = new Date(seconds * 1000);
+  return `${WEEKDAYS[date.getDay()]} ${MONTHS[date.getMonth()]} ${date.getDate()} ${formatTime(date)}`;
+}
+
+function formatTime(date: Date): string {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const suffix = hours >= 12 ? 'pm' : 'am';
+  const hour12 = hours % 12 || 12;
+  return `${hour12}:${String(minutes).padStart(2, '0')}${suffix}`;
+}
