@@ -227,7 +227,84 @@ const tools: AiTool[] = [
       }
     },
   },
+  {
+    name: 'next_rehearsal',
+    description:
+      'Get the next scheduled band rehearsal, including its date/time, location, status, and a summary of who\'s coming. Use when someone asks "when\'s the next rehearsal/practice" or "who\'s coming to practice".',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    execute: async () => {
+      try {
+        const { getNextRehearsal, listAvailability } = await import('../utils/db.js');
+        const { formatRehearsalLine } = await import('../features/rehearsals.js');
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const rehearsal = await getNextRehearsal(nowSeconds);
+
+        recordToolCall('next_rehearsal', 'ok');
+        if (!rehearsal) return 'No rehearsal scheduled.';
+
+        const lines = [formatRehearsalLine(rehearsal)];
+        const availability = await listAvailability(rehearsal.id);
+        const summary = formatAvailabilityCounts(availability);
+        if (summary) lines.push(summary);
+
+        return truncateToolResult(lines.join('\n'));
+      } catch (err) {
+        recordToolCall('next_rehearsal', 'error');
+        return truncateToolResult(errorMessage('next_rehearsal', err));
+      }
+    },
+  },
+  {
+    name: 'current_setlist',
+    description:
+      'Get a band setlist and its songs in order. Give an optional setlist name to look up a specific one; omit it to get the most recently created setlist. Use when someone asks "what\'s the setlist" or "what songs are we playing".',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Optional setlist name, e.g. "Summer Gig". Omit for the most recent setlist.' },
+      },
+      required: [],
+    },
+    execute: async (input) => {
+      const name = stringInput(input, 'name');
+      try {
+        const { getSetlistByName, getSetlistSongs, listSetlists } = await import('../utils/db.js');
+        const { formatSetlist } = await import('../features/setlists.js');
+
+        const setlist = name ? await getSetlistByName(name) : mostRecentSetlist(await listSetlists());
+
+        recordToolCall('current_setlist', 'ok');
+        if (!setlist) {
+          return name ? `No setlist found named "${name}".` : 'No setlists yet.';
+        }
+
+        const entries = await getSetlistSongs(setlist.id);
+        return truncateToolResult(formatSetlist(setlist, entries));
+      } catch (err) {
+        recordToolCall('current_setlist', 'error');
+        return truncateToolResult(errorMessage('current_setlist', err));
+      }
+    },
+  },
 ];
+
+function formatAvailabilityCounts(responses: { response: 'yes' | 'no' | 'maybe' }[]): string | null {
+  if (responses.length === 0) return null;
+
+  const count = (response: 'yes' | 'no' | 'maybe'): number =>
+    responses.filter((entry) => entry.response === response).length;
+
+  return `Coming: ${count('yes')}, Out: ${count('no')}, Maybe: ${count('maybe')}`;
+}
+
+function mostRecentSetlist<T extends { createdAt: number }>(setlists: T[]): T | undefined {
+  if (setlists.length === 0) return undefined;
+  return [...setlists].sort((a, b) => b.createdAt - a.createdAt)[0];
+}
 
 export function getEnabledTools(): AiTool[] {
   if (!config.AI_TOOL_CALLING) return [];
@@ -240,6 +317,8 @@ export function getEnabledTools(): AiTool[] {
     if (tool.name === 'web_search') return getSearchProviderName() !== null;
     if (tool.name === 'list_band_songs') return config.BAND_FEATURES_ENABLED;
     if (tool.name === 'find_band_song') return config.BAND_FEATURES_ENABLED;
+    if (tool.name === 'next_rehearsal') return config.BAND_FEATURES_ENABLED;
+    if (tool.name === 'current_setlist') return config.BAND_FEATURES_ENABLED;
     return true;
   });
 }

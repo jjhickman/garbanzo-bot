@@ -17,6 +17,8 @@ const VALID_TOOLS = [
   'search_community_memory',
   'list_band_songs',
   'find_band_song',
+  'next_rehearsal',
+  'current_setlist',
 ] as const;
 
 const CATEGORIES = [
