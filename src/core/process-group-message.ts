@@ -8,6 +8,7 @@ import { handleFeedbackSubmit, handleUpvote } from '../features/feedback.js';
 import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } from '../features/voice.js';
 import { handleSongCommand } from '../features/songs.js';
 import { handleAvailabilityCommand, handleRehearsalCommand } from '../features/rehearsals.js';
+import { handleSetlistCommand } from '../features/setlists.js';
 import { extractUrls, processUrl } from '../features/links.js';
 import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
@@ -189,6 +190,20 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     return;
   }
 
+  // Band feature — !setlist (shared band memory: ordered song lists)
+  if (featureCheck?.feature === 'setlist' && config.BAND_FEATURES_ENABLED) {
+    await handleSetlistFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
+      replyTo,
+    });
+    return;
+  }
+
   // URL context enrichment
   let urlContext = '';
   const urls = extractUrls(query);
@@ -338,6 +353,29 @@ async function handleRehearsalFeature(params: {
   }
 
   const result = await handleRehearsalCommand(featureQuery, { senderId });
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleSetlistFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can manage setlists right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleSetlistCommand(featureQuery);
   await messenger.sendText(chatId, result, { replyTo });
   recordBotResponse(chatId);
   recordResponse(senderId, chatId);
