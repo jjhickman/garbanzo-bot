@@ -124,6 +124,15 @@ describe('handleSongCommand', () => {
       expect(dbMocks.addSong).not.toHaveBeenCalled();
       expect(result).toMatch(/tempo/i);
     });
+
+    it('rejects a blank, zero, or negative tempo instead of storing 0', async () => {
+      for (const bad of ['add Sundown tempo=', 'add Sundown tempo=0', 'add Sundown tempo=-40']) {
+        dbMocks.addSong.mockClear();
+        const result = await handleSongCommand(bad);
+        expect(dbMocks.addSong).not.toHaveBeenCalled();
+        expect(result).toMatch(/tempo/i);
+      }
+    });
   });
 
   describe('list', () => {

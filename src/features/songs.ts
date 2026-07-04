@@ -131,8 +131,12 @@ function parseTitleAndFields(
 }
 
 function parseTempo(value: string): number | null {
-  const tempo = Number(value);
-  return Number.isFinite(tempo) ? tempo : null;
+  // Number('') and Number('  ') are 0 (finite), which would silently store a
+  // bogus tempo — reject blank input and require a positive BPM.
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  const tempo = Number(trimmed);
+  return Number.isFinite(tempo) && tempo > 0 ? tempo : null;
 }
 
 async function handleAdd(rest: string): Promise<string> {
@@ -155,7 +159,8 @@ async function handleAdd(rest: string): Promise<string> {
     tempo = parsed;
   }
 
-  const key = fields.key !== undefined ? fields.key : undefined;
+  // Empty `key=` on add means "no key" (consistent with set clearing it to null).
+  const key = fields.key ? fields.key : undefined;
 
   const song = await addSong({ title, key, tempo, status });
   return `✅ Added: ${formatSongLine(song)}`;
