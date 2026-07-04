@@ -225,3 +225,19 @@ CREATE TABLE IF NOT EXISTS song_ideas (
 
 CREATE INDEX IF NOT EXISTS idx_song_ideas_created_at
   ON song_ideas (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS song_sections (
+  id BIGSERIAL PRIMARY KEY,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL
+    CHECK (kind IN ('intro','verse','chorus','bridge','solo','outro','other')),
+  position INTEGER NOT NULL,
+  lyrics TEXT,
+  chords TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(song_id, position)
+);
+
+CREATE INDEX IF NOT EXISTS idx_song_sections_song_position
+  ON song_sections (song_id, position);

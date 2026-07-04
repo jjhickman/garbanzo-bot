@@ -25,11 +25,13 @@ export type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
   SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   SessionSummaryHit,
@@ -163,6 +165,13 @@ export const getSongIdeaById = backend.getSongIdeaById;
 export const listSongIdeas = backend.listSongIdeas;
 export const linkSongIdeaToSong = backend.linkSongIdeaToSong;
 export const deleteSongIdea = backend.deleteSongIdea;
+
+// Song sections (per-song structure: intro/verse/chorus/...)
+export const addSongSection = backend.addSongSection;
+export const getSongSections = backend.getSongSections;
+export const updateSongSection = backend.updateSongSection;
+export const moveSongSection = backend.moveSongSection;
+export const removeSongSection = backend.removeSongSection;
 
 // Rehearsals (shared band practice memory)
 export const addRehearsal = backend.addRehearsal;

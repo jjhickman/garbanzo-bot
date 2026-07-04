@@ -10,12 +10,14 @@ import type {
   MemoryEntry,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   SessionSummaryHit,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
   SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -152,6 +154,17 @@ export interface SongIdeaRow {
   song_id: DbNumeric | null;
   created_by: string | null;
   created_at: DbNumeric | null;
+}
+
+export interface SongSectionRow {
+  id: DbNumeric | null;
+  song_id: DbNumeric | null;
+  kind: SectionKind;
+  position: DbNumeric | null;
+  lyrics: string | null;
+  chords: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -344,6 +357,19 @@ export function mapSetlistEntry(row: SetlistEntryRow): SetlistEntry {
   return {
     position: toNumber(row.position),
     song: mapSong(row),
+  };
+}
+
+export function mapSongSection(row: SongSectionRow): SongSection {
+  return {
+    id: toNumber(row.id),
+    songId: toNumber(row.song_id),
+    kind: row.kind,
+    position: toNumber(row.position),
+    lyrics: row.lyrics,
+    chords: row.chords,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
   };
 }
 

@@ -14,11 +14,13 @@ import type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
   SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   SessionSummaryHit,
@@ -120,6 +122,13 @@ export interface DbBackend {
   listSongIdeas(limit?: number): Promise<SongIdea[]>;
   linkSongIdeaToSong(ideaId: number, songId: number): Promise<boolean>;
   deleteSongIdea(id: number): Promise<boolean>;
+
+  // Song sections (per-song structure: intro/verse/chorus/...)
+  addSongSection(input: { songId: number; kind: SectionKind; lyrics?: string | null; chords?: string | null; position?: number }): Promise<SongSection>;
+  getSongSections(songId: number): Promise<SongSection[]>;
+  updateSongSection(id: number, patch: Partial<{ kind: SectionKind; lyrics: string | null; chords: string | null }>): Promise<SongSection | undefined>;
+  moveSongSection(id: number, newPosition: number): Promise<boolean>;
+  removeSongSection(id: number): Promise<boolean>;
 
   // Rehearsals (shared band practice memory)
   addRehearsal(input: { scheduledAt: number; location?: string | null; agenda?: string | null; createdBy?: string | null }): Promise<Rehearsal>;

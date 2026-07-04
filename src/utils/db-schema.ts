@@ -285,6 +285,26 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_song_ideas_created_at
     ON song_ideas (created_at DESC);
+
+  -- NOTE: sqlite does not run with PRAGMA foreign_keys=ON, so ON DELETE
+  -- CASCADE below is inert on the default sqlite backend (deleteSong() in
+  -- db-sqlite.ts does the cascading cleanup in code). The FK stays for
+  -- postgres correctness and as documentation of the relationship.
+  CREATE TABLE IF NOT EXISTS song_sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL
+      CHECK (kind IN ('intro','verse','chorus','bridge','solo','outro','other')),
+    position INTEGER NOT NULL,
+    lyrics TEXT,
+    chords TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(song_id, position)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_song_sections_song_position
+    ON song_sections (song_id, position);
 `);
 
 interface TableColumnInfo {
