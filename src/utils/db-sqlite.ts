@@ -25,6 +25,8 @@ import {
   mapSetlistEntry,
   mapSetlistSong,
   mapSong,
+  mapSongIdea,
+  mapSongSection,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
@@ -39,7 +41,9 @@ import {
   type SetlistEntryRow,
   type SetlistRow,
   type SetlistSongRow,
+  type SongIdeaRow,
   type SongRow,
+  type SongSectionRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
   type WhatsAppSafetyStateRow,
@@ -67,11 +71,14 @@ import type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   SessionSummaryHit,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -277,6 +284,36 @@ const updateSongRow = db.prepare(
   `UPDATE songs SET title = ?, song_key = ?, tempo = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
 );
 const deleteSongById = db.prepare(`DELETE FROM songs WHERE id = ?`);
+const insertSongIdea = db.prepare(
+  `INSERT INTO song_ideas (title, text, audio_url, transcript, song_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+const selectSongIdeaById = db.prepare(`SELECT * FROM song_ideas WHERE id = ?`);
+const selectSongIdeasNewestFirst = db.prepare(
+  `SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC`,
+);
+const selectSongIdeasNewestFirstLimited = db.prepare(
+  `SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC LIMIT ?`,
+);
+const updateSongIdeaSongId = db.prepare(`UPDATE song_ideas SET song_id = ? WHERE id = ?`);
+const deleteSongIdeaById = db.prepare(`DELETE FROM song_ideas WHERE id = ?`);
+const nullSongIdeasBySongId = db.prepare(`UPDATE song_ideas SET song_id = NULL WHERE song_id = ?`);
+const insertSongSection = db.prepare(
+  `INSERT INTO song_sections (song_id, kind, position, lyrics, chords, created_at, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+const selectSongSectionById = db.prepare(`SELECT * FROM song_sections WHERE id = ?`);
+const selectMaxSongSectionPosition = db.prepare(
+  `SELECT MAX(position) AS maxPosition FROM song_sections WHERE song_id = ?`,
+);
+const selectSongSectionsOrdered = db.prepare(
+  `SELECT * FROM song_sections WHERE song_id = ? ORDER BY position ASC`,
+);
+const updateSongSectionRow = db.prepare(
+  `UPDATE song_sections SET kind = ?, lyrics = ?, chords = ?, updated_at = ? WHERE id = ?`,
+);
+const updateSongSectionPosition = db.prepare(`UPDATE song_sections SET position = ? WHERE id = ?`);
+const deleteSongSectionById = db.prepare(`DELETE FROM song_sections WHERE id = ?`);
+const deleteSongSectionsBySong = db.prepare(`DELETE FROM song_sections WHERE song_id = ?`);
 const insertRehearsal = db.prepare(
   `INSERT INTO rehearsals (scheduled_at, location, agenda, status, reminder_sent, created_by, created_at, updated_at)
    VALUES (?, ?, ?, 'scheduled', 0, ?, ?, ?)`,
@@ -903,14 +940,67 @@ export function updateSong(
 }
 
 /**
- * Delete a song by ID. Also removes any setlist_songs entries referencing it
- * (sqlite does not run with `PRAGMA foreign_keys=ON`, so ON DELETE CASCADE on
- * setlist_songs.song_id is inert here — this cleanup makes the DB layer
- * correct without relying on that pragma).
+ * Delete a song by ID. Also removes any setlist_songs and song_sections
+ * entries referencing it, and nulls out song_id on any linked song_ideas
+ * (sqlite does not run with `PRAGMA foreign_keys=ON`, so ON DELETE
+ * CASCADE/SET NULL on those tables' song_id columns is inert here — this
+ * cleanup makes the DB layer correct without relying on that pragma).
  */
 export function deleteSong(id: number): boolean {
   deleteSetlistSongsBySong.run(id);
+  deleteSongSectionsBySong.run(id);
+  nullSongIdeasBySongId.run(id);
   return deleteSongById.run(id).changes > 0;
+}
+
+// ── Public API: Song Ideas (shared band songwriting scratchpad) ─────
+
+export interface NewSongIdea {
+  title?: string | null;
+  text?: string | null;
+  audioUrl?: string | null;
+  transcript?: string | null;
+  songId?: number | null;
+  createdBy?: string | null;
+}
+
+/** Add a new song idea (a scratchpad entry, optionally linked to a song). */
+export function addSongIdea(input: NewSongIdea): SongIdea {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertSongIdea.run(
+    input.title ?? null,
+    input.text ?? null,
+    input.audioUrl ?? null,
+    input.transcript ?? null,
+    input.songId ?? null,
+    input.createdBy ?? null,
+    ts,
+  );
+  return mapSongIdea(selectSongIdeaById.get(result.lastInsertRowid) as SongIdeaRow);
+}
+
+/** Get a song idea by ID. */
+export function getSongIdeaById(id: number): SongIdea | undefined {
+  const row = selectSongIdeaById.get(id) as SongIdeaRow | undefined;
+  return row ? mapSongIdea(row) : undefined;
+}
+
+/** List song ideas, newest first, optionally limited. */
+export function listSongIdeas(limit?: number): SongIdea[] {
+  const rows = limit !== undefined
+    ? (selectSongIdeasNewestFirstLimited.all(limit) as SongIdeaRow[])
+    : (selectSongIdeasNewestFirst.all() as SongIdeaRow[]);
+  return rows.map(mapSongIdea);
+}
+
+/** Link a song idea to a song, setting its song_id. */
+export function linkSongIdeaToSong(ideaId: number, songId: number): boolean {
+  return updateSongIdeaSongId.run(songId, ideaId).changes > 0;
+}
+
+/** Delete a song idea by ID. */
+export function deleteSongIdea(id: number): boolean {
+  return deleteSongIdeaById.run(id).changes > 0;
 }
 
 // ── Public API: Rehearsals (shared band practice memory) ───────────
@@ -1099,6 +1189,102 @@ export function getSetlistSongs(setlistId: number): SetlistEntry[] {
   return (selectSetlistEntriesJoined.all(setlistId) as SetlistEntryRow[]).map(mapSetlistEntry);
 }
 
+// ── Public API: Song Sections (per-song structure: intro/verse/chorus/...) ──
+
+export interface NewSongSection {
+  songId: number;
+  kind: SectionKind;
+  lyrics?: string | null;
+  chords?: string | null;
+  position?: number;
+}
+
+/**
+ * Reassign positions 1..N (in the given order) for a song's sections.
+ * Uses a negative-position intermediate pass first: song_sections has a
+ * UNIQUE(song_id, position) constraint, so writing final positions directly
+ * can collide with a row's current position mid-sequence.
+ */
+const reassignSongSectionPositions = db.transaction((rows: SongSectionRow[]): void => {
+  rows.forEach((row, index) => {
+    updateSongSectionPosition.run(-(index + 1), row.id);
+  });
+  rows.forEach((row, index) => {
+    updateSongSectionPosition.run(index + 1, row.id);
+  });
+});
+
+/** Add a section to a song. Appends to the end (max position + 1) when no position is given. */
+export function addSongSection(input: NewSongSection): SongSection {
+  let pos = input.position;
+  if (pos === undefined) {
+    const row = selectMaxSongSectionPosition.get(input.songId) as { maxPosition: number | null };
+    pos = (row.maxPosition ?? 0) + 1;
+  }
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertSongSection.run(
+    input.songId,
+    input.kind,
+    pos,
+    input.lyrics ?? null,
+    input.chords ?? null,
+    ts,
+    ts,
+  );
+  return mapSongSection(selectSongSectionById.get(result.lastInsertRowid) as SongSectionRow);
+}
+
+/** Get a song's sections, ordered by position. */
+export function getSongSections(songId: number): SongSection[] {
+  return (selectSongSectionsOrdered.all(songId) as SongSectionRow[]).map(mapSongSection);
+}
+
+/** Update only the provided fields on a section and bump updated_at. */
+export function updateSongSection(
+  id: number,
+  patch: Partial<{ kind: SectionKind; lyrics: string | null; chords: string | null }>,
+): SongSection | undefined {
+  const existing = selectSongSectionById.get(id) as SongSectionRow | undefined;
+  if (!existing) return undefined;
+
+  const ts = Math.floor(Date.now() / 1000);
+  updateSongSectionRow.run(
+    patch.kind ?? existing.kind,
+    patch.lyrics !== undefined ? patch.lyrics : existing.lyrics,
+    patch.chords !== undefined ? patch.chords : existing.chords,
+    ts,
+    id,
+  );
+  return mapSongSection(selectSongSectionById.get(id) as SongSectionRow);
+}
+
+/** Move a section within its song to a new 1-based position, reordering the rest. */
+export function moveSongSection(id: number, newPosition: number): boolean {
+  const target = selectSongSectionById.get(id) as SongSectionRow | undefined;
+  if (!target) return false;
+
+  const rows = selectSongSectionsOrdered.all(target.song_id) as SongSectionRow[];
+  const clampedPosition = Math.max(1, Math.min(newPosition, rows.length));
+  const reordered = rows.filter((row) => row.id !== target.id);
+  reordered.splice(clampedPosition - 1, 0, target);
+
+  reassignSongSectionPositions(reordered);
+  return true;
+}
+
+/** Remove a section, then re-close position gaps so 1..N stays contiguous for that song. */
+export function removeSongSection(id: number): boolean {
+  const target = selectSongSectionById.get(id) as SongSectionRow | undefined;
+  if (!target) return false;
+
+  const removed = deleteSongSectionById.run(id).changes > 0;
+  if (removed) {
+    const rows = selectSongSectionsOrdered.all(target.song_id) as SongSectionRow[];
+    reassignSongSectionPositions(rows);
+  }
+  return removed;
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────
 
 /** Stop scheduled maintenance and close SQLite handle for shutdown. */
@@ -1220,6 +1406,12 @@ export function createSqliteBackend(): DbBackend {
     ) => updateSong(id, patch),
     deleteSong: async (id: number) => deleteSong(id),
 
+    addSongIdea: async (input: NewSongIdea) => addSongIdea(input),
+    getSongIdeaById: async (id: number) => getSongIdeaById(id),
+    listSongIdeas: async (limit?: number) => listSongIdeas(limit),
+    linkSongIdeaToSong: async (ideaId: number, songId: number) => linkSongIdeaToSong(ideaId, songId),
+    deleteSongIdea: async (id: number) => deleteSongIdea(id),
+
     addRehearsal: async (input: NewRehearsal) => addRehearsal(input),
     getRehearsalById: async (id: number) => getRehearsalById(id),
     listUpcomingRehearsals: async (nowSeconds: number, limit?: number) =>
@@ -1253,6 +1445,15 @@ export function createSqliteBackend(): DbBackend {
     moveSetlistSong: async (setlistId: number, songId: number, newPosition: number) =>
       moveSetlistSong(setlistId, songId, newPosition),
     getSetlistSongs: async (setlistId: number) => getSetlistSongs(setlistId),
+
+    addSongSection: async (input: NewSongSection) => addSongSection(input),
+    getSongSections: async (songId: number) => getSongSections(songId),
+    updateSongSection: async (
+      id: number,
+      patch: Partial<{ kind: SectionKind; lyrics: string | null; chords: string | null }>,
+    ) => updateSongSection(id, patch),
+    moveSongSection: async (id: number, newPosition: number) => moveSongSection(id, newPosition),
+    removeSongSection: async (id: number) => removeSongSection(id),
 
     closeDb: async (): Promise<void> => {
       closeDb();

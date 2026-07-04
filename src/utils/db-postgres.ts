@@ -22,6 +22,8 @@ import {
   mapSetlistEntry,
   mapSetlistSong,
   mapSong,
+  mapSongIdea,
+  mapSongSection,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
@@ -37,7 +39,9 @@ import {
   type SetlistEntryRow,
   type SetlistRow,
   type SetlistSongRow,
+  type SongIdeaRow,
   type SongRow,
+  type SongSectionRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
   type WhatsAppSafetyStateRow,
@@ -68,11 +72,14 @@ import type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   SessionSummaryHit,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -99,6 +106,8 @@ const REQUIRED_CORE_TABLES = [
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
   'songs',
+  'song_ideas',
+  'song_sections',
   'rehearsals',
   'availability',
   'setlists',
@@ -464,6 +473,32 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       }
       for (const [index, row] of rows.entries()) {
         await client.query('UPDATE setlist_songs SET position = $1 WHERE id = $2', [index + 1, row.id]);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  };
+
+  /**
+   * Reassign positions 1..N (in the given order) for a song's sections.
+   * Mirrors reassignSetlistSongPositions's negative-then-final two-phase
+   * transaction pattern, needed because song_sections has a
+   * UNIQUE(song_id, position) constraint.
+   */
+  const reassignSongSectionPositions = async (rows: SongSectionRow[]): Promise<void> => {
+    if (rows.length === 0) return;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [index, row] of rows.entries()) {
+        await client.query('UPDATE song_sections SET position = $1 WHERE id = $2', [-(index + 1), row.id]);
+      }
+      for (const [index, row] of rows.entries()) {
+        await client.query('UPDATE song_sections SET position = $1 WHERE id = $2', [index + 1, row.id]);
       }
       await client.query('COMMIT');
     } catch (err) {
@@ -1113,7 +1148,61 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     async deleteSong(id: number): Promise<boolean> {
       await pool.query('DELETE FROM setlist_songs WHERE song_id = $1', [id]);
+      await pool.query('DELETE FROM song_sections WHERE song_id = $1', [id]);
+      await pool.query('UPDATE song_ideas SET song_id = NULL WHERE song_id = $1', [id]);
       const res = await pool.query('DELETE FROM songs WHERE id = $1', [id]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async addSongIdea(input: {
+      title?: string | null;
+      text?: string | null;
+      audioUrl?: string | null;
+      transcript?: string | null;
+      songId?: number | null;
+      createdBy?: string | null;
+    }): Promise<SongIdea> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongIdeaRow>(
+        `INSERT INTO song_ideas (title, text, audio_url, transcript, song_id, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          input.title ?? null,
+          input.text ?? null,
+          input.audioUrl ?? null,
+          input.transcript ?? null,
+          input.songId ?? null,
+          input.createdBy ?? null,
+          ts,
+        ],
+      );
+      return mapSongIdea(res.rows[0]);
+    },
+
+    async getSongIdeaById(id: number): Promise<SongIdea | undefined> {
+      const res = await pool.query<SongIdeaRow>('SELECT * FROM song_ideas WHERE id = $1', [id]);
+      const row = res.rows[0];
+      return row ? mapSongIdea(row) : undefined;
+    },
+
+    async listSongIdeas(limit?: number): Promise<SongIdea[]> {
+      const res = limit !== undefined
+        ? await pool.query<SongIdeaRow>(
+          'SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC LIMIT $1',
+          [limit],
+        )
+        : await pool.query<SongIdeaRow>('SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC');
+      return res.rows.map(mapSongIdea);
+    },
+
+    async linkSongIdeaToSong(ideaId: number, songId: number): Promise<boolean> {
+      const res = await pool.query('UPDATE song_ideas SET song_id = $1 WHERE id = $2', [songId, ideaId]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async deleteSongIdea(id: number): Promise<boolean> {
+      const res = await pool.query('DELETE FROM song_ideas WHERE id = $1', [id]);
       return (res.rowCount ?? 0) > 0;
     },
 
@@ -1341,6 +1430,99 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [setlistId],
       );
       return res.rows.map(mapSetlistEntry);
+    },
+
+    async addSongSection(input: {
+      songId: number;
+      kind: SectionKind;
+      lyrics?: string | null;
+      chords?: string | null;
+      position?: number;
+    }): Promise<SongSection> {
+      let pos = input.position;
+      if (pos === undefined) {
+        const maxRes = await pool.query<{ maxposition: DbNumeric | null }>(
+          'SELECT MAX(position) AS maxposition FROM song_sections WHERE song_id = $1',
+          [input.songId],
+        );
+        pos = toNumber(maxRes.rows[0]?.maxposition ?? 0) + 1;
+      }
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongSectionRow>(
+        `INSERT INTO song_sections (song_id, kind, position, lyrics, chords, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $6)
+         RETURNING *`,
+        [input.songId, input.kind, pos, input.lyrics ?? null, input.chords ?? null, ts],
+      );
+      return mapSongSection(res.rows[0]);
+    },
+
+    async getSongSections(songId: number): Promise<SongSection[]> {
+      const res = await pool.query<SongSectionRow>(
+        'SELECT * FROM song_sections WHERE song_id = $1 ORDER BY position ASC',
+        [songId],
+      );
+      return res.rows.map(mapSongSection);
+    },
+
+    async updateSongSection(
+      id: number,
+      patch: Partial<{ kind: SectionKind; lyrics: string | null; chords: string | null }>,
+    ): Promise<SongSection | undefined> {
+      const existingRes = await pool.query<SongSectionRow>('SELECT * FROM song_sections WHERE id = $1', [id]);
+      const existing = existingRes.rows[0];
+      if (!existing) return undefined;
+
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongSectionRow>(
+        `UPDATE song_sections
+         SET kind = $1, lyrics = $2, chords = $3, updated_at = $4
+         WHERE id = $5
+         RETURNING *`,
+        [
+          patch.kind ?? existing.kind,
+          patch.lyrics !== undefined ? patch.lyrics : existing.lyrics,
+          patch.chords !== undefined ? patch.chords : existing.chords,
+          ts,
+          id,
+        ],
+      );
+      return mapSongSection(res.rows[0]);
+    },
+
+    async moveSongSection(id: number, newPosition: number): Promise<boolean> {
+      const targetRes = await pool.query<SongSectionRow>('SELECT * FROM song_sections WHERE id = $1', [id]);
+      const target = targetRes.rows[0];
+      if (!target) return false;
+
+      const allRes = await pool.query<SongSectionRow>(
+        'SELECT * FROM song_sections WHERE song_id = $1 ORDER BY position ASC',
+        [target.song_id],
+      );
+      const rows = allRes.rows;
+      const clampedPosition = Math.max(1, Math.min(newPosition, rows.length));
+      const reordered = rows.filter((row) => toNumber(row.id) !== toNumber(target.id));
+      reordered.splice(clampedPosition - 1, 0, target);
+
+      await reassignSongSectionPositions(reordered);
+      return true;
+    },
+
+    async removeSongSection(id: number): Promise<boolean> {
+      const targetRes = await pool.query<SongSectionRow>('SELECT * FROM song_sections WHERE id = $1', [id]);
+      const target = targetRes.rows[0];
+      if (!target) return false;
+
+      const res = await pool.query('DELETE FROM song_sections WHERE id = $1', [id]);
+      const removed = (res.rowCount ?? 0) > 0;
+      if (removed) {
+        const rowsRes = await pool.query<SongSectionRow>(
+          'SELECT * FROM song_sections WHERE song_id = $1 ORDER BY position ASC',
+          [target.song_id],
+        );
+        await reassignSongSectionPositions(rowsRes.rows);
+      }
+      return removed;
     },
 
     async closeDb(): Promise<void> {

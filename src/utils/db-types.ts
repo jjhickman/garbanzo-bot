@@ -109,6 +109,30 @@ export interface SetlistEntry {
   song: Song;
 }
 
+export type SectionKind = 'intro' | 'verse' | 'chorus' | 'bridge' | 'solo' | 'outro' | 'other';
+
+export interface SongSection {
+  id: number;
+  songId: number;
+  kind: SectionKind;
+  position: number;
+  lyrics: string | null;
+  chords: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SongIdea {
+  id: number;
+  title: string | null;
+  text: string | null;
+  audioUrl: string | null;
+  transcript: string | null;
+  songId: number | null;
+  createdBy: string | null;
+  createdAt: number;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

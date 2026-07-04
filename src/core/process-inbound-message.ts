@@ -25,6 +25,7 @@ export interface CoreMessageHooks {
     inbound: InboundMessage;
     text: string;
     hasMedia: boolean;
+    audio?: { url: string; contentType: string };
   }): Promise<void>;
 
   /** Continue into platform-specific owner DM handling. */
@@ -182,7 +183,7 @@ export async function processInboundMessage(
   // Dispatch
   if (inbound.isGroupChat) {
     if (!env.isGroupEnabled(inbound.chatId)) return;
-    await hooks.handleGroupMessage({ inbound, text, hasMedia });
+    await hooks.handleGroupMessage({ inbound, text, hasMedia, audio: inbound.audio });
     return;
   }
 

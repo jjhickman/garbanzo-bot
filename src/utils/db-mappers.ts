@@ -10,11 +10,14 @@ import type {
   MemoryEntry,
   Rehearsal,
   RehearsalStatus,
+  SectionKind,
   SessionSummaryHit,
   Setlist,
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
+  SongSection,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -142,6 +145,28 @@ export interface SetlistEntryRow extends SongRow {
   position: DbNumeric | null;
 }
 
+export interface SongIdeaRow {
+  id: DbNumeric | null;
+  title: string | null;
+  text: string | null;
+  audio_url: string | null;
+  transcript: string | null;
+  song_id: DbNumeric | null;
+  created_by: string | null;
+  created_at: DbNumeric | null;
+}
+
+export interface SongSectionRow {
+  id: DbNumeric | null;
+  song_id: DbNumeric | null;
+  kind: SectionKind;
+  position: DbNumeric | null;
+  lyrics: string | null;
+  chords: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
+}
+
 export interface EventReminderRow {
   id: DbNumeric | null;
   chat_jid: string;
@@ -267,6 +292,19 @@ export function mapSong(row: SongRow): Song {
   };
 }
 
+export function mapSongIdea(row: SongIdeaRow): SongIdea {
+  return {
+    id: toNumber(row.id),
+    title: row.title,
+    text: row.text,
+    audioUrl: row.audio_url,
+    transcript: row.transcript,
+    songId: row.song_id === null ? null : toNumber(row.song_id),
+    createdBy: row.created_by,
+    createdAt: toNumber(row.created_at),
+  };
+}
+
 export function mapRehearsal(row: RehearsalRow): Rehearsal {
   const reminderSent = typeof row.reminder_sent === 'boolean'
     ? row.reminder_sent
@@ -319,6 +357,19 @@ export function mapSetlistEntry(row: SetlistEntryRow): SetlistEntry {
   return {
     position: toNumber(row.position),
     song: mapSong(row),
+  };
+}
+
+export function mapSongSection(row: SongSectionRow): SongSection {
+  return {
+    id: toNumber(row.id),
+    songId: toNumber(row.song_id),
+    kind: row.kind,
+    position: toNumber(row.position),
+    lyrics: row.lyrics,
+    chords: row.chords,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
   };
 }
 
