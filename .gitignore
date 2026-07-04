@@ -18,3 +18,6 @@ infra/cdk/cdk.out/
 /CROSS_PLATFORM_BRIDGE_COMPLEXITY.md
 /SLACK_DISCORD_LAUNCH_CHECKLIST.md
 config/discord-channels.json
+
+# Agent working notes (never published)
+.superpowers/

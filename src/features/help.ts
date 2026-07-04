@@ -1,4 +1,5 @@
 import { bold } from '../utils/formatting.js';
+import { getPersonaName } from '../ai/persona.js';
 
 /**
  * Help command — shows users what Garbanzo can do.
@@ -9,7 +10,7 @@ import { bold } from '../utils/formatting.js';
 /** Build the standard member-facing help message. */
 export function getHelpMessage(): string {
   return [
-    `${bold('Hey, I\'m Garbanzo Bean!')} 🫘`,
+    `${bold(`Hey, I'm ${getPersonaName()}!`)} 🫘`,
     'Your Boston community bot. Here\'s what I can do:',
     '',
     `${bold('Weather')}`,
