@@ -10,6 +10,7 @@ import { handleSongCommand } from '../features/songs.js';
 import { handleAvailabilityCommand, handleRehearsalCommand } from '../features/rehearsals.js';
 import { handleSetlistCommand } from '../features/setlists.js';
 import { handleAgendaCommand } from '../features/practice-agenda.js';
+import { handleIdeaCommand } from '../features/song-ideas.js';
 import { extractUrls, processUrl } from '../features/links.js';
 import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
@@ -88,6 +89,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     messageId,
     replyTo,
     visionImages,
+    audio,
     isFeatureEnabled,
     getResponse,
   } = params;
@@ -207,6 +209,22 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
       ownerUserId: ownerUserId ?? ownerId,
       senderIsBandMember,
       featureQuery: featureCheck.query,
+      replyTo,
+    });
+    return;
+  }
+
+  // Band feature — !idea (songwriting scratchpad: capture text or an audio
+  // clip → Whisper transcript, plus promote-to-song)
+  if (featureCheck?.feature === 'idea' && config.BAND_FEATURES_ENABLED) {
+    await handleIdeaFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
+      audio,
       replyTo,
     });
     return;
@@ -397,6 +415,30 @@ async function handleSetlistFeature(params: {
   }
 
   const result = await handleSetlistCommand(featureQuery);
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
+}
+
+async function handleIdeaFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  audio?: { url: string; contentType: string };
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, audio, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can capture song ideas right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleIdeaCommand(featureQuery, { senderId, audio });
   await messenger.sendText(chatId, result, { replyTo });
   recordBotResponse(chatId);
   recordResponse(senderId, chatId);
