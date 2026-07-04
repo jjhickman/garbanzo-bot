@@ -11,6 +11,8 @@ import { createDiscordInteractionsServer } from './gateway-runtime.js';
 import {
   scheduleDiscordDigest,
   scheduleDiscordEventReminders,
+  scheduleDiscordPracticeAgenda,
+  scheduleDiscordRehearsalReminders,
   scheduleDiscordWeeklyRecap,
 } from './schedulers.js';
 
@@ -23,6 +25,8 @@ export interface DiscordRuntimeDeps {
   resolveOwnerDmChannelId?: typeof resolveOwnerDmChannelId;
   scheduleDigest?: typeof scheduleDiscordDigest;
   scheduleEventReminders?: typeof scheduleDiscordEventReminders;
+  schedulePracticeAgenda?: typeof scheduleDiscordPracticeAgenda;
+  scheduleRehearsalReminders?: typeof scheduleDiscordRehearsalReminders;
   scheduleWeeklyRecap?: typeof scheduleDiscordWeeklyRecap;
 }
 
@@ -38,6 +42,8 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
     resolveOwnerDmChannelId: deps.resolveOwnerDmChannelId ?? resolveOwnerDmChannelId,
     scheduleDigest: deps.scheduleDigest ?? scheduleDiscordDigest,
     scheduleEventReminders: deps.scheduleEventReminders ?? scheduleDiscordEventReminders,
+    schedulePracticeAgenda: deps.schedulePracticeAgenda ?? scheduleDiscordPracticeAgenda,
+    scheduleRehearsalReminders: deps.scheduleRehearsalReminders ?? scheduleDiscordRehearsalReminders,
     scheduleWeeklyRecap: deps.scheduleWeeklyRecap ?? scheduleDiscordWeeklyRecap,
   };
   let gatewayClient: DiscordGatewayRuntimeClient | null = null;
@@ -91,6 +97,10 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
           ));
         }
         disposers.push(runtimeDeps.scheduleEventReminders(adapter));
+
+        const practiceChannelId = config.DISCORD_PRACTICE_CHANNEL_ID ?? ownerDmChannelId;
+        disposers.push(runtimeDeps.scheduleRehearsalReminders(adapter, practiceChannelId));
+        disposers.push(runtimeDeps.schedulePracticeAgenda(adapter, practiceChannelId));
 
         logger.info({ ownerUserId, ownerDmChannelId }, 'Discord Gateway runtime started');
         return;
