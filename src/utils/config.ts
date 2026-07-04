@@ -99,7 +99,7 @@ const envSchema = z.object({
   WHATSAPP_SAFETY_AUTO_PAUSE_AT: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   EVENT_REMINDERS_ENABLED: booleanFromEnv.default(true),
   EVENT_REMINDER_LEAD_MINUTES: z.coerce.number().int().min(10).max(1440).default(120),
-  REHEARSAL_REMINDER_LEAD_MINUTES: z.coerce.number().int().default(120),
+  REHEARSAL_REMINDER_LEAD_MINUTES: z.coerce.number().int().min(10).max(1440).default(120),
 
   // Feature API keys (all optional — features degrade gracefully)
   GOOGLE_API_KEY: z.string().optional(),
