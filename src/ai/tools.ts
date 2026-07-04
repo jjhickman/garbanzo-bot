@@ -37,6 +37,17 @@ function errorMessage(name: string, err: unknown): string {
   return `Tool ${name} failed: ${message}`;
 }
 
+const SONG_STATUSES = ['idea', 'rough', 'tight', 'gig-ready'] as const;
+type SongStatusLiteral = (typeof SONG_STATUSES)[number];
+
+function normalizeSongStatus(value: unknown): SongStatusLiteral | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  return (SONG_STATUSES as readonly string[]).includes(normalized)
+    ? (normalized as SongStatusLiteral)
+    : undefined;
+}
+
 function queryTool(
   name: string,
   description: string,
@@ -150,6 +161,72 @@ const tools: AiTool[] = [
         .join('\n');
     },
   ),
+  {
+    name: 'list_band_songs',
+    description:
+      'List songs in the band\'s shared catalog, optionally filtered by status (idea, rough, tight, gig-ready). Use when someone asks about the setlist, catalog, or which songs are at a given stage.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          description: 'Optional status filter: idea, rough, tight, or gig-ready. Omit to list every song.',
+        },
+      },
+      required: [],
+    },
+    execute: async (input) => {
+      const status = normalizeSongStatus(input.status);
+      try {
+        const { listSongs } = await import('../utils/db.js');
+        const { formatSongLine } = await import('../features/songs.js');
+        const songs = await listSongs(status);
+        recordToolCall('list_band_songs', 'ok');
+        if (songs.length === 0) {
+          return status ? `No songs with status "${status}".` : 'No songs in the catalog yet.';
+        }
+        return truncateToolResult(songs.map(formatSongLine).join('\n'));
+      } catch (err) {
+        recordToolCall('list_band_songs', 'error');
+        return truncateToolResult(errorMessage('list_band_songs', err));
+      }
+    },
+  },
+  {
+    name: 'find_band_song',
+    description:
+      'Find a specific song in the band\'s shared catalog by title, using a fuzzy (case-insensitive, partial) match. Use when someone asks about one song by name, e.g. "do we have a song called Sundown" or "what status is Chickpea Boogie in".',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'The song title (or part of it) to search for, e.g. "Sundown".' },
+      },
+      required: ['title'],
+    },
+    execute: async (input) => {
+      const title = stringInput(input, 'title');
+      if (!title) {
+        recordToolCall('find_band_song', 'error');
+        return 'Tool find_band_song needs a non-empty title.';
+      }
+
+      try {
+        const { listSongs } = await import('../utils/db.js');
+        const { formatSongLine } = await import('../features/songs.js');
+        const songs = await listSongs();
+        const query = title.toLowerCase();
+        const exact = songs.find((song) => song.title.toLowerCase() === query);
+        const matches = exact ? [exact] : songs.filter((song) => song.title.toLowerCase().includes(query));
+
+        recordToolCall('find_band_song', 'ok');
+        if (matches.length === 0) return `No song matching "${title}".`;
+        return truncateToolResult(matches.map(formatSongLine).join('\n'));
+      } catch (err) {
+        recordToolCall('find_band_song', 'error');
+        return truncateToolResult(errorMessage('find_band_song', err));
+      }
+    },
+  },
 ];
 
 export function getEnabledTools(): AiTool[] {
@@ -161,6 +238,8 @@ export function getEnabledTools(): AiTool[] {
     if (tool.name === 'get_transit_status') return !!config.MBTA_API_KEY;
     if (tool.name === 'get_news') return !!config.NEWSAPI_KEY;
     if (tool.name === 'web_search') return getSearchProviderName() !== null;
+    if (tool.name === 'list_band_songs') return config.BAND_FEATURES_ENABLED;
+    if (tool.name === 'find_band_song') return config.BAND_FEATURES_ENABLED;
     return true;
   });
 }
