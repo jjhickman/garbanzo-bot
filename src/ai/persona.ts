@@ -43,7 +43,16 @@ try {
   personaDoc = 'You are Garbanzo Bean, a community chat bot. Be warm, direct, and helpful.';
 }
 
+/** First emoji in the persona doc's heading ('' when the heading has none). */
+function derivePersonaEmoji(doc: string): string {
+  const headingMatch = /^#\s+(.+)$/m.exec(doc);
+  if (!headingMatch) return '';
+  const emojiMatch = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/u.exec(headingMatch[1]);
+  return emojiMatch?.[0] ?? '';
+}
+
 const personaName = derivePersonaName(personaDoc);
+const personaEmoji = derivePersonaEmoji(personaDoc);
 if (loadedPersonaFile) {
   logger.info(
     { personaFile: loadedPersonaFile, platform: config.MESSAGING_PLATFORM, personaName },
@@ -53,6 +62,11 @@ if (loadedPersonaFile) {
 
 export function getPersonaName(): string {
   return personaName;
+}
+
+/** Persona's signature emoji from its doc heading, or '' — never hardcode one. */
+export function getPersonaEmoji(): string {
+  return personaEmoji;
 }
 
 export interface MessageContext {
