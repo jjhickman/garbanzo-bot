@@ -1,97 +1,109 @@
-# Modular Config & Deployment — Design Spec
+# Modular Config & Deployment — Design Spec (v2, platform-first)
 
 **Date:** 2026-07-04
-**Status:** Draft (owner reviews plan before build)
+**Status:** Approved direction (owner directives incorporated; build authorized)
 **Branch:** `feat/modular-config`
-**Breaking:** YES — clean-slate redeploy sanctioned by the owner ("completely re-deploying everything clean in one swoop; keeping a copy of current configs/.envs"). Target version: **v2.0.0**. **HARD CONSTRAINT: every named Docker volume keeps its exact current `name:`** (`garbanzo-bot-auth`, `garbanzo-bot-data`, `garbanzo-bot-remy-data`, `garbanzo-bot-qdrant`, `garbanzo-bot-prometheus`, `garbanzo-bot-grafana`) so the linked WhatsApp auth state, both SQLite DBs, vectors, and dashboards all survive the redeploy untouched. Only config/compose/env files change.
+**Breaking:** YES — clean-slate redeploy sanctioned ("completely re-deploying everything clean in one swoop; keeping a copy of current configs/.envs"). Target version: **v2.0.0**. **HARD CONSTRAINT: every named Docker volume keeps its exact current `name:`** (`garbanzo-bot-auth`, `garbanzo-bot-data`, `garbanzo-bot-remy-data`, `garbanzo-bot-qdrant`, `garbanzo-bot-prometheus`, `garbanzo-bot-grafana`) so the linked WhatsApp auth state, both SQLite DBs, vectors, and dashboards survive the redeploy untouched. Only config/compose/env files change.
+
+## Owner directives (govern every decision below)
+
+1. **Discord is the first-class default platform.** It uses official, well-documented APIs. WhatsApp (Baileys, unofficial API, ToS-gray) remains fully supported but is positioned as the secondary path and labeled honestly in docs.
+2. **Garbanzo is the project/framework/app name — not a persona.** "Garbanzo Bean" is just the first persona and happens to share the name. Infrastructure artifacts (compose profiles, service names, Prometheus jobs, env file names) are **platform-named** (`discord`, `whatsapp`), never persona-named (`remy` dies as an infra name).
+3. **Persona names are configurable.** The bot's display identity derives from the loaded persona document, not from hardcoded strings. As few environment variables as possible — no new env var for this; the persona file is the source of truth.
 
 ## Summary
 
-Restructure configuration and deployment so multiple platform instances (WhatsApp Garbanzo + Discord Remy) run on one machine as peers, sharing one config layer, with infra (Qdrant) and monitoring (Prometheus + Grafana) attachable to any subset. Rename the overloaded ops-auth secret to `MONITORING_TOKEN`. Fold in the tracked small fixes (empty-string env hardening, persona-load logging, platform-aware startup line, multi-instance dashboards, `.env.remy.example` gaps).
+Restructure configuration and deployment so multiple platform instances (Discord + WhatsApp) run on one machine as peers, sharing one config layer, with infra (Qdrant) and monitoring (Prometheus + Grafana) attachable to any subset. Rename the overloaded ops-auth secret to `MONITORING_TOKEN`. Make the persona identity file-driven. Fold in the tracked small fixes.
 
-Grounded in the 13-problem inventory from the codebase review (see plan). The headline findings: one token secretly does five jobs; `${VAR}` interpolation only ever reads the root `.env` (forcing duplication); monitoring is welded to the WhatsApp service; the Grafana dashboard has zero `job` filters so two instances' metrics blend; `OWNER_JID` is unconditionally required even on Discord; plain `.optional()` strings let `VAR=` defeat `??` fallbacks.
+Grounded in the 13-problem inventory from the codebase review. Headline findings: one token secretly does five jobs; compose `${VAR}` interpolation only ever reads the root `.env` (forcing duplication); monitoring is welded to the WhatsApp service; the Grafana dashboard has zero `job` filters so two instances' metrics blend; `OWNER_JID` is unconditionally required even on Discord; plain `.optional()` strings let `VAR=` defeat `??` fallbacks.
 
 ## Goals
 
-1. **One compose file, profile-selected deployments.** `COMPOSE_PROFILES` in `.env` picks the shape (`whatsapp`, `remy`, `monitoring` in any combination); `docker compose up -d` starts exactly that. Qdrant starts whenever any bot profile is active. Remy-only, WhatsApp-only, both, each ± monitoring — all first-class.
-2. **Layered env files, zero duplication.** `.env` = shared (provider keys, `MONITORING_TOKEN`, Qdrant/embeddings, `APP_VERSION`, `COMPOSE_PROFILES`); `.env.whatsapp` and `.env.remy` = per-instance deltas. Services load `env_file: [.env, .env.<instance>]` (later wins); interpolation naturally reads the shared file.
-3. **`MONITORING_TOKEN`** gates `/metrics`, `/admin`, the Prometheus scrape credential, and the Grafana admin password (with `GRAFANA_ADMIN_PASSWORD` as an optional separate override). `WHATSAPP_LOGIN_TOKEN` shrinks to its literal job: the WhatsApp browser-login page. No cross-fallbacks.
-4. **Modular config schema.** Split the flat ~180-line zod object into merged modules (core, ai, whatsapp, discord, band, vector, monitoring, integrations); `OWNER_JID` required only when `MESSAGING_PLATFORM=whatsapp`; every optional string treats `""` as unset.
-5. **Multi-instance monitoring.** Prometheus scrapes both instances; the Grafana dashboard gains a `job` template variable and per-panel `job=~"$job"` filters so instances can be viewed together or separately.
-6. **Small fixes:** persona-load log line; platform-aware startup line ("Remy is online", not "Garbanzo Bean"); host-Ollama reachability from containers (`host.docker.internal` + `extra_hosts`); `QDRANT_API_KEY` empty-value crash; `.env.remy.example` gaps (`MONITORING_TOKEN`, `WHISPER_URL`, `METRICS_ENABLED`); setup wizard writes the new layout.
+1. **One compose file, profile-selected deployments.** `COMPOSE_PROFILES` in `.env` picks the shape — `discord`, `whatsapp`, `monitoring` in any combination; `docker compose up -d` starts exactly that. Qdrant starts whenever any bot profile is active. Discord-only (shipped default), WhatsApp-only, both, each ± monitoring: all first-class.
+2. **Layered env files, zero duplication.** `.env` = shared (provider keys, `MONITORING_TOKEN`, Qdrant/embeddings, `APP_VERSION`, `COMPOSE_PROFILES`); `.env.discord` and `.env.whatsapp` = per-instance deltas. Services load `env_file: [.env, .env.<platform>]` (later wins); `${VAR}` interpolation naturally reads the shared file.
+3. **`MONITORING_TOKEN`** gates `/metrics`, `/admin`, the Prometheus scrape credential, and the Grafana admin password (`GRAFANA_ADMIN_PASSWORD` remains an optional separate override). `WHATSAPP_LOGIN_TOKEN` shrinks to its literal job: the WhatsApp browser-login page. No cross-fallbacks.
+4. **Discord is the config default.** `MESSAGING_PLATFORM` defaults to `discord`; the setup wizard lists Discord first; README/quick-start lead with Discord. WhatsApp docs carry a plain-language note that it uses an unofficial API.
+5. **Modular config schema.** Split the flat ~180-line zod object into merged modules (core, ai, whatsapp, discord, band, vector, monitoring, integrations); `OWNER_JID` required only when `MESSAGING_PLATFORM=whatsapp`; every optional string treats `""` as unset.
+6. **Persona identity is file-driven.** `getPersonaName()` = first `# Heading` of the loaded persona doc (fallback `"Garbanzo Bean"`). It feeds the startup line ("Remy is online and listening"), the persona-load log, and the distilled Ollama identity (name substituted into the platform-appropriate distilled text). Operators change identity by editing/mounting their persona file — documented.
+7. **Multi-instance monitoring.** Prometheus scrapes both instances (`discord:3002`, `whatsapp:3001`); the Grafana dashboard gains a `job` template variable with `job=~"$job"` on every panel.
+8. **Small fixes:** host-Ollama reachability (`extra_hosts` + `host.docker.internal` guidance), `QDRANT_API_KEY` empty-value crash, `.env` example rewrites (incl. `WHISPER_URL`, `METRICS_ENABLED` for Discord), wizard writes the new layout.
 
 ## Non-goals
 
-- Per-instance metric renaming (metrics stay `garbanzo_*`; instances are distinguished by the Prometheus `job` label).
-- Generalizing beyond two instances (the layout supports N, but only whatsapp+remy files/profiles ship).
+- Per-instance metric renaming (metrics stay `garbanzo_*` — the framework name; instances distinguished by the `job` label).
+- N>2 instances (layout supports it; only discord+whatsapp ship).
 - Slack/Teams productization; AWS overlay rework beyond keeping it loading.
-- Data migration tooling (volumes are preserved; envs are hand-migrated by the owner from his kept copies).
+- Data migration tooling (volumes are preserved; envs hand-migrated by the owner from kept copies).
+- Renaming the WhatsApp anti-ban/safety machinery or weakening its warnings — the WhatsApp path stays production-quality, just not the headline.
 
 ## Decisions
 
-- **Profiles in ONE `docker-compose.yml`, not multi-file overlays.** Now that back-compat is waived: `garbanzo` gets `profiles: ["whatsapp"]`, `remy` moves INTO the base file with `profiles: ["remy"]`, prometheus/grafana keep `profiles: ["monitoring"]`, and `qdrant` gets `profiles: ["whatsapp", "remy"]` (starts if either bot does). `docker-compose.remy.yml` is deleted. `COMPOSE_PROFILES=whatsapp,monitoring` (etc.) lives in `.env`, making deployment shape part of config — one command (`docker compose up -d`) for every shape. `docker compose config` validation for each combo is part of the test suite (extends `tests/remy-compose.test.ts`).
-- **`.env` is the shared layer** (not a new `.env.shared`): compose `${VAR}` interpolation only reads the root `.env`, so the shared file must BE `.env`. Instance files are additive deltas loaded via multi-entry `env_file:` with `required: false` on instance files.
-- **Token split, no fallback chain:** `MONITORING_TOKEN` (shared, ops auth) and `WHATSAPP_LOGIN_TOKEN` (whatsapp-only, login page; random per-run when unset, as today). health-server `authToken` = `MONITORING_TOKEN`. Grafana password = `GRAFANA_ADMIN_PASSWORD ?? MONITORING_TOKEN` (refuse to start if neither, as today). Prometheus token file written from `MONITORING_TOKEN`. Docs + wizard updated; `AGENTS.md` Decisions Log entry replaces the PR #209 note.
-- **Config schema split is behavior-preserving** except for three deliberate changes: (1) `optionalString` (empty→undefined) applied to all plain-optional strings — kills the `DISCORD_DIGEST_CHANNEL_ID=""` class of bug globally; (2) `OWNER_JID` optional in schema + `superRefine`-required for `MESSAGING_PLATFORM=whatsapp` (Discord identity comes from `DISCORD_OWNER_ID`; the WhatsApp-shaped placeholder in `.env.remy` dies); (3) `QDRANT_API_KEY` uses `optionalString` (fixes the shipped-empty-value startup crash).
-- **Prometheus scrapes both jobs statically** (`garbanzo:3001`, `remy:3002`); an inactive instance is just a down target. Simpler than templating the scrape config; revisit only if target noise ever matters.
-- **Dashboard multi-instance via `job` template var** (multi-select, default all) + `job=~"$job"` on every panel expression. Combined view = today's behavior; per-instance = select one.
-- **Ollama from containers:** add `extra_hosts: ["host.docker.internal:host-gateway"]` to both bot services and document `OLLAMA_BASE_URL=http://host.docker.internal:11434` in the shared example. Default stays as-is (unset = feature quietly unused, unchanged).
-- **Startup identity from the persona:** derive the display name from the loaded persona doc's first `# Heading` (e.g. "Remy") with a fallback to "Garbanzo Bean"; log `"<name> is online and listening"` and log which persona file was chosen at load.
+- **Profiles in ONE `docker-compose.yml`.** Services: `discord` (`profiles: ["discord"]`, container `garbanzo-discord`, port 3002, data volume name `garbanzo-bot-remy-data` — key renamed, `name:` preserved for data continuity), `whatsapp` (`profiles: ["whatsapp"]`, container `garbanzo-whatsapp`, port 3001, volumes `garbanzo-bot-auth` + `garbanzo-bot-data`), `qdrant` (`profiles: ["discord", "whatsapp"]`), `prometheus` + `grafana` (`profiles: ["monitoring"]`). `docker-compose.remy.yml` is deleted. Each bot service pins `MESSAGING_PLATFORM` explicitly in compose `environment:` (identity in infra, not just env files). `docker compose config` validation for each combo is part of the test suite.
+- **Ports stay as deployed** (whatsapp 3001, discord 3002) — no churn against the owner's live volumes/dashboards.
+- **`.env` is the shared layer** (compose interpolation reads only root `.env`, so shared must BE `.env`). Instance files `.env.discord` / `.env.whatsapp` load via multi-entry `env_file:` with `required: false`.
+- **Token split, no fallback chain:** health-server `authToken` = `MONITORING_TOKEN` (per-run random when unset, with a log line saying how to pin). Grafana password = `GRAFANA_ADMIN_PASSWORD ?? MONITORING_TOKEN` (refuses to start when neither). Prometheus token file from `MONITORING_TOKEN`. `WHATSAPP_LOGIN_TOKEN` = login page only, whatsapp-only concern.
+- **Config schema split is behavior-preserving** except the deliberate changes: `optionalString` (empty→undefined) on all plain-optional strings; `OWNER_JID` platform-conditional; `QDRANT_API_KEY` → `optionalString`; **`MESSAGING_PLATFORM` default `discord`**.
+- **Persona name from the doc, zero new env vars.** `getPersonaName()` parses the loaded persona's first heading (e.g. `# Remy - Persona Document` → `Remy`; `# Garbanzo Bean` → `Garbanzo Bean`). Threaded into: startup log, persona-load log, distilled Ollama identity (name substituted; distilled personality text still platform-appropriate). Custom personas documented via bind-mount over `/app/docs/personas/<platform>.md`.
+- **Prometheus scrapes both jobs statically** (`discord:3002`, `whatsapp:3001`); an inactive instance is just a down target.
+- **Ollama from containers:** `extra_hosts: ["host.docker.internal:host-gateway"]` on both bot services; `OLLAMA_BASE_URL=http://host.docker.internal:11434` documented in the shared example. Default behavior unchanged when unset.
 
 ## Architecture
 
 ```
-.env                    # shared: COMPOSE_PROFILES, provider keys, MONITORING_TOKEN,
-                        #         QDRANT_URL, VECTOR_*, APP_VERSION, LOG_LEVEL, OLLAMA_BASE_URL
-.env.whatsapp           # OWNER_JID, BOT_PHONE_NUMBER, WHATSAPP_*, (HEALTH_PORT=3001)
-.env.remy               # MESSAGING_PLATFORM=discord, DISCORD_*, BAND_*, WHISPER_URL,
-                        #   QDRANT_COLLECTION=remy_memory, HEALTH_PORT=3002
+.env                    # shared: COMPOSE_PROFILES=discord (default), provider keys,
+                        #   MONITORING_TOKEN, QDRANT_URL, VECTOR_*, APP_VERSION, LOG_LEVEL,
+                        #   OLLAMA_BASE_URL, METRICS_ENABLED
+.env.discord            # DISCORD_* app vars, BAND_FEATURES_ENABLED, WHISPER_URL,
+                        #   QDRANT_COLLECTION (e.g. remy_memory), (HEALTH_PORT=3002 set in compose)
+.env.whatsapp           # OWNER_JID, BOT_PHONE_NUMBER, WHATSAPP_* (incl. WHATSAPP_LOGIN_TOKEN)
 
-docker-compose.yml      # ALL services, profile-gated:
-  qdrant     profiles [whatsapp, remy]     volume garbanzo-bot-qdrant (name preserved)
-  garbanzo   profiles [whatsapp]  env_file [.env, .env.whatsapp]  port 3001
-             vols garbanzo-bot-auth (Baileys auth — MUST keep name; owner keeps his linked
-             WhatsApp session across the redeploy) + garbanzo-bot-data (preserved)
-  remy       profiles [remy]      env_file [.env, .env.remy]      port 3002  vol garbanzo-bot-remy-data (preserved)
-  prometheus profiles [monitoring]  scrapes garbanzo:3001 + remy:3002 w/ MONITORING_TOKEN
-  grafana    profiles [monitoring]  password GRAFANA_ADMIN_PASSWORD ?? MONITORING_TOKEN
+docker-compose.yml      # ALL services, profile-gated (COMPOSE_PROFILES selects):
+  qdrant      profiles [discord, whatsapp]   vol name garbanzo-bot-qdrant (preserved)
+  discord     profiles [discord]   container garbanzo-discord   port 3002
+              env_file [.env, .env.discord]  MESSAGING_PLATFORM=discord pinned
+              vol name garbanzo-bot-remy-data (preserved)
+  whatsapp    profiles [whatsapp]  container garbanzo-whatsapp  port 3001
+              env_file [.env, .env.whatsapp] MESSAGING_PLATFORM=whatsapp pinned
+              vols garbanzo-bot-auth (Baileys session — MUST keep name; owner keeps his
+              linked WhatsApp across the redeploy) + garbanzo-bot-data (preserved)
+  prometheus  profiles [monitoring]  scrapes discord:3002 + whatsapp:3001 w/ MONITORING_TOKEN
+  grafana     profiles [monitoring]  password GRAFANA_ADMIN_PASSWORD ?? MONITORING_TOKEN
 
-src/utils/config/       # modular schema (barrel: config.ts re-exports, call sites unchanged)
-  core.ts ai.ts whatsapp.ts discord.ts band.ts vector.ts monitoring.ts integrations.ts
-  shared.ts             # optionalString / optionalUrl / booleanFromEnv helpers
+src/utils/config/       # modular schema (config.ts stays as re-export shim; call sites untouched)
+  shared.ts core.ts ai.ts whatsapp.ts discord.ts band.ts vector.ts monitoring.ts integrations.ts
 ```
 
 Deployment shapes (all `docker compose up -d` after setting `COMPOSE_PROFILES`):
-`whatsapp` · `remy` · `whatsapp,remy` · any + `,monitoring`. Prod/dev overlays continue to layer on top.
+`discord` (shipped default) · `whatsapp` · `discord,whatsapp` · any + `,monitoring`. Prod/dev overlays continue to layer on top.
 
 ## Migration (owner-facing, one swoop)
 
-1. `docker compose down` the old stack (volumes remain).
-2. Rebuild env files from kept copies: shared values → `.env` (+ new `MONITORING_TOKEN`, `COMPOSE_PROFILES=whatsapp,remy,monitoring`), WhatsApp-specific → `.env.whatsapp`, Remy values → `.env.remy` (drop the `OWNER_JID` placeholder, provider keys, Qdrant/embedding lines — now inherited).
-3. `docker compose up -d`. Volumes reattach; WhatsApp auth, both DBs, and vectors are intact.
-A `docs/MIGRATION-2.0.md` walks this with a checklist.
+1. `docker compose down` the old stack (volumes remain, WhatsApp session included).
+2. Rebuild env files from kept copies: shared values → `.env` (+ `MONITORING_TOKEN`, `COMPOSE_PROFILES=discord,whatsapp,monitoring`), old `.env.remy` values → `.env.discord` (minus the now-inherited provider/vector keys and the dead `OWNER_JID` placeholder), WhatsApp-specific values → `.env.whatsapp`.
+3. `docker compose up -d`. Volumes reattach; auth, both DBs, vectors, dashboards intact.
+`docs/MIGRATION-2.0.md` walks this with a checklist, including the explicit old→new env-file mapping table.
 
 ## Error handling / degradation
 
-- Missing instance env file → compose `required: false` tolerates it; the profile simply shouldn't be enabled (documented).
-- `MONITORING_TOKEN` unset: bot generates a per-run token (as today) → `/admin`/`/metrics` gated but unscrapeable; prometheus/grafana entrypoints refuse to start with a clear message naming `MONITORING_TOKEN`. Metrics-off deployments unaffected.
-- Config validation failures keep the current fail-fast behavior with the same message quality; platform-conditional checks name the platform in the error.
+- Missing instance env file → `required: false` tolerates it (don't enable that profile; documented).
+- `MONITORING_TOKEN` unset: bot generates per-run token (as today) → `/admin`/`/metrics` gated but unscrapeable; prometheus/grafana refuse to start with messages naming `MONITORING_TOKEN`. Metrics-off deployments unaffected.
+- Config validation stays fail-fast; platform-conditional errors name the platform.
 
 ## Testing
 
-- Schema split: full existing suite must stay green (behavior-preserving); new unit tests for `optionalString` keys (`VAR=""` ≡ unset), platform-conditional `OWNER_JID`, `MONITORING_TOKEN` resolution.
-- Compose: extend `tests/remy-compose.test.ts` → parse the single file; assert profiles per service, env_file layering, volume names PRESERVED (`garbanzo-bot-*`), qdrant profile union, scrape/grafana entrypoints reference `MONITORING_TOKEN` and not `WHATSAPP_LOGIN_TOKEN`; `docker compose config` run for each documented profile combo when docker is available.
-- Dashboard: JSON test asserting the `job` template variable exists and every panel expr carries a `job` selector.
-- Startup: persona-name extraction unit test (Remy vs Garbanzo Bean vs fallback).
-- Wizard: `setup-fields`/resolver tests extended for `MONITORING_TOKEN` + split-file emission.
-- Prompt-eval set untouched (no persona/tool changes beyond logging).
+- Schema: suite stays green; new tests for `optionalString` semantics, platform-conditional `OWNER_JID`, `MESSAGING_PLATFORM` default `discord`, `MONITORING_TOKEN` parse.
+- Compose: parse-based tests — profiles per service, env_file layering (`required:false`), **all six volume `name:`s byte-identical** (the auth-preservation gate), `MESSAGING_PLATFORM` pinned per bot service, no `WHATSAPP_LOGIN_TOKEN` in monitoring entrypoints; `docker compose config -q` per profile combo when docker is available.
+- Dashboard: `job` template var exists; no panel expr touches `garbanzo_*` without a `job=~` selector.
+- Persona: `getPersonaName()` for Remy-style / Garbanzo-style / missing-file cases; distilled identity uses the derived name; prompt-eval set re-run (persona.ts changes).
+- Wizard: field resolution + split-file emission tests.
 
 ## Docs impact
 
-README (quick start: `COMPOSE_PROFILES` model), docs/MONITORING.md (token rename, remy job, `$job` var), docs/CONFIGURATION.md (layered env files, new/renamed keys), docs/REMY_DEPLOY.md (rewrite: no more `-f` overlay), docs/PLATFORMS.md, `.env.example` + `.env.whatsapp.example` + `.env.remy.example`, DOCKERHUB_OVERVIEW.md, AGENTS.md Decisions Log (token model + profile model), CHANGELOG (breaking-changes section), new docs/MIGRATION-2.0.md.
+README (Discord-first quick start, `COMPOSE_PROFILES` model, WhatsApp positioned as unofficial-API path — plain register per public-copy rules), docs/PLATFORMS.md (ordering + ToS note), docs/MONITORING.md, docs/CONFIGURATION.md, docs/REMY_DEPLOY.md → superseded by the new model (band mode documented under the Discord platform docs; file replaced with a pointer or folded in), `.env.example` + `.env.discord.example` + `.env.whatsapp.example`, DOCKERHUB_OVERVIEW.md, AGENTS.md Decisions Log (platform default flip, token model, profile model, persona-name model — replaces the PR #209 Grafana note and amends "WhatsApp is production"), CHANGELOG breaking section, new docs/MIGRATION-2.0.md.
 
-## Open questions (defaults chosen; owner can redirect)
+## Resolved questions (owner-directed)
 
-1. `COMPOSE_PROFILES` default in `.env.example` → proposing `whatsapp` (preserves the community-bot golden path for new users).
-2. Version → proposing **2.0.0** (breaking config/deploy contract).
-3. `docker-compose.aws.yml` → keep loading against the new base but otherwise untouched (not re-validated end-to-end).
+1. First-class platform/default: **Discord** (`MESSAGING_PLATFORM` default, `COMPOSE_PROFILES=discord` shipped default, docs lead with it).
+2. Infra naming: **platform names only** — `remy` survives solely as data (`garbanzo-bot-remy-data` volume name, `remy_memory` collection value) and as the owner's persona content.
+3. Persona identity: **file-driven** via `getPersonaName()`; no new env var.
+4. Version: **2.0.0**.
