@@ -89,6 +89,26 @@ export interface Availability {
   respondedAt: number;
 }
 
+export interface Setlist {
+  id: number;
+  name: string;
+  notes: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SetlistSong {
+  id: number;
+  setlistId: number;
+  songId: number;
+  position: number;
+}
+
+export interface SetlistEntry {
+  position: number;
+  song: Song;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

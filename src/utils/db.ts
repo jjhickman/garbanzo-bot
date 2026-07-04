@@ -25,6 +25,9 @@ export type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -166,6 +169,16 @@ export const markRehearsalReminderSent = backend.markRehearsalReminderSent;
 // Availability (per-rehearsal band member RSVPs)
 export const setAvailability = backend.setAvailability;
 export const listAvailability = backend.listAvailability;
+
+// Setlists (ordered song lists referencing shared band songs)
+export const addSetlist = backend.addSetlist;
+export const getSetlistByName = backend.getSetlistByName;
+export const listSetlists = backend.listSetlists;
+export const deleteSetlist = backend.deleteSetlist;
+export const addSongToSetlist = backend.addSongToSetlist;
+export const removeSongFromSetlist = backend.removeSongFromSetlist;
+export const moveSetlistSong = backend.moveSetlistSong;
+export const getSetlistSongs = backend.getSetlistSongs;
 
 // Lifecycle
 export const closeDb = backend.closeDb;

@@ -189,3 +189,25 @@ CREATE TABLE IF NOT EXISTS availability (
   responded_at BIGINT NOT NULL,
   UNIQUE(rehearsal_id, member_id)
 );
+
+CREATE TABLE IF NOT EXISTS setlists (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  notes TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_setlists_name_lower
+  ON setlists (lower(name));
+
+CREATE TABLE IF NOT EXISTS setlist_songs (
+  id BIGSERIAL PRIMARY KEY,
+  setlist_id BIGINT NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  UNIQUE(setlist_id, position)
+);
+
+CREATE INDEX IF NOT EXISTS idx_setlist_songs_setlist
+  ON setlist_songs (setlist_id);

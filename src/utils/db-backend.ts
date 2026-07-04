@@ -14,6 +14,9 @@ import type {
   NewEventReminder,
   Rehearsal,
   RehearsalStatus,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -123,6 +126,16 @@ export interface DbBackend {
   // Availability (per-rehearsal band member RSVPs)
   setAvailability(rehearsalId: number, memberId: string, memberName: string | null, response: AvailabilityResponse): Promise<Availability>;
   listAvailability(rehearsalId: number): Promise<Availability[]>;
+
+  // Setlists (ordered song lists referencing shared band songs)
+  addSetlist(input: { name: string; notes?: string | null }): Promise<Setlist>;
+  getSetlistByName(name: string): Promise<Setlist | undefined>;
+  listSetlists(): Promise<Setlist[]>;
+  deleteSetlist(id: number): Promise<boolean>;
+  addSongToSetlist(setlistId: number, songId: number, position?: number): Promise<SetlistSong>;
+  removeSongFromSetlist(setlistId: number, songId: number): Promise<boolean>;
+  moveSetlistSong(setlistId: number, songId: number, newPosition: number): Promise<boolean>;
+  getSetlistSongs(setlistId: number): Promise<SetlistEntry[]>;
 
   // Lifecycle
   closeDb(): Promise<void>;

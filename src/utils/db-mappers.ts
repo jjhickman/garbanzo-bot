@@ -11,6 +11,9 @@ import type {
   Rehearsal,
   RehearsalStatus,
   SessionSummaryHit,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -117,6 +120,26 @@ export interface AvailabilityRow {
   member_name: string | null;
   response: AvailabilityResponse;
   responded_at: DbNumeric | null;
+}
+
+export interface SetlistRow {
+  id: DbNumeric | null;
+  name: string;
+  notes: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
+}
+
+export interface SetlistSongRow {
+  id: DbNumeric | null;
+  setlist_id: DbNumeric | null;
+  song_id: DbNumeric | null;
+  position: DbNumeric | null;
+}
+
+/** A setlist_songs row JOINed with its referenced songs row (position + full song columns). */
+export interface SetlistEntryRow extends SongRow {
+  position: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -270,6 +293,32 @@ export function mapAvailability(row: AvailabilityRow): Availability {
     memberName: row.member_name,
     response: row.response,
     respondedAt: toNumber(row.responded_at),
+  };
+}
+
+export function mapSetlist(row: SetlistRow): Setlist {
+  return {
+    id: toNumber(row.id),
+    name: row.name,
+    notes: row.notes,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapSetlistSong(row: SetlistSongRow): SetlistSong {
+  return {
+    id: toNumber(row.id),
+    setlistId: toNumber(row.setlist_id),
+    songId: toNumber(row.song_id),
+    position: toNumber(row.position),
+  };
+}
+
+export function mapSetlistEntry(row: SetlistEntryRow): SetlistEntry {
+  return {
+    position: toNumber(row.position),
+    song: mapSong(row),
   };
 }
 

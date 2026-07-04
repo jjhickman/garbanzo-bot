@@ -21,6 +21,9 @@ import {
   mapMemoryEntry,
   mapRehearsal,
   mapSessionSummaryHit,
+  mapSetlist,
+  mapSetlistEntry,
+  mapSetlistSong,
   mapSong,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
@@ -33,6 +36,9 @@ import {
   type MessageRow,
   type RehearsalRow,
   type SessionSummaryRow,
+  type SetlistEntryRow,
+  type SetlistRow,
+  type SetlistSongRow,
   type SongRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
@@ -62,6 +68,9 @@ import type {
   Rehearsal,
   RehearsalStatus,
   SessionSummaryHit,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -317,6 +326,39 @@ const selectAvailabilityByRehearsalAndMember = db.prepare(
 );
 const selectAvailabilityByRehearsal = db.prepare(
   `SELECT * FROM availability WHERE rehearsal_id = ? ORDER BY response ASC, responded_at ASC`,
+);
+const insertSetlist = db.prepare(
+  `INSERT INTO setlists (name, notes, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+);
+const selectSetlistById = db.prepare(`SELECT * FROM setlists WHERE id = ?`);
+const selectSetlistByNameLower = db.prepare(`SELECT * FROM setlists WHERE lower(name) = lower(?)`);
+const selectAllSetlists = db.prepare(`SELECT * FROM setlists ORDER BY name ASC`);
+const deleteSetlistById = db.prepare(`DELETE FROM setlists WHERE id = ?`);
+const insertSetlistSong = db.prepare(
+  `INSERT INTO setlist_songs (setlist_id, song_id, position) VALUES (?, ?, ?)`,
+);
+const selectSetlistSongById = db.prepare(`SELECT * FROM setlist_songs WHERE id = ?`);
+const selectMaxSetlistSongPosition = db.prepare(
+  `SELECT MAX(position) AS maxPosition FROM setlist_songs WHERE setlist_id = ?`,
+);
+const selectSetlistSongBySetlistAndSong = db.prepare(
+  `SELECT * FROM setlist_songs WHERE setlist_id = ? AND song_id = ?`,
+);
+const selectSetlistSongsOrdered = db.prepare(
+  `SELECT * FROM setlist_songs WHERE setlist_id = ? ORDER BY position ASC`,
+);
+const deleteSetlistSongsBySetlist = db.prepare(`DELETE FROM setlist_songs WHERE setlist_id = ?`);
+const deleteSetlistSongsBySong = db.prepare(`DELETE FROM setlist_songs WHERE song_id = ?`);
+const deleteSetlistSongRow = db.prepare(
+  `DELETE FROM setlist_songs WHERE setlist_id = ? AND song_id = ?`,
+);
+const updateSetlistSongPosition = db.prepare(`UPDATE setlist_songs SET position = ? WHERE id = ?`);
+const selectSetlistEntriesJoined = db.prepare(
+  `SELECT setlist_songs.position AS position, songs.*
+   FROM setlist_songs
+   JOIN songs ON songs.id = setlist_songs.song_id
+   WHERE setlist_songs.setlist_id = ?
+   ORDER BY setlist_songs.position ASC`,
 );
 const insertWhatsAppOutboundJob = db.prepare(
   `INSERT INTO whatsapp_outbound_jobs
@@ -860,8 +902,14 @@ export function updateSong(
   return mapSong(selectSongById.get(id) as SongRow);
 }
 
-/** Delete a song by ID. */
+/**
+ * Delete a song by ID. Also removes any setlist_songs entries referencing it
+ * (sqlite does not run with `PRAGMA foreign_keys=ON`, so ON DELETE CASCADE on
+ * setlist_songs.song_id is inert here — this cleanup makes the DB layer
+ * correct without relying on that pragma).
+ */
 export function deleteSong(id: number): boolean {
+  deleteSetlistSongsBySong.run(id);
   return deleteSongById.run(id).changes > 0;
 }
 
@@ -963,6 +1011,92 @@ export function setAvailability(
 /** List all availability responses for a rehearsal, grouped by response then response time. */
 export function listAvailability(rehearsalId: number): Availability[] {
   return (selectAvailabilityByRehearsal.all(rehearsalId) as AvailabilityRow[]).map(mapAvailability);
+}
+
+// ── Public API: Setlists (ordered song lists referencing shared songs) ─────
+
+export interface NewSetlist {
+  name: string;
+  notes?: string | null;
+}
+
+/** Add a new setlist. */
+export function addSetlist(input: NewSetlist): Setlist {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertSetlist.run(input.name, input.notes ?? null, ts, ts);
+  return mapSetlist(selectSetlistById.get(result.lastInsertRowid) as SetlistRow);
+}
+
+/** Get a setlist by name (case-insensitive). */
+export function getSetlistByName(name: string): Setlist | undefined {
+  const row = selectSetlistByNameLower.get(name) as SetlistRow | undefined;
+  return row ? mapSetlist(row) : undefined;
+}
+
+/** List all setlists, alphabetically by name. */
+export function listSetlists(): Setlist[] {
+  return (selectAllSetlists.all() as SetlistRow[]).map(mapSetlist);
+}
+
+/** Delete a setlist and its setlist_songs entries. */
+export function deleteSetlist(id: number): boolean {
+  deleteSetlistSongsBySetlist.run(id);
+  return deleteSetlistById.run(id).changes > 0;
+}
+
+/**
+ * Reassign positions 1..N (in the given order) for a setlist's songs.
+ * Uses a negative-position intermediate pass first: setlist_songs has a
+ * UNIQUE(setlist_id, position) constraint, so writing final positions
+ * directly can collide with a row's current position mid-sequence.
+ */
+const reassignSetlistSongPositions = db.transaction((rows: SetlistSongRow[]): void => {
+  rows.forEach((row, index) => {
+    updateSetlistSongPosition.run(-(index + 1), row.id);
+  });
+  rows.forEach((row, index) => {
+    updateSetlistSongPosition.run(index + 1, row.id);
+  });
+});
+
+/** Add a song to a setlist. Appends to the end (max position + 1) when no position is given. */
+export function addSongToSetlist(setlistId: number, songId: number, position?: number): SetlistSong {
+  let pos = position;
+  if (pos === undefined) {
+    const row = selectMaxSetlistSongPosition.get(setlistId) as { maxPosition: number | null };
+    pos = (row.maxPosition ?? 0) + 1;
+  }
+  const result = insertSetlistSong.run(setlistId, songId, pos);
+  return mapSetlistSong(selectSetlistSongById.get(result.lastInsertRowid) as SetlistSongRow);
+}
+
+/** Remove a song from a setlist, then re-close position gaps so 1..N stays contiguous. */
+export function removeSongFromSetlist(setlistId: number, songId: number): boolean {
+  const removed = deleteSetlistSongRow.run(setlistId, songId).changes > 0;
+  if (removed) {
+    const rows = selectSetlistSongsOrdered.all(setlistId) as SetlistSongRow[];
+    reassignSetlistSongPositions(rows);
+  }
+  return removed;
+}
+
+/** Move a song within a setlist to a new 1-based position, reordering the rest. */
+export function moveSetlistSong(setlistId: number, songId: number, newPosition: number): boolean {
+  const target = selectSetlistSongBySetlistAndSong.get(setlistId, songId) as SetlistSongRow | undefined;
+  if (!target) return false;
+
+  const rows = selectSetlistSongsOrdered.all(setlistId) as SetlistSongRow[];
+  const clampedPosition = Math.max(1, Math.min(newPosition, rows.length));
+  const reordered = rows.filter((row) => row.id !== target.id);
+  reordered.splice(clampedPosition - 1, 0, target);
+
+  reassignSetlistSongPositions(reordered);
+  return true;
+}
+
+/** Get a setlist's songs, JOINed with their song data, ordered by position. */
+export function getSetlistSongs(setlistId: number): SetlistEntry[] {
+  return (selectSetlistEntriesJoined.all(setlistId) as SetlistEntryRow[]).map(mapSetlistEntry);
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────
@@ -1107,6 +1241,18 @@ export function createSqliteBackend(): DbBackend {
       response: AvailabilityResponse,
     ) => setAvailability(rehearsalId, memberId, memberName, response),
     listAvailability: async (rehearsalId: number) => listAvailability(rehearsalId),
+
+    addSetlist: async (input: NewSetlist) => addSetlist(input),
+    getSetlistByName: async (name: string) => getSetlistByName(name),
+    listSetlists: async () => listSetlists(),
+    deleteSetlist: async (id: number) => deleteSetlist(id),
+    addSongToSetlist: async (setlistId: number, songId: number, position?: number) =>
+      addSongToSetlist(setlistId, songId, position),
+    removeSongFromSetlist: async (setlistId: number, songId: number) =>
+      removeSongFromSetlist(setlistId, songId),
+    moveSetlistSong: async (setlistId: number, songId: number, newPosition: number) =>
+      moveSetlistSong(setlistId, songId, newPosition),
+    getSetlistSongs: async (setlistId: number) => getSetlistSongs(setlistId),
 
     closeDb: async (): Promise<void> => {
       closeDb();

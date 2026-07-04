@@ -18,6 +18,9 @@ import {
   mapMemberProfile,
   mapRehearsal,
   mapSessionSummaryHit,
+  mapSetlist,
+  mapSetlistEntry,
+  mapSetlistSong,
   mapSong,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
@@ -31,6 +34,9 @@ import {
   type ProfileRow,
   type RehearsalRow,
   type SessionSummaryRow,
+  type SetlistEntryRow,
+  type SetlistRow,
+  type SetlistSongRow,
   type SongRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
@@ -63,6 +69,9 @@ import type {
   Rehearsal,
   RehearsalStatus,
   SessionSummaryHit,
+  Setlist,
+  SetlistEntry,
+  SetlistSong,
   Song,
   SongStatus,
   StrikeSummary,
@@ -92,6 +101,8 @@ const REQUIRED_CORE_TABLES = [
   'songs',
   'rehearsals',
   'availability',
+  'setlists',
+  'setlist_songs',
 ] as const;
 
 interface DbCountRow {
@@ -436,6 +447,32 @@ export async function createPostgresBackend(): Promise<DbBackend> {
   };
 
   const scheduler = createMaintenanceScheduler(backupDatabase, runMaintenance);
+
+  /**
+   * Reassign positions 1..N (in the given order) for a setlist's songs.
+   * Uses a negative-position intermediate pass first: setlist_songs has a
+   * UNIQUE(setlist_id, position) constraint, so writing final positions
+   * directly can collide with a row's current position mid-sequence.
+   */
+  const reassignSetlistSongPositions = async (rows: SetlistSongRow[]): Promise<void> => {
+    if (rows.length === 0) return;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [index, row] of rows.entries()) {
+        await client.query('UPDATE setlist_songs SET position = $1 WHERE id = $2', [-(index + 1), row.id]);
+      }
+      for (const [index, row] of rows.entries()) {
+        await client.query('UPDATE setlist_songs SET position = $1 WHERE id = $2', [index + 1, row.id]);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  };
 
   return {
     async touchProfile(senderJid: string): Promise<void> {
@@ -1075,6 +1112,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     },
 
     async deleteSong(id: number): Promise<boolean> {
+      await pool.query('DELETE FROM setlist_songs WHERE song_id = $1', [id]);
       const res = await pool.query('DELETE FROM songs WHERE id = $1', [id]);
       return (res.rowCount ?? 0) > 0;
     },
@@ -1208,6 +1246,101 @@ export async function createPostgresBackend(): Promise<DbBackend> {
         [rehearsalId],
       );
       return res.rows.map(mapAvailability);
+    },
+
+    async addSetlist(input: { name: string; notes?: string | null }): Promise<Setlist> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SetlistRow>(
+        `INSERT INTO setlists (name, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $3)
+         RETURNING *`,
+        [input.name, input.notes ?? null, ts],
+      );
+      return mapSetlist(res.rows[0]);
+    },
+
+    async getSetlistByName(name: string): Promise<Setlist | undefined> {
+      const res = await pool.query<SetlistRow>('SELECT * FROM setlists WHERE lower(name) = lower($1)', [name]);
+      const row = res.rows[0];
+      return row ? mapSetlist(row) : undefined;
+    },
+
+    async listSetlists(): Promise<Setlist[]> {
+      const res = await pool.query<SetlistRow>('SELECT * FROM setlists ORDER BY name ASC');
+      return res.rows.map(mapSetlist);
+    },
+
+    async deleteSetlist(id: number): Promise<boolean> {
+      await pool.query('DELETE FROM setlist_songs WHERE setlist_id = $1', [id]);
+      const res = await pool.query('DELETE FROM setlists WHERE id = $1', [id]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async addSongToSetlist(setlistId: number, songId: number, position?: number): Promise<SetlistSong> {
+      let pos = position;
+      if (pos === undefined) {
+        const maxRes = await pool.query<{ maxposition: DbNumeric | null }>(
+          'SELECT MAX(position) AS maxposition FROM setlist_songs WHERE setlist_id = $1',
+          [setlistId],
+        );
+        pos = toNumber(maxRes.rows[0]?.maxposition ?? 0) + 1;
+      }
+      const res = await pool.query<SetlistSongRow>(
+        `INSERT INTO setlist_songs (setlist_id, song_id, position)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [setlistId, songId, pos],
+      );
+      return mapSetlistSong(res.rows[0]);
+    },
+
+    async removeSongFromSetlist(setlistId: number, songId: number): Promise<boolean> {
+      const res = await pool.query(
+        'DELETE FROM setlist_songs WHERE setlist_id = $1 AND song_id = $2',
+        [setlistId, songId],
+      );
+      const removed = (res.rowCount ?? 0) > 0;
+      if (removed) {
+        const rowsRes = await pool.query<SetlistSongRow>(
+          'SELECT * FROM setlist_songs WHERE setlist_id = $1 ORDER BY position ASC',
+          [setlistId],
+        );
+        await reassignSetlistSongPositions(rowsRes.rows);
+      }
+      return removed;
+    },
+
+    async moveSetlistSong(setlistId: number, songId: number, newPosition: number): Promise<boolean> {
+      const targetRes = await pool.query<SetlistSongRow>(
+        'SELECT * FROM setlist_songs WHERE setlist_id = $1 AND song_id = $2',
+        [setlistId, songId],
+      );
+      const target = targetRes.rows[0];
+      if (!target) return false;
+
+      const allRes = await pool.query<SetlistSongRow>(
+        'SELECT * FROM setlist_songs WHERE setlist_id = $1 ORDER BY position ASC',
+        [setlistId],
+      );
+      const rows = allRes.rows;
+      const clampedPosition = Math.max(1, Math.min(newPosition, rows.length));
+      const reordered = rows.filter((row) => toNumber(row.id) !== toNumber(target.id));
+      reordered.splice(clampedPosition - 1, 0, target);
+
+      await reassignSetlistSongPositions(reordered);
+      return true;
+    },
+
+    async getSetlistSongs(setlistId: number): Promise<SetlistEntry[]> {
+      const res = await pool.query<SetlistEntryRow>(
+        `SELECT setlist_songs.position AS position, songs.*
+         FROM setlist_songs
+         JOIN songs ON songs.id = setlist_songs.song_id
+         WHERE setlist_songs.setlist_id = $1
+         ORDER BY setlist_songs.position ASC`,
+        [setlistId],
+      );
+      return res.rows.map(mapSetlistEntry);
     },
 
     async closeDb(): Promise<void> {
