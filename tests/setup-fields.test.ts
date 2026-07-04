@@ -1,6 +1,7 @@
 // Unit tests for the setup wizard's field table + resolvers. The module is pure
 // (no config import), so no env prefix is needed. tsconfig excludes tests/, so
 // importing the .mjs here is fine.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -18,6 +19,8 @@ import {
   resolveMessagingPlatform,
   DEFAULT_MESSAGING_PLATFORM,
   mergeExistingEnvForPlatform,
+  buildPlatformEnvLines,
+  buildSharedEnvLines,
   redactEnvContent,
   promptFieldEnvsForPlatform,
   emittedKeysForPlatform,
@@ -28,6 +31,12 @@ import {
 
 function cli(options: Record<string, string>): { options: Record<string, string>; flags: Set<string> } {
   return { options, flags: new Set<string>() };
+}
+
+function envKeysFromLines(lines: string[]): string[] {
+  return lines
+    .map((line) => line.match(/^([A-Z0-9_]+)=/)?.[1])
+    .filter((key): key is string => Boolean(key));
 }
 
 describe('setup field resolver', () => {
@@ -194,13 +203,20 @@ describe('setup field resolver', () => {
     expect(promptFieldEnvsForPlatform('whatsapp')).toEqual(WHATSAPP_FIELDS.map((field) => field.env));
   });
 
-  it('documents and partitions the actual emitted env key sets', () => {
+  it('builds and partitions the actual emitted env line sets from one source', () => {
+    const sharedKeys = envKeysFromLines(buildSharedEnvLines({}));
+    const discordPlatformKeys = envKeysFromLines(buildPlatformEnvLines('discord', {}));
+    const whatsappPlatformKeys = envKeysFromLines(buildPlatformEnvLines('whatsapp', {}));
     const discordKeys = emittedKeysForPlatform('discord');
     const whatsappKeys = emittedKeysForPlatform('whatsapp');
 
     expect(new Set(discordKeys.sharedKeys).size).toBe(discordKeys.sharedKeys.length);
     expect(new Set(discordKeys.platformKeys).size).toBe(discordKeys.platformKeys.length);
     expect(new Set(whatsappKeys.platformKeys).size).toBe(whatsappKeys.platformKeys.length);
+    expect(discordKeys.sharedKeys).toEqual(sharedKeys);
+    expect(whatsappKeys.sharedKeys).toEqual(sharedKeys);
+    expect(discordKeys.platformKeys).toEqual(discordPlatformKeys);
+    expect(whatsappKeys.platformKeys).toEqual(whatsappPlatformKeys);
 
     const discordIntersection = discordKeys.sharedKeys.filter((key) => discordKeys.platformKeys.includes(key));
     const whatsappIntersection = whatsappKeys.sharedKeys.filter((key) => whatsappKeys.platformKeys.includes(key));
@@ -227,6 +243,18 @@ describe('setup field resolver', () => {
       expect(discordKeys.platformKeys).toContain(key);
       expect(whatsappKeys.sharedKeys).not.toContain(key);
     }
+
+    const sharedPreview = buildSharedEnvLines({ MONITORING_TOKEN: 'real-generated-monitoring-token' }).join('\n');
+    expect(redactEnvContent(sharedPreview)).toContain('MONITORING_TOKEN=[REDACTED]');
+    expect(redactEnvContent(sharedPreview)).not.toContain('real-generated-monitoring-token');
+  });
+
+  it('has the setup wizard emit env files through the shared line builders', () => {
+    const setupSource = readFileSync(new URL('../scripts/setup.mjs', import.meta.url), 'utf-8');
+
+    expect(setupSource).toMatch(/buildSharedEnvLines\(finalEnv\)\.join\('\\n'\)/);
+    expect(setupSource).toMatch(/buildPlatformEnvLines\('discord', finalEnv\)\.join\('\\n'\)/);
+    expect(setupSource).toMatch(/buildPlatformEnvLines\('whatsapp', finalEnv\)\.join\('\\n'\)/);
   });
 
   it('resolves the non-interactive messaging platform with a discord default', () => {
