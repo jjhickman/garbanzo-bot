@@ -85,22 +85,23 @@ export function formatIdeaLine(idea: SongIdea): string {
 export async function fetchAndTranscribe(url: string, contentType: string): Promise<string | null> {
   try {
     const controller = new AbortController();
+    // The timeout must bound the whole download (request + body read), not just
+    // the initial response — aborting the signal cancels an in-flight
+    // arrayBuffer() too, so clear it only after the body is fully read.
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    let response: Response;
+    let buffer: Buffer;
     try {
-      response = await fetch(url, { signal: controller.signal });
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        logger.warn({ url, status: response.status }, 'Song idea audio fetch failed');
+        return null;
+      }
+      buffer = Buffer.from(await response.arrayBuffer());
     } finally {
       clearTimeout(timeout);
     }
 
-    if (!response.ok) {
-      logger.warn({ url, status: response.status }, 'Song idea audio fetch failed');
-      return null;
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     return await transcribeAudio(buffer, contentType);
   } catch (err) {
     logger.warn({ err, url }, 'Song idea audio fetch/transcription failed');
