@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
  * Band memory — songs table CRUD (sqlite backend, real db via the shared
@@ -80,18 +80,30 @@ describe('Songs — shared band memory', async () => {
   });
 
   it('updates only the provided fields and bumps updatedAt', async () => {
-    const created = await addSong({ title: 'Patchwork Melody', key: 'C', tempo: 100, notes: 'draft' });
+    // updatedAt is stored in unix seconds, so a same-second create+update pair
+    // would pass a `>= createdAt` check even if the bump logic were removed
+    // entirely. Freeze the clock, capture the pre-update timestamp, then jump
+    // forward a full second before updating so a missing bump is caught.
+    vi.useFakeTimers();
+    try {
+      const created = await addSong({ title: 'Patchwork Melody', key: 'C', tempo: 100, notes: 'draft' });
+      const preUpdateUpdatedAt = created.updatedAt;
 
-    const updated = await updateSong(created.id, { tempo: 140, status: 'tight' });
+      vi.advanceTimersByTime(1_500);
 
-    expect(updated).toBeDefined();
-    expect(updated?.title).toBe('Patchwork Melody');
-    expect(updated?.key).toBe('C');
-    expect(updated?.tempo).toBe(140);
-    expect(updated?.status).toBe('tight');
-    expect(updated?.notes).toBe('draft');
-    expect(updated?.createdAt).toBe(created.createdAt);
-    expect(updated?.updatedAt).toBeGreaterThanOrEqual(created.createdAt);
+      const updated = await updateSong(created.id, { tempo: 140, status: 'tight' });
+
+      expect(updated).toBeDefined();
+      expect(updated?.title).toBe('Patchwork Melody');
+      expect(updated?.key).toBe('C');
+      expect(updated?.tempo).toBe(140);
+      expect(updated?.status).toBe('tight');
+      expect(updated?.notes).toBe('draft');
+      expect(updated?.createdAt).toBe(created.createdAt);
+      expect(updated?.updatedAt).toBeGreaterThan(preUpdateUpdatedAt);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns undefined when updating a missing song', async () => {

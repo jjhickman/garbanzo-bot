@@ -151,7 +151,8 @@ CREATE TABLE IF NOT EXISTS songs (
   title TEXT NOT NULL,
   song_key TEXT,
   tempo INTEGER,
-  status TEXT NOT NULL DEFAULT 'idea',
+  status TEXT NOT NULL DEFAULT 'idea'
+    CHECK (status IN ('idea', 'rough', 'tight', 'gig-ready')),
   notes TEXT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL

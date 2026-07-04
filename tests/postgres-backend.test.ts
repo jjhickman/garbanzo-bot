@@ -36,7 +36,7 @@ describePostgres('Postgres backend parity', () => {
 
   beforeEach(async () => {
     await client.query(
-      'TRUNCATE TABLE feedback, moderation_log, conversation_sessions, messages, memory, member_profiles, daily_stats, whatsapp_outbound_jobs, whatsapp_safety_state RESTART IDENTITY CASCADE',
+      'TRUNCATE TABLE feedback, moderation_log, conversation_sessions, messages, memory, member_profiles, daily_stats, whatsapp_outbound_jobs, whatsapp_safety_state, songs RESTART IDENTITY CASCADE',
     );
     await client.query(
       `INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
@@ -148,6 +148,57 @@ describePostgres('Postgres backend parity', () => {
     const sessionHits = await db.searchRelevantSessionSummaries(chatJid, 'Any trivia plans in Cambridge?', 2);
     expect(sessionHits.length).toBeGreaterThan(0);
     expect(sessionHits[0]?.summaryText).toContain('trivia');
+  });
+
+  it('supports song storage, case-insensitive lookup, status filtering, and bump-on-update', async () => {
+    const idea = await db.addSong({ title: 'Postgres Test Song' });
+    expect(idea.status).toBe('idea');
+    expect(idea.key).toBeNull();
+    expect(idea.tempo).toBeNull();
+    expect(idea.notes).toBeNull();
+    expect(idea.createdAt).toBeGreaterThan(0);
+    expect(idea.updatedAt).toBeGreaterThan(0);
+
+    const gigReady = await db.addSong({
+      title: 'Postgres Gig Ready Song',
+      key: 'D',
+      tempo: 128,
+      status: 'gig-ready',
+      notes: 'ready to play',
+    });
+    expect(gigReady.status).toBe('gig-ready');
+
+    const foundByTitle = await db.getSongByTitle('postgres test song');
+    expect(foundByTitle?.id).toBe(idea.id);
+    expect(await db.getSongByTitle('POSTGRES TEST SONG')).toEqual(foundByTitle);
+    expect(await db.getSongByTitle('no such postgres song, sorry')).toBeUndefined();
+
+    const all = await db.listSongs();
+    expect(all.map((song) => song.id)).toEqual(expect.arrayContaining([idea.id, gigReady.id]));
+
+    const gigReadyOnly = await db.listSongs('gig-ready');
+    expect(gigReadyOnly.map((song) => song.id)).toContain(gigReady.id);
+    expect(gigReadyOnly.every((song) => song.status === 'gig-ready')).toBe(true);
+    expect(gigReadyOnly.map((song) => song.id)).not.toContain(idea.id);
+
+    const preUpdateUpdatedAt = idea.updatedAt;
+    // updated_at is unix seconds; wait past the second boundary so a missing
+    // bump wouldn't be masked by two calls landing in the same second.
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_100));
+
+    const updated = await db.updateSong(idea.id, { tempo: 132, status: 'tight' });
+    expect(updated).toBeDefined();
+    expect(updated?.title).toBe('Postgres Test Song');
+    expect(updated?.key).toBeNull();
+    expect(updated?.tempo).toBe(132);
+    expect(updated?.status).toBe('tight');
+    expect(updated?.notes).toBeNull();
+    expect(updated?.createdAt).toBe(idea.createdAt);
+    expect(updated?.updatedAt).toBeGreaterThan(preUpdateUpdatedAt);
+
+    expect(await db.deleteSong(idea.id)).toBe(true);
+    expect(await db.getSongById(idea.id)).toBeUndefined();
+    expect(await db.deleteSong(999_999_999)).toBe(false);
   });
 
   it('runs maintenance and reports backup integrity status', async () => {

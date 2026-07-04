@@ -202,7 +202,8 @@ db.exec(`
     title TEXT NOT NULL,
     song_key TEXT,
     tempo INTEGER,
-    status TEXT NOT NULL DEFAULT 'idea',
+    status TEXT NOT NULL DEFAULT 'idea'
+      CHECK (status IN ('idea', 'rough', 'tight', 'gig-ready')),
     notes TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
