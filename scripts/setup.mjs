@@ -8,12 +8,16 @@ import { execSync } from 'node:child_process';
 
 import {
   DISCORD_FIELDS,
+  WHATSAPP_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
   resolveMessagingPlatform,
+  mergeExistingEnvForPlatform,
   generateMonitoringToken,
   resolveComposeProfiles,
+  redactEnvContent,
+  NATIVE_RUN_DEFAULT_SHARED_KEYS,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
 } from './setup-fields.mjs';
@@ -153,30 +157,6 @@ function sanitizeFeatureList(features) {
   return normalized;
 }
 
-function redactEnvContent(content) {
-  const redactPrefixes = [
-    'ANTHROPIC_API_KEY=',
-    'OPENROUTER_API_KEY=',
-    'OPENAI_API_KEY=',
-    'GEMINI_API_KEY=',
-    'BEDROCK_MODEL_ID=',
-    'GITHUB_ISSUES_TOKEN=',
-    'DISCORD_BOT_TOKEN=',
-    'OWNER_JID=',
-    'BOT_PHONE_NUMBER=',
-  ];
-
-  return content
-    .split('\n')
-    .map((line) => {
-      const prefix = redactPrefixes.find((candidate) => line.startsWith(candidate));
-      if (!prefix) return line;
-      const value = line.slice(prefix.length).trim();
-      return value ? `${prefix}[REDACTED]` : line;
-    })
-    .join('\n');
-}
-
 function yn(value, fallback = true) {
   if (!value) return fallback;
   const normalized = value.trim().toLowerCase();
@@ -241,7 +221,8 @@ async function main() {
   }
 
   const rl = createInterface({ input, output });
-  const existing = parseEnvFile(ENV_PATH);
+  const rootExisting = parseEnvFile(ENV_PATH);
+  let existing = rootExisting;
 
   // Resolve one FIELD_TABLE field: CLI/existing/default when non-interactive,
   // otherwise prompt with a hint (masked for secret fields — Sec-3).
@@ -295,6 +276,16 @@ async function main() {
             : 'discord';
     }
 
+    const platformEnvPath = messagingPlatform === 'discord'
+      ? ENV_DISCORD_PATH
+      : messagingPlatform === 'whatsapp'
+        ? ENV_WHATSAPP_PATH
+        : null;
+    existing = mergeExistingEnvForPlatform(
+      rootExisting,
+      platformEnvPath ? parseEnvFile(platformEnvPath) : {},
+    );
+
     let slackDemo = false;
     if (messagingPlatform === 'slack') {
       if (nonInteractive) {
@@ -308,6 +299,7 @@ async function main() {
     }
 
     const discordEnv = {};
+    const whatsappEnv = {};
     let bandDeployment = false;
     let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
     let shouldScaffoldDiscordChannels = false;
@@ -473,7 +465,15 @@ async function main() {
     const bedrockPricingOutputPerM = await resolveText('BEDROCK_PRICING_OUTPUT_PER_M');
 
     const ollamaBaseUrl = await resolveText('OLLAMA_BASE_URL');
-    const ownerJid = await resolveText('OWNER_JID');
+    if (messagingPlatform === 'whatsapp') {
+      for (const field of WHATSAPP_FIELDS) {
+        whatsappEnv[field.env] = await resolveText(field.env);
+      }
+      const requestedLoginMode = (whatsappEnv.WHATSAPP_LOGIN_MODE || 'web').trim().toLowerCase();
+      whatsappEnv.WHATSAPP_LOGIN_MODE = WHATSAPP_LOGIN_MODES.includes(requestedLoginMode)
+        ? requestedLoginMode
+        : 'web';
+    }
     const appVersion = nonInteractive
       ? (cli.options['app-version'] ?? existing.APP_VERSION ?? DEFAULT_APP_VERSION)
       : await rl.question(`APP_VERSION [${existing.APP_VERSION ?? DEFAULT_APP_VERSION}]: `);
@@ -572,22 +572,6 @@ async function main() {
       }
     }
 
-    let whatsappLoginMode = existing.WHATSAPP_LOGIN_MODE ?? 'web';
-    if (messagingPlatform === 'whatsapp') {
-      if (nonInteractive) {
-        const requested = (cli.options['whatsapp-login-mode'] ?? existing.WHATSAPP_LOGIN_MODE ?? 'web').trim().toLowerCase();
-        whatsappLoginMode = WHATSAPP_LOGIN_MODES.includes(requested) ? requested : 'web';
-      } else {
-        const loginIndex = await promptChoice(
-          rl,
-          'WhatsApp login mode:',
-          ['Browser page (default)', 'Terminal QR', 'Both'],
-          existing.WHATSAPP_LOGIN_MODE === 'terminal' ? 1 : existing.WHATSAPP_LOGIN_MODE === 'both' ? 2 : 0,
-        );
-        whatsappLoginMode = loginIndex === 1 ? 'terminal' : loginIndex === 2 ? 'both' : 'web';
-      }
-    }
-
     const ownerName = nonInteractive
       ? (cli.options['owner-name'] || 'Owner').trim()
       : (await rl.question('Owner display name [Owner]: ')).trim() || 'Owner';
@@ -616,7 +600,7 @@ async function main() {
       BEDROCK_MAX_TOKENS: String(bedrockMaxTokens || existing.BEDROCK_MAX_TOKENS || '1024').trim(),
       BEDROCK_PRICING_INPUT_PER_M: String(bedrockPricingInputPerM || existing.BEDROCK_PRICING_INPUT_PER_M || '0').trim(),
       BEDROCK_PRICING_OUTPUT_PER_M: String(bedrockPricingOutputPerM || existing.BEDROCK_PRICING_OUTPUT_PER_M || '0').trim(),
-      BOT_PHONE_NUMBER: (existing.BOT_PHONE_NUMBER || '').trim(),
+      BOT_PHONE_NUMBER: (whatsappEnv.BOT_PHONE_NUMBER || existing.BOT_PHONE_NUMBER || '').trim(),
       GOOGLE_API_KEY: (existing.GOOGLE_API_KEY || '').trim(),
       MBTA_API_KEY: (existing.MBTA_API_KEY || '').trim(),
       NEWSAPI_KEY: (existing.NEWSAPI_KEY || '').trim(),
@@ -645,8 +629,8 @@ async function main() {
       DISCORD_CHANNELS_CONFIG_PATH: (existing.DISCORD_CHANNELS_CONFIG_PATH || 'config/discord-channels.json').trim(),
       BAND_FEATURES_ENABLED: (discordEnv.BAND_FEATURES_ENABLED || existing.BAND_FEATURES_ENABLED || 'false').trim(),
       QDRANT_COLLECTION: String(qdrantCollection || existing.QDRANT_COLLECTION || 'garbanzo_memory').trim(),
-      OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
-      WHATSAPP_LOGIN_MODE: (whatsappLoginMode || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
+      OWNER_JID: (whatsappEnv.OWNER_JID || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
+      WHATSAPP_LOGIN_MODE: (whatsappEnv.WHATSAPP_LOGIN_MODE || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
     };
 
     // Layered emission (modular-config v2): `.env` carries only the shared
@@ -657,7 +641,8 @@ async function main() {
     // docs/superpowers/specs/2026-07-04-modular-config-design.md.
     const sharedEnvContent = [
       '# Garbanzo generated by setup wizard (shared config — all platform instances)',
-      `MESSAGING_PLATFORM=${finalEnv.MESSAGING_PLATFORM}`,
+      '# Native-run default: docker compose pins this per service; harmless there.',
+      ...NATIVE_RUN_DEFAULT_SHARED_KEYS.map((key) => `${key}=${finalEnv[key]}`),
       `COMPOSE_PROFILES=${finalEnv.COMPOSE_PROFILES}`,
       '',
       '# Cloud providers (runtime failover follows AI_PROVIDER_ORDER)',

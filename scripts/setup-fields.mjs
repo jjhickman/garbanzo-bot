@@ -71,6 +71,76 @@ export const FIELD_TABLE = [
   ...DISCORD_FIELDS,
 ];
 
+export const NATIVE_RUN_DEFAULT_SHARED_KEYS = ['MESSAGING_PLATFORM'];
+
+export const SHARED_LAYER_EXCEPTION_KEYS = [
+  ...NATIVE_RUN_DEFAULT_SHARED_KEYS,
+  'COMPOSE_PROFILES',
+  'METRICS_ENABLED',
+];
+
+export const PLATFORM_LAYER_EXCEPTION_KEYS = {
+  discord: ['DISCORD_CHANNELS_CONFIG_PATH', 'QDRANT_COLLECTION'],
+  whatsapp: [],
+  slack: [],
+  teams: [],
+};
+
+export const EMITTED_SHARED_KEYS = [
+  ...NATIVE_RUN_DEFAULT_SHARED_KEYS,
+  'COMPOSE_PROFILES',
+  'ANTHROPIC_API_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENAI_API_KEY',
+  'GEMINI_API_KEY',
+  'AI_PROVIDER_ORDER',
+  'ANTHROPIC_MODEL',
+  'OPENROUTER_MODEL',
+  'OPENAI_MODEL',
+  'OPENAI_AUTH_MODE',
+  'GEMINI_MODEL',
+  'GEMINI_PRICING_INPUT_PER_M',
+  'GEMINI_PRICING_OUTPUT_PER_M',
+  'BEDROCK_REGION',
+  'BEDROCK_MODEL_ID',
+  'BEDROCK_MAX_TOKENS',
+  'BEDROCK_PRICING_INPUT_PER_M',
+  'BEDROCK_PRICING_OUTPUT_PER_M',
+  'GOOGLE_API_KEY',
+  'MBTA_API_KEY',
+  'NEWSAPI_KEY',
+  'BRAVE_SEARCH_API_KEY',
+  'GITHUB_SPONSORS_URL',
+  'PATREON_URL',
+  'KOFI_URL',
+  'SUPPORT_CUSTOM_URL',
+  'SUPPORT_MESSAGE',
+  'GITHUB_ISSUES_TOKEN',
+  'GITHUB_ISSUES_REPO',
+  'OLLAMA_BASE_URL',
+  'LOG_LEVEL',
+  'APP_VERSION',
+  'HEALTH_PORT',
+  'HEALTH_BIND_HOST',
+  'SLACK_DEMO',
+  'SLACK_DEMO_PORT',
+  'SLACK_DEMO_BIND_HOST',
+  'METRICS_ENABLED',
+  'MONITORING_TOKEN',
+];
+
+export const EMITTED_PLATFORM_KEYS = {
+  discord: [
+    ...DISCORD_FIELDS.slice(0, 6).map((field) => field.env),
+    'DISCORD_CHANNELS_CONFIG_PATH',
+    'BAND_FEATURES_ENABLED',
+    'QDRANT_COLLECTION',
+  ],
+  whatsapp: WHATSAPP_FIELDS.map((field) => field.env),
+  slack: [],
+  teams: [],
+};
+
 const FIELD_BY_ENV = new Map(FIELD_TABLE.map((field) => [field.env, field]));
 
 export function getField(env) {
@@ -100,6 +170,48 @@ export function promptHint(field, existing) {
     return existing[field.env] ? 'set' : 'empty';
   }
   return existing[field.env] ?? field.default;
+}
+
+export function mergeExistingEnvForPlatform(rootEnv, platformEnv = {}) {
+  return { ...rootEnv, ...platformEnv };
+}
+
+export function promptFieldEnvsForPlatform(platform) {
+  if (platform === 'discord') return DISCORD_FIELDS.map((field) => field.env);
+  if (platform === 'whatsapp') return WHATSAPP_FIELDS.map((field) => field.env);
+  return [];
+}
+
+export function emittedKeysForPlatform(platform) {
+  return {
+    sharedKeys: [...EMITTED_SHARED_KEYS],
+    platformKeys: [...(EMITTED_PLATFORM_KEYS[platform] ?? [])],
+  };
+}
+
+export function redactEnvContent(content) {
+  const redactPrefixes = [
+    'ANTHROPIC_API_KEY=',
+    'OPENROUTER_API_KEY=',
+    'OPENAI_API_KEY=',
+    'GEMINI_API_KEY=',
+    'BEDROCK_MODEL_ID=',
+    'GITHUB_ISSUES_TOKEN=',
+    'MONITORING_TOKEN=',
+    'DISCORD_BOT_TOKEN=',
+    'OWNER_JID=',
+    'BOT_PHONE_NUMBER=',
+  ];
+
+  return content
+    .split('\n')
+    .map((line) => {
+      const prefix = redactPrefixes.find((candidate) => line.startsWith(candidate));
+      if (!prefix) return line;
+      const value = line.slice(prefix.length).trim();
+      return value ? `${prefix}[REDACTED]` : line;
+    })
+    .join('\n');
 }
 
 /**

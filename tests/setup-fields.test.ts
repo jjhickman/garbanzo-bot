@@ -17,6 +17,13 @@ import {
   resolveComposeProfiles,
   resolveMessagingPlatform,
   DEFAULT_MESSAGING_PLATFORM,
+  mergeExistingEnvForPlatform,
+  redactEnvContent,
+  promptFieldEnvsForPlatform,
+  emittedKeysForPlatform,
+  SHARED_LAYER_EXCEPTION_KEYS,
+  PLATFORM_LAYER_EXCEPTION_KEYS,
+  NATIVE_RUN_DEFAULT_SHARED_KEYS,
 } from '../scripts/setup-fields.mjs';
 
 function cli(options: Record<string, string>): { options: Record<string, string>; flags: Set<string> } {
@@ -141,6 +148,85 @@ describe('setup field resolver', () => {
 
     // FIELD_TABLE is exactly the union of the three partitioned lists.
     expect(FIELD_TABLE.map((f) => f.env).sort()).toEqual(allKeys.slice().sort());
+  });
+
+  it('merges root and selected platform env values with platform values winning', () => {
+    expect(
+      mergeExistingEnvForPlatform(
+        {
+          OPENAI_MODEL: 'root-model',
+          DISCORD_BOT_TOKEN: 'root-discord-token',
+          OWNER_JID: 'root-owner@s.whatsapp.net',
+        },
+        {
+          DISCORD_BOT_TOKEN: 'platform-discord-token',
+          DISCORD_OWNER_ID: 'platform-owner',
+        },
+      ),
+    ).toEqual({
+      OPENAI_MODEL: 'root-model',
+      DISCORD_BOT_TOKEN: 'platform-discord-token',
+      OWNER_JID: 'root-owner@s.whatsapp.net',
+      DISCORD_OWNER_ID: 'platform-owner',
+    });
+  });
+
+  it('redacts MONITORING_TOKEN in dry-run env previews', () => {
+    const redacted = redactEnvContent([
+      'MONITORING_TOKEN=real-generated-monitoring-token',
+      'OPENAI_MODEL=gpt-5.4-mini',
+      'DISCORD_BOT_TOKEN=real-discord-token',
+      'MONITORING_TOKEN=',
+    ].join('\n'));
+
+    expect(redacted).toContain('MONITORING_TOKEN=[REDACTED]');
+    expect(redacted).not.toContain('real-generated-monitoring-token');
+    expect(redacted).toContain('OPENAI_MODEL=gpt-5.4-mini');
+    expect(redacted).toContain('DISCORD_BOT_TOKEN=[REDACTED]');
+    expect(redacted).toContain('MONITORING_TOKEN=');
+  });
+
+  it('does not collect WhatsApp prompt fields for the Discord setup path', () => {
+    expect(promptFieldEnvsForPlatform('discord')).toEqual(DISCORD_FIELDS.map((field) => field.env));
+    expect(promptFieldEnvsForPlatform('discord')).not.toEqual(expect.arrayContaining(
+      WHATSAPP_FIELDS.map((field) => field.env),
+    ));
+    expect(promptFieldEnvsForPlatform('whatsapp')).toEqual(WHATSAPP_FIELDS.map((field) => field.env));
+  });
+
+  it('documents and partitions the actual emitted env key sets', () => {
+    const discordKeys = emittedKeysForPlatform('discord');
+    const whatsappKeys = emittedKeysForPlatform('whatsapp');
+
+    expect(new Set(discordKeys.sharedKeys).size).toBe(discordKeys.sharedKeys.length);
+    expect(new Set(discordKeys.platformKeys).size).toBe(discordKeys.platformKeys.length);
+    expect(new Set(whatsappKeys.platformKeys).size).toBe(whatsappKeys.platformKeys.length);
+
+    const discordIntersection = discordKeys.sharedKeys.filter((key) => discordKeys.platformKeys.includes(key));
+    const whatsappIntersection = whatsappKeys.sharedKeys.filter((key) => whatsappKeys.platformKeys.includes(key));
+    expect(discordIntersection).toEqual([]);
+    expect(whatsappIntersection).toEqual([]);
+
+    expect(NATIVE_RUN_DEFAULT_SHARED_KEYS).toEqual(['MESSAGING_PLATFORM']);
+    expect(SHARED_LAYER_EXCEPTION_KEYS).toEqual(expect.arrayContaining([
+      'MESSAGING_PLATFORM',
+      'COMPOSE_PROFILES',
+      'METRICS_ENABLED',
+    ]));
+    expect(PLATFORM_LAYER_EXCEPTION_KEYS.discord).toContain('QDRANT_COLLECTION');
+
+    for (const key of [...SHARED_FIELDS.map((field) => field.env), ...SHARED_LAYER_EXCEPTION_KEYS]) {
+      expect(discordKeys.sharedKeys).toContain(key);
+      expect(whatsappKeys.sharedKeys).toContain(key);
+    }
+    for (const key of WHATSAPP_FIELDS.map((field) => field.env)) {
+      expect(whatsappKeys.platformKeys).toContain(key);
+      expect(discordKeys.sharedKeys).not.toContain(key);
+    }
+    for (const key of DISCORD_FIELDS.map((field) => field.env)) {
+      expect(discordKeys.platformKeys).toContain(key);
+      expect(whatsappKeys.sharedKeys).not.toContain(key);
+    }
   });
 
   it('resolves the non-interactive messaging platform with a discord default', () => {
