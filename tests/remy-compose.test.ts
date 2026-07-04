@@ -72,6 +72,9 @@ describe('Remy compose overlay', () => {
     expect(remy?.image).toBe(garbanzo?.image);
     expect(remy?.restart).toBe(garbanzo?.restart);
     expect(remy?.logging).toEqual(garbanzo?.logging);
+    // Memory must be capped like the base service so a Remy leak can't OOM the
+    // production WhatsApp bot on a shared host.
+    expect(remy?.deploy).toEqual(garbanzo?.deploy);
 
     expect(toStringList(remy?.env_file)).toContain('.env.remy');
     expect(envEntries(remy ?? {})).toEqual(

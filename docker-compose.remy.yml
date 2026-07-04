@@ -9,6 +9,13 @@ services:
     container_name: remy
     restart: unless-stopped
 
+    # Cap memory like the base garbanzo service — on a shared host (Pi 5) a
+    # Remy leak must not OOM the production WhatsApp bot.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
     env_file:
       - .env.remy
 
