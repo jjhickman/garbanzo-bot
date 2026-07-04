@@ -19,6 +19,8 @@ const VALID_TOOLS = [
   'find_band_song',
   'next_rehearsal',
   'current_setlist',
+  'get_song_sections',
+  'list_song_ideas',
 ] as const;
 
 const CATEGORIES = [

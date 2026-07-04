@@ -3,6 +3,7 @@ import { recordToolCall } from '../middleware/stats.js';
 import { getSearchProviderName } from '../features/web-search.js';
 
 const TOOL_RESULT_MAX_CHARS = 1500;
+const SONG_IDEAS_TOOL_LIMIT = 15;
 
 export interface AiToolParameter {
   type: 'string';
@@ -290,6 +291,65 @@ const tools: AiTool[] = [
       }
     },
   },
+  {
+    name: 'get_song_sections',
+    description:
+      'Get a song\'s full section sheet (intro/verse/chorus/etc. in order, with lyrics and chords) by title. Use when someone asks to see the lyrics, structure, or chords for a specific song.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'The song title, e.g. "Sundown".' },
+      },
+      required: ['title'],
+    },
+    execute: async (input) => {
+      const title = stringInput(input, 'title');
+      if (!title) {
+        recordToolCall('get_song_sections', 'error');
+        return 'Tool get_song_sections needs a non-empty title.';
+      }
+
+      try {
+        const { getSongByTitle, getSongSections } = await import('../utils/db.js');
+        const { formatSongSheet } = await import('../features/song-sections.js');
+
+        const song = await getSongByTitle(title);
+        recordToolCall('get_song_sections', 'ok');
+        if (!song) return `No song titled "${title}".`;
+
+        const sections = await getSongSections(song.id);
+        return truncateToolResult(formatSongSheet(song, sections));
+      } catch (err) {
+        recordToolCall('get_song_sections', 'error');
+        return truncateToolResult(errorMessage('get_song_sections', err));
+      }
+    },
+  },
+  {
+    name: 'list_song_ideas',
+    description:
+      'List recently captured song ideas (quick scratchpad snippets, not full catalog songs). Use when someone asks "what song ideas do we have" or "any new ideas lying around".',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    execute: async () => {
+      try {
+        const { listSongIdeas } = await import('../utils/db.js');
+        const { formatIdeaLine } = await import('../features/song-ideas.js');
+
+        const ideas = await listSongIdeas(SONG_IDEAS_TOOL_LIMIT);
+        recordToolCall('list_song_ideas', 'ok');
+        if (ideas.length === 0) return 'No song ideas captured yet.';
+
+        return truncateToolResult(ideas.map(formatIdeaLine).join('\n'));
+      } catch (err) {
+        recordToolCall('list_song_ideas', 'error');
+        return truncateToolResult(errorMessage('list_song_ideas', err));
+      }
+    },
+  },
 ];
 
 function formatAvailabilityCounts(responses: { response: 'yes' | 'no' | 'maybe' }[]): string | null {
@@ -319,6 +379,8 @@ export function getEnabledTools(): AiTool[] {
     if (tool.name === 'find_band_song') return config.BAND_FEATURES_ENABLED;
     if (tool.name === 'next_rehearsal') return config.BAND_FEATURES_ENABLED;
     if (tool.name === 'current_setlist') return config.BAND_FEATURES_ENABLED;
+    if (tool.name === 'get_song_sections') return config.BAND_FEATURES_ENABLED;
+    if (tool.name === 'list_song_ideas') return config.BAND_FEATURES_ENABLED;
     return true;
   });
 }
