@@ -13,7 +13,8 @@ This image is built for operators and small teams that want:
 - Built-in integrations (weather, transit, venues, news, books, D&D lookups)
 - Operations: health/readiness endpoints, token-gated `/admin` usage & cost page, Prometheus `/metrics`, and a pre-provisioned Grafana dashboard via the compose `monitoring` profile
 - Verified off-machine backups (systemd timer + restore runbook) and anti-ban outbound safety for WhatsApp
-- Docker-first deployment with persistent auth + SQLite or Postgres (pgvector) state
+- Docker-first deployment with persistent auth, SQLite or Postgres state, and a self-hosted Qdrant vector store for semantic recall
+- Band mode (`BAND_FEATURES_ENABLED`): the same image runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription
 
 ## Quick Start (Docker Compose)
 
@@ -28,8 +29,8 @@ cp .env.example .env
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=1.0.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=1.0.7 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -50,9 +51,10 @@ curl -i http://127.0.0.1:3001/health/ready
 - **Tool calling:** opt-in native function calling (`AI_TOOL_CALLING`) so members ask naturally — "is the red line running?" — instead of using bang commands
 - **Community memory:** owner-curated facts plus opt-in automatic extraction (`MEMORY_AUTO_EXTRACT`), injected into the AI prompt and managed with `!memory`
 - **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
-- **Embedding providers:** deterministic hash embeddings by default, OpenAI `text-embedding-3-small` available with automatic fallback
-- **Storage:** SQLite (default) or Postgres with pgvector for semantic session retrieval
-- **Platforms:** WhatsApp (production), Slack, Discord (official API runtimes), unified demo at garbanzobot.com
+- **Vector memory:** session summaries and community facts are embedded (OpenAI `text-embedding-3-small`) into a self-hosted Qdrant store, with automatic keyword fallback when Qdrant is unavailable
+- **Storage:** SQLite (default) or Postgres for relational state; Qdrant for vectors
+- **Platforms:** WhatsApp (production), Discord (Gateway runtime with opt-in channels), Slack (scaffold + demo mode)
+- **Band mode:** `BAND_FEATURES_ENABLED=true` turns on the Remy band assistant on Discord (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`); run it beside a community instance with `docker-compose.remy.yml`
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
 - **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
 
@@ -63,9 +65,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `1.0.7`
+- `1.1.0`
   - Semver tag without the leading `v`
-- `v1.0.7`
+- `v1.1.0`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:
@@ -77,6 +79,7 @@ All tags are multi-arch where available:
 
 - This container persists runtime auth state and database files via Docker volumes.
 - For Postgres deployments, set `DB_DIALECT=postgres` and provide `DATABASE_URL` or `POSTGRES_*` connection vars.
+- The default compose file includes a Qdrant service for vector memory. Set `VECTOR_STORE=none` for keyword-only search without Qdrant.
 - Session memory is enabled by default (`CONTEXT_SESSION_MEMORY_ENABLED=true`) and can be disabled via env var.
 - Exposing the health port on your LAN is useful for Uptime Kuma, but restrict access to trusted hosts (firewall or reverse proxy).
 - Security checks are part of release workflow: smoke-test + vulnerability scan (Trivy report artifact).
