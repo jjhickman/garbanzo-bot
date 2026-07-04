@@ -18,6 +18,7 @@ import {
   mapEventReminder,
   mapFeedbackEntry,
   mapMemoryEntry,
+  mapRehearsal,
   mapSessionSummaryHit,
   mapSong,
   mapStrikeSummary,
@@ -28,6 +29,7 @@ import {
   type FeedbackRow,
   type MemoryRow,
   type MessageRow,
+  type RehearsalRow,
   type SessionSummaryRow,
   type SongRow,
   type StrikeSummaryRow,
@@ -53,6 +55,8 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
   SessionSummaryHit,
   Song,
   SongStatus,
@@ -260,6 +264,42 @@ const updateSongRow = db.prepare(
   `UPDATE songs SET title = ?, song_key = ?, tempo = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
 );
 const deleteSongById = db.prepare(`DELETE FROM songs WHERE id = ?`);
+const insertRehearsal = db.prepare(
+  `INSERT INTO rehearsals (scheduled_at, location, agenda, status, reminder_sent, created_by, created_at, updated_at)
+   VALUES (?, ?, ?, 'scheduled', 0, ?, ?, ?)`,
+);
+const selectRehearsalById = db.prepare(`SELECT * FROM rehearsals WHERE id = ?`);
+const selectUpcomingRehearsals = db.prepare(
+  `SELECT * FROM rehearsals
+   WHERE status = 'scheduled' AND scheduled_at >= ?
+   ORDER BY scheduled_at ASC
+   LIMIT ?`,
+);
+const selectNextRehearsal = db.prepare(
+  `SELECT * FROM rehearsals
+   WHERE status = 'scheduled' AND scheduled_at >= ?
+   ORDER BY scheduled_at ASC
+   LIMIT 1`,
+);
+const updateRehearsalRow = db.prepare(
+  `UPDATE rehearsals
+   SET scheduled_at = ?, location = ?, agenda = ?, status = ?, updated_at = ?
+   WHERE id = ?`,
+);
+const updateRehearsalCancelled = db.prepare(
+  `UPDATE rehearsals SET status = 'cancelled', updated_at = ? WHERE id = ?`,
+);
+const selectRehearsalsNeedingReminder = db.prepare(
+  `SELECT * FROM rehearsals
+   WHERE status = 'scheduled'
+     AND reminder_sent = 0
+     AND (scheduled_at - ?) <= ?
+     AND ? < scheduled_at
+   ORDER BY scheduled_at ASC`,
+);
+const updateRehearsalReminderSent = db.prepare(
+  `UPDATE rehearsals SET reminder_sent = 1, updated_at = ? WHERE id = ?`,
+);
 const insertWhatsAppOutboundJob = db.prepare(
   `INSERT INTO whatsapp_outbound_jobs
    (chat_jid, kind, content_json, options_json, status, created_at, updated_at)
@@ -807,6 +847,85 @@ export function deleteSong(id: number): boolean {
   return deleteSongById.run(id).changes > 0;
 }
 
+// ── Public API: Rehearsals (shared band practice memory) ───────────
+
+export interface NewRehearsal {
+  scheduledAt: number;
+  location?: string | null;
+  agenda?: string | null;
+  createdBy?: string | null;
+}
+
+/** Add a new rehearsal. Defaults status to 'scheduled' and reminder_sent to false. */
+export function addRehearsal(input: NewRehearsal): Rehearsal {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertRehearsal.run(
+    input.scheduledAt,
+    input.location ?? null,
+    input.agenda ?? null,
+    input.createdBy ?? null,
+    ts,
+    ts,
+  );
+  return mapRehearsal(selectRehearsalById.get(result.lastInsertRowid) as RehearsalRow);
+}
+
+/** Get a rehearsal by ID. */
+export function getRehearsalById(id: number): Rehearsal | undefined {
+  const row = selectRehearsalById.get(id) as RehearsalRow | undefined;
+  return row ? mapRehearsal(row) : undefined;
+}
+
+/** List scheduled rehearsals at or after now, ordered by start time. */
+export function listUpcomingRehearsals(nowSeconds: number, limit: number = 20): Rehearsal[] {
+  return (selectUpcomingRehearsals.all(nowSeconds, limit) as RehearsalRow[]).map(mapRehearsal);
+}
+
+/** Get the next scheduled rehearsal at or after now. */
+export function getNextRehearsal(nowSeconds: number): Rehearsal | undefined {
+  const row = selectNextRehearsal.get(nowSeconds) as RehearsalRow | undefined;
+  return row ? mapRehearsal(row) : undefined;
+}
+
+/** Update only the provided fields on a rehearsal and bump updated_at. */
+export function updateRehearsal(
+  id: number,
+  patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>,
+): Rehearsal | undefined {
+  const existing = selectRehearsalById.get(id) as RehearsalRow | undefined;
+  if (!existing) return undefined;
+
+  const ts = Math.floor(Date.now() / 1000);
+  updateRehearsalRow.run(
+    patch.scheduledAt ?? existing.scheduled_at,
+    patch.location !== undefined ? patch.location : existing.location,
+    patch.agenda !== undefined ? patch.agenda : existing.agenda,
+    patch.status ?? existing.status,
+    ts,
+    id,
+  );
+  return mapRehearsal(selectRehearsalById.get(id) as RehearsalRow);
+}
+
+/** Cancel a rehearsal by ID. */
+export function cancelRehearsal(id: number): boolean {
+  const ts = Math.floor(Date.now() / 1000);
+  return updateRehearsalCancelled.run(ts, id).changes > 0;
+}
+
+/** List scheduled rehearsals whose reminder window has opened. */
+export function listRehearsalsNeedingReminder(nowSeconds: number): Rehearsal[] {
+  const leadSeconds = config.REHEARSAL_REMINDER_LEAD_MINUTES * 60;
+  return (selectRehearsalsNeedingReminder.all(leadSeconds, nowSeconds, nowSeconds) as RehearsalRow[])
+    .map(mapRehearsal);
+}
+
+/** Mark the rehearsal reminder as sent. */
+export function markRehearsalReminderSent(id: number): boolean {
+  const ts = Math.floor(Date.now() / 1000);
+  return updateRehearsalReminderSent.run(ts, id).changes > 0;
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────
 
 /** Stop scheduled maintenance and close SQLite handle for shutdown. */
@@ -927,6 +1046,20 @@ export function createSqliteBackend(): DbBackend {
       patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>,
     ) => updateSong(id, patch),
     deleteSong: async (id: number) => deleteSong(id),
+
+    addRehearsal: async (input: NewRehearsal) => addRehearsal(input),
+    getRehearsalById: async (id: number) => getRehearsalById(id),
+    listUpcomingRehearsals: async (nowSeconds: number, limit?: number) =>
+      listUpcomingRehearsals(nowSeconds, limit),
+    getNextRehearsal: async (nowSeconds: number) => getNextRehearsal(nowSeconds),
+    updateRehearsal: async (
+      id: number,
+      patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>,
+    ) => updateRehearsal(id, patch),
+    cancelRehearsal: async (id: number) => cancelRehearsal(id),
+    listRehearsalsNeedingReminder: async (nowSeconds: number) =>
+      listRehearsalsNeedingReminder(nowSeconds),
+    markRehearsalReminderSent: async (id: number) => markRehearsalReminderSent(id),
 
     closeDb: async (): Promise<void> => {
       closeDb();

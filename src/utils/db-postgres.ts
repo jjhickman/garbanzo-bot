@@ -15,6 +15,7 @@ import {
   mapFeedbackEntry,
   mapMemoryEntry,
   mapMemberProfile,
+  mapRehearsal,
   mapSessionSummaryHit,
   mapSong,
   mapStrikeSummary,
@@ -26,6 +27,7 @@ import {
   type MemoryRow,
   type MessageRow,
   type ProfileRow,
+  type RehearsalRow,
   type SessionSummaryRow,
   type SongRow,
   type StrikeSummaryRow,
@@ -54,6 +56,8 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
   SessionSummaryHit,
   Song,
   SongStatus,
@@ -82,6 +86,7 @@ const REQUIRED_CORE_TABLES = [
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
   'songs',
+  'rehearsals',
 ] as const;
 
 interface DbCountRow {
@@ -1066,6 +1071,109 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     async deleteSong(id: number): Promise<boolean> {
       const res = await pool.query('DELETE FROM songs WHERE id = $1', [id]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async addRehearsal(input: {
+      scheduledAt: number;
+      location?: string | null;
+      agenda?: string | null;
+      createdBy?: string | null;
+    }): Promise<Rehearsal> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<RehearsalRow>(
+        `INSERT INTO rehearsals (scheduled_at, location, agenda, status, reminder_sent, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, 'scheduled', false, $4, $5, $5)
+         RETURNING *`,
+        [input.scheduledAt, input.location ?? null, input.agenda ?? null, input.createdBy ?? null, ts],
+      );
+      return mapRehearsal(res.rows[0]);
+    },
+
+    async getRehearsalById(id: number): Promise<Rehearsal | undefined> {
+      const res = await pool.query<RehearsalRow>('SELECT * FROM rehearsals WHERE id = $1', [id]);
+      const row = res.rows[0];
+      return row ? mapRehearsal(row) : undefined;
+    },
+
+    async listUpcomingRehearsals(nowSeconds: number, limit: number = 20): Promise<Rehearsal[]> {
+      const res = await pool.query<RehearsalRow>(
+        `SELECT * FROM rehearsals
+         WHERE status = 'scheduled' AND scheduled_at >= $1
+         ORDER BY scheduled_at ASC
+         LIMIT $2`,
+        [nowSeconds, limit],
+      );
+      return res.rows.map(mapRehearsal);
+    },
+
+    async getNextRehearsal(nowSeconds: number): Promise<Rehearsal | undefined> {
+      const res = await pool.query<RehearsalRow>(
+        `SELECT * FROM rehearsals
+         WHERE status = 'scheduled' AND scheduled_at >= $1
+         ORDER BY scheduled_at ASC
+         LIMIT 1`,
+        [nowSeconds],
+      );
+      const row = res.rows[0];
+      return row ? mapRehearsal(row) : undefined;
+    },
+
+    async updateRehearsal(
+      id: number,
+      patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>,
+    ): Promise<Rehearsal | undefined> {
+      const existingRes = await pool.query<RehearsalRow>('SELECT * FROM rehearsals WHERE id = $1', [id]);
+      const existing = existingRes.rows[0];
+      if (!existing) return undefined;
+
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<RehearsalRow>(
+        `UPDATE rehearsals
+         SET scheduled_at = $1, location = $2, agenda = $3, status = $4, updated_at = $5
+         WHERE id = $6
+         RETURNING *`,
+        [
+          patch.scheduledAt ?? existing.scheduled_at,
+          patch.location !== undefined ? patch.location : existing.location,
+          patch.agenda !== undefined ? patch.agenda : existing.agenda,
+          patch.status ?? existing.status,
+          ts,
+          id,
+        ],
+      );
+      return mapRehearsal(res.rows[0]);
+    },
+
+    async cancelRehearsal(id: number): Promise<boolean> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query(
+        "UPDATE rehearsals SET status = 'cancelled', updated_at = $1 WHERE id = $2",
+        [ts, id],
+      );
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async listRehearsalsNeedingReminder(nowSeconds: number): Promise<Rehearsal[]> {
+      const leadSeconds = config.REHEARSAL_REMINDER_LEAD_MINUTES * 60;
+      const res = await pool.query<RehearsalRow>(
+        `SELECT * FROM rehearsals
+         WHERE status = 'scheduled'
+           AND reminder_sent = false
+           AND (scheduled_at - $1) <= $2
+           AND $2 < scheduled_at
+         ORDER BY scheduled_at ASC`,
+        [leadSeconds, nowSeconds],
+      );
+      return res.rows.map(mapRehearsal);
+    },
+
+    async markRehearsalReminderSent(id: number): Promise<boolean> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query(
+        'UPDATE rehearsals SET reminder_sent = true, updated_at = $1 WHERE id = $2',
+        [ts, id],
+      );
       return (res.rowCount ?? 0) > 0;
     },
 

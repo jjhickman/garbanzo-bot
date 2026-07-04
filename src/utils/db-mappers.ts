@@ -6,6 +6,8 @@ import type {
   FeedbackEntry,
   MemberProfile,
   MemoryEntry,
+  Rehearsal,
+  RehearsalStatus,
   SessionSummaryHit,
   Song,
   SongStatus,
@@ -90,6 +92,18 @@ export interface SongRow {
   tempo: DbNumeric | null;
   status: SongStatus;
   notes: string | null;
+  created_at: DbNumeric | null;
+  updated_at: DbNumeric | null;
+}
+
+export interface RehearsalRow {
+  id: DbNumeric | null;
+  scheduled_at: DbNumeric | null;
+  location: string | null;
+  agenda: string | null;
+  status: RehearsalStatus;
+  reminder_sent: DbNumeric | boolean | null;
+  created_by: string | null;
   created_at: DbNumeric | null;
   updated_at: DbNumeric | null;
 }
@@ -214,6 +228,24 @@ export function mapSong(row: SongRow): Song {
     tempo: row.tempo === null ? null : toNumber(row.tempo),
     status: row.status,
     notes: row.notes,
+    createdAt: toNumber(row.created_at),
+    updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapRehearsal(row: RehearsalRow): Rehearsal {
+  const reminderSent = typeof row.reminder_sent === 'boolean'
+    ? row.reminder_sent
+    : toNumber(row.reminder_sent) === 1;
+
+  return {
+    id: toNumber(row.id),
+    scheduledAt: toNumber(row.scheduled_at),
+    location: row.location,
+    agenda: row.agenda,
+    status: row.status,
+    reminderSent,
+    createdBy: row.created_by,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
   };

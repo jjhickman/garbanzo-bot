@@ -10,6 +10,8 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
   Song,
   SongStatus,
   StrikeSummary,
@@ -105,6 +107,16 @@ export interface DbBackend {
   listSongs(status?: SongStatus): Promise<Song[]>;
   updateSong(id: number, patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>): Promise<Song | undefined>;
   deleteSong(id: number): Promise<boolean>;
+
+  // Rehearsals (shared band practice memory)
+  addRehearsal(input: { scheduledAt: number; location?: string | null; agenda?: string | null; createdBy?: string | null }): Promise<Rehearsal>;
+  getRehearsalById(id: number): Promise<Rehearsal | undefined>;
+  listUpcomingRehearsals(nowSeconds: number, limit?: number): Promise<Rehearsal[]>;
+  getNextRehearsal(nowSeconds: number): Promise<Rehearsal | undefined>;
+  updateRehearsal(id: number, patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>): Promise<Rehearsal | undefined>;
+  cancelRehearsal(id: number): Promise<boolean>;
+  listRehearsalsNeedingReminder(nowSeconds: number): Promise<Rehearsal[]>;
+  markRehearsalReminderSent(id: number): Promise<boolean>;
 
   // Lifecycle
   closeDb(): Promise<void>;

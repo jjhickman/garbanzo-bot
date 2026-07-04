@@ -163,3 +163,19 @@ CREATE INDEX IF NOT EXISTS idx_songs_title_lower
 
 CREATE INDEX IF NOT EXISTS idx_songs_status
   ON songs (status);
+
+CREATE TABLE IF NOT EXISTS rehearsals (
+  id BIGSERIAL PRIMARY KEY,
+  scheduled_at BIGINT NOT NULL,
+  location TEXT,
+  agenda TEXT,
+  status TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK (status IN ('scheduled','done','cancelled')),
+  reminder_sent BOOLEAN NOT NULL DEFAULT false,
+  created_by TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rehearsals_status_scheduled
+  ON rehearsals (status, scheduled_at);

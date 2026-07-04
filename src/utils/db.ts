@@ -21,6 +21,8 @@ export type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Rehearsal,
+  RehearsalStatus,
   Song,
   SongStatus,
   StrikeSummary,
@@ -148,6 +150,16 @@ export const getSongByTitle = backend.getSongByTitle;
 export const listSongs = backend.listSongs;
 export const updateSong = backend.updateSong;
 export const deleteSong = backend.deleteSong;
+
+// Rehearsals (shared band practice memory)
+export const addRehearsal = backend.addRehearsal;
+export const getRehearsalById = backend.getRehearsalById;
+export const listUpcomingRehearsals = backend.listUpcomingRehearsals;
+export const getNextRehearsal = backend.getNextRehearsal;
+export const updateRehearsal = backend.updateRehearsal;
+export const cancelRehearsal = backend.cancelRehearsal;
+export const listRehearsalsNeedingReminder = backend.listRehearsalsNeedingReminder;
+export const markRehearsalReminderSent = backend.markRehearsalReminderSent;
 
 // Lifecycle
 export const closeDb = backend.closeDb;
