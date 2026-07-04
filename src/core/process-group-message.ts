@@ -1,9 +1,12 @@
 import { logger } from '../middleware/logger.js';
+import { config } from '../utils/config.js';
+import { jidsMatch } from '../utils/jid.js';
 import { matchFeature } from '../features/router.js';
 import { handlePoll, isDuplicatePoll, recordPoll } from '../features/polls.js';
 import { handleCharacter } from '../features/character.js';
 import { handleFeedbackSubmit, handleUpvote } from '../features/feedback.js';
 import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } from '../features/voice.js';
+import { handleSongCommand } from '../features/songs.js';
 import { extractUrls, processUrl } from '../features/links.js';
 import { maybeExtractCommunityFacts } from '../features/memory-extract.js';
 import { isSoftMuted } from '../features/moderation.js';
@@ -22,6 +25,17 @@ export interface ProcessGroupMessageParams {
   senderId: string;
   groupName: string;
   ownerId: string;
+
+  /**
+   * Identity to compare `senderId` against for owner-gated commands (e.g. `!song`).
+   *
+   * Defaults to `ownerId` when omitted, which is correct for WhatsApp (where
+   * `ownerId` is the owner's own JID — the same space as `senderId`). Discord
+   * passes `ownerId` as an *alert-delivery* DM channel id, which is NOT
+   * comparable to a Discord user id — Discord callers must pass the real
+   * owner user id here explicitly.
+   */
+  ownerUserId?: string;
 
   /** Mention-stripped query string (optionally enriched, e.g. with URL context). */
   query: string;
@@ -54,6 +68,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     senderId,
     groupName,
     ownerId,
+    ownerUserId,
     query,
     quotedText,
     messageId,
@@ -122,6 +137,19 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
       chatId,
       featureQuery: featureCheck.query,
       quotedText,
+      replyTo,
+    });
+    return;
+  }
+
+  // Band feature — !song (shared band memory: setlist tracking)
+  if (featureCheck?.feature === 'song' && config.BAND_FEATURES_ENABLED) {
+    await handleSongFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      featureQuery: featureCheck.query,
       replyTo,
     });
     return;
@@ -233,6 +261,32 @@ async function handleFeedbackCommand(params: {
       '  !upvote <id>',
     ].join('\n'), { replyTo });
   }
+}
+
+async function handleSongFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, featureQuery, replyTo } = params;
+
+  // TODO(band-role-plumbing): band members (not just the owner) should also be
+  // authorized on Discord via `isBandMember(roleIds)`, but the sender's Discord
+  // role ids are not currently threaded through to this shared dispatch point.
+  // Until that plumbing exists, gate to owner-only rather than fake a role check.
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  if (!isOwner) {
+    await messenger.sendText(chatId, '🎸 Only the owner (or band members, once role sync lands) can manage the setlist right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleSongCommand(featureQuery);
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
 }
 
 async function handlePollCommand(params: {

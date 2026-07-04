@@ -152,6 +152,7 @@ async function processDiscordInbound(
         senderId: m.senderId,
         groupName: getDiscordChannelName(m.chatId) ?? `Discord ${m.chatId}`,
         ownerId: env.ownerId,
+        ownerUserId: env.ownerUserId,
         query,
         isFeatureEnabled: featureEnabled,
         getResponse,
