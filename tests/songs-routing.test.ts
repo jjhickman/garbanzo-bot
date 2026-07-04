@@ -206,6 +206,31 @@ describe('!song routing (band feature gating)', () => {
     expect(String(calls[0]?.payload)).toMatch(/owner|band/i);
   });
 
+  it('routes !song to handleSongCommand for a non-owner band member when the flag is on', async () => {
+    const { songMock, getResponseMock } = setupMocks(true);
+    const { processGroupMessage } = await import('../src/core/process-group-message.js');
+
+    const calls: Array<{ type: string; to: string; payload: unknown }> = [];
+    const messenger = makeMessenger(calls);
+
+    await processGroupMessage({
+      messenger,
+      chatId: 'band-channel',
+      senderId: BAND_MEMBER_ID,
+      groupName: 'Band',
+      ownerId: 'owner-dm-channel',
+      ownerUserId: OWNER_ID,
+      senderIsBandMember: true,
+      query: '!song list',
+      isFeatureEnabled: () => true,
+      getResponse: getResponseMock,
+    });
+
+    expect(songMock).toHaveBeenCalledWith('list');
+    expect(getResponseMock).not.toHaveBeenCalled();
+    expect(calls).toEqual([{ type: 'text', to: 'band-channel', payload: 'song-handled:list' }]);
+  });
+
   it('falls back to owner-comparable ownerId when ownerUserId is not provided (WhatsApp-style callers)', async () => {
     const { songMock } = setupMocks(true);
     const { processGroupMessage } = await import('../src/core/process-group-message.js');

@@ -17,6 +17,7 @@ import {
   getDiscordIntroductionsChannelId,
   isDiscordChannelEnabled,
   isDiscordFeatureEnabled,
+  isBandMember,
 } from './discord-config.js';
 
 const DiscordAuthorSchema = z.object({
@@ -40,6 +41,10 @@ const DiscordMessageCreateSchema = z.object({
     id: z.string().optional(),
     content: z.string().optional(),
   }).nullable().optional(),
+  senderRoleIds: z.array(z.string()).optional(),
+  member: z.object({
+    roles: z.array(z.string()).optional(),
+  }).optional(),
   attachments: z.array(z.unknown()).optional(),
 });
 
@@ -76,6 +81,7 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
     text: event.content,
     quotedText: event.referenced_message?.content,
     mentionedIds: event.mentions?.map((mention) => mention.id),
+    senderRoleIds: event.senderRoleIds ?? event.member?.roles ?? [],
     hasVisualMedia: (event.attachments?.length ?? 0) > 0,
     raw: createMessageRef({
       platform: 'discord',
@@ -113,6 +119,7 @@ async function processDiscordInbound(
   const channelEnabled = options.channelEnabled ?? isDiscordChannelEnabled;
   const featureEnabled = options.featureEnabled
     ?? ((chatId: string, feature: string) => isDiscordFeatureEnabled(chatId, feature));
+  const senderIsBandMember = isBandMember(inbound.senderRoleIds ?? []);
 
   await processInboundMessage(messenger, inbound, {
     isReplyToBot: () => false,
@@ -153,6 +160,7 @@ async function processDiscordInbound(
         groupName: getDiscordChannelName(m.chatId) ?? `Discord ${m.chatId}`,
         ownerId: env.ownerId,
         ownerUserId: env.ownerUserId,
+        senderIsBandMember,
         query,
         isFeatureEnabled: featureEnabled,
         getResponse,

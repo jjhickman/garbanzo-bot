@@ -4,6 +4,7 @@ vi.mock('../src/platforms/discord/discord-config.js', () => ({
   isDiscordChannelEnabled: vi.fn((channelId: string) => channelId === 'C123'),
   discordChannelRequiresMention: vi.fn(() => true),
   isDiscordFeatureEnabled: vi.fn(() => true),
+  isBandMember: vi.fn(() => false),
   getDiscordChannelName: vi.fn(() => 'general'),
   getDiscordIntroductionsChannelId: vi.fn(() => null),
   getDiscordEventsChannelId: vi.fn(() => null),

@@ -37,6 +37,9 @@ export interface ProcessGroupMessageParams {
    */
   ownerUserId?: string;
 
+  /** True when the sending platform has already identified the sender as a band member. */
+  senderIsBandMember?: boolean;
+
   /** Mention-stripped query string (optionally enriched, e.g. with URL context). */
   query: string;
 
@@ -69,6 +72,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
     groupName,
     ownerId,
     ownerUserId,
+    senderIsBandMember,
     query,
     quotedText,
     messageId,
@@ -149,6 +153,7 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
       chatId,
       senderId,
       ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
       featureQuery: featureCheck.query,
       replyTo,
     });
@@ -268,18 +273,15 @@ async function handleSongFeature(params: {
   chatId: string;
   senderId: string;
   ownerUserId: string;
+  senderIsBandMember?: boolean;
   featureQuery: string;
   replyTo?: MessageRef;
 }): Promise<void> {
-  const { messenger, chatId, senderId, ownerUserId, featureQuery, replyTo } = params;
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
 
-  // TODO(band-role-plumbing): band members (not just the owner) should also be
-  // authorized on Discord via `isBandMember(roleIds)`, but the sender's Discord
-  // role ids are not currently threaded through to this shared dispatch point.
-  // Until that plumbing exists, gate to owner-only rather than fake a role check.
   const isOwner = jidsMatch(senderId, ownerUserId);
-  if (!isOwner) {
-    await messenger.sendText(chatId, '🎸 Only the owner (or band members, once role sync lands) can manage the setlist right now.', { replyTo });
+  if (!isOwner && senderIsBandMember !== true) {
+    await messenger.sendText(chatId, '🎸 Only the owner or band members can manage the setlist right now.', { replyTo });
     return;
   }
 
