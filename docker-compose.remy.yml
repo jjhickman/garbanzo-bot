@@ -1,0 +1,42 @@
+# docker-compose.remy.yml — Remy overlay
+#
+# Run alongside the base Garbanzo stack with:
+#   docker compose -f docker-compose.yml -f docker-compose.remy.yml up -d
+
+services:
+  remy:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
+    container_name: remy
+    restart: unless-stopped
+
+    env_file:
+      - .env.remy
+
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
+      - MESSAGING_PLATFORM=discord
+      - HEALTH_PORT=3002
+      - HEALTH_BIND_HOST=0.0.0.0
+      - QDRANT_COLLECTION=remy_memory
+
+    ports:
+      - "127.0.0.1:3002:3002"
+
+    volumes:
+      - remy_data:/app/data
+      - ./config/discord-channels.json:/app/config/discord-channels.json:ro
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    depends_on:
+      - qdrant
+
+volumes:
+  remy_data:
+    name: garbanzo-bot-remy-data
