@@ -22,6 +22,7 @@ import {
   mapSetlistEntry,
   mapSetlistSong,
   mapSong,
+  mapSongIdea,
   mapStrikeSummary,
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
@@ -37,6 +38,7 @@ import {
   type SetlistEntryRow,
   type SetlistRow,
   type SetlistSongRow,
+  type SongIdeaRow,
   type SongRow,
   type StrikeSummaryRow,
   type WhatsAppOutboundRow,
@@ -73,6 +75,7 @@ import type {
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -99,6 +102,7 @@ const REQUIRED_CORE_TABLES = [
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
   'songs',
+  'song_ideas',
   'rehearsals',
   'availability',
   'setlists',
@@ -1114,6 +1118,58 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     async deleteSong(id: number): Promise<boolean> {
       await pool.query('DELETE FROM setlist_songs WHERE song_id = $1', [id]);
       const res = await pool.query('DELETE FROM songs WHERE id = $1', [id]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async addSongIdea(input: {
+      title?: string | null;
+      text?: string | null;
+      audioUrl?: string | null;
+      transcript?: string | null;
+      songId?: number | null;
+      createdBy?: string | null;
+    }): Promise<SongIdea> {
+      const ts = Math.floor(Date.now() / 1000);
+      const res = await pool.query<SongIdeaRow>(
+        `INSERT INTO song_ideas (title, text, audio_url, transcript, song_id, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          input.title ?? null,
+          input.text ?? null,
+          input.audioUrl ?? null,
+          input.transcript ?? null,
+          input.songId ?? null,
+          input.createdBy ?? null,
+          ts,
+        ],
+      );
+      return mapSongIdea(res.rows[0]);
+    },
+
+    async getSongIdeaById(id: number): Promise<SongIdea | undefined> {
+      const res = await pool.query<SongIdeaRow>('SELECT * FROM song_ideas WHERE id = $1', [id]);
+      const row = res.rows[0];
+      return row ? mapSongIdea(row) : undefined;
+    },
+
+    async listSongIdeas(limit?: number): Promise<SongIdea[]> {
+      const res = limit !== undefined
+        ? await pool.query<SongIdeaRow>(
+          'SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC LIMIT $1',
+          [limit],
+        )
+        : await pool.query<SongIdeaRow>('SELECT * FROM song_ideas ORDER BY created_at DESC, id DESC');
+      return res.rows.map(mapSongIdea);
+    },
+
+    async linkSongIdeaToSong(ideaId: number, songId: number): Promise<boolean> {
+      const res = await pool.query('UPDATE song_ideas SET song_id = $1 WHERE id = $2', [songId, ideaId]);
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async deleteSongIdea(id: number): Promise<boolean> {
+      const res = await pool.query('DELETE FROM song_ideas WHERE id = $1', [id]);
       return (res.rowCount ?? 0) > 0;
     },
 

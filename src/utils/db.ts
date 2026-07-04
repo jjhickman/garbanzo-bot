@@ -29,6 +29,7 @@ export type {
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
   SongStatus,
   StrikeSummary,
   SessionSummaryHit,
@@ -155,6 +156,13 @@ export const getSongByTitle = backend.getSongByTitle;
 export const listSongs = backend.listSongs;
 export const updateSong = backend.updateSong;
 export const deleteSong = backend.deleteSong;
+
+// Song ideas (shared band songwriting scratchpad)
+export const addSongIdea = backend.addSongIdea;
+export const getSongIdeaById = backend.getSongIdeaById;
+export const listSongIdeas = backend.listSongIdeas;
+export const linkSongIdeaToSong = backend.linkSongIdeaToSong;
+export const deleteSongIdea = backend.deleteSongIdea;
 
 // Rehearsals (shared band practice memory)
 export const addRehearsal = backend.addRehearsal;

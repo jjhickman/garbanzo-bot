@@ -15,6 +15,7 @@ import type {
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
   SongStatus,
   StrikeSummary,
   WhatsAppOutboundJob,
@@ -142,6 +143,17 @@ export interface SetlistEntryRow extends SongRow {
   position: DbNumeric | null;
 }
 
+export interface SongIdeaRow {
+  id: DbNumeric | null;
+  title: string | null;
+  text: string | null;
+  audio_url: string | null;
+  transcript: string | null;
+  song_id: DbNumeric | null;
+  created_by: string | null;
+  created_at: DbNumeric | null;
+}
+
 export interface EventReminderRow {
   id: DbNumeric | null;
   chat_jid: string;
@@ -264,6 +276,19 @@ export function mapSong(row: SongRow): Song {
     notes: row.notes,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapSongIdea(row: SongIdeaRow): SongIdea {
+  return {
+    id: toNumber(row.id),
+    title: row.title,
+    text: row.text,
+    audioUrl: row.audio_url,
+    transcript: row.transcript,
+    songId: row.song_id === null ? null : toNumber(row.song_id),
+    createdBy: row.created_by,
+    createdAt: toNumber(row.created_at),
   };
 }
 

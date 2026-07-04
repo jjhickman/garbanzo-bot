@@ -211,3 +211,17 @@ CREATE TABLE IF NOT EXISTS setlist_songs (
 
 CREATE INDEX IF NOT EXISTS idx_setlist_songs_setlist
   ON setlist_songs (setlist_id);
+
+CREATE TABLE IF NOT EXISTS song_ideas (
+  id BIGSERIAL PRIMARY KEY,
+  title TEXT,
+  text TEXT,
+  audio_url TEXT,
+  transcript TEXT,
+  song_id BIGINT REFERENCES songs(id) ON DELETE SET NULL,
+  created_by TEXT,
+  created_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_song_ideas_created_at
+  ON song_ideas (created_at DESC);

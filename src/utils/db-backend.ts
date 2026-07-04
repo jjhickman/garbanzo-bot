@@ -18,6 +18,7 @@ import type {
   SetlistEntry,
   SetlistSong,
   Song,
+  SongIdea,
   SongStatus,
   StrikeSummary,
   SessionSummaryHit,
@@ -112,6 +113,13 @@ export interface DbBackend {
   listSongs(status?: SongStatus): Promise<Song[]>;
   updateSong(id: number, patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>): Promise<Song | undefined>;
   deleteSong(id: number): Promise<boolean>;
+
+  // Song ideas (shared band songwriting scratchpad)
+  addSongIdea(input: { title?: string | null; text?: string | null; audioUrl?: string | null; transcript?: string | null; songId?: number | null; createdBy?: string | null }): Promise<SongIdea>;
+  getSongIdeaById(id: number): Promise<SongIdea | undefined>;
+  listSongIdeas(limit?: number): Promise<SongIdea[]>;
+  linkSongIdeaToSong(ideaId: number, songId: number): Promise<boolean>;
+  deleteSongIdea(id: number): Promise<boolean>;
 
   // Rehearsals (shared band practice memory)
   addRehearsal(input: { scheduledAt: number; location?: string | null; agenda?: string | null; createdBy?: string | null }): Promise<Rehearsal>;

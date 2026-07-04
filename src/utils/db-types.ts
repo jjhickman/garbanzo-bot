@@ -109,6 +109,17 @@ export interface SetlistEntry {
   song: Song;
 }
 
+export interface SongIdea {
+  id: number;
+  title: string | null;
+  text: string | null;
+  audioUrl: string | null;
+  transcript: string | null;
+  songId: number | null;
+  createdBy: string | null;
+  createdAt: number;
+}
+
 export interface DailyGroupActivity {
   chatJid: string;
   messageCount: number;

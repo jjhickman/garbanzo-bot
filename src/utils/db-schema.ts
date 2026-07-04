@@ -267,6 +267,24 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_setlist_songs_setlist
     ON setlist_songs (setlist_id);
+
+  -- NOTE: sqlite does not run with PRAGMA foreign_keys=ON, so ON DELETE SET
+  -- NULL below is inert on the default sqlite backend (Task 2 handles the
+  -- deleteSong -> song_ideas null-out in code). The FK stays for postgres
+  -- correctness and as documentation of the relationship.
+  CREATE TABLE IF NOT EXISTS song_ideas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    text TEXT,
+    audio_url TEXT,
+    transcript TEXT,
+    song_id INTEGER REFERENCES songs(id) ON DELETE SET NULL,
+    created_by TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_song_ideas_created_at
+    ON song_ideas (created_at DESC);
 `);
 
 interface TableColumnInfo {
