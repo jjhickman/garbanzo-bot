@@ -305,6 +305,18 @@ export async function handleOwnerDM(
     return true;
   }
 
+  // !song [args] — band feature, gated by BAND_FEATURES_ENABLED. Owner is
+  // already guaranteed at this point (jidsMatch check above), so no further
+  // permission check is needed here.
+  // Lazy import: songs pulls in the db layer, which command tests mock per-module.
+  if (config.BAND_FEATURES_ENABLED && trimmedLower.startsWith('!song')) {
+    const { handleSongCommand } = await import('../../features/songs.js');
+    const args = text.trim().slice('!song'.length).trim();
+    const result = await handleSongCommand(args);
+    await sock.sendMessage(remoteJid, { text: result });
+    return true;
+  }
+
   // Owner help — show both regular + owner commands
   if (trimmedLower === '!help' || trimmedLower === '!help admin' || trimmedLower === '!admin') {
     const help = getHelpMessage() + '\n\n---\n\n' + getOwnerHelpMessage();

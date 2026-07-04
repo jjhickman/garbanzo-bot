@@ -44,6 +44,9 @@ export interface InboundMessage {
   /** Platform-native mention identifiers, when available. */
   mentionedIds?: string[];
 
+  /** Roles the sender holds, where the platform exposes them. */
+  senderRoleIds?: string[];
+
   /** True if the message includes visual media. */
   hasVisualMedia: boolean;
 

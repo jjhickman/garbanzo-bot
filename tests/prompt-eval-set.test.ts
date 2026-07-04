@@ -15,6 +15,8 @@ const VALID_TOOLS = [
   'lookup_book',
   'web_search',
   'search_community_memory',
+  'list_band_songs',
+  'find_band_song',
 ] as const;
 
 const CATEGORIES = [

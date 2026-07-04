@@ -4,6 +4,7 @@ import { createPublicKey, verify } from 'node:crypto';
 import { logger } from '../../middleware/logger.js';
 
 import { createDiscordAdapter } from './adapter.js';
+import { getDiscordOwnerId } from './discord-config.js';
 import { processDiscordEvent } from './processor.js';
 
 interface DiscordGatewayRuntimeParams {
@@ -169,6 +170,10 @@ export function createDiscordInteractionsServer(
 
       await processDiscordEvent(messenger, messageCreateLike, {
         ownerId: params.ownerId,
+        // The owner check compares the sender's user id, not the escalation
+        // target — thread the Discord owner user id here too (not just on the
+        // Gateway path) so owner commands work on the interactions runtime.
+        ownerUserId: getDiscordOwnerId(),
         botUserId,
       });
     } catch (err) {

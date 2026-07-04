@@ -141,6 +141,25 @@ describe('Discord Gateway client', () => {
     );
   });
 
+  it('maps guild member role ids into Discord payloads', async () => {
+    const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
+
+    const payload = mapMessageToPayload(createFakeMessage({
+      member: {
+        roles: {
+          cache: new Map<string, unknown>([
+            ['role-1', {}],
+            ['role-2', {}],
+          ]),
+        },
+      },
+    }));
+
+    expect(payload).toEqual(expect.objectContaining({
+      senderRoleIds: ['role-1', 'role-2'],
+    }));
+  });
+
   it('does not forward bot-authored messages', async () => {
     const { fakeClient, gateway, processDiscordEvent } = await setup();
 

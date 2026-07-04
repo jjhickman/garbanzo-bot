@@ -145,3 +145,21 @@ CREATE TABLE IF NOT EXISTS whatsapp_safety_state (
 INSERT INTO whatsapp_safety_state (id, paused, risk, score, reasons, updated_at)
   VALUES (1, 0, 'low', 0, '[]'::jsonb, 0)
   ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS songs (
+  id BIGSERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  song_key TEXT,
+  tempo INTEGER,
+  status TEXT NOT NULL DEFAULT 'idea'
+    CHECK (status IN ('idea', 'rough', 'tight', 'gig-ready')),
+  notes TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_songs_title_lower
+  ON songs (lower(title));
+
+CREATE INDEX IF NOT EXISTS idx_songs_status
+  ON songs (status);

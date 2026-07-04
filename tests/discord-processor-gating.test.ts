@@ -25,6 +25,7 @@ function setupMocks() {
   const isDiscordFeatureEnabled = vi.fn<(channelId: string, feature: string) => boolean>(
     (channelId, feature) => channelId === 'open' && feature === 'weather',
   );
+  const isBandMember = vi.fn<() => boolean>(() => false);
   const getDiscordIntroductionsChannelId = vi.fn<() => string | null>(() => 'intros');
   const getDiscordEventsChannelId = vi.fn<() => string | null>(() => 'events');
   const getDiscordChannelName = vi.fn<(channelId: string) => string | undefined>(
@@ -39,6 +40,7 @@ function setupMocks() {
     isDiscordChannelEnabled,
     discordChannelRequiresMention,
     isDiscordFeatureEnabled,
+    isBandMember,
     getDiscordChannelName,
     getDiscordIntroductionsChannelId,
     getDiscordEventsChannelId,

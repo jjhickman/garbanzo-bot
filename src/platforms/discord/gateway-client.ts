@@ -37,6 +37,7 @@ interface DiscordMessagePayload {
     id?: string;
     content?: string;
   };
+  senderRoleIds: string[];
   attachments: unknown[];
 }
 
@@ -136,6 +137,24 @@ function readMentions(message: Record<string, unknown>): Array<{ id: string }> {
     .map((id) => ({ id }));
 }
 
+function readMemberRoleIds(message: Record<string, unknown>): string[] {
+  const member = readRecord(message, 'member');
+  if (!member) return [];
+
+  const roles = member.roles;
+  if (Array.isArray(roles)) {
+    return roles.filter((roleId): roleId is string => typeof roleId === 'string');
+  }
+
+  if (!isRecord(roles)) return [];
+
+  const cache = roles.cache;
+  const ids = readCollectionKeys(cache).filter((roleId): roleId is string => typeof roleId === 'string');
+  if (ids.length > 0) return ids;
+
+  return readCollectionKeys(roles).filter((roleId): roleId is string => typeof roleId === 'string');
+}
+
 function readReferencedMessage(message: Record<string, unknown>): DiscordMessagePayload['referenced_message'] {
   const referencedMessage = readRecord(message, 'referencedMessage');
   const reference = readRecord(message, 'reference');
@@ -176,6 +195,7 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
     timestamp: readTimestamp(record),
     mentions: readMentions(record),
     ...(referencedMessage ? { referenced_message: referencedMessage } : {}),
+    senderRoleIds: readMemberRoleIds(record),
     attachments: readCollectionValues(record.attachments),
   };
 }

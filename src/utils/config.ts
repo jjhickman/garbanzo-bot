@@ -189,6 +189,9 @@ const envSchema = z.object({
   MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES: z.coerce.number().int().min(10).max(10080).default(360),
   MEMORY_AUTO_MAX_FACTS: z.coerce.number().int().min(10).max(2000).default(200),
 
+  // Shared band memory (songs, setlists, rehearsal notes)
+  BAND_FEATURES_ENABLED: booleanFromEnv.default(false),
+
   // Vector embedding pipeline
   VECTOR_STORE: z.enum(['qdrant', 'none']).default('qdrant'),
   QDRANT_URL: z.string().url().default('http://qdrant:6333'),

@@ -9,6 +9,7 @@ import {
   normalizeDiscordDemoInbound,
   processDiscordDemoInbound,
 } from './processor.js';
+import { getDiscordOwnerId } from './discord-config.js';
 
 export function createDiscordDemoServer(params: {
   host: string;
@@ -45,7 +46,10 @@ export function createDiscordDemoServer(params: {
       const outbox: DiscordDemoOutboxEntry[] = [];
       const messenger = createDiscordDemoAdapter(outbox);
 
-      await processDiscordDemoInbound(messenger, inbound, { ownerId: config.OWNER_JID });
+      await processDiscordDemoInbound(messenger, inbound, {
+        ownerId: config.OWNER_JID,
+        ownerUserId: getDiscordOwnerId(),
+      });
 
       writeJson(res, 200, {
         ok: true,

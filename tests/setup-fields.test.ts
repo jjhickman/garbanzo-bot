@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DISCORD_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
@@ -38,10 +39,52 @@ describe('setup field resolver', () => {
   });
 
   it('marks every API key/token field as secret', () => {
-    for (const env of ['ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GITHUB_ISSUES_TOKEN']) {
+    for (const env of ['ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GITHUB_ISSUES_TOKEN', 'DISCORD_BOT_TOKEN']) {
       expect(getField(env).secret).toBe(true);
     }
     expect(getField('OPENAI_MODEL').secret).toBeUndefined();
+  });
+
+  it('exposes Discord setup fields separately from the always-collected fields', () => {
+    expect(DISCORD_FIELDS.map((field) => field.env)).toEqual([
+      'DISCORD_BOT_TOKEN',
+      'DISCORD_PUBLIC_KEY',
+      'DISCORD_OWNER_ID',
+      'DISCORD_GATEWAY_ENABLED',
+      'DISCORD_DIGEST_CHANNEL_ID',
+      'DISCORD_RECAP_CHANNEL_ID',
+      'BAND_FEATURES_ENABLED',
+    ]);
+  });
+
+  it('resolves Discord fields from cli, existing env, then defaults', () => {
+    const token = getField('DISCORD_BOT_TOKEN');
+    expect(resolveEnvField(token, cli({ 'discord-bot-token': 'cli-token' }), { DISCORD_BOT_TOKEN: 'existing-token' })).toBe('cli-token');
+    expect(resolveEnvField(token, cli({}), { DISCORD_BOT_TOKEN: 'existing-token' })).toBe('existing-token');
+    expect(resolveEnvField(token, cli({}), {})).toBe('');
+
+    const publicKey = getField('DISCORD_PUBLIC_KEY');
+    expect(resolveEnvField(publicKey, cli({ 'discord-public-key': 'cli-public' }), { DISCORD_PUBLIC_KEY: 'existing-public' })).toBe('cli-public');
+
+    const ownerId = getField('DISCORD_OWNER_ID');
+    expect(resolveEnvField(ownerId, cli({ 'discord-owner-id': 'cli-owner' }), { DISCORD_OWNER_ID: 'existing-owner' })).toBe('cli-owner');
+
+    const digestChannelId = getField('DISCORD_DIGEST_CHANNEL_ID');
+    expect(resolveEnvField(digestChannelId, cli({ 'discord-digest-channel-id': 'cli-digest' }), { DISCORD_DIGEST_CHANNEL_ID: 'existing-digest' })).toBe('cli-digest');
+
+    const recapChannelId = getField('DISCORD_RECAP_CHANNEL_ID');
+    expect(resolveEnvField(recapChannelId, cli({ 'discord-recap-channel-id': 'cli-recap' }), { DISCORD_RECAP_CHANNEL_ID: 'existing-recap' })).toBe('cli-recap');
+  });
+
+  it('uses Discord/Remy defaults and masks the Discord bot token prompt hint', () => {
+    const token = getField('DISCORD_BOT_TOKEN');
+    expect(token.secret).toBe(true);
+    expect(promptHint(token, { DISCORD_BOT_TOKEN: 'discord-secret-token' })).toBe('set');
+    expect(promptHint(token, {})).toBe('empty');
+    expect(promptHint(token, { DISCORD_BOT_TOKEN: 'discord-secret-token' })).not.toContain('discord-secret-token');
+
+    expect(resolveEnvField(getField('DISCORD_GATEWAY_ENABLED'), cli({}), {})).toBe('true');
+    expect(resolveEnvField(getField('BAND_FEATURES_ENABLED'), cli({}), {})).toBe('false');
   });
 
   it('exposes the new auth/login mode enums and rejects unknown fields', () => {

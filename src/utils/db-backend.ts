@@ -10,6 +10,8 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
+  Song,
+  SongStatus,
   StrikeSummary,
   SessionSummaryHit,
   WhatsAppOutboundJob,
@@ -95,6 +97,14 @@ export interface DbBackend {
   deleteMemory(id: number): Promise<boolean>;
   searchMemory(keyword: string, limit?: number): Promise<MemoryEntry[]>;
   formatMemoriesForPrompt(): Promise<string>;
+
+  // Songs (shared band memory)
+  addSong(input: { title: string; key?: string | null; tempo?: number | null; status?: SongStatus; notes?: string | null }): Promise<Song>;
+  getSongById(id: number): Promise<Song | undefined>;
+  getSongByTitle(title: string): Promise<Song | undefined>;
+  listSongs(status?: SongStatus): Promise<Song[]>;
+  updateSong(id: number, patch: Partial<{ title: string; key: string | null; tempo: number | null; status: SongStatus; notes: string | null }>): Promise<Song | undefined>;
+  deleteSong(id: number): Promise<boolean>;
 
   // Lifecycle
   closeDb(): Promise<void>;

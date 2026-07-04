@@ -7,6 +7,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { execSync } from 'node:child_process';
 
 import {
+  DISCORD_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
@@ -17,6 +18,8 @@ import {
 const PROJECT_ROOT = resolve(new URL('..', import.meta.url).pathname);
 const ENV_PATH = resolve(PROJECT_ROOT, '.env');
 const GROUPS_PATH = resolve(PROJECT_ROOT, 'config', 'groups.json');
+const DISCORD_CHANNELS_PATH = resolve(PROJECT_ROOT, 'config', 'discord-channels.json');
+const DISCORD_CHANNELS_EXAMPLE_PATH = resolve(PROJECT_ROOT, 'config', 'discord-channels.example.json');
 const PERSONA_PATH = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
 const PACKAGE_JSON_PATH = resolve(PROJECT_ROOT, 'package.json');
 
@@ -153,6 +156,7 @@ function redactEnvContent(content) {
     'GEMINI_API_KEY=',
     'BEDROCK_MODEL_ID=',
     'GITHUB_ISSUES_TOKEN=',
+    'DISCORD_BOT_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
   ];
@@ -174,6 +178,12 @@ function yn(value, fallback = true) {
   if (['y', 'yes'].includes(normalized)) return true;
   if (['n', 'no'].includes(normalized)) return false;
   return fallback;
+}
+
+function defaultQdrantCollectionForBand(isBandDeployment, existingCollection) {
+  const current = (existingCollection || '').trim();
+  if (isBandDeployment && (!current || current === 'garbanzo_memory')) return 'remy_memory';
+  return current || 'garbanzo_memory';
 }
 
 async function promptChoice(rl, question, options, defaultIndex = 0) {
@@ -292,6 +302,39 @@ async function main() {
           await rl.question('Enable local Slack demo mode? [Y/n] (required for Slack right now): '),
           true,
         );
+      }
+    }
+
+    const discordEnv = {};
+    let bandDeployment = false;
+    let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
+    let shouldScaffoldDiscordChannels = false;
+    if (messagingPlatform === 'discord') {
+      for (const field of DISCORD_FIELDS.filter((candidate) => candidate.env !== 'BAND_FEATURES_ENABLED')) {
+        discordEnv[field.env] = await resolveText(field.env);
+      }
+
+      if (nonInteractive) {
+        const bandValue = resolveEnvField(getField('BAND_FEATURES_ENABLED'), cli, existing);
+        bandDeployment = parseBoolean(bandValue, false);
+      } else {
+        const existingBandDeployment = parseBoolean(existing.BAND_FEATURES_ENABLED, false);
+        bandDeployment = yn(
+          await rl.question(`Is this a band deployment (Remy)? [${existingBandDeployment ? 'Y/n' : 'y/N'}]: `),
+          existingBandDeployment,
+        );
+      }
+      discordEnv.BAND_FEATURES_ENABLED = String(bandDeployment);
+
+      const qdrantDefault = defaultQdrantCollectionForBand(bandDeployment, existing.QDRANT_COLLECTION);
+      qdrantCollection = nonInteractive
+        ? (cli.options['qdrant-collection'] ?? qdrantDefault)
+        : ((await rl.question(`QDRANT_COLLECTION [${qdrantDefault}]: `)).trim() || qdrantDefault);
+
+      if (bandDeployment && !existsSync(DISCORD_CHANNELS_PATH)) {
+        shouldScaffoldDiscordChannels = nonInteractive
+          ? parseBoolean(cli.options['write-discord-channels'], true)
+          : yn(await rl.question('Create config/discord-channels.json from the example? [Y/n]: '), true);
       }
     }
 
@@ -569,9 +612,36 @@ async function main() {
       SLACK_DEMO: (messagingPlatform === 'slack' ? String(slackDemo) : (existing.SLACK_DEMO || 'false')).trim(),
       SLACK_DEMO_PORT: (existing.SLACK_DEMO_PORT || '3002').trim(),
       SLACK_DEMO_BIND_HOST: (existing.SLACK_DEMO_BIND_HOST || '127.0.0.1').trim(),
+      DISCORD_BOT_TOKEN: (discordEnv.DISCORD_BOT_TOKEN || existing.DISCORD_BOT_TOKEN || '').trim(),
+      DISCORD_PUBLIC_KEY: (discordEnv.DISCORD_PUBLIC_KEY || existing.DISCORD_PUBLIC_KEY || '').trim(),
+      DISCORD_OWNER_ID: (discordEnv.DISCORD_OWNER_ID || existing.DISCORD_OWNER_ID || '').trim(),
+      DISCORD_GATEWAY_ENABLED: (discordEnv.DISCORD_GATEWAY_ENABLED || existing.DISCORD_GATEWAY_ENABLED || 'true').trim(),
+      DISCORD_DIGEST_CHANNEL_ID: (discordEnv.DISCORD_DIGEST_CHANNEL_ID || existing.DISCORD_DIGEST_CHANNEL_ID || '').trim(),
+      DISCORD_RECAP_CHANNEL_ID: (discordEnv.DISCORD_RECAP_CHANNEL_ID || existing.DISCORD_RECAP_CHANNEL_ID || '').trim(),
+      DISCORD_CHANNELS_CONFIG_PATH: (existing.DISCORD_CHANNELS_CONFIG_PATH || 'config/discord-channels.json').trim(),
+      BAND_FEATURES_ENABLED: (discordEnv.BAND_FEATURES_ENABLED || existing.BAND_FEATURES_ENABLED || 'false').trim(),
+      QDRANT_COLLECTION: String(qdrantCollection || existing.QDRANT_COLLECTION || 'garbanzo_memory').trim(),
       OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
       WHATSAPP_LOGIN_MODE: (whatsappLoginMode || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
     };
+
+    const discordEnvLines = messagingPlatform === 'discord'
+      ? [
+          '',
+          '# Discord runtime',
+          `DISCORD_BOT_TOKEN=${finalEnv.DISCORD_BOT_TOKEN}`,
+          `DISCORD_PUBLIC_KEY=${finalEnv.DISCORD_PUBLIC_KEY}`,
+          `DISCORD_OWNER_ID=${finalEnv.DISCORD_OWNER_ID}`,
+          `DISCORD_GATEWAY_ENABLED=${finalEnv.DISCORD_GATEWAY_ENABLED}`,
+          `DISCORD_DIGEST_CHANNEL_ID=${finalEnv.DISCORD_DIGEST_CHANNEL_ID}`,
+          `DISCORD_RECAP_CHANNEL_ID=${finalEnv.DISCORD_RECAP_CHANNEL_ID}`,
+          `DISCORD_CHANNELS_CONFIG_PATH=${finalEnv.DISCORD_CHANNELS_CONFIG_PATH}`,
+          '',
+          '# Remy band memory',
+          `BAND_FEATURES_ENABLED=${finalEnv.BAND_FEATURES_ENABLED}`,
+          `QDRANT_COLLECTION=${finalEnv.QDRANT_COLLECTION}`,
+        ]
+      : [];
 
     const envContent = [
       '# Garbanzo generated by setup wizard',
@@ -625,6 +695,7 @@ async function main() {
       `SLACK_DEMO=${finalEnv.SLACK_DEMO}`,
       `SLACK_DEMO_PORT=${finalEnv.SLACK_DEMO_PORT}`,
       `SLACK_DEMO_BIND_HOST=${finalEnv.SLACK_DEMO_BIND_HOST}`,
+      ...discordEnvLines,
       '',
     ].join('\n');
 
@@ -700,6 +771,25 @@ async function main() {
       output.write('ℹ️ Skipped groups.json generation (only needed for WhatsApp runtime).\n');
     }
 
+    if (messagingPlatform === 'discord' && bandDeployment) {
+      if (existsSync(DISCORD_CHANNELS_PATH)) {
+        output.write('ℹ️ Using existing config/discord-channels.json; leaving it unchanged.\n');
+      } else if (shouldScaffoldDiscordChannels) {
+        if (!existsSync(DISCORD_CHANNELS_EXAMPLE_PATH)) {
+          output.write('⚠️ config/discord-channels.example.json is missing; create config/discord-channels.json before starting Remy.\n');
+        } else if (dryRun) {
+          output.write('🧪 Dry-run: would copy config/discord-channels.example.json to config/discord-channels.json\n');
+        } else {
+          mkdirSync(resolve(PROJECT_ROOT, 'config'), { recursive: true });
+          copyFileSync(DISCORD_CHANNELS_EXAMPLE_PATH, DISCORD_CHANNELS_PATH);
+          output.write('✅ Wrote config/discord-channels.json from config/discord-channels.example.json\n');
+        }
+        output.write('ℹ️ Fill config/discord-channels.json with real Discord channel, role, and owner ids before starting Remy.\n');
+      } else {
+        output.write('ℹ️ Skipped config/discord-channels.json scaffold. Copy config/discord-channels.example.json there and fill in real Discord ids before starting Remy.\n');
+      }
+    }
+
     if (!dryRun && existsSync(resolve(PROJECT_ROOT, '.git'))) {
       copyFileSync(resolve(PROJECT_ROOT, 'scripts', 'pre-commit'), resolve(PROJECT_ROOT, '.git', 'hooks', 'pre-commit'));
       output.write('✅ Installed pre-commit hook\n');
@@ -731,6 +821,12 @@ async function main() {
       } else {
         output.write('\nℹ️ Slack official runtime requires SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET in .env.\n');
       }
+    }
+
+    if (messagingPlatform === 'discord') {
+      output.write(`- Discord gateway enabled: ${finalEnv.DISCORD_GATEWAY_ENABLED}\n`);
+      output.write(`- Band deployment (Remy): ${finalEnv.BAND_FEATURES_ENABLED}\n`);
+      output.write(`- Qdrant collection: ${finalEnv.QDRANT_COLLECTION}\n`);
     }
 
     if (deployTarget === 'docker') {

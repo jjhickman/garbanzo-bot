@@ -10,6 +10,7 @@ import { formatContext } from '../middleware/context.js';
 import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPrompt } from '../utils/db.js';
 import { getSearchProviderName } from '../features/web-search.js';
+import { formatBandKnowledgeForPrompt } from '../features/band-knowledge.js';
 
 // Load persona at startup
 const defaultPersonaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
@@ -89,6 +90,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
   const context = await formatContext(ctx.groupJid, userMessage ?? '');
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
   const memories = await formatMemoriesForPrompt();
+  const bandKnowledge = await formatBandKnowledgeForPrompt();
   const groupPersona = getGroupPersona(ctx.groupJid);
   const toolInstruction = buildToolInstruction();
 
@@ -104,6 +106,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
       : '',
     context ? `\n${context}` : '',
     memories ? `\n${memories}` : '',
+    bandKnowledge ? `\n${bandKnowledge}` : '',
     '',
     buildFormattingInstruction(config.MESSAGING_PLATFORM),
     toolInstruction,
@@ -124,6 +127,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
  */
 export async function buildOllamaPrompt(ctx: MessageContext, userMessage: string = ''): Promise<string> {
   const context = await formatContext(ctx.groupJid, userMessage);
+  const bandKnowledge = await formatBandKnowledgeForPrompt();
   const formattingRule = config.MESSAGING_PLATFORM === 'discord'
     ? '- Use Discord markdown: **bold**, *italic*, ~~strike~~.'
     : '- Use WhatsApp formatting: *bold*, _italic_, ~strike~.';
@@ -142,5 +146,6 @@ export async function buildOllamaPrompt(ctx: MessageContext, userMessage: string
     '',
     `You are in the "${ctx.groupName}" group chat.`,
     context ? `\n${context}` : '',
+    bandKnowledge ? `\n${bandKnowledge}` : '',
   ].filter(Boolean).join('\n');
 }
