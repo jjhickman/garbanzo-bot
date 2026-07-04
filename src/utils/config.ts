@@ -16,6 +16,15 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const optionalString = z.preprocess(
+  (value) => {
+    if (typeof value === 'string' && value.trim() === '') return undefined;
+    if (typeof value === 'string') return value.trim();
+    return value;
+  },
+  z.string().min(1).optional(),
+);
+
 const booleanFromEnv = z.preprocess((value) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
@@ -29,13 +38,13 @@ const booleanFromEnv = z.preprocess((value) => {
 
 const envSchema = z.object({
   // Runtime platform
-  MESSAGING_PLATFORM: z.enum(['whatsapp', 'discord', 'slack', 'teams']).default('whatsapp'),
+  MESSAGING_PLATFORM: z.enum(['whatsapp', 'discord', 'slack', 'teams']).default('discord'),
 
   // AI — at least one must be set
-  ANTHROPIC_API_KEY: z.string().optional(),
-  OPENROUTER_API_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  GEMINI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: optionalString,
+  OPENROUTER_API_KEY: optionalString,
+  OPENAI_API_KEY: optionalString,
+  GEMINI_API_KEY: optionalString,
   // Comma-separated provider priority order, eg: "openrouter,anthropic,openai,gemini,bedrock"
   AI_PROVIDER_ORDER: z.string().default('openai,anthropic'),
   ANTHROPIC_MODEL: z.string().default('claude-haiku-4-5-20251001'),
@@ -70,7 +79,7 @@ const envSchema = z.object({
 
   // AWS Bedrock (uses AWS credentials via default provider chain)
   BEDROCK_REGION: z.string().default('us-east-1'),
-  BEDROCK_MODEL_ID: z.string().optional(),
+  BEDROCK_MODEL_ID: optionalString,
   BEDROCK_MAX_TOKENS: z.coerce.number().int().min(1).max(4096).default(1024),
   BEDROCK_PRICING_INPUT_PER_M: z.coerce.number().min(0).default(0.0),
   BEDROCK_PRICING_OUTPUT_PER_M: z.coerce.number().min(0).default(0.0),
@@ -80,7 +89,7 @@ const envSchema = z.object({
   OLLAMA_MODEL: z.string().default('qwen3:8b'),
 
   // WhatsApp
-  BOT_PHONE_NUMBER: z.string().optional(),
+  BOT_PHONE_NUMBER: optionalString,
   WHATSAPP_LOGIN_MODE: z.enum(['web', 'terminal', 'both']).default('web'),
   // Empty string normalizes to undefined so a strong random token is generated at
   // startup instead of an all-empty (bypassable) token guard.
@@ -102,12 +111,12 @@ const envSchema = z.object({
   REHEARSAL_REMINDER_LEAD_MINUTES: z.coerce.number().int().min(10).max(1440).default(120),
 
   // Feature API keys (all optional — features degrade gracefully)
-  GOOGLE_API_KEY: z.string().optional(),
-  MBTA_API_KEY: z.string().optional(),
-  NEWSAPI_KEY: z.string().optional(),
-  FIRECRAWL_API_KEY: z.string().optional(),
-  BRAVE_SEARCH_API_KEY: z.string().optional(),
-  GOOGLE_SEARCH_ENGINE_ID: z.string().optional(),
+  GOOGLE_API_KEY: optionalString,
+  MBTA_API_KEY: optionalString,
+  NEWSAPI_KEY: optionalString,
+  FIRECRAWL_API_KEY: optionalString,
+  BRAVE_SEARCH_API_KEY: optionalString,
+  GOOGLE_SEARCH_ENGINE_ID: optionalString,
   SEARXNG_BASE_URL: optionalUrl,
   WEB_SEARCH_PROVIDER: z.enum(['firecrawl', 'brave', 'google', 'searxng']).optional(),
 
@@ -116,29 +125,30 @@ const envSchema = z.object({
   PATREON_URL: optionalUrl,
   KOFI_URL: optionalUrl,
   SUPPORT_CUSTOM_URL: optionalUrl,
-  SUPPORT_MESSAGE: z.string().optional(),
+  SUPPORT_MESSAGE: optionalString,
 
   // Optional GitHub issue automation for owner-approved feedback
-  GITHUB_ISSUES_TOKEN: z.string().optional(),
+  GITHUB_ISSUES_TOKEN: optionalString,
   GITHUB_ISSUES_REPO: z.string().default('owner/repo'),
 
   // Infrastructure
   HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   HEALTH_BIND_HOST: z.string().min(1).default('127.0.0.1'),
   METRICS_ENABLED: booleanFromEnv.default(false),
+  MONITORING_TOKEN: optionalString,
   // Owner admin page at /admin (token-gated with the login token).
   ADMIN_PAGE_ENABLED: booleanFromEnv.default(true),
   // Sunday-evening weekly recap DM to the owner.
   WEEKLY_RECAP_ENABLED: booleanFromEnv.default(true),
 
   // Slack runtime
-  SLACK_BOT_TOKEN: z.string().optional(),
-  SLACK_SIGNING_SECRET: z.string().optional(),
-  SLACK_BOT_USER_ID: z.string().optional(),
+  SLACK_BOT_TOKEN: optionalString,
+  SLACK_SIGNING_SECRET: optionalString,
+  SLACK_BOT_USER_ID: optionalString,
   // Optional token rotation support (recommended for expiring Slack tokens)
-  SLACK_CLIENT_ID: z.string().optional(),
-  SLACK_CLIENT_SECRET: z.string().optional(),
-  SLACK_REFRESH_TOKEN: z.string().optional(),
+  SLACK_CLIENT_ID: optionalString,
+  SLACK_CLIENT_SECRET: optionalString,
+  SLACK_REFRESH_TOKEN: optionalString,
   SLACK_TOKEN_STATE_FILE: z.string().default('data/slack-token-state.json'),
   SLACK_TOKEN_ROTATE_MIN_BUFFER: z.coerce.number().int().min(1).max(120).default(5),
   SLACK_EVENTS_PORT: z.coerce.number().int().min(1).max(65535).default(3002),
@@ -148,17 +158,17 @@ const envSchema = z.object({
   SLACK_DEMO_PORT: z.coerce.number().int().min(1).max(65535).default(3002),
   SLACK_DEMO_BIND_HOST: z.string().min(1).default('127.0.0.1'),
   DEMO_TURNSTILE_ENABLED: booleanFromEnv.default(false),
-  DEMO_TURNSTILE_SITE_KEY: z.string().optional(),
-  DEMO_TURNSTILE_SECRET_KEY: z.string().optional(),
+  DEMO_TURNSTILE_SITE_KEY: optionalString,
+  DEMO_TURNSTILE_SECRET_KEY: optionalString,
 
   // Discord runtime
-  DISCORD_BOT_TOKEN: z.string().optional(),
-  DISCORD_PUBLIC_KEY: z.string().optional(),
-  DISCORD_OWNER_ID: z.string().optional(),
+  DISCORD_BOT_TOKEN: optionalString,
+  DISCORD_PUBLIC_KEY: optionalString,
+  DISCORD_OWNER_ID: optionalString,
   DISCORD_GATEWAY_ENABLED: booleanFromEnv.default(true),
-  DISCORD_DIGEST_CHANNEL_ID: z.string().optional(),
-  DISCORD_RECAP_CHANNEL_ID: z.string().optional(),
-  DISCORD_PRACTICE_CHANNEL_ID: z.string().optional(),
+  DISCORD_DIGEST_CHANNEL_ID: optionalString,
+  DISCORD_RECAP_CHANNEL_ID: optionalString,
+  DISCORD_PRACTICE_CHANNEL_ID: optionalString,
   DISCORD_CHANNELS_CONFIG_PATH: z.string().default('config/discord-channels.json'),
   DISCORD_INTERACTIONS_PORT: z.coerce.number().int().min(1).max(65535).default(3003),
   DISCORD_INTERACTIONS_BIND_HOST: z.string().min(1).default('127.0.0.1'),
@@ -169,12 +179,12 @@ const envSchema = z.object({
 
   // Database
   DB_DIALECT: z.enum(['sqlite', 'postgres']).default('sqlite'),
-  DATABASE_URL: z.string().optional(),
-  POSTGRES_HOST: z.string().optional(),
+  DATABASE_URL: optionalString,
+  POSTGRES_HOST: optionalString,
   POSTGRES_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
-  POSTGRES_DB: z.string().optional(),
-  POSTGRES_USER: z.string().optional(),
-  POSTGRES_PASSWORD: z.string().optional(),
+  POSTGRES_DB: optionalString,
+  POSTGRES_USER: optionalString,
+  POSTGRES_PASSWORD: optionalString,
   POSTGRES_SSL: booleanFromEnv.default(false),
   POSTGRES_SSL_REJECT_UNAUTHORIZED: booleanFromEnv.default(false),
 
@@ -197,7 +207,7 @@ const envSchema = z.object({
   // Vector embedding pipeline
   VECTOR_STORE: z.enum(['qdrant', 'none']).default('qdrant'),
   QDRANT_URL: z.string().url().default('http://qdrant:6333'),
-  QDRANT_API_KEY: z.string().min(1).optional(),
+  QDRANT_API_KEY: optionalString,
   QDRANT_COLLECTION: z.string().min(1).default('garbanzo_memory'),
   VECTOR_EMBEDDING_PROVIDER: z.enum(['deterministic', 'openai']).default('openai'),
   VECTOR_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
@@ -206,7 +216,15 @@ const envSchema = z.object({
   VECTOR_EMBEDDING_MAX_CHARS: z.coerce.number().int().min(256).max(12000).default(4000),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  OWNER_JID: z.string().min(1, 'OWNER_JID is required — set in .env'),
+  OWNER_JID: optionalString,
+}).superRefine((env, ctx) => {
+  if (env.MESSAGING_PLATFORM === 'whatsapp' && !env.OWNER_JID) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OWNER_JID'],
+      message: 'OWNER_JID is required when MESSAGING_PLATFORM=whatsapp — set it in .env.whatsapp',
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

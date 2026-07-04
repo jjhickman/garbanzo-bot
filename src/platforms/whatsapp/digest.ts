@@ -43,6 +43,11 @@ export function scheduleDigest(sock: WASocket): () => void {
 }
 
 async function sendDigest(sock: WASocket): Promise<string> {
+  // Config schema requires OWNER_JID for the WhatsApp platform; this narrows
+  // the conditional type at WhatsApp-only call sites.
+  const ownerJid = config.OWNER_JID;
+  if (!ownerJid) throw new Error('OWNER_JID is required for WhatsApp digest delivery');
+
   const stats = snapshotAndReset();
   const text = await formatDigest(stats);
 
@@ -50,10 +55,10 @@ async function sendDigest(sock: WASocket): Promise<string> {
   await archiveDailyDigest(stats);
 
   try {
-    await sock.sendMessage(config.OWNER_JID, { text });
+    await sock.sendMessage(ownerJid, { text });
     logger.info({ date: stats.date }, 'Daily digest sent');
   } catch (err) {
-    logger.error({ err, ownerId: config.OWNER_JID, date: stats.date }, 'Failed to send digest to owner DM');
+    logger.error({ err, ownerId: ownerJid, date: stats.date }, 'Failed to send digest to owner DM');
   }
 
   return text;

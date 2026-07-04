@@ -210,7 +210,11 @@ export async function handleOwnerDM(
   senderJid: string,
   text: string,
 ): Promise<boolean> {
-  if (!jidsMatch(senderJid, config.OWNER_JID)) return false;
+  // Config schema requires OWNER_JID for the WhatsApp platform; this narrows
+  // the conditional type at WhatsApp-only call sites.
+  const ownerJid = config.OWNER_JID;
+  if (!ownerJid) throw new Error('OWNER_JID is required for WhatsApp owner commands');
+  if (!jidsMatch(senderJid, ownerJid)) return false;
 
   logger.info({ sender: senderJid, text }, 'Owner DM');
   recordOwnerDM();

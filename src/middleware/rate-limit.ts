@@ -43,7 +43,7 @@ export function checkRateLimit(
   groupJid: string,
 ): string | null {
   // Owner is exempt (device-suffix tolerant — see jidsMatch)
-  if (jidsMatch(senderJid, config.OWNER_JID)) return null;
+  if (config.OWNER_JID && jidsMatch(senderJid, config.OWNER_JID)) return null;
 
   const now = Date.now();
 

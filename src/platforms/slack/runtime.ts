@@ -25,7 +25,7 @@ export function createSlackRuntime(): PlatformRuntime {
           port: config.SLACK_EVENTS_PORT,
           tokenProvider,
           signingSecret: config.SLACK_SIGNING_SECRET,
-          ownerId: config.OWNER_JID,
+          ownerId: config.OWNER_JID ?? '',
           botUserId: config.SLACK_BOT_USER_ID,
         });
 
