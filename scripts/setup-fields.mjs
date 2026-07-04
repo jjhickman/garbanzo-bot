@@ -12,7 +12,7 @@
  * `secret: true` fields never render their raw value in a prompt hint.
  * (APP_VERSION is intentionally omitted — its default is computed at runtime.)
  */
-export const FIELD_TABLE = [
+export const COMMON_FIELDS = [
   { env: 'ANTHROPIC_API_KEY', cli: 'anthropic-key', default: '', secret: true },
   { env: 'OPENROUTER_API_KEY', cli: 'openrouter-key', default: '', secret: true },
   { env: 'OPENAI_API_KEY', cli: 'openai-key', default: '', secret: true },
@@ -39,6 +39,21 @@ export const FIELD_TABLE = [
   { env: 'SUPPORT_MESSAGE', cli: 'support-message', default: '' },
   { env: 'GITHUB_ISSUES_TOKEN', cli: 'github-issues-token', default: '', secret: true },
   { env: 'GITHUB_ISSUES_REPO', cli: 'github-issues-repo', default: 'owner/repo' },
+];
+
+export const DISCORD_FIELDS = [
+  { env: 'DISCORD_BOT_TOKEN', cli: 'discord-bot-token', default: '', secret: true },
+  { env: 'DISCORD_PUBLIC_KEY', cli: 'discord-public-key', default: '' },
+  { env: 'DISCORD_OWNER_ID', cli: 'discord-owner-id', default: '' },
+  { env: 'DISCORD_GATEWAY_ENABLED', cli: 'discord-gateway-enabled', default: 'true' },
+  { env: 'DISCORD_DIGEST_CHANNEL_ID', cli: 'discord-digest-channel-id', default: '' },
+  { env: 'DISCORD_RECAP_CHANNEL_ID', cli: 'discord-recap-channel-id', default: '' },
+  { env: 'BAND_FEATURES_ENABLED', cli: 'band-features-enabled', default: 'false' },
+];
+
+export const FIELD_TABLE = [
+  ...COMMON_FIELDS,
+  ...DISCORD_FIELDS,
 ];
 
 const FIELD_BY_ENV = new Map(FIELD_TABLE.map((field) => [field.env, field]));
