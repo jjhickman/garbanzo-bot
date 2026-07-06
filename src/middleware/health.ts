@@ -26,6 +26,7 @@ import {
 import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
 import { getGroupName } from '../core/groups-config.js';
 import { getVectorStore } from '../utils/vector-memory.js';
+import { parseBridgeEnvelope, type BridgeEnvelope } from '../bridge/envelope.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -97,17 +98,21 @@ let server: Server | null = null;
 
 const HEALTH_RATE_WINDOW_MS = 60_000;
 const HEALTH_RATE_LIMIT = 120;
+const BRIDGE_INBOUND_BODY_LIMIT_BYTES = 64 * 1024;
 
 const healthRateWindow = new Map<string, { windowStart: number; count: number }>();
 
 const BACKUP_CHECK_CACHE_MS = 5 * 60_000;
 let backupStatusCache: { checkedAt: number; status: BackupIntegrityStatus } | null = null;
 
+type BridgeInboundHandler = (envelope: BridgeEnvelope) => Promise<'accepted' | 'duplicate'>;
+
 interface HealthServerOptions {
   metricsEnabled?: boolean;
   authToken?: string;
   /** Serve the owner admin page at /admin (+ /admin.json). Requires authToken. */
   adminEnabled?: boolean;
+  bridgeInboundHandler?: BridgeInboundHandler;
   extraHandler?: (req: IncomingMessage, res: ServerResponse) => boolean;
 }
 
@@ -160,6 +165,113 @@ function requestHasValidToken(req: IncomingMessage, expected: string): boolean {
   const rawUrl = req.url ?? '';
   const queryToken = new URLSearchParams(rawUrl.split('?')[1] ?? '').get('token');
   return tokenMatches(queryToken, expected) || tokenMatches(bearerToken(req), expected);
+}
+
+function writeJson(res: ServerResponse, status: number, body: object): void {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super('payload_too_large');
+  }
+}
+
+async function readRequestBody(req: IncomingMessage, maxBytes: number): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    let settled = false;
+
+    const rejectOnce = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    req.on('data', (chunk: Buffer | string) => {
+      if (settled) return;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.length;
+      if (totalBytes > maxBytes) {
+        req.destroy();
+        rejectOnce(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(buffer);
+    });
+
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+
+    req.on('error', (err) => {
+      rejectOnce(err instanceof Error ? err : new Error(String(err)));
+    });
+  });
+}
+
+async function handleBridgeInbound(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: HealthServerOptions & { bridgeInboundHandler: BridgeInboundHandler },
+): Promise<void> {
+  const now = Date.now();
+  const ip = req.socket.remoteAddress ?? 'unknown';
+  if (isHealthRequestRateLimited(ip, now)) {
+    writeJson(res, 429, { error: 'rate_limited' });
+    return;
+  }
+
+  if (!requestHasValidToken(req, options.authToken ?? '')) {
+    writeJson(res, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    writeJson(res, 405, { error: 'method_not_allowed' });
+    return;
+  }
+
+  let body: string;
+  try {
+    body = await readRequestBody(req, BRIDGE_INBOUND_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof PayloadTooLargeError) {
+      writeJson(res, 413, { error: 'payload_too_large' });
+      return;
+    }
+    throw err;
+  }
+
+  let rawEnvelope: unknown;
+  try {
+    rawEnvelope = JSON.parse(body) as unknown;
+  } catch {
+    writeJson(res, 400, { error: 'invalid json' });
+    return;
+  }
+
+  const envelope = parseBridgeEnvelope(rawEnvelope);
+  if (!envelope) {
+    writeJson(res, 400, { error: 'invalid envelope' });
+    return;
+  }
+
+  try {
+    const result = await options.bridgeInboundHandler(envelope);
+    if (result === 'duplicate') {
+      writeJson(res, 200, { status: 'duplicate' });
+      return;
+    }
+    writeJson(res, 202, { status: 'accepted' });
+  } catch (err) {
+    logger.warn({ err, routeId: envelope.routeId }, 'Bridge inbound handler failed');
+    writeJson(res, 503, { error: 'delivery failed' });
+  }
 }
 
 async function getCachedBackupStatus(now: number): Promise<{ checkedAt: number; status: BackupIntegrityStatus }> {
@@ -441,96 +553,8 @@ export function startHealthServer(
   host: string = '127.0.0.1',
   options?: HealthServerOptions,
 ): Server {
-  const metricsEnabled = options?.metricsEnabled === true;
-  // The admin page carries usage/cost detail, so it is only served when a
-  // token exists to gate it — never open, even on localhost binds.
-  const adminEnabled = options?.adminEnabled === true && options.authToken !== undefined;
-
   server = createServer((req, res) => {
-    void (async () => {
-      if (options?.extraHandler?.(req, res)) return;
-
-      // Match on the raw origin-form path (unchanged from before): absolute-form
-      // request targets must not be normalized into a matching pathname.
-      const rawUrl = req.url ?? '';
-      const path = rawUrl.split('?')[0];
-
-      if (adminEnabled && (path === '/admin' || path === '/admin.json') && req.method === 'GET') {
-        const now = Date.now();
-        const ip = req.socket.remoteAddress ?? 'unknown';
-        if (isHealthRequestRateLimited(ip, now)) {
-          res.writeHead(429, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'rate_limited' }));
-          return;
-        }
-
-        if (!requestHasValidToken(req, options.authToken ?? '')) {
-          res.writeHead(401, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'unauthorized' }));
-          return;
-        }
-
-        const snapshot = buildAdminSnapshot();
-        const whatsappSafety = await getWhatsAppSafetyMetrics(
-          Math.floor((now - 60 * 60 * 1000) / 1000),
-          Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
-        );
-
-        if (path === '/admin.json') {
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ ...snapshot, whatsappSafety }));
-          return;
-        }
-
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(renderAdminHtml(snapshot, { whatsappSafety, rawQuery: rawUrl.split('?')[1] }));
-        return;
-      }
-
-      if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
-        const now = Date.now();
-        const ip = req.socket.remoteAddress ?? 'unknown';
-
-        if (isHealthRequestRateLimited(ip, now)) {
-          res.writeHead(429, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'rate_limited', message: 'Too many health requests' }));
-          return;
-        }
-
-        const stale = isConnectionStale();
-
-        if (path === '/metrics') {
-          const authToken = options?.authToken;
-          if (authToken !== undefined && !requestHasValidToken(req, authToken)) {
-            res.writeHead(401, { 'content-type': 'application/json' });
-            res.end(JSON.stringify({ error: 'unauthorized' }));
-            return;
-          }
-
-          res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
-          res.end(await renderPrometheusMetrics(now));
-          return;
-        }
-
-        // `/health` is informational and always 200.
-        // `/health/ready` is actionable: incoming-message inactivity alone must not fail it.
-        if (path === '/health/ready') {
-          const ready = state.status === 'connected';
-          res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ ready, status: state.status, stale }));
-          return;
-        }
-
-        const body = JSON.stringify(await buildHealthPayload(now));
-
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(body);
-        return;
-      }
-
-      res.writeHead(404);
-      res.end();
-    })().catch((err) => {
+    void handleRequest(req, res, options).catch((err) => {
       logger.error({ err }, 'Health request handling failed');
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' });
@@ -548,6 +572,108 @@ export function startHealthServer(
   });
 
   return server;
+}
+
+async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options?: HealthServerOptions,
+): Promise<void> {
+  const metricsEnabled = options?.metricsEnabled === true;
+  // The admin page carries usage/cost detail, so it is only served when a
+  // token exists to gate it — never open, even on localhost binds.
+  const adminEnabled = options?.adminEnabled === true && options.authToken !== undefined;
+
+  if (options?.extraHandler?.(req, res)) return;
+
+  // Match on the raw origin-form path (unchanged from before): absolute-form
+  // request targets must not be normalized into a matching pathname.
+  const rawUrl = req.url ?? '';
+  const path = rawUrl.split('?')[0];
+
+  if (path === '/bridge/inbound') {
+    const bridgeInboundHandler = options?.bridgeInboundHandler;
+    if (bridgeInboundHandler !== undefined) {
+      await handleBridgeInbound(req, res, { ...options, bridgeInboundHandler });
+      return;
+    }
+  }
+
+  if (adminEnabled && (path === '/admin' || path === '/admin.json') && req.method === 'GET') {
+    const now = Date.now();
+    const ip = req.socket.remoteAddress ?? 'unknown';
+    if (isHealthRequestRateLimited(ip, now)) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'rate_limited' }));
+      return;
+    }
+
+    if (!requestHasValidToken(req, options.authToken ?? '')) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+
+    const snapshot = buildAdminSnapshot();
+    const whatsappSafety = await getWhatsAppSafetyMetrics(
+      Math.floor((now - 60 * 60 * 1000) / 1000),
+      Math.floor((now - 24 * 60 * 60 * 1000) / 1000),
+    );
+
+    if (path === '/admin.json') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ...snapshot, whatsappSafety }));
+      return;
+    }
+
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(renderAdminHtml(snapshot, { whatsappSafety, rawQuery: rawUrl.split('?')[1] }));
+    return;
+  }
+
+  if ((path === '/health' || path === '/health/ready' || (metricsEnabled && path === '/metrics')) && req.method === 'GET') {
+    const now = Date.now();
+    const ip = req.socket.remoteAddress ?? 'unknown';
+
+    if (isHealthRequestRateLimited(ip, now)) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'rate_limited', message: 'Too many health requests' }));
+      return;
+    }
+
+    const stale = isConnectionStale();
+
+    if (path === '/metrics') {
+      const authToken = options?.authToken;
+      if (authToken !== undefined && !requestHasValidToken(req, authToken)) {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
+
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
+      res.end(await renderPrometheusMetrics(now));
+      return;
+    }
+
+    // `/health` is informational and always 200.
+    // `/health/ready` is actionable: incoming-message inactivity alone must not fail it.
+    if (path === '/health/ready') {
+      const ready = state.status === 'connected';
+      res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ready, status: state.status, stale }));
+      return;
+    }
+
+    const body = JSON.stringify(await buildHealthPayload(now));
+
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(body);
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
 }
 
 /** Stop the local health endpoint and memory watchdog timers. */
@@ -603,4 +729,4 @@ function stopMemoryWatchdog(): void {
   }
 }
 
-export const __testing = { buildHealthPayload, normalizeIp, renderPrometheusMetrics, requestHasValidToken };
+export const __testing = { buildHealthPayload, handleRequest, normalizeIp, renderPrometheusMetrics, requestHasValidToken };

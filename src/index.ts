@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { closeDb, scheduleMaintenance } from './utils/db.js';
+import { bridgeSeenInsert, closeDb, scheduleMaintenance } from './utils/db.js';
 import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
 import { config, loadedEnvFiles } from './utils/config.js';
@@ -62,12 +62,23 @@ async function main(): Promise<void> {
   }
 
   // Start health check server + memory watchdog for monitoring
-  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
+  const healthOptions: Parameters<typeof startHealthServer>[2] = {
     metricsEnabled: config.METRICS_ENABLED,
     adminEnabled: config.ADMIN_PAGE_ENABLED,
     authToken: monitoringToken,
     extraHandler: loginHandler,
-  });
+  };
+  if (config.BRIDGE_ENABLED) {
+    healthOptions.bridgeInboundHandler = async (envelope) => {
+      const fresh = await bridgeSeenInsert(envelope.idempotencyKey);
+      if (!fresh) return 'duplicate';
+      const { routeId, origin, targetChatId } = envelope;
+      logger.info({ routeId, origin, targetChatId }, 'Bridge envelope accepted');
+      // T6 wires actual delivery.
+      return 'accepted';
+    };
+  }
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, healthOptions);
   startMemoryWatchdog();
 
   if (whatsAppLoginEnabled) {
