@@ -175,6 +175,31 @@ describe('bridge inbound endpoint', () => {
     expect(bridgeInboundHandler).not.toHaveBeenCalled();
   });
 
+  it('rejects and destroys a stream that crosses 64KB mid-body', async () => {
+    const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
+    const { __testing } = await loadHealthModule();
+
+    // Two chunks, each under the cap; the second crosses it mid-stream.
+    const req = request('/bridge/inbound', 'POST', undefined, {
+      authorization: 'Bearer T',
+      'content-type': 'application/json',
+    });
+    const stream = Readable.from(['a'.repeat(40 * 1024), 'b'.repeat(40 * 1024)]);
+    const midStreamReq = Object.assign(stream, {
+      url: req.url,
+      method: req.method,
+      headers: req.headers,
+      socket: { remoteAddress: '127.0.0.1' },
+    }) as typeof req;
+    const res = response();
+
+    await __testing.handleRequest(midStreamReq, res, { authToken: 'T', bridgeInboundHandler });
+
+    expect(res.captured.status).toBe(413);
+    expect(bridgeInboundHandler).not.toHaveBeenCalled();
+    expect(midStreamReq.destroyed).toBe(true);
+  });
+
   it('rejects malformed JSON', async () => {
     const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
 
