@@ -980,7 +980,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     },
 
     async bridgeOutboxCounts(): Promise<BridgeOutboxCounts> {
-      return { pending: 0, sent: 0, dead: 0 };
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
     },
 
     async submitFeedback(

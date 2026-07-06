@@ -434,34 +434,85 @@ const upsertWhatsAppSafetyState = db.prepare(
      reasons = excluded.reasons,
      updated_at = excluded.updated_at`,
 );
+
+const BRIDGE_OUTBOX_STALE_CLAIM_MS = 120_000;
+
+function bridgeOutboxSupportsClaimed(): boolean {
+  const row = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bridge_outbox'",
+  ).get() as { sql: string | null } | undefined;
+  return row?.sql?.includes("'claimed'") ?? false;
+}
+
+if (!bridgeOutboxSupportsClaimed()) {
+  db.exec(`
+    CREATE TABLE bridge_outbox_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_json TEXT NOT NULL,
+      target_instance TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','claimed','sent','dead')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL,
+      last_error TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    INSERT INTO bridge_outbox_new
+      (id, envelope_json, target_instance, status, attempts, next_attempt_at, last_error, created_at)
+    SELECT id, envelope_json, target_instance, status, attempts, next_attempt_at, last_error, created_at
+    FROM bridge_outbox;
+
+    DROP TABLE bridge_outbox;
+    ALTER TABLE bridge_outbox_new RENAME TO bridge_outbox;
+
+    CREATE INDEX IF NOT EXISTS idx_bridge_outbox_status_next_attempt
+      ON bridge_outbox (status, next_attempt_at);
+  `);
+}
+
 const insertBridgeOutbox = db.prepare(
   `INSERT INTO bridge_outbox
    (envelope_json, target_instance, status, attempts, next_attempt_at, created_at)
    VALUES (?, ?, 'pending', 0, ?, ?)`,
 );
 const selectBridgeOutboxById = db.prepare(`SELECT * FROM bridge_outbox WHERE id = ?`);
-const selectDueBridgeOutbox = db.prepare(
-  `SELECT * FROM bridge_outbox
-   WHERE status = 'pending' AND next_attempt_at <= ?
-   ORDER BY next_attempt_at ASC, id ASC
-   LIMIT ?`,
+const claimDueBridgeOutboxRows = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'claimed', next_attempt_at = @now
+   WHERE id IN (
+     SELECT id FROM bridge_outbox
+     WHERE (status = 'pending' AND next_attempt_at <= @now)
+        OR (status = 'claimed' AND next_attempt_at <= @staleBefore)
+     ORDER BY id ASC
+     LIMIT @limit
+   )
+   RETURNING *`,
 );
 const updateBridgeOutboxSent = db.prepare(
-  `UPDATE bridge_outbox SET status = 'sent', last_error = NULL WHERE id = ?`,
+  `UPDATE bridge_outbox
+   SET status = 'sent', last_error = NULL
+   WHERE id = ? AND status = 'claimed'`,
 );
 const updateBridgeOutboxDead = db.prepare(
-  `UPDATE bridge_outbox SET status = 'dead', last_error = ? WHERE id = ?`,
+  `UPDATE bridge_outbox
+   SET status = 'dead', attempts = attempts + 1, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
 const updateBridgeOutboxAttempt = db.prepare(
   `UPDATE bridge_outbox
-   SET attempts = attempts + 1, next_attempt_at = ?, last_error = ?
-   WHERE id = ? AND status = 'pending'`,
+   SET status = 'pending', attempts = attempts + 1, next_attempt_at = ?, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
 const insertBridgeSeen = db.prepare(
   `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
 );
 const selectBridgeOutboxCounts = db.prepare(
-  `SELECT status, COUNT(*) AS count FROM bridge_outbox GROUP BY status`,
+  `SELECT
+     SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
+     SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead
+   FROM bridge_outbox`,
 );
 const selectWhatsAppMetricCounts = db.prepare(
   `SELECT
@@ -825,7 +876,12 @@ export function enqueueBridgeOutbox(envelope: BridgeEnvelope): BridgeOutboxEntry
 
 export function claimDueBridgeOutbox(limit: number): BridgeOutboxEntry[] {
   const safeLimit = Math.max(1, Math.floor(limit));
-  return (selectDueBridgeOutbox.all(Date.now(), safeLimit) as BridgeOutboxRow[]).map(mapBridgeOutboxEntry);
+  const now = Date.now();
+  return (claimDueBridgeOutboxRows.all({
+    now,
+    staleBefore: now - BRIDGE_OUTBOX_STALE_CLAIM_MS,
+    limit: safeLimit,
+  }) as BridgeOutboxRow[]).map(mapBridgeOutboxEntry);
 }
 
 export function markBridgeOutboxSent(id: number): boolean {
@@ -845,12 +901,12 @@ export function bridgeSeenInsert(key: string): boolean {
 }
 
 export function bridgeOutboxCounts(): BridgeOutboxCounts {
-  const counts: BridgeOutboxCounts = { pending: 0, sent: 0, dead: 0 };
-  const rows = selectBridgeOutboxCounts.all() as Array<{ status: keyof BridgeOutboxCounts; count: number }>;
-  for (const row of rows) {
-    counts[row.status] = toNumber(row.count);
-  }
-  return counts;
+  const row = selectBridgeOutboxCounts.get() as { pending: number | null; sent: number | null; dead: number | null };
+  return {
+    pending: toNumber(row.pending ?? 0),
+    sent: toNumber(row.sent ?? 0),
+    dead: toNumber(row.dead ?? 0),
+  };
 }
 
 // ── Public API: Feedback ────────────────────────────────────────────

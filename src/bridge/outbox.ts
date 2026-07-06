@@ -1,23 +1,26 @@
-import { logger } from '../middleware/logger.js';
-import {
-  bridgeOutboxCounts,
-  bumpBridgeOutboxAttempt,
-  claimDueBridgeOutbox,
-  enqueueBridgeOutbox,
-  markBridgeOutboxDead,
-  markBridgeOutboxSent,
-} from '../utils/db.js';
-import { parseBridgeEnvelope, type BridgeEnvelope } from './envelope.js';
-import { TransportDeliveryError, type BridgeTransport } from './transport.js';
+import type { DbBackend } from '../utils/db-backend.js';
+import type { BridgeEnvelope } from './envelope.js';
+import type { BridgeTransport } from './transport.js';
 
 const PUMP_INTERVAL_MS = 5_000;
 const CLAIM_LIMIT = 10;
 const MAX_ATTEMPTS = 8;
 const MAX_BACKOFF_MS = 10 * 60 * 1000;
 
+export type BridgeOutboxOps = Pick<
+  DbBackend,
+  | 'enqueueBridgeOutbox'
+  | 'claimDueBridgeOutbox'
+  | 'markBridgeOutboxSent'
+  | 'markBridgeOutboxDead'
+  | 'bumpBridgeOutboxAttempt'
+  | 'bridgeOutboxCounts'
+>;
+
 export interface BridgeOutboxOptions {
   transport: BridgeTransport;
   resolveTargetUrl(instanceId: string): string | null;
+  ops: BridgeOutboxOps;
 }
 
 export interface BridgeOutbox {
@@ -37,8 +40,30 @@ const stats: BridgeOutboxStats = {
   dead: 0,
 };
 
+let envelopeModulePromise: Promise<typeof import('./envelope.js')> | null = null;
+let loggerModulePromise: Promise<typeof import('../middleware/logger.js')> | null = null;
+
+async function parseStoredEnvelope(raw: unknown): Promise<BridgeEnvelope | null> {
+  envelopeModulePromise ??= import('./envelope.js');
+  const { parseBridgeEnvelope } = await envelopeModulePromise;
+  return parseBridgeEnvelope(raw);
+}
+
+async function logOutboxError(fields: Record<string, unknown>, message: string): Promise<void> {
+  loggerModulePromise ??= import('../middleware/logger.js');
+  const { logger } = await loggerModulePromise;
+  logger.error(fields, message);
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function isRetryableTransportError(err: unknown): err is { retryable: boolean } {
+  return typeof err === 'object'
+    && err !== null
+    && 'retryable' in err
+    && typeof (err as { retryable: unknown }).retryable === 'boolean';
 }
 
 function nextAttemptAt(attempts: number): number {
@@ -53,57 +78,62 @@ export function getBridgeOutboxStats(): BridgeOutboxStats {
 export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
   let timer: ReturnType<typeof setInterval> | null = null;
   let pumping = false;
+  let activePump: Promise<void> | null = null;
 
   const pump = async (): Promise<void> => {
     if (pumping) return;
     pumping = true;
     try {
-      const rows = await claimDueBridgeOutbox(CLAIM_LIMIT);
+      const rows = await options.ops.claimDueBridgeOutbox(CLAIM_LIMIT);
       for (const row of rows) {
         const rawEnvelope: unknown = JSON.parse(row.envelopeJson);
-        const envelope = parseBridgeEnvelope(rawEnvelope);
+        const envelope = await parseStoredEnvelope(rawEnvelope);
         if (!envelope) {
-          await markBridgeOutboxDead(row.id, 'stored bridge envelope failed validation');
+          await options.ops.markBridgeOutboxDead(row.id, 'stored bridge envelope failed validation');
           stats.dead++;
-          logger.error({ id: row.id }, 'Bridge outbox row dead-lettered: invalid envelope');
+          await logOutboxError({ id: row.id }, 'Bridge outbox row dead-lettered: invalid envelope');
           continue;
         }
 
         try {
           await options.transport.deliver(envelope, options.resolveTargetUrl(row.targetInstance));
-          await markBridgeOutboxSent(row.id);
+          await options.ops.markBridgeOutboxSent(row.id);
           stats.delivered++;
         } catch (err) {
           const message = errorMessage(err);
-          const retryable = err instanceof TransportDeliveryError ? err.retryable : true;
+          const retryable = isRetryableTransportError(err) ? err.retryable : true;
           const nextAttempt = row.attempts + 1;
 
           if (!retryable || nextAttempt >= MAX_ATTEMPTS) {
-            await markBridgeOutboxDead(row.id, message);
+            await options.ops.markBridgeOutboxDead(row.id, message);
             stats.dead++;
-            logger.error({ err, id: row.id, targetInstance: row.targetInstance }, 'Bridge outbox row dead-lettered');
+            await logOutboxError({ err, id: row.id, targetInstance: row.targetInstance }, 'Bridge outbox row dead-lettered');
           } else {
-            await bumpBridgeOutboxAttempt(row.id, nextAttemptAt(row.attempts), message);
+            await options.ops.bumpBridgeOutboxAttempt(row.id, nextAttemptAt(row.attempts), message);
           }
         }
       }
     } catch (err) {
-      logger.error({ err }, 'Bridge outbox pump failed');
+      await logOutboxError({ err }, 'Bridge outbox pump failed');
     } finally {
       pumping = false;
     }
   };
 
+  const triggerPump = (): void => {
+    activePump = pump().finally(() => {
+      activePump = null;
+    });
+  };
+
   return {
     async enqueue(envelope: BridgeEnvelope): Promise<void> {
-      await enqueueBridgeOutbox(envelope);
+      await options.ops.enqueueBridgeOutbox(envelope);
     },
 
     start(): void {
       if (timer) return;
-      timer = setInterval(() => {
-        void pump();
-      }, PUMP_INTERVAL_MS);
+      timer = setInterval(triggerPump, PUMP_INTERVAL_MS);
       timer.unref?.();
     },
 
@@ -112,11 +142,12 @@ export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
         clearInterval(timer);
         timer = null;
       }
+      await activePump;
       await options.transport.stop();
     },
 
     async depth(): Promise<number> {
-      return (await bridgeOutboxCounts()).pending;
+      return (await options.ops.bridgeOutboxCounts()).pending;
     },
   };
 }
