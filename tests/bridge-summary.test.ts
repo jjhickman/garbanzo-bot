@@ -113,6 +113,40 @@ describe('bridge summary buffer + flusher', () => {
     vi.clearAllMocks();
   });
 
+  it('skips an overlapping tick while a flush is in flight (one send max)', async () => {
+    const ops = createFakeBridgeBufferOps();
+    let release: (() => void) | undefined;
+    const sendText = vi.fn(
+      () => new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const buffer = createSummaryBuffer({
+      sendText,
+      ...singleRouteTargets('route-1', 'target-chat', 'discord'),
+      ops,
+      intervalMinutes: 15,
+      maxText: 1500,
+    });
+
+    await buffer.bufferEnvelope(envelope());
+    buffer.start();
+
+    await tick(15); // first tick: flush begins, send never resolves
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await buffer.bufferEnvelope(envelope({ origin: { messageId: 'm2' } }));
+    await tick(15); // overlapping tick: the flushing guard must skip it
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    release?.(); // in-flight send completes
+    await vi.advanceTimersByTimeAsync(0);
+    await tick(15); // next tick proceeds normally
+    expect(sendText).toHaveBeenCalledTimes(2);
+
+    buffer.stop();
+  });
+
   it('buffers an envelope without ever sending', async () => {
     const ops = createFakeBridgeBufferOps();
     const sendText = vi.fn(async () => undefined);

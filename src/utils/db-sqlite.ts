@@ -517,7 +517,10 @@ const insertBridgeBuffer = db.prepare(
   `INSERT INTO bridge_buffer (route_id, envelope_json, buffered_at) VALUES (?, ?, ?)`,
 );
 const selectBridgeBufferByRoute = db.prepare(
-  `SELECT * FROM bridge_buffer WHERE route_id = ? ORDER BY id ASC`,
+  // buffered_at first: restored rows get NEW autoincrement ids, so id order
+  // would sort them after messages that arrived mid-flush, inverting the
+  // oldest-dropped truncation guarantee. buffered_at survives restore.
+  `SELECT * FROM bridge_buffer WHERE route_id = ? ORDER BY buffered_at ASC, id ASC`,
 );
 const deleteBridgeBufferByRoute = db.prepare(`DELETE FROM bridge_buffer WHERE route_id = ?`);
 const selectBridgeBufferDepths = db.prepare(

@@ -103,6 +103,9 @@ export function createSummaryBuffer(options: SummaryBufferOptions): SummaryBuffe
   let flushing = false;
 
   async function flushRoute(routeId: string): Promise<void> {
+    // Accepted tradeoff: take commits before the network send, so a process
+    // crash during sendText loses this flush's rows (no transaction can span
+    // the send). restore() covers send FAILURE, not process death.
     const rows = await options.ops.takeBridgeBuffer(routeId);
     if (rows.length === 0) return;
 

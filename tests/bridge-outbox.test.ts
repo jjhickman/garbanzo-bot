@@ -10,6 +10,7 @@ import { createBridgeOutbox, getBridgeOutboxStats } from '../src/bridge/outbox.j
 import { TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
 import {
+  appendBridgeBuffer,
   bridgeOutboxCounts,
   bridgeSeenInsert,
   claimDueBridgeOutbox,
@@ -17,6 +18,8 @@ import {
   bumpBridgeOutboxAttempt,
   markBridgeOutboxDead,
   markBridgeOutboxSent,
+  restoreBridgeBuffer,
+  takeBridgeBuffer,
 } from '../src/utils/db-sqlite.js';
 import { db } from '../src/utils/db-schema.js';
 
@@ -428,5 +431,36 @@ describe('bridge durable outbox', () => {
     const backend = await createPostgresBackend();
 
     await expect(backend.bridgeOutboxCounts()).rejects.toThrow('Bridge outbox is not implemented for postgres backend yet');
+  });
+});
+
+describe('bridge buffer ordering across restore', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    db.exec('DELETE FROM bridge_buffer;');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    db.exec('DELETE FROM bridge_buffer;');
+  });
+
+  it('keeps restored rows ahead of messages that arrived mid-flush', () => {
+    vi.setSystemTime(1_000);
+    appendBridgeBuffer('route-1', 'A');
+
+    // Flush takes A; while its send is in flight, B arrives.
+    const taken = takeBridgeBuffer('route-1');
+    expect(taken.map((row) => row.envelopeJson)).toEqual(['A']);
+
+    vi.setSystemTime(2_000);
+    appendBridgeBuffer('route-1', 'B');
+
+    // Send fails; A is restored with a NEW autoincrement id but its old
+    // buffered_at. The next take must still see A first (oldest-dropped
+    // truncation depends on it).
+    restoreBridgeBuffer(taken);
+    const next = takeBridgeBuffer('route-1');
+    expect(next.map((row) => row.envelopeJson)).toEqual(['A', 'B']);
   });
 });
