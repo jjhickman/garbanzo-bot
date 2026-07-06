@@ -49,6 +49,37 @@ describe('translateFormatting', () => {
     expect(translateFormatting('*slack* _text_', 'slack', 'discord')).toBe('*slack* _text_');
     expect(translateFormatting('*teams* _text_', 'discord', 'teams')).toBe('*teams* _text_');
   });
+
+  it('does not corrupt user text that collides with the internal placeholder format', () => {
+    // Regression test for a sentinel-collision bug: the old implementation protected
+    // code spans/URLs with an in-band sentinel ("BRIDGE<i>") restored via
+    // replaceAll. If user text already contained that exact literal sentinel, restoring
+    // the real protected value (e.g. a code span) would corrupt BOTH the genuine
+    // placeholder and the coincidental literal occurrence. The segment-model rewrite is
+    // structurally immune: there is no in-band sentinel to collide with.
+    const sentinelLookalike = 'BRIDGE0';
+    const text = `${sentinelLookalike} \`code\` *bold*`;
+
+    expect(translateFormatting(text, 'whatsapp', 'discord')).toBe(
+      `${sentinelLookalike} \`code\` **bold**`,
+    );
+  });
+
+  it('includes balanced parentheses in URLs and trims trailing punctuation', () => {
+    const text = 'See https://example.com/a_(b)_ and _real_';
+
+    expect(translateFormatting(text, 'whatsapp', 'discord')).toBe(
+      'See https://example.com/a_(b)_ and *real*',
+    );
+  });
+
+  it('trims trailing sentence punctuation off a protected URL', () => {
+    const text = 'Visit https://example.com/a_b_. Then _italic_';
+
+    expect(translateFormatting(text, 'whatsapp', 'discord')).toBe(
+      'Visit https://example.com/a_b_. Then *italic*',
+    );
+  });
 });
 
 describe('BridgeEnvelopeSchema', () => {
@@ -101,5 +132,27 @@ describe('BridgeEnvelopeSchema', () => {
     expect(parseBridgeEnvelope('not json')).toBeNull();
     expect(parseBridgeEnvelope(null)).toBeNull();
     expect(parseBridgeEnvelope({ ...validEnvelope, kind: 'other' })).toBeNull();
+  });
+
+  it('rejects an unknown top-level key', () => {
+    expect(
+      BridgeEnvelopeSchema.safeParse({ ...validEnvelope, extra: 'nope' }).success,
+    ).toBe(false);
+    expect(parseBridgeEnvelope({ ...validEnvelope, extra: 'nope' })).toBeNull();
+  });
+
+  it('rejects an unknown origin key', () => {
+    expect(
+      BridgeEnvelopeSchema.safeParse({
+        ...validEnvelope,
+        origin: { ...validEnvelope.origin, extra: 'nope' },
+      }).success,
+    ).toBe(false);
+    expect(
+      parseBridgeEnvelope({
+        ...validEnvelope,
+        origin: { ...validEnvelope.origin, extra: 'nope' },
+      }),
+    ).toBeNull();
   });
 });

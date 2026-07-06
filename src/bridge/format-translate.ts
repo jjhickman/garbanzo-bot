@@ -5,10 +5,16 @@ type MarkerRule = {
   readonly to: string;
 };
 
-const CODE_SPAN_PATTERN = /```[\s\S]{0,4000}?```|`[^`\n]{0,1000}`/g;
-const URL_PATTERN = /\bhttps?:\/\/[^\s<>()]{1,2048}/g;
-const PLACEHOLDER_PREFIX = '\uE000BRIDGE';
-const PLACEHOLDER_SUFFIX = '\uE001';
+type Segment = {
+  readonly kind: 'protected' | 'text';
+  readonly value: string;
+};
+
+const CODE_SPAN_PATTERN = /```[\s\S]{0,4000}?```|`[^`\n]{0,1000}`/y;
+const URL_PROTOCOL_PATTERN = /^https?:\/\//;
+const URL_TRAILING_PUNCTUATION = /[.,;:!?]/;
+const WORD_CHAR_PATTERN = /\w/;
+const MAX_URL_BODY_LENGTH = 2048;
 
 const WHATSAPP_TO_DISCORD: readonly MarkerRule[] = [
   { from: '*', to: '**' },
@@ -32,10 +38,14 @@ const DISCORD_TO_WHATSAPP: readonly MarkerRule[] = [
  *   markers because WhatsApp has no underline, code passes through.
  * - Same platform, Slack, Teams, or any unsupported pair returns text unchanged.
  *
- * Code spans are protected before formatting rules, then URLs are protected so
- * marker-looking URL characters are restored untouched. Rules are applied by a
- * bounded scanner with longest markers first. Repeated cross-platform calls are
- * not required to be idempotent; same-platform calls are identity.
+ * Input is tokenized into an ordered array of segments before any formatting rules
+ * run: code spans and URLs become 'protected' segments carried through verbatim;
+ * everything else becomes a 'text' segment. The marker-translation scanner only ever
+ * runs over 'text' segments, and segments are joined back in order at the end. There
+ * is no in-band sentinel/placeholder step, so user text can never collide with (and
+ * corrupt) the protection mechanism. Rules are applied by a bounded scanner with
+ * longest markers first. Repeated cross-platform calls are not required to be
+ * idempotent; same-platform calls are identity.
  */
 export function translateFormatting(
   text: string,
@@ -47,12 +57,11 @@ export function translateFormatting(
   const rules = selectRules(from, to);
   if (!rules) return text;
 
-  const protectedValues: string[] = [];
-  const withoutCode = protect(text, CODE_SPAN_PATTERN, protectedValues);
-  const withoutUrls = protect(withoutCode, URL_PATTERN, protectedValues);
-  const translated = translateSegment(withoutUrls, rules, undefined, 0).text;
-
-  return restore(translated, protectedValues);
+  return tokenize(text)
+    .map((segment) =>
+      segment.kind === 'protected' ? segment.value : translateSegment(segment.value, rules, undefined, 0).text,
+    )
+    .join('');
 }
 
 function selectRules(
@@ -64,21 +73,86 @@ function selectRules(
   return null;
 }
 
-function protect(text: string, pattern: RegExp, protectedValues: string[]): string {
-  return text.replace(pattern, (match) => {
-    const index = protectedValues.push(match) - 1;
-    return `${PLACEHOLDER_PREFIX}${index}${PLACEHOLDER_SUFFIX}`;
-  });
-}
+function tokenize(text: string): Segment[] {
+  const segments: Segment[] = [];
+  let buffer = '';
+  let position = 0;
 
-function restore(text: string, protectedValues: readonly string[]): string {
-  let restored = text;
+  const flushBuffer = () => {
+    if (buffer.length > 0) {
+      segments.push({ kind: 'text', value: buffer });
+      buffer = '';
+    }
+  };
 
-  for (const [index, value] of protectedValues.entries()) {
-    restored = restored.replaceAll(`${PLACEHOLDER_PREFIX}${index}${PLACEHOLDER_SUFFIX}`, value);
+  while (position < text.length) {
+    const codeSpan = matchCodeSpanAt(text, position);
+    if (codeSpan !== null) {
+      flushBuffer();
+      segments.push({ kind: 'protected', value: codeSpan });
+      position += codeSpan.length;
+      continue;
+    }
+
+    const url = matchUrlAt(text, position);
+    if (url !== null) {
+      flushBuffer();
+      segments.push({ kind: 'protected', value: url });
+      position += url.length;
+      continue;
+    }
+
+    buffer += text[position];
+    position += 1;
   }
 
-  return restored;
+  flushBuffer();
+  return segments;
+}
+
+function matchCodeSpanAt(text: string, position: number): string | null {
+  CODE_SPAN_PATTERN.lastIndex = position;
+  const match = CODE_SPAN_PATTERN.exec(text);
+  return match && match.index === position ? match[0] : null;
+}
+
+function matchUrlAt(text: string, position: number): string | null {
+  const previousChar = text[position - 1];
+  if (previousChar !== undefined && WORD_CHAR_PATTERN.test(previousChar)) return null;
+
+  const protocolMatch = URL_PROTOCOL_PATTERN.exec(text.slice(position));
+  if (!protocolMatch) return null;
+
+  const bodyStart = position + protocolMatch[0].length;
+  const bodyLimit = bodyStart + MAX_URL_BODY_LENGTH;
+  let depth = 0;
+  let end = bodyStart;
+
+  while (end < text.length && end < bodyLimit) {
+    const char = text[end];
+    if (char === undefined || /\s/.test(char) || char === '<' || char === '>') break;
+
+    if (char === '(') {
+      depth += 1;
+      end += 1;
+      continue;
+    }
+
+    if (char === ')') {
+      if (depth === 0) break;
+      depth -= 1;
+      end += 1;
+      continue;
+    }
+
+    end += 1;
+  }
+
+  while (end > bodyStart && URL_TRAILING_PUNCTUATION.test(text[end - 1] ?? '')) {
+    end -= 1;
+  }
+
+  return end > bodyStart ? text.slice(position, end) : null;
 }
 
 function translateSegment(

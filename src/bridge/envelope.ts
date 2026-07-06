@@ -1,28 +1,33 @@
 import { z } from 'zod';
-import { coreSchema } from '../utils/config/core.js';
 
-export const MessagingPlatformSchema = coreSchema.shape.MESSAGING_PLATFORM.removeDefault();
+// Mirrors MessagingPlatform (src/core/messaging-platform.ts). Defined locally rather
+// than imported so the wire schema stays independent of internal config plumbing.
+export const MessagingPlatformSchema = z.enum(['whatsapp', 'discord', 'slack', 'teams']);
 
-export const BridgeOriginSchema = z.object({
-  instance: z.string().min(1),
-  platform: MessagingPlatformSchema,
-  chatId: z.string().min(1),
-  messageId: z.string().min(1),
-  senderId: z.string().min(1),
-  senderName: z.string().min(1).optional(),
-});
+export const BridgeOriginSchema = z
+  .object({
+    instance: z.string().min(1),
+    platform: MessagingPlatformSchema,
+    chatId: z.string().min(1),
+    messageId: z.string().min(1),
+    senderId: z.string().min(1),
+    senderName: z.string().min(1).optional(),
+  })
+  .strict();
 
-export const BridgeEnvelopeSchema = z.object({
-  v: z.literal(1),
-  routeId: z.string().min(1),
-  origin: BridgeOriginSchema,
-  targetInstance: z.string().min(1),
-  targetChatId: z.string().min(1),
-  text: z.string(),
-  kind: z.enum(['message', 'media-placeholder']),
-  sentAtMs: z.number().int().positive(),
-  idempotencyKey: z.string().min(1),
-});
+export const BridgeEnvelopeSchema = z
+  .object({
+    v: z.literal(1),
+    routeId: z.string().min(1),
+    origin: BridgeOriginSchema,
+    targetInstance: z.string().min(1),
+    targetChatId: z.string().min(1),
+    text: z.string(),
+    kind: z.enum(['message', 'media-placeholder']),
+    sentAtMs: z.number().int().positive(),
+    idempotencyKey: z.string().min(1),
+  })
+  .strict();
 
 export type BridgeOrigin = z.infer<typeof BridgeOriginSchema>;
 export type BridgeEnvelope = z.infer<typeof BridgeEnvelopeSchema>;
