@@ -66,7 +66,7 @@ Each item is marked **Done** (with the phase/commit area), **Deferred**, or **N/
   stream failures or an output-less stream as errors → fallback, rather than returning a fake reply.
   Still ToS-grey — do not make it the sole provider.
 - **`/metrics` token gate** (Sec-4) is a behavior change for existing scrapers: append `?token=<T>` or
-  pin `WHATSAPP_LOGIN_TOKEN`.
+  pin `MONITORING_TOKEN`.
 - **DX-10 Postgres coverage:** `tests/postgres-backend.test.ts` requires a live `DATABASE_URL` and is
   skipped without one, so the Postgres backend is guarded here by typecheck + `db-shared-layer` unit
   tests + independent review. Run it against a real Postgres in CI to exercise the extracted mappers

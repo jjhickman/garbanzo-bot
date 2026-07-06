@@ -29,6 +29,7 @@ Create the shared layer:
 
 ```bash
 cp .env.example .env
+# In .env: confirm APP_VERSION=2.0.0 (or newer) so compose pulls the v2 image, never a 1.x one
 ```
 
 Set these in `.env`:

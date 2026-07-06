@@ -1,4 +1,6 @@
 # v1.0.0 WhatsApp Acceptance Test Plan
+
+> Historical document for the 1.0.0 release. Token references predate the v2 split: `/admin` and `/metrics` are now gated by `MONITORING_TOKEN` (see docs/MONITORING.md).
 > Everything shipped between v0.2.4 and v1.0.0 (#190–#202), in dependency order.
 > Assumes the Pi runs 1.0.0 with `AI_TOOL_CALLING=true` and `MEMORY_AUTO_EXTRACT=true`.
 

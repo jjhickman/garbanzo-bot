@@ -799,7 +799,7 @@ async function main() {
     if (deployTarget === 'docker') {
       output.write('\nNext commands:\n');
       output.write('  docker compose up -d\n');
-      output.write('  docker compose logs -f garbanzo\n');
+      output.write(`  docker compose logs -f ${messagingPlatform}\n`);
     } else {
       output.write('\nNext commands:\n');
       output.write('  npm run dev\n');

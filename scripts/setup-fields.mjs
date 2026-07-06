@@ -36,7 +36,7 @@ export const SHARED_FIELDS = [
   { env: 'BEDROCK_MAX_TOKENS', cli: 'bedrock-max-tokens', default: '1024' },
   { env: 'BEDROCK_PRICING_INPUT_PER_M', cli: 'bedrock-pricing-input-per-m', default: '0', note: '(USD per 1M tokens)' },
   { env: 'BEDROCK_PRICING_OUTPUT_PER_M', cli: 'bedrock-pricing-output-per-m', default: '0', note: '(USD per 1M tokens)' },
-  { env: 'OLLAMA_BASE_URL', cli: 'ollama-base-url', default: 'http://127.0.0.1:11434' },
+  { env: 'OLLAMA_BASE_URL', cli: 'ollama-base-url', default: 'http://host.docker.internal:11434', note: '(native runs: http://127.0.0.1:11434)' },
   { env: 'HEALTH_PORT', cli: 'health-port', default: '3001' },
   { env: 'HEALTH_BIND_HOST', cli: 'health-bind-host', default: '127.0.0.1' },
   { env: 'GITHUB_SPONSORS_URL', cli: 'github-sponsors-url', default: '' },
@@ -53,6 +53,7 @@ export const WHATSAPP_FIELDS = [
   { env: 'OWNER_JID', cli: 'owner-jid', default: 'your_number@s.whatsapp.net' },
   { env: 'BOT_PHONE_NUMBER', cli: 'bot-phone-number', default: '' },
   { env: 'WHATSAPP_LOGIN_MODE', cli: 'whatsapp-login-mode', default: 'web' },
+  { env: 'WHATSAPP_LOGIN_TOKEN', cli: 'whatsapp-login-token', default: '', secret: true, note: '(gates only the WhatsApp browser-login page)' },
 ];
 
 export const DISCORD_FIELDS = [
@@ -181,6 +182,7 @@ export function buildPlatformEnvLines(platform, values) {
       envLine(values, 'OWNER_JID'),
       envLine(values, 'BOT_PHONE_NUMBER'),
       envLine(values, 'WHATSAPP_LOGIN_MODE'),
+      envLine(values, 'WHATSAPP_LOGIN_TOKEN'),
       '',
     ];
   }
@@ -243,6 +245,7 @@ export function redactEnvContent(content) {
     'BEDROCK_MODEL_ID=',
     'GITHUB_ISSUES_TOKEN=',
     'MONITORING_TOKEN=',
+    'WHATSAPP_LOGIN_TOKEN=',
     'DISCORD_BOT_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
