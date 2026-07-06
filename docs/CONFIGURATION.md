@@ -111,6 +111,18 @@ cp .env.discord.example .env.discord
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | WhatsApp only | Owner WhatsApp JID; required only when `MESSAGING_PLATFORM=whatsapp` |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
+| `INSTANCE_ID` | No | Deployment identity for cross-instance bridging; defaults to `MESSAGING_PLATFORM` |
+| `BRIDGE_ENABLED` | No | Master switch for cross-platform message bridging (default: `false`) |
+| `BRIDGE_TRANSPORT` | No | Bridge delivery transport: `http` (default) or `amqp` |
+| `BRIDGE_BROKER_URL` | Bridge (amqp) | AMQP broker URL, for example `amqp://garbanzo:<password>@rabbitmq:5672`; required when `BRIDGE_TRANSPORT=amqp` |
+| `BRIDGE_BROKER_USER` | Bridge (amqp, broker profile) | RabbitMQ user for the `broker` compose profile (default: `garbanzo`) |
+| `BRIDGE_BROKER_PASSWORD` | Bridge (amqp, broker profile) | RabbitMQ password for the `broker` compose profile; the `rabbitmq` container refuses to start without it |
+| `BRIDGE_SUMMARY_INTERVAL_MINUTES` | No | Minutes between WhatsApp-bound bridge digest flushes (default: `15`) |
+| `BRIDGE_MAX_TEXT` | No | Max characters per relayed/digest bridge message (default: `1500`) |
+| `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
+| `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
+
+Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 

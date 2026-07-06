@@ -24,6 +24,7 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 - Operational guardrails: health/readiness endpoints, verified off-machine backups, anti-ban outbound safety, retry queue, moderation review (edit-aware), rate limits, and per-group feature allowlists.
 - Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard enabled with the `monitoring` compose profile.
 - Docker-first deployment with SQLite by default, optional Postgres, and a self-hosted Qdrant vector store for semantic recall.
+- Cross-platform bridging: relay chat between Discord and WhatsApp instances and share curated community memory across them, off by default — see [docs/BRIDGING.md](docs/BRIDGING.md).
 
 ## See it in action
 A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
@@ -179,6 +180,12 @@ Run the same bot as a band assistant on Discord. Everything below stays off unle
 - **Sections and lyrics** — `!section` and `!lyrics` organize each song's structure, words, and chords
 
 Deploy band mode on the Discord profile with `.env.discord`, `BAND_FEATURES_ENABLED=true`, and `config/discord-channels.json`: [docs/REMY_DEPLOY.md](docs/REMY_DEPLOY.md)
+### Cross-platform bridging
+Off by default (`BRIDGE_ENABLED`, `SHARED_MEMORY_ENABLED`). Two independent tiers:
+- **Shared memory** — `!memory share <id>` / `!memory unshare <id>` explicitly copies a curated fact into a shared collection that other instances can read, namespaced by instance id so nothing collides and nothing is shared automatically.
+- **Message bridging** — `config/bridge-map.json` maps channels/groups across instances; relayed messages carry attribution (`Ana (Discord): ...`), and WhatsApp-bound relays default to a periodic digest so they never bypass the anti-ban outbound-safety layer.
+
+Works over plain HTTP for two instances, or a RabbitMQ broker profile for three or more. Full setup: [docs/BRIDGING.md](docs/BRIDGING.md)
 ### Moderation & Safety
 - Content moderation: regex patterns + OpenAI Moderation API (human-in-the-loop)
 - Strike tracking with soft-mute after threshold
@@ -302,7 +309,7 @@ npm run start        # Production (from dist/)
 ```
 
 ## Docs
-Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md)
+Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md), [BRIDGING.md](docs/BRIDGING.md)
 
 Operations: [MIGRATION-2.0.md](docs/MIGRATION-2.0.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
 

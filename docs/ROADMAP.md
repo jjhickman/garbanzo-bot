@@ -39,14 +39,61 @@ Priority order:
 
 ## Planned Milestones
 
-## Post-v2: Platform Bridging
+## Post-v2: Platform Bridging — Delivered (v3)
 
-- v3 platform bridging is gated on v2.0.0 being deployed and observed stable.
-- Tier 1: shared memory across platform instances with clear source and scope
-  boundaries.
-- Tier 2: bridge-map message relay between configured channels and groups.
-  Discord-to-WhatsApp relays flow through the outbound-safety layer.
-- Tier 3: single-process multi-runtime remains deferred.
+- Tier 1: shared memory across platform instances, explicit and reversible
+  (`!memory share`/`unshare`), with clear source and scope boundaries. Done.
+- Tier 2: bridge-map message relay between configured channels and groups,
+  over `http` or `amqp` (RabbitMQ) transports. WhatsApp-bound relays flow
+  through the existing outbound-safety layer by default. Done.
+- Setup guide: [docs/BRIDGING.md](BRIDGING.md).
+- Tier 3 (single-process multi-runtime) and media re-upload (media relays as
+  typed placeholders today, e.g. "[voice note]") remain deferred.
+
+## Platform expansion (researched 2026-07-06)
+
+Candidates for the next platform adapter, ranked:
+
+1. **Telegram** — lowest engineering risk of any candidate: an official free
+   Bot API and a mature TypeScript-native client library, with no account-ban
+   risk (unlike WhatsApp/Baileys).
+2. **Matrix** — best fit for a self-hosted, privacy-minded community
+   audience, backed by a real demand signal (a large spike in Matrix interest
+   during a 2026 Discord trust incident), with a healthy TypeScript-native
+   bot SDK.
+3. **Mattermost** — a clean official bot-account API and a genuinely free
+   self-hosted core (bot accounts don't consume paid seats), with strong
+   audience overlap as another self-hosted OSS chat tool.
+
+Also planned:
+
+- **Slack completion** — finish the existing Slack scaffold into a
+  production runtime, as cleanup rather than new priority. The SDK is mature
+  and fits Garbanzo's self-hosted model, but Slack's free-tier message
+  history cap makes it a weaker primary home for a memory-carrying bot than
+  the top three above.
+- **XMPP (community tier)** — technically shovel-ready (mature client
+  libraries, native group-chat support, no adverse bot policy found), but a
+  small enough addressable audience that it fits better as a
+  community-contributed adapter than a roadmap item.
+
+**Explicit non-goals, with reasons:**
+
+- **Signal** — no official bot API, and unofficial clients took on
+  unhedgeable ban risk after a March 2026 mass-deregistration of outdated
+  unofficial clients. Unlike WhatsApp's behavior-based anti-ban posture, this
+  is a protocol-versioning cliff that can't be managed with rate limits or
+  warm-up ramps.
+- **Microsoft Teams** — the bot SDK the existing stub targets
+  (`botbuilder-js`) was archived in January 2026. Building this out would
+  mean a full rewrite against Microsoft's replacement SDK.
+- **IRC** — Libera.Chat, the largest IRC network, adopted a May 2026 policy
+  restricting autonomous LLM-driven bots, undercutting IRC's appeal as an
+  easy low-effort target.
+- **Social media (X/Twitter, Bluesky)** — mostly a modality mismatch for a
+  group-chat bot. X's group messaging API exists but is approval-gated and
+  metered per action. Bluesky's group-chat feature is new enough that
+  third-party bot access to it is unconfirmed; worth re-checking later.
 
 ## Milestone A: Narrative and Docs Alignment
 
