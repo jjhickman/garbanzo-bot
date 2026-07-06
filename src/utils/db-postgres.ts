@@ -61,6 +61,7 @@ import type {
   Availability,
   AvailabilityResponse,
   BackupIntegrityStatus,
+  BridgeBufferEntry,
   BridgeOutboxCounts,
   BridgeOutboxEntry,
   DailyGroupActivity,
@@ -981,6 +982,22 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     async bridgeOutboxCounts(): Promise<BridgeOutboxCounts> {
       throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async appendBridgeBuffer(_routeId: string, _envelopeJson: string): Promise<void> {
+      throw new Error('Bridge summary buffer is not implemented for postgres backend yet');
+    },
+
+    async takeBridgeBuffer(_routeId: string): Promise<BridgeBufferEntry[]> {
+      throw new Error('Bridge summary buffer is not implemented for postgres backend yet');
+    },
+
+    async restoreBridgeBuffer(_rows: BridgeBufferEntry[]): Promise<void> {
+      throw new Error('Bridge summary buffer is not implemented for postgres backend yet');
+    },
+
+    async bridgeBufferDepths(): Promise<Record<string, number>> {
+      throw new Error('Bridge summary buffer is not implemented for postgres backend yet');
     },
 
     async submitFeedback(

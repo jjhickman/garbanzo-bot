@@ -1,6 +1,7 @@
 import type {
   Availability,
   AvailabilityResponse,
+  BridgeBufferEntry,
   BridgeOutboxEntry,
   BridgeOutboxStatus,
   DailyGroupActivity,
@@ -212,6 +213,13 @@ export interface BridgeOutboxRow {
   next_attempt_at: DbNumeric | null;
   last_error: string | null;
   created_at: DbNumeric | null;
+}
+
+export interface BridgeBufferRow {
+  id: DbNumeric | null;
+  route_id: string;
+  envelope_json: string;
+  buffered_at: DbNumeric | null;
 }
 
 export function mapDbMessage(row: MessageRow): DbMessage {
@@ -436,5 +444,14 @@ export function mapBridgeOutboxEntry(row: BridgeOutboxRow): BridgeOutboxEntry {
     nextAttemptAt: toNumber(row.next_attempt_at),
     lastError: row.last_error,
     createdAt: toNumber(row.created_at),
+  };
+}
+
+export function mapBridgeBufferEntry(row: BridgeBufferRow): BridgeBufferEntry {
+  return {
+    id: toNumber(row.id),
+    routeId: row.route_id,
+    envelopeJson: row.envelope_json,
+    bufferedAt: toNumber(row.buffered_at),
   };
 }

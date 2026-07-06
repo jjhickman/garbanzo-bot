@@ -15,6 +15,7 @@ import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapAvailability,
+  mapBridgeBufferEntry,
   mapBridgeOutboxEntry,
   mapDailyGroupActivity,
   mapDbMessage,
@@ -33,6 +34,7 @@ import {
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
   type AvailabilityRow,
+  type BridgeBufferRow,
   type BridgeOutboxRow,
   type DailyGroupActivityRow,
   type EventReminderRow,
@@ -65,6 +67,7 @@ import type {
   Availability,
   AvailabilityResponse,
   BackfillSession,
+  BridgeBufferEntry,
   BridgeOutboxCounts,
   BridgeOutboxEntry,
   DailyGroupActivity,
@@ -507,6 +510,16 @@ const updateBridgeOutboxAttempt = db.prepare(
 const insertBridgeSeen = db.prepare(
   `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
 );
+const insertBridgeBuffer = db.prepare(
+  `INSERT INTO bridge_buffer (route_id, envelope_json, buffered_at) VALUES (?, ?, ?)`,
+);
+const selectBridgeBufferByRoute = db.prepare(
+  `SELECT * FROM bridge_buffer WHERE route_id = ? ORDER BY id ASC`,
+);
+const deleteBridgeBufferByRoute = db.prepare(`DELETE FROM bridge_buffer WHERE route_id = ?`);
+const selectBridgeBufferDepths = db.prepare(
+  `SELECT route_id, COUNT(*) as count FROM bridge_buffer GROUP BY route_id`,
+);
 const selectBridgeOutboxCounts = db.prepare(
   `SELECT
      SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
@@ -907,6 +920,52 @@ export function bridgeOutboxCounts(): BridgeOutboxCounts {
     sent: toNumber(row.sent ?? 0),
     dead: toNumber(row.dead ?? 0),
   };
+}
+
+// ── Public API: Bridge Summary Buffer (Task 7) ─────────────────────
+
+/**
+ * Atomically read and clear all buffered rows for a route (oldest first).
+ * better-sqlite3 executes synchronously, so the select+delete pair below
+ * cannot interleave with a concurrent append on the same process — no
+ * explicit BEGIN/COMMIT is needed for that guarantee, but we still wrap it
+ * in a transaction for clarity and to keep the pattern consistent with the
+ * other multi-statement writes in this file.
+ */
+const takeBridgeBufferTxn = db.transaction((routeId: string): BridgeBufferRow[] => {
+  const rows = selectBridgeBufferByRoute.all(routeId) as BridgeBufferRow[];
+  if (rows.length > 0) deleteBridgeBufferByRoute.run(routeId);
+  return rows;
+});
+
+const restoreBridgeBufferTxn = db.transaction((rows: BridgeBufferEntry[]): void => {
+  for (const row of rows) {
+    insertBridgeBuffer.run(row.routeId, row.envelopeJson, row.bufferedAt);
+  }
+});
+
+/** Append one envelope to a route's buffer. Never sends — the flusher does that. */
+export function appendBridgeBuffer(routeId: string, envelopeJson: string): void {
+  insertBridgeBuffer.run(routeId, envelopeJson, Date.now());
+}
+
+/** Atomically take (read + delete) all buffered rows for a route, oldest first. */
+export function takeBridgeBuffer(routeId: string): BridgeBufferEntry[] {
+  return takeBridgeBufferTxn(routeId).map(mapBridgeBufferEntry);
+}
+
+/** Re-insert previously taken rows, preserving their original order and timestamps. */
+export function restoreBridgeBuffer(rows: BridgeBufferEntry[]): void {
+  if (rows.length === 0) return;
+  restoreBridgeBufferTxn(rows);
+}
+
+/** Current buffer depth (row count) per route id, for routes with at least one buffered row. */
+export function bridgeBufferDepths(): Record<string, number> {
+  const rows = selectBridgeBufferDepths.all() as Array<{ route_id: string; count: number }>;
+  const depths: Record<string, number> = {};
+  for (const row of rows) depths[row.route_id] = toNumber(row.count);
+  return depths;
 }
 
 // ── Public API: Feedback ────────────────────────────────────────────
@@ -1514,6 +1573,15 @@ export function createSqliteBackend(): DbBackend {
       bumpBridgeOutboxAttempt(id, nextAt, error),
     bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
     bridgeOutboxCounts: async () => bridgeOutboxCounts(),
+
+    appendBridgeBuffer: async (routeId: string, envelopeJson: string): Promise<void> => {
+      appendBridgeBuffer(routeId, envelopeJson);
+    },
+    takeBridgeBuffer: async (routeId: string) => takeBridgeBuffer(routeId),
+    restoreBridgeBuffer: async (rows: BridgeBufferEntry[]): Promise<void> => {
+      restoreBridgeBuffer(rows);
+    },
+    bridgeBufferDepths: async () => bridgeBufferDepths(),
 
     submitFeedback: async (
       type: 'suggestion' | 'bug',

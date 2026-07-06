@@ -4,6 +4,7 @@ import type {
   AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
+  BridgeBufferEntry,
   BridgeOutboxCounts,
   BridgeOutboxEntry,
   DailyGroupActivity,
@@ -104,6 +105,12 @@ export interface DbBackend {
   bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
   bridgeSeenInsert(key: string): Promise<boolean>;
   bridgeOutboxCounts(): Promise<BridgeOutboxCounts>;
+
+  // Bridge summary buffer (rate-safe WhatsApp relay mode, Task 7)
+  appendBridgeBuffer(routeId: string, envelopeJson: string): Promise<void>;
+  takeBridgeBuffer(routeId: string): Promise<BridgeBufferEntry[]>;
+  restoreBridgeBuffer(rows: BridgeBufferEntry[]): Promise<void>;
+  bridgeBufferDepths(): Promise<Record<string, number>>;
 
   // Feedback
   submitFeedback(type: 'suggestion' | 'bug', sender: string, groupJid: string | null, text: string): Promise<FeedbackEntry>;

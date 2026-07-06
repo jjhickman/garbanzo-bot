@@ -14,6 +14,7 @@ export type {
   AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
+  BridgeBufferEntry,
   BridgeOutboxCounts,
   BridgeOutboxEntry,
   DailyGroupActivity,
@@ -115,6 +116,12 @@ export const markBridgeOutboxDead = backend.markBridgeOutboxDead;
 export const bumpBridgeOutboxAttempt = backend.bumpBridgeOutboxAttempt;
 export const bridgeSeenInsert = backend.bridgeSeenInsert;
 export const bridgeOutboxCounts = backend.bridgeOutboxCounts;
+
+// Bridge summary buffer (rate-safe WhatsApp relay mode, Task 7)
+export const appendBridgeBuffer = backend.appendBridgeBuffer;
+export const takeBridgeBuffer = backend.takeBridgeBuffer;
+export const restoreBridgeBuffer = backend.restoreBridgeBuffer;
+export const bridgeBufferDepths = backend.bridgeBufferDepths;
 
 // Feedback
 export const submitFeedback = backend.submitFeedback;

@@ -276,3 +276,17 @@ export interface BridgeOutboxCounts {
   sent: number;
   dead: number;
 }
+
+/**
+ * A row buffered for the WhatsApp-relay-safe summary flusher (Task 7). Unlike
+ * bridge_outbox (per-message durable delivery queue), bridge_buffer holds
+ * envelopes destined to be batched into ONE digest send per route per flush
+ * interval — the anti-ban guarantee for high-traffic routes bridging into
+ * WhatsApp.
+ */
+export interface BridgeBufferEntry {
+  id: number;
+  routeId: string;
+  envelopeJson: string;
+  bufferedAt: number;
+}

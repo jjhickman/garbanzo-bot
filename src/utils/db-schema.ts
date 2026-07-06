@@ -325,6 +325,16 @@ db.exec(`
     idempotency_key TEXT PRIMARY KEY,
     seen_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS bridge_buffer (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id TEXT NOT NULL,
+    envelope_json TEXT NOT NULL,
+    buffered_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_bridge_buffer_route
+    ON bridge_buffer (route_id);
 `);
 
 interface TableColumnInfo {
