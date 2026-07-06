@@ -7,6 +7,7 @@ import { logger } from '../middleware/logger.js';
 import type { DbBackend } from './db-backend.js';
 import type { LocalMemoryEntry, MemoryEntry, SharedMemoryEntry } from './db-types.js';
 import { deleteFact, indexFact } from './vector-memory.js';
+import { truncate } from './formatting.js';
 
 export type {
   Availability,
@@ -178,6 +179,26 @@ export async function searchMemory(keyword: string, limit = 10): Promise<MemoryE
   return [...localResults, ...sharedResults];
 }
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
+
+const PROMPT_MEMORY_MAX_CHARS = 4000;
+
+export async function formatMemoriesForPromptWithShared(userMessage?: string): Promise<string> {
+  const localBlock = await backend.formatMemoriesForPrompt();
+  const query = userMessage?.trim();
+  if (!config.SHARED_MEMORY_ENABLED || !query) return localBlock;
+
+  const { searchSharedFacts } = await import('./vector-memory.js');
+  const sharedHits = await searchSharedFacts(query, 3);
+  if (sharedHits.length === 0) return localBlock;
+
+  const sharedLines = [
+    'Shared community knowledge (relevant facts from other instances):',
+    ...sharedHits.map((hit) => `  - [shared from ${hit.originInstance}] ${hit.text}`),
+  ];
+  const sharedBlock = sharedLines.join('\n');
+  const combined = localBlock ? `${localBlock}\n${sharedBlock}` : sharedBlock;
+  return truncate(combined, PROMPT_MEMORY_MAX_CHARS);
+}
 
 // Songs (shared band memory)
 export const addSong = backend.addSong;

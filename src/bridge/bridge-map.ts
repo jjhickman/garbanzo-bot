@@ -116,12 +116,24 @@ export function loadBridgeMap(): BridgeMap | null {
   }
 }
 
-export function routesForInstance(map: BridgeMap, instanceId: string): BridgeRoute[] {
+function canSendFrom(route: BridgeRoute, instanceId: string): boolean {
+  return route.direction === 'both' || route.from === instanceId;
+}
+
+export function allRoutesForInstance(map: BridgeMap, instanceId: string): BridgeRoute[] {
   return map.routes.filter((route) =>
     route.endpoints.some((endpoint) => endpoint.instance === instanceId));
 }
 
-export function findRoute(map: BridgeMap, instanceId: string, chatId: string): BridgeRoute | undefined {
-  return map.routes.find((route) =>
+export function outboundRoutesForInstance(map: BridgeMap, instanceId: string): BridgeRoute[] {
+  return allRoutesForInstance(map, instanceId).filter((route) => canSendFrom(route, instanceId));
+}
+
+export function findOutboundRoute(
+  map: BridgeMap,
+  instanceId: string,
+  chatId: string,
+): BridgeRoute | undefined {
+  return outboundRoutesForInstance(map, instanceId).find((route) =>
     route.endpoints.some((endpoint) => endpoint.instance === instanceId && endpoint.chatId === chatId));
 }

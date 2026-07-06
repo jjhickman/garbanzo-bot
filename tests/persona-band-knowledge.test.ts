@@ -23,6 +23,7 @@ const dbMocks = vi.hoisted(() => ({
   updateSong: vi.fn(),
   deleteSong: vi.fn(),
   formatMemoriesForPrompt: vi.fn(),
+  formatMemoriesForPromptWithShared: vi.fn(),
 }));
 
 vi.mock('../src/utils/config.js', () => ({
@@ -87,6 +88,8 @@ describe('persona band knowledge prompt injection', () => {
     dbMocks.listSongs.mockReset();
     dbMocks.formatMemoriesForPrompt.mockReset();
     dbMocks.formatMemoriesForPrompt.mockResolvedValue('');
+    dbMocks.formatMemoriesForPromptWithShared.mockReset();
+    dbMocks.formatMemoriesForPromptWithShared.mockResolvedValue('');
   });
 
   afterEach(() => {

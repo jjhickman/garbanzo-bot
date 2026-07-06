@@ -190,6 +190,71 @@ describe('shared memory search and owner commands', () => {
     expect('id' in results[1]).toBe(false);
   });
 
+  it('formats shared prompt hits with origin labels when enabled and queried', async () => {
+    vi.resetModules();
+    process.env.SHARED_MEMORY_ENABLED = 'true';
+    const localBlock = [
+      'Community knowledge (facts you know about this group):',
+      '  venues:',
+      '    - Local venue fact',
+    ].join('\n');
+    vi.doMock('../src/utils/db-sqlite.js', () => ({
+      createSqliteBackend: () => ({
+        ...makeBackend(),
+        formatMemoriesForPrompt: vi.fn(async () => localBlock),
+      }),
+    }));
+    const searchSharedFacts = vi.fn(async () => [{
+      refId: 'discord:42',
+      text: 'Shared fact from the Discord instance',
+      score: 0.91,
+      originInstance: 'discord',
+      category: 'general',
+    }]);
+    vi.doMock('../src/utils/vector-memory.js', () => ({
+      indexFact: vi.fn(async () => undefined),
+      deleteFact: vi.fn(async () => undefined),
+      searchFacts: vi.fn(async () => []),
+      searchSharedFacts,
+    }));
+
+    const db = await import('../src/utils/db.js');
+    const formatted = await db.formatMemoriesForPromptWithShared('practice query');
+
+    expect(searchSharedFacts).toHaveBeenCalledWith('practice query', 3);
+    expect(formatted).toContain(localBlock);
+    expect(formatted).toContain('[shared from discord] Shared fact from the Discord instance');
+  });
+
+  it('keeps prompt memory byte-identical when shared memory is disabled', async () => {
+    vi.resetModules();
+    process.env.SHARED_MEMORY_ENABLED = 'false';
+    const localBlock = [
+      'Community knowledge (facts you know about this group):',
+      '  venues:',
+      '    - Local venue fact',
+    ].join('\n');
+    vi.doMock('../src/utils/db-sqlite.js', () => ({
+      createSqliteBackend: () => ({
+        ...makeBackend(),
+        formatMemoriesForPrompt: vi.fn(async () => localBlock),
+      }),
+    }));
+    const searchSharedFacts = vi.fn(async () => []);
+    vi.doMock('../src/utils/vector-memory.js', () => ({
+      indexFact: vi.fn(async () => undefined),
+      deleteFact: vi.fn(async () => undefined),
+      searchFacts: vi.fn(async () => []),
+      searchSharedFacts,
+    }));
+
+    const db = await import('../src/utils/db.js');
+    const formatted = await db.formatMemoriesForPromptWithShared('practice query');
+
+    expect(formatted).toBe(localBlock);
+    expect(searchSharedFacts).not.toHaveBeenCalled();
+  });
+
   it('labels shared search results without exposing the local numeric id', async () => {
     vi.resetModules();
     vi.doMock('../src/utils/db.js', () => ({

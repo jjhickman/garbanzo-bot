@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BridgeMapSchema,
-  findRoute,
-  routesForInstance,
+  allRoutesForInstance,
+  findOutboundRoute,
+  outboundRoutesForInstance,
 } from '../src/bridge/bridge-map.js';
 
 const validMap = {
@@ -110,13 +111,57 @@ describe('bridge map config', () => {
     expect(result.success).toBe(false);
   });
 
-  it('filters and finds routes by instance and chat id', () => {
+  it('filters and finds outbound routes by instance and chat id', () => {
     const parsed = BridgeMapSchema.parse(validMap);
 
-    expect(routesForInstance(parsed, 'remy').map((route) => route.id)).toEqual(['band-community']);
-    expect(routesForInstance(parsed, 'missing')).toEqual([]);
-    expect(findRoute(parsed, 'garbanzo', '456@g.us')?.id).toBe('band-community');
-    expect(findRoute(parsed, 'garbanzo', 'other')).toBeUndefined();
+    expect(outboundRoutesForInstance(parsed, 'remy').map((route) => route.id)).toEqual(['band-community']);
+    expect(outboundRoutesForInstance(parsed, 'missing')).toEqual([]);
+    expect(findOutboundRoute(parsed, 'garbanzo', '456@g.us')?.id).toBe('band-community');
+    expect(findOutboundRoute(parsed, 'garbanzo', 'other')).toBeUndefined();
+  });
+
+  it('keeps all-routes lookup endpoint-based for diagnostics', () => {
+    const parsed = BridgeMapSchema.parse(validMap);
+
+    expect(allRoutesForInstance(parsed, 'garbanzo').map((route) => route.id)).toEqual(['band-community']);
+  });
+
+  it('only returns one-way routes for the sending endpoint', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      routes: [
+        {
+          id: 'remy-to-garbanzo',
+          endpoints: [
+            { instance: 'remy', chatId: '123' },
+            { instance: 'garbanzo', chatId: '456@g.us' },
+          ],
+          direction: 'one-way',
+          from: 'remy',
+        },
+        {
+          id: 'garbanzo-to-remy',
+          endpoints: [
+            { instance: 'remy', chatId: '789' },
+            { instance: 'garbanzo', chatId: '999@g.us' },
+          ],
+          direction: 'one-way',
+          from: 'garbanzo',
+        },
+      ],
+    });
+
+    expect(outboundRoutesForInstance(parsed, 'remy').map((route) => route.id)).toEqual(['remy-to-garbanzo']);
+    expect(outboundRoutesForInstance(parsed, 'garbanzo').map((route) => route.id)).toEqual(['garbanzo-to-remy']);
+    expect(allRoutesForInstance(parsed, 'remy').map((route) => route.id)).toEqual([
+      'remy-to-garbanzo',
+      'garbanzo-to-remy',
+    ]);
+
+    expect(findOutboundRoute(parsed, 'remy', '123')?.id).toBe('remy-to-garbanzo');
+    expect(findOutboundRoute(parsed, 'remy', '789')).toBeUndefined();
+    expect(findOutboundRoute(parsed, 'garbanzo', '999@g.us')?.id).toBe('garbanzo-to-remy');
+    expect(findOutboundRoute(parsed, 'garbanzo', '456@g.us')).toBeUndefined();
   });
 
   it('returns null when the bridge map file is absent', async () => {
