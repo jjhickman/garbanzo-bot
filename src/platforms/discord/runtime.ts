@@ -112,7 +112,7 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
           port: config.DISCORD_INTERACTIONS_PORT,
           botToken: token,
           publicKey: config.DISCORD_PUBLIC_KEY,
-          ownerId: config.OWNER_JID,
+          ownerId: config.OWNER_JID ?? runtimeDeps.getOwnerId() ?? '',
         });
 
         logger.info(

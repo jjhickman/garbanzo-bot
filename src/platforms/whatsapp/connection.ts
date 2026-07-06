@@ -14,6 +14,7 @@ import { resolve } from 'path';
 import { logger } from '../../middleware/logger.js';
 import { config, PROJECT_ROOT } from '../../utils/config.js';
 import { markConnected, markDisconnected } from '../../middleware/health.js';
+import { getPersonaName } from '../../ai/persona.js';
 import { createProtectedWhatsAppSocket, getWhatsAppOutboundSafety } from './outbound-safety.js';
 import { markLinked, markUnlinked, routeLoginQr, setActiveSocket } from './login-store.js';
 
@@ -69,9 +70,10 @@ export async function startConnection(
       markLinked();
       safety?.onConnected();
 
-      // Set the bot's display name so it shows as "Garbanzo Bean" in groups
-      sock.updateProfileName('Garbanzo Bean').catch((err) => {
-        logger.warn({ err, desiredName: 'Garbanzo Bean' }, 'Failed to set profile name — may need to set manually in WhatsApp');
+      // Set the bot's display name so it shows correctly in groups.
+      const desiredName = getPersonaName();
+      sock.updateProfileName(desiredName).catch((err) => {
+        logger.warn({ err, desiredName }, 'Failed to set profile name — may need to set manually in WhatsApp');
       });
 
       onReady(protectedSock);

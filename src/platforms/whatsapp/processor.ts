@@ -45,6 +45,10 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
   }
 
   const adapter = createWhatsAppAdapter(sock);
+  // Config schema requires OWNER_JID for the WhatsApp platform; this narrows
+  // the conditional type at WhatsApp-only call sites.
+  const ownerJid = config.OWNER_JID;
+  if (!ownerJid) throw new Error('OWNER_JID is required for WhatsApp message processing');
 
   await processInboundMessage(adapter, inbound, {
     isReplyToBot: (m) => {
@@ -69,7 +73,7 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       await handleOwnerDM(sock, wa.chatId, wa.senderId, text);
     },
   }, {
-    ownerId: config.OWNER_JID,
+    ownerId: ownerJid,
     isGroupEnabled,
     introductionsChatId: getEnabledGroupJidByName('Introductions'),
     eventsChatId: getEnabledGroupJidByName('Events'),

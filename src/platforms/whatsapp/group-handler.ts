@@ -70,13 +70,17 @@ export async function handleGroupMessage(
   }
 
   const messenger = createWhatsAppAdapter(sock);
+  // Config schema requires OWNER_JID for the WhatsApp platform; this narrows
+  // the conditional type at WhatsApp-only call sites.
+  const ownerJid = config.OWNER_JID;
+  if (!ownerJid) throw new Error('OWNER_JID is required for WhatsApp group handling');
 
   await processGroupMessage({
     messenger,
     chatId: remoteJid,
     senderId: senderJid,
     groupName,
-    ownerId: config.OWNER_JID,
+    ownerId: ownerJid,
     query,
     isFeatureEnabled,
     getResponse,

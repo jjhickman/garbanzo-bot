@@ -9,13 +9,24 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.aws.yml up -d
 
 services:
-  garbanzo:
+  whatsapp:
     logging:
       driver: awslogs
       options:
         awslogs-region: ${AWS_REGION}
         awslogs-group: ${AWS_LOG_GROUP:-/garbanzo/prod}
-        awslogs-stream: ${AWS_LOG_STREAM:-garbanzo/${AWS_INSTANCE_ID}}
+        awslogs-stream: ${AWS_LOG_STREAM:-whatsapp/${AWS_INSTANCE_ID}}
+
+    depends_on:
+      - qdrant
+
+  discord:
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: ${AWS_LOG_GROUP:-/garbanzo/prod}
+        awslogs-stream: ${AWS_LOG_STREAM:-discord/${AWS_INSTANCE_ID}}
 
     depends_on:
       - qdrant

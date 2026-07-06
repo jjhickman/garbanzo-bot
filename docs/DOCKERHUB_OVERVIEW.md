@@ -18,32 +18,42 @@ This image is built for operators and small teams that want:
 
 ## Quick Start (Docker Compose)
 
-1) Copy env template:
+1) Copy env templates:
 
 ```bash
 cp .env.example .env
+cp .env.discord.example .env.discord
+# Optional WhatsApp instance:
+# cp .env.whatsapp.example .env.whatsapp
 ```
 
-2) Set required vars in `.env` (at minimum: `OWNER_JID` and one AI provider key).
+2) In `.env`, set `COMPOSE_PROFILES=discord`, one AI provider key, and
+`MONITORING_TOKEN` if you enable monitoring. In `.env.discord`, set
+`DISCORD_BOT_TOKEN` and `DISCORD_OWNER_ID`.
 
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:3001/health
+curl http://127.0.0.1:3002/health
 ```
 
 Readiness (non-200 when disconnected/stale):
 
 ```bash
-curl -i http://127.0.0.1:3001/health/ready
+curl -i http://127.0.0.1:3002/health/ready
 ```
+
+To run WhatsApp too, copy `.env.whatsapp.example` to `.env.whatsapp`, set
+`OWNER_JID`, and use `COMPOSE_PROFILES=discord,whatsapp`. To add Prometheus and
+Grafana, append `,monitoring`, set `METRICS_ENABLED=true`, and set
+`MONITORING_TOKEN`.
 
 ## Key Features
 
@@ -53,8 +63,8 @@ curl -i http://127.0.0.1:3001/health/ready
 - **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
 - **Vector memory:** session summaries and community facts are embedded (OpenAI `text-embedding-3-small`) into a self-hosted Qdrant store, with automatic keyword fallback when Qdrant is unavailable
 - **Storage:** SQLite (default) or Postgres for relational state; Qdrant for vectors
-- **Platforms:** WhatsApp (production), Discord (Gateway runtime with opt-in channels), Slack (scaffold + demo mode)
-- **Band mode:** `BAND_FEATURES_ENABLED=true` turns on the Remy band assistant on Discord (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`); run it beside a community instance with `docker-compose.remy.yml`
+- **Platforms:** Discord (default Gateway runtime with opt-in channels), WhatsApp (Baileys runtime with browser login and anti-ban outbound safety), Slack (support plus demo mode)
+- **Band mode:** `BAND_FEATURES_ENABLED=true` turns on the Remy band assistant on the Discord profile (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`)
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
 - **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
 

@@ -12,6 +12,26 @@
     "from": "now-24h",
     "to": "now"
   },
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "garbanzo-prom"
+        },
+        "query": "label_values(job)",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -64,7 +84,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (group) (increase(garbanzo_messages_total[1h]))",
+          "expr": "sum by (group) (increase(garbanzo_messages_total{job=~\"$job\"}[1h]))",
           "refId": "A",
           "legendFormat": "{{group}}"
         }
@@ -109,7 +129,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (group) (increase(garbanzo_bot_responses_total[1h]))",
+          "expr": "sum by (group) (increase(garbanzo_bot_responses_total{job=~\"$job\"}[1h]))",
           "refId": "A",
           "legendFormat": "{{group}}"
         }
@@ -151,7 +171,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_daily_active_users",
+          "expr": "garbanzo_daily_active_users{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "{{group}}"
         }
@@ -193,12 +213,12 @@
       },
       "targets": [
         {
-          "expr": "increase(garbanzo_owner_dms_total[1h])",
+          "expr": "increase(garbanzo_owner_dms_total{job=~\"$job\"}[1h])",
           "refId": "A",
           "legendFormat": "owner DMs"
         },
         {
-          "expr": "increase(garbanzo_rate_limited_total[1h])",
+          "expr": "increase(garbanzo_rate_limited_total{job=~\"$job\"}[1h])",
           "refId": "B",
           "legendFormat": "rate-limited"
         }
@@ -264,7 +284,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_daily_cost_usd",
+          "expr": "garbanzo_daily_cost_usd{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -308,7 +328,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (provider) (increase(garbanzo_ai_cost_usd_total[24h]))",
+          "expr": "sum by (provider) (increase(garbanzo_ai_cost_usd_total{job=~\"$job\"}[24h]))",
           "refId": "A",
           "legendFormat": "{{provider}}"
         }
@@ -353,7 +373,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (provider) (increase(garbanzo_ai_requests_total[1h]))",
+          "expr": "sum by (provider) (increase(garbanzo_ai_requests_total{job=~\"$job\"}[1h]))",
           "refId": "A",
           "legendFormat": "{{provider}}"
         }
@@ -398,7 +418,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (tool) (increase(garbanzo_tool_calls_total{outcome=\"ok\"}[1h]))",
+          "expr": "sum by (tool) (increase(garbanzo_tool_calls_total{job=~\"$job\", outcome=\"ok\"}[1h]))",
           "refId": "A",
           "legendFormat": "{{tool}}"
         }
@@ -440,12 +460,12 @@
       },
       "targets": [
         {
-          "expr": "sum (increase(garbanzo_ai_errors_total[1h]))",
+          "expr": "sum (increase(garbanzo_ai_errors_total{job=~\"$job\"}[1h]))",
           "refId": "A",
           "legendFormat": "AI errors"
         },
         {
-          "expr": "sum (increase(garbanzo_tool_calls_total{outcome=\"error\"}[1h]))",
+          "expr": "sum (increase(garbanzo_tool_calls_total{job=~\"$job\", outcome=\"error\"}[1h]))",
           "refId": "B",
           "legendFormat": "tool failures"
         }
@@ -520,7 +540,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_connection_status{status=\"connected\"}",
+          "expr": "garbanzo_connection_status{job=~\"$job\", status=\"connected\"}",
           "refId": "A"
         }
       ]
@@ -573,7 +593,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_last_message_ago_seconds",
+          "expr": "garbanzo_last_message_ago_seconds{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -635,7 +655,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_connection_stale",
+          "expr": "garbanzo_connection_stale{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -676,7 +696,7 @@
       },
       "targets": [
         {
-          "expr": "increase(garbanzo_reconnect_count[6h])",
+          "expr": "increase(garbanzo_reconnect_count{job=~\"$job\"}[6h])",
           "refId": "A",
           "legendFormat": "reconnects"
         }
@@ -730,7 +750,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_whatsapp_safety_risk_score",
+          "expr": "garbanzo_whatsapp_safety_risk_score{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "risk"
         }
@@ -772,12 +792,12 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_whatsapp_outbound_sent_last_hour",
+          "expr": "garbanzo_whatsapp_outbound_sent_last_hour{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "sent (1h)"
         },
         {
-          "expr": "garbanzo_whatsapp_outbound_held",
+          "expr": "garbanzo_whatsapp_outbound_held{job=~\"$job\"}",
           "refId": "B",
           "legendFormat": "held"
         }
@@ -840,7 +860,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_whatsapp_safety_paused",
+          "expr": "garbanzo_whatsapp_safety_paused{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -893,7 +913,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_memory_facts",
+          "expr": "garbanzo_memory_facts{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "{{source}}"
         }
@@ -935,12 +955,12 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_event_reminders_pending",
+          "expr": "garbanzo_event_reminders_pending{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "pending"
         },
         {
-          "expr": "increase(garbanzo_event_reminders_sent_total[24h])",
+          "expr": "increase(garbanzo_event_reminders_sent_total{job=~\"$job\"}[24h])",
           "refId": "B",
           "legendFormat": "sent (24h)"
         }
@@ -982,7 +1002,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (group) (increase(garbanzo_moderation_flags_total[24h]))",
+          "expr": "sum by (group) (increase(garbanzo_moderation_flags_total{job=~\"$job\"}[24h]))",
           "refId": "A",
           "legendFormat": "{{group}}"
         }
@@ -1036,12 +1056,12 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_memory_rss_bytes",
+          "expr": "garbanzo_memory_rss_bytes{job=~\"$job\"}",
           "refId": "A",
           "legendFormat": "RSS"
         },
         {
-          "expr": "garbanzo_memory_heap_used_bytes",
+          "expr": "garbanzo_memory_heap_used_bytes{job=~\"$job\"}",
           "refId": "B",
           "legendFormat": "heap used"
         }
@@ -1078,7 +1098,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_up_time_seconds",
+          "expr": "garbanzo_up_time_seconds{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -1140,7 +1160,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_backup_available",
+          "expr": "garbanzo_backup_available{job=~\"$job\"}",
           "refId": "A"
         }
       ]
@@ -1202,7 +1222,7 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_backup_integrity_ok",
+          "expr": "garbanzo_backup_integrity_ok{job=~\"$job\"}",
           "refId": "A"
         }
       ]

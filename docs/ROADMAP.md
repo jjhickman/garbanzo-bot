@@ -39,6 +39,15 @@ Priority order:
 
 ## Planned Milestones
 
+## Post-v2: Platform Bridging
+
+- v3 platform bridging is gated on v2.0.0 being deployed and observed stable.
+- Tier 1: shared memory across platform instances with clear source and scope
+  boundaries.
+- Tier 2: bridge-map message relay between configured channels and groups.
+  Discord-to-WhatsApp relays flow through the outbound-safety layer.
+- Tier 3: single-process multi-runtime remains deferred.
+
 ## Milestone A: Narrative and Docs Alignment
 
 - Align README, website, and docs around a single product story.

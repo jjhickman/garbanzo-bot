@@ -155,7 +155,7 @@ export async function processDemoMessage(
 
     const outbox: DiscordDemoOutboxEntry[] = [];
     const messenger = createDiscordDemoAdapter(outbox);
-    await processDiscordDemoInbound(messenger, inbound, { ownerId: config.OWNER_JID });
+    await processDiscordDemoInbound(messenger, inbound, { ownerId: config.OWNER_JID ?? '' });
 
     return {
       inbound: {
@@ -184,7 +184,7 @@ export async function processDemoMessage(
 
   const outbox: SlackDemoOutboxEntry[] = [];
   const messenger = createSlackDemoAdapter(outbox);
-  await processSlackDemoInbound(messenger, inbound, { ownerId: config.OWNER_JID });
+  await processSlackDemoInbound(messenger, inbound, { ownerId: config.OWNER_JID ?? '' });
 
   return {
     inbound: {

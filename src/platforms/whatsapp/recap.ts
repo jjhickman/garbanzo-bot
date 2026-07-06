@@ -23,12 +23,17 @@ export function scheduleWeeklyRecap(sock: WASocket): () => void {
     logger.info({ nextRecapIn: `${hoursUntil}h` }, 'Weekly recap scheduled');
 
     timer = setTimeout(async () => {
+      // Config schema requires OWNER_JID for the WhatsApp platform; this
+      // narrows the conditional type at WhatsApp-only call sites.
+      const ownerJid = config.OWNER_JID;
       try {
+        if (!ownerJid) throw new Error('OWNER_JID is required for WhatsApp recap delivery');
+
         const text = await buildWeeklyRecap();
-        await sock.sendMessage(config.OWNER_JID, { text });
+        await sock.sendMessage(ownerJid, { text });
         logger.info('Weekly recap sent');
       } catch (err) {
-        logger.error({ err, ownerId: config.OWNER_JID }, 'Failed to send weekly recap');
+        logger.error({ err, ownerId: ownerJid }, 'Failed to send weekly recap');
       }
       arm(); // reschedule for next week
     }, msUntil);

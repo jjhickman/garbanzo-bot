@@ -45,10 +45,11 @@ export function createDiscordDemoServer(params: {
       const inbound = normalizeDiscordDemoInbound(msg);
       const outbox: DiscordDemoOutboxEntry[] = [];
       const messenger = createDiscordDemoAdapter(outbox);
+      const ownerUserId = getDiscordOwnerId();
 
       await processDiscordDemoInbound(messenger, inbound, {
-        ownerId: config.OWNER_JID,
-        ownerUserId: getDiscordOwnerId(),
+        ownerId: config.OWNER_JID ?? ownerUserId ?? '',
+        ownerUserId,
       });
 
       writeJson(res, 200, {

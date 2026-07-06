@@ -8,15 +8,25 @@ import { execSync } from 'node:child_process';
 
 import {
   DISCORD_FIELDS,
+  WHATSAPP_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
+  resolveMessagingPlatform,
+  mergeExistingEnvForPlatform,
+  generateMonitoringToken,
+  resolveComposeProfiles,
+  buildPlatformEnvLines,
+  buildSharedEnvLines,
+  redactEnvContent,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
 } from './setup-fields.mjs';
 
 const PROJECT_ROOT = resolve(new URL('..', import.meta.url).pathname);
 const ENV_PATH = resolve(PROJECT_ROOT, '.env');
+const ENV_DISCORD_PATH = resolve(PROJECT_ROOT, '.env.discord');
+const ENV_WHATSAPP_PATH = resolve(PROJECT_ROOT, '.env.whatsapp');
 const GROUPS_PATH = resolve(PROJECT_ROOT, 'config', 'groups.json');
 const DISCORD_CHANNELS_PATH = resolve(PROJECT_ROOT, 'config', 'discord-channels.json');
 const DISCORD_CHANNELS_EXAMPLE_PATH = resolve(PROJECT_ROOT, 'config', 'discord-channels.example.json');
@@ -148,30 +158,6 @@ function sanitizeFeatureList(features) {
   return normalized;
 }
 
-function redactEnvContent(content) {
-  const redactPrefixes = [
-    'ANTHROPIC_API_KEY=',
-    'OPENROUTER_API_KEY=',
-    'OPENAI_API_KEY=',
-    'GEMINI_API_KEY=',
-    'BEDROCK_MODEL_ID=',
-    'GITHUB_ISSUES_TOKEN=',
-    'DISCORD_BOT_TOKEN=',
-    'OWNER_JID=',
-    'BOT_PHONE_NUMBER=',
-  ];
-
-  return content
-    .split('\n')
-    .map((line) => {
-      const prefix = redactPrefixes.find((candidate) => line.startsWith(candidate));
-      if (!prefix) return line;
-      const value = line.slice(prefix.length).trim();
-      return value ? `${prefix}[REDACTED]` : line;
-    })
-    .join('\n');
-}
-
 function yn(value, fallback = true) {
   if (!value) return fallback;
   const normalized = value.trim().toLowerCase();
@@ -236,7 +222,8 @@ async function main() {
   }
 
   const rl = createInterface({ input, output });
-  const existing = parseEnvFile(ENV_PATH);
+  const rootExisting = parseEnvFile(ENV_PATH);
+  let existing = rootExisting;
 
   // Resolve one FIELD_TABLE field: CLI/existing/default when non-interactive,
   // otherwise prompt with a hint (masked for secret fields — Sec-3).
@@ -260,38 +247,45 @@ async function main() {
       }
     }
 
-    let messagingPlatform = 'whatsapp';
+    let messagingPlatform = 'discord';
     if (nonInteractive) {
-      const requestedPlatform = (cli.options.platform || existing.MESSAGING_PLATFORM || 'whatsapp').trim().toLowerCase();
-      messagingPlatform = ['whatsapp', 'discord', 'slack', 'teams'].includes(requestedPlatform)
-        ? requestedPlatform
-        : 'whatsapp';
+      messagingPlatform = resolveMessagingPlatform(cli, existing);
     } else {
       const platformIndex = await promptChoice(
         rl,
         'Messaging platform:',
         [
-          'WhatsApp (supported now)',
+          'Discord (official runtime + demo mode)',
+          'WhatsApp (unofficial API)',
           'Slack (official runtime + demo mode)',
           'Teams (planned; runtime support pending)',
-          'Discord (official runtime + demo mode)',
         ],
-        existing.MESSAGING_PLATFORM === 'slack'
+        existing.MESSAGING_PLATFORM === 'whatsapp'
           ? 1
-          : existing.MESSAGING_PLATFORM === 'teams'
+          : existing.MESSAGING_PLATFORM === 'slack'
             ? 2
-            : existing.MESSAGING_PLATFORM === 'discord'
+            : existing.MESSAGING_PLATFORM === 'teams'
               ? 3
               : 0,
       );
       messagingPlatform = platformIndex === 1
-        ? 'slack'
+        ? 'whatsapp'
         : platformIndex === 2
-          ? 'teams'
+          ? 'slack'
           : platformIndex === 3
-            ? 'discord'
-            : 'whatsapp';
+            ? 'teams'
+            : 'discord';
     }
+
+    const platformEnvPath = messagingPlatform === 'discord'
+      ? ENV_DISCORD_PATH
+      : messagingPlatform === 'whatsapp'
+        ? ENV_WHATSAPP_PATH
+        : null;
+    existing = mergeExistingEnvForPlatform(
+      rootExisting,
+      platformEnvPath ? parseEnvFile(platformEnvPath) : {},
+    );
 
     let slackDemo = false;
     if (messagingPlatform === 'slack') {
@@ -306,6 +300,7 @@ async function main() {
     }
 
     const discordEnv = {};
+    const whatsappEnv = {};
     let bandDeployment = false;
     let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
     let shouldScaffoldDiscordChannels = false;
@@ -471,12 +466,37 @@ async function main() {
     const bedrockPricingOutputPerM = await resolveText('BEDROCK_PRICING_OUTPUT_PER_M');
 
     const ollamaBaseUrl = await resolveText('OLLAMA_BASE_URL');
-    const ownerJid = await resolveText('OWNER_JID');
+    if (messagingPlatform === 'whatsapp') {
+      for (const field of WHATSAPP_FIELDS) {
+        whatsappEnv[field.env] = await resolveText(field.env);
+      }
+      const requestedLoginMode = (whatsappEnv.WHATSAPP_LOGIN_MODE || 'web').trim().toLowerCase();
+      whatsappEnv.WHATSAPP_LOGIN_MODE = WHATSAPP_LOGIN_MODES.includes(requestedLoginMode)
+        ? requestedLoginMode
+        : 'web';
+    }
     const appVersion = nonInteractive
       ? (cli.options['app-version'] ?? existing.APP_VERSION ?? DEFAULT_APP_VERSION)
       : await rl.question(`APP_VERSION [${existing.APP_VERSION ?? DEFAULT_APP_VERSION}]: `);
     const healthPort = await resolveText('HEALTH_PORT');
     const healthBindHost = await resolveText('HEALTH_BIND_HOST');
+
+    const monitoringEnabled = nonInteractive
+      ? parseBoolean(cli.options.monitoring, parseBoolean(existing.METRICS_ENABLED, false))
+      : yn(
+          await rl.question('\nEnable monitoring (Prometheus + Grafana)? [y/N]: '),
+          parseBoolean(existing.METRICS_ENABLED, false),
+        );
+
+    const monitoringTokenInput = monitoringEnabled ? await resolveText('MONITORING_TOKEN') : '';
+    let monitoringToken = (monitoringTokenInput || existing.MONITORING_TOKEN || '').trim();
+    if (monitoringEnabled && !monitoringToken) {
+      monitoringToken = generateMonitoringToken();
+      output.write(
+        '\n🔐 Generated a new MONITORING_TOKEN and stored it in .env — it authenticates /metrics, /admin, ' +
+        'the Prometheus scrape, and (unless GRAFANA_ADMIN_PASSWORD is set) the Grafana admin login.\n',
+      );
+    }
 
     const githubSponsorsUrl = await resolveText('GITHUB_SPONSORS_URL');
     const patreonUrl = await resolveText('PATREON_URL');
@@ -553,28 +573,17 @@ async function main() {
       }
     }
 
-    let whatsappLoginMode = existing.WHATSAPP_LOGIN_MODE ?? 'web';
-    if (messagingPlatform === 'whatsapp') {
-      if (nonInteractive) {
-        const requested = (cli.options['whatsapp-login-mode'] ?? existing.WHATSAPP_LOGIN_MODE ?? 'web').trim().toLowerCase();
-        whatsappLoginMode = WHATSAPP_LOGIN_MODES.includes(requested) ? requested : 'web';
-      } else {
-        const loginIndex = await promptChoice(
-          rl,
-          'WhatsApp login mode:',
-          ['Browser page (default)', 'Terminal QR', 'Both'],
-          existing.WHATSAPP_LOGIN_MODE === 'terminal' ? 1 : existing.WHATSAPP_LOGIN_MODE === 'both' ? 2 : 0,
-        );
-        whatsappLoginMode = loginIndex === 1 ? 'terminal' : loginIndex === 2 ? 'both' : 'web';
-      }
-    }
-
     const ownerName = nonInteractive
       ? (cli.options['owner-name'] || 'Owner').trim()
       : (await rl.question('Owner display name [Owner]: ')).trim() || 'Owner';
 
+    const composeProfiles = resolveComposeProfiles(messagingPlatform, monitoringEnabled);
+
     const finalEnv = {
       MESSAGING_PLATFORM: messagingPlatform,
+      COMPOSE_PROFILES: composeProfiles,
+      METRICS_ENABLED: String(monitoringEnabled),
+      MONITORING_TOKEN: monitoringToken,
       ANTHROPIC_API_KEY: (anthropicKey || existing.ANTHROPIC_API_KEY || '').trim(),
       OPENROUTER_API_KEY: (openRouterKey || existing.OPENROUTER_API_KEY || '').trim(),
       OPENAI_API_KEY: (openAIKey || existing.OPENAI_API_KEY || '').trim(),
@@ -592,7 +601,7 @@ async function main() {
       BEDROCK_MAX_TOKENS: String(bedrockMaxTokens || existing.BEDROCK_MAX_TOKENS || '1024').trim(),
       BEDROCK_PRICING_INPUT_PER_M: String(bedrockPricingInputPerM || existing.BEDROCK_PRICING_INPUT_PER_M || '0').trim(),
       BEDROCK_PRICING_OUTPUT_PER_M: String(bedrockPricingOutputPerM || existing.BEDROCK_PRICING_OUTPUT_PER_M || '0').trim(),
-      BOT_PHONE_NUMBER: (existing.BOT_PHONE_NUMBER || '').trim(),
+      BOT_PHONE_NUMBER: (whatsappEnv.BOT_PHONE_NUMBER || existing.BOT_PHONE_NUMBER || '').trim(),
       GOOGLE_API_KEY: (existing.GOOGLE_API_KEY || '').trim(),
       MBTA_API_KEY: (existing.MBTA_API_KEY || '').trim(),
       NEWSAPI_KEY: (existing.NEWSAPI_KEY || '').trim(),
@@ -621,96 +630,51 @@ async function main() {
       DISCORD_CHANNELS_CONFIG_PATH: (existing.DISCORD_CHANNELS_CONFIG_PATH || 'config/discord-channels.json').trim(),
       BAND_FEATURES_ENABLED: (discordEnv.BAND_FEATURES_ENABLED || existing.BAND_FEATURES_ENABLED || 'false').trim(),
       QDRANT_COLLECTION: String(qdrantCollection || existing.QDRANT_COLLECTION || 'garbanzo_memory').trim(),
-      OWNER_JID: (ownerJid || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
-      WHATSAPP_LOGIN_MODE: (whatsappLoginMode || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
+      OWNER_JID: (whatsappEnv.OWNER_JID || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
+      WHATSAPP_LOGIN_MODE: (whatsappEnv.WHATSAPP_LOGIN_MODE || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
     };
 
-    const discordEnvLines = messagingPlatform === 'discord'
-      ? [
-          '',
-          '# Discord runtime',
-          `DISCORD_BOT_TOKEN=${finalEnv.DISCORD_BOT_TOKEN}`,
-          `DISCORD_PUBLIC_KEY=${finalEnv.DISCORD_PUBLIC_KEY}`,
-          `DISCORD_OWNER_ID=${finalEnv.DISCORD_OWNER_ID}`,
-          `DISCORD_GATEWAY_ENABLED=${finalEnv.DISCORD_GATEWAY_ENABLED}`,
-          `DISCORD_DIGEST_CHANNEL_ID=${finalEnv.DISCORD_DIGEST_CHANNEL_ID}`,
-          `DISCORD_RECAP_CHANNEL_ID=${finalEnv.DISCORD_RECAP_CHANNEL_ID}`,
-          `DISCORD_CHANNELS_CONFIG_PATH=${finalEnv.DISCORD_CHANNELS_CONFIG_PATH}`,
-          '',
-          '# Remy band memory',
-          `BAND_FEATURES_ENABLED=${finalEnv.BAND_FEATURES_ENABLED}`,
-          `QDRANT_COLLECTION=${finalEnv.QDRANT_COLLECTION}`,
-        ]
-      : [];
+    // Layered emission (modular-config v2): `.env` carries only the shared
+    // fields (provider keys/models, MONITORING_TOKEN, health, integrations,
+    // COMPOSE_PROFILES) so it never needs edits when switching platforms;
+    // `.env.discord` / `.env.whatsapp` carry that platform's instance keys
+    // only. Every emitted key lives in exactly one file — see
+    // docs/superpowers/specs/2026-07-04-modular-config-design.md.
+    const sharedEnvContent = buildSharedEnvLines(finalEnv).join('\n');
 
-    const envContent = [
-      '# Garbanzo generated by setup wizard',
-      `MESSAGING_PLATFORM=${finalEnv.MESSAGING_PLATFORM}`,
-      '',
-      '# Cloud providers (runtime failover follows AI_PROVIDER_ORDER)',
-      `ANTHROPIC_API_KEY=${finalEnv.ANTHROPIC_API_KEY}`,
-      `OPENROUTER_API_KEY=${finalEnv.OPENROUTER_API_KEY}`,
-      `OPENAI_API_KEY=${finalEnv.OPENAI_API_KEY}`,
-      `GEMINI_API_KEY=${finalEnv.GEMINI_API_KEY}`,
-      `AI_PROVIDER_ORDER=${finalEnv.AI_PROVIDER_ORDER}`,
-      `ANTHROPIC_MODEL=${finalEnv.ANTHROPIC_MODEL}`,
-      `OPENROUTER_MODEL=${finalEnv.OPENROUTER_MODEL}`,
-      `OPENAI_MODEL=${finalEnv.OPENAI_MODEL}`,
-      `OPENAI_AUTH_MODE=${finalEnv.OPENAI_AUTH_MODE}`,
-      `GEMINI_MODEL=${finalEnv.GEMINI_MODEL}`,
-      `GEMINI_PRICING_INPUT_PER_M=${finalEnv.GEMINI_PRICING_INPUT_PER_M}`,
-      `GEMINI_PRICING_OUTPUT_PER_M=${finalEnv.GEMINI_PRICING_OUTPUT_PER_M}`,
-      `BEDROCK_REGION=${finalEnv.BEDROCK_REGION}`,
-      `BEDROCK_MODEL_ID=${finalEnv.BEDROCK_MODEL_ID}`,
-      `BEDROCK_MAX_TOKENS=${finalEnv.BEDROCK_MAX_TOKENS}`,
-      `BEDROCK_PRICING_INPUT_PER_M=${finalEnv.BEDROCK_PRICING_INPUT_PER_M}`,
-      `BEDROCK_PRICING_OUTPUT_PER_M=${finalEnv.BEDROCK_PRICING_OUTPUT_PER_M}`,
-      '',
-      '# Messaging and bot identity',
-      `BOT_PHONE_NUMBER=${finalEnv.BOT_PHONE_NUMBER}`,
-      `OWNER_JID=${finalEnv.OWNER_JID}`,
-      `WHATSAPP_LOGIN_MODE=${finalEnv.WHATSAPP_LOGIN_MODE}`,
-      '',
-      '# Optional feature APIs',
-      `GOOGLE_API_KEY=${finalEnv.GOOGLE_API_KEY}`,
-      `MBTA_API_KEY=${finalEnv.MBTA_API_KEY}`,
-      `NEWSAPI_KEY=${finalEnv.NEWSAPI_KEY}`,
-      `BRAVE_SEARCH_API_KEY=${finalEnv.BRAVE_SEARCH_API_KEY}`,
-      '',
-      '# Optional support links',
-      `GITHUB_SPONSORS_URL=${finalEnv.GITHUB_SPONSORS_URL}`,
-      `PATREON_URL=${finalEnv.PATREON_URL}`,
-      `KOFI_URL=${finalEnv.KOFI_URL}`,
-      `SUPPORT_CUSTOM_URL=${finalEnv.SUPPORT_CUSTOM_URL}`,
-      `SUPPORT_MESSAGE=${finalEnv.SUPPORT_MESSAGE}`,
-      `GITHUB_ISSUES_TOKEN=${finalEnv.GITHUB_ISSUES_TOKEN}`,
-      `GITHUB_ISSUES_REPO=${finalEnv.GITHUB_ISSUES_REPO}`,
-      '',
-      '# Runtime',
-      `OLLAMA_BASE_URL=${finalEnv.OLLAMA_BASE_URL}`,
-      `LOG_LEVEL=${finalEnv.LOG_LEVEL}`,
-      `APP_VERSION=${finalEnv.APP_VERSION}`,
-      `HEALTH_PORT=${finalEnv.HEALTH_PORT}`,
-      `HEALTH_BIND_HOST=${finalEnv.HEALTH_BIND_HOST}`,
-      `SLACK_DEMO=${finalEnv.SLACK_DEMO}`,
-      `SLACK_DEMO_PORT=${finalEnv.SLACK_DEMO_PORT}`,
-      `SLACK_DEMO_BIND_HOST=${finalEnv.SLACK_DEMO_BIND_HOST}`,
-      ...discordEnvLines,
-      '',
-    ].join('\n');
+    const envTargets = [{ path: ENV_PATH, content: sharedEnvContent, label: '.env' }];
+    if (messagingPlatform === 'discord') {
+      envTargets.push({
+        path: ENV_DISCORD_PATH,
+        content: buildPlatformEnvLines('discord', finalEnv).join('\n'),
+        label: '.env.discord',
+      });
+    } else if (messagingPlatform === 'whatsapp') {
+      envTargets.push({
+        path: ENV_WHATSAPP_PATH,
+        content: buildPlatformEnvLines('whatsapp', finalEnv).join('\n'),
+        label: '.env.whatsapp',
+      });
+    }
 
+    const writtenEnvFiles = [];
     if (dryRun) {
-      output.write('\n🧪 Dry-run: would write .env with these contents:\n');
-      output.write('--- .env (preview) ---\n');
-      output.write(`${redactEnvContent(envContent)}\n`);
-      output.write('--- end .env preview ---\n');
-    } else {
-      if (existsSync(ENV_PATH)) {
-        copyFileSync(ENV_PATH, `${ENV_PATH}.bak`);
-        output.write(`\n🗂️ Existing .env backed up to .env.bak\n`);
+      for (const target of envTargets) {
+        output.write(`\n🧪 Dry-run: would write ${target.label} with these contents:\n`);
+        output.write(`--- ${target.label} (preview) ---\n`);
+        output.write(`${redactEnvContent(target.content)}\n`);
+        output.write(`--- end ${target.label} preview ---\n`);
       }
-      writeFileSync(ENV_PATH, envContent, 'utf-8');
-      output.write('✅ Wrote .env\n');
+    } else {
+      for (const target of envTargets) {
+        if (existsSync(target.path)) {
+          copyFileSync(target.path, `${target.path}.bak`);
+          output.write(`\n🗂️ Existing ${target.label} backed up to ${target.label}.bak\n`);
+        }
+        writeFileSync(target.path, target.content, 'utf-8');
+        output.write(`✅ Wrote ${target.label}\n`);
+        writtenEnvFiles.push(target.label);
+      }
     }
 
     if (customPersonaContent) {
@@ -800,6 +764,9 @@ async function main() {
     output.write('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     output.write('✅ Setup complete\n');
     output.write(`- Messaging platform: ${messagingPlatform}\n`);
+    output.write(`- Compose profiles: ${composeProfiles}\n`);
+    output.write(`- Env files written: ${dryRun ? '(preview only — see above)' : writtenEnvFiles.join(', ')}\n`);
+    output.write(`- Monitoring (Prometheus + Grafana): ${monitoringEnabled ? 'enabled' : 'disabled'}\n`);
     output.write(`- Cloud provider order: ${aiProviderOrder}\n`);
     if (useOpenAI) output.write(`- OpenAI auth mode: ${finalEnv.OPENAI_AUTH_MODE}\n`);
     if (messagingPlatform === 'whatsapp') output.write(`- WhatsApp login mode: ${finalEnv.WHATSAPP_LOGIN_MODE}\n`);
@@ -832,7 +799,7 @@ async function main() {
     if (deployTarget === 'docker') {
       output.write('\nNext commands:\n');
       output.write('  docker compose up -d\n');
-      output.write('  docker compose logs -f garbanzo\n');
+      output.write(`  docker compose logs -f ${messagingPlatform}\n`);
     } else {
       output.write('\nNext commands:\n');
       output.write('  npm run dev\n');

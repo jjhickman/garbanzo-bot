@@ -1,19 +1,42 @@
 // Unit tests for the setup wizard's field table + resolvers. The module is pure
 // (no config import), so no env prefix is needed. tsconfig excludes tests/, so
 // importing the .mjs here is fine.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
   DISCORD_FIELDS,
+  SHARED_FIELDS,
+  WHATSAPP_FIELDS,
+  FIELD_TABLE,
   getField,
   promptHint,
   resolveEnvField,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
+  generateMonitoringToken,
+  resolveComposeProfiles,
+  resolveMessagingPlatform,
+  DEFAULT_MESSAGING_PLATFORM,
+  mergeExistingEnvForPlatform,
+  buildPlatformEnvLines,
+  buildSharedEnvLines,
+  redactEnvContent,
+  promptFieldEnvsForPlatform,
+  emittedKeysForPlatform,
+  SHARED_LAYER_EXCEPTION_KEYS,
+  PLATFORM_LAYER_EXCEPTION_KEYS,
+  NATIVE_RUN_DEFAULT_SHARED_KEYS,
 } from '../scripts/setup-fields.mjs';
 
 function cli(options: Record<string, string>): { options: Record<string, string>; flags: Set<string> } {
   return { options, flags: new Set<string>() };
+}
+
+function envKeysFromLines(lines: string[]): string[] {
+  return lines
+    .map((line) => line.match(/^([A-Z0-9_]+)=/)?.[1])
+    .filter((key): key is string => Boolean(key));
 }
 
 describe('setup field resolver', () => {
@@ -91,5 +114,154 @@ describe('setup field resolver', () => {
     expect(OPENAI_AUTH_MODES).toEqual(['apikey', 'oauth']);
     expect(WHATSAPP_LOGIN_MODES).toEqual(['web', 'terminal', 'both']);
     expect(() => getField('NOPE')).toThrow(/Unknown setup field/);
+  });
+
+  it('adds a secret-masked MONITORING_TOKEN field to the shared field list', () => {
+    const field = getField('MONITORING_TOKEN');
+    expect(field.secret).toBe(true);
+    expect(SHARED_FIELDS.map((f) => f.env)).toContain('MONITORING_TOKEN');
+    expect(promptHint(field, { MONITORING_TOKEN: 'super-secret-token' })).toBe('set');
+    expect(promptHint(field, {})).toBe('empty');
+    expect(promptHint(field, { MONITORING_TOKEN: 'super-secret-token' })).not.toContain('super-secret-token');
+  });
+
+  it('generateMonitoringToken returns a 48-character hex string, freshly random each call', () => {
+    const first = generateMonitoringToken();
+    const second = generateMonitoringToken();
+    expect(first).toMatch(/^[0-9a-f]{48}$/);
+    expect(second).toMatch(/^[0-9a-f]{48}$/);
+    expect(first).not.toBe(second);
+  });
+
+  it('resolveComposeProfiles derives COMPOSE_PROFILES from platform + monitoring toggle', () => {
+    expect(resolveComposeProfiles('discord', true)).toBe('discord,monitoring');
+    expect(resolveComposeProfiles('discord', false)).toBe('discord');
+    expect(resolveComposeProfiles('whatsapp', true)).toBe('whatsapp,monitoring');
+    expect(resolveComposeProfiles('whatsapp', false)).toBe('whatsapp');
+  });
+
+  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD_FIELDS', () => {
+    const sharedKeys = SHARED_FIELDS.map((f) => f.env);
+    const whatsappKeys = WHATSAPP_FIELDS.map((f) => f.env);
+    const discordKeys = DISCORD_FIELDS.map((f) => f.env);
+    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys];
+
+    // No duplicates across the three lists (disjoint partition).
+    expect(new Set(allKeys).size).toBe(allKeys.length);
+
+    // Spot-check expected homes for a few keys per the brief.
+    expect(sharedKeys).not.toContain('OWNER_JID');
+    expect(sharedKeys).not.toContain('BOT_PHONE_NUMBER');
+    expect(whatsappKeys).toEqual(expect.arrayContaining(['OWNER_JID', 'BOT_PHONE_NUMBER']));
+    expect(discordKeys).toContain('DISCORD_BOT_TOKEN');
+
+    // FIELD_TABLE is exactly the union of the three partitioned lists.
+    expect(FIELD_TABLE.map((f) => f.env).sort()).toEqual(allKeys.slice().sort());
+  });
+
+  it('merges root and selected platform env values with platform values winning', () => {
+    expect(
+      mergeExistingEnvForPlatform(
+        {
+          OPENAI_MODEL: 'root-model',
+          DISCORD_BOT_TOKEN: 'root-discord-token',
+          OWNER_JID: 'root-owner@s.whatsapp.net',
+        },
+        {
+          DISCORD_BOT_TOKEN: 'platform-discord-token',
+          DISCORD_OWNER_ID: 'platform-owner',
+        },
+      ),
+    ).toEqual({
+      OPENAI_MODEL: 'root-model',
+      DISCORD_BOT_TOKEN: 'platform-discord-token',
+      OWNER_JID: 'root-owner@s.whatsapp.net',
+      DISCORD_OWNER_ID: 'platform-owner',
+    });
+  });
+
+  it('redacts MONITORING_TOKEN in dry-run env previews', () => {
+    const redacted = redactEnvContent([
+      'MONITORING_TOKEN=real-generated-monitoring-token',
+      'OPENAI_MODEL=gpt-5.4-mini',
+      'DISCORD_BOT_TOKEN=real-discord-token',
+      'MONITORING_TOKEN=',
+    ].join('\n'));
+
+    expect(redacted).toContain('MONITORING_TOKEN=[REDACTED]');
+    expect(redacted).not.toContain('real-generated-monitoring-token');
+    expect(redacted).toContain('OPENAI_MODEL=gpt-5.4-mini');
+    expect(redacted).toContain('DISCORD_BOT_TOKEN=[REDACTED]');
+    expect(redacted).toContain('MONITORING_TOKEN=');
+  });
+
+  it('does not collect WhatsApp prompt fields for the Discord setup path', () => {
+    expect(promptFieldEnvsForPlatform('discord')).toEqual(DISCORD_FIELDS.map((field) => field.env));
+    expect(promptFieldEnvsForPlatform('discord')).not.toEqual(expect.arrayContaining(
+      WHATSAPP_FIELDS.map((field) => field.env),
+    ));
+    expect(promptFieldEnvsForPlatform('whatsapp')).toEqual(WHATSAPP_FIELDS.map((field) => field.env));
+  });
+
+  it('builds and partitions the actual emitted env line sets from one source', () => {
+    const sharedKeys = envKeysFromLines(buildSharedEnvLines({}));
+    const discordPlatformKeys = envKeysFromLines(buildPlatformEnvLines('discord', {}));
+    const whatsappPlatformKeys = envKeysFromLines(buildPlatformEnvLines('whatsapp', {}));
+    const discordKeys = emittedKeysForPlatform('discord');
+    const whatsappKeys = emittedKeysForPlatform('whatsapp');
+
+    expect(new Set(discordKeys.sharedKeys).size).toBe(discordKeys.sharedKeys.length);
+    expect(new Set(discordKeys.platformKeys).size).toBe(discordKeys.platformKeys.length);
+    expect(new Set(whatsappKeys.platformKeys).size).toBe(whatsappKeys.platformKeys.length);
+    expect(discordKeys.sharedKeys).toEqual(sharedKeys);
+    expect(whatsappKeys.sharedKeys).toEqual(sharedKeys);
+    expect(discordKeys.platformKeys).toEqual(discordPlatformKeys);
+    expect(whatsappKeys.platformKeys).toEqual(whatsappPlatformKeys);
+
+    const discordIntersection = discordKeys.sharedKeys.filter((key) => discordKeys.platformKeys.includes(key));
+    const whatsappIntersection = whatsappKeys.sharedKeys.filter((key) => whatsappKeys.platformKeys.includes(key));
+    expect(discordIntersection).toEqual([]);
+    expect(whatsappIntersection).toEqual([]);
+
+    expect(NATIVE_RUN_DEFAULT_SHARED_KEYS).toEqual(['MESSAGING_PLATFORM']);
+    expect(SHARED_LAYER_EXCEPTION_KEYS).toEqual(expect.arrayContaining([
+      'MESSAGING_PLATFORM',
+      'COMPOSE_PROFILES',
+      'METRICS_ENABLED',
+    ]));
+    expect(PLATFORM_LAYER_EXCEPTION_KEYS.discord).toContain('QDRANT_COLLECTION');
+
+    for (const key of [...SHARED_FIELDS.map((field) => field.env), ...SHARED_LAYER_EXCEPTION_KEYS]) {
+      expect(discordKeys.sharedKeys).toContain(key);
+      expect(whatsappKeys.sharedKeys).toContain(key);
+    }
+    for (const key of WHATSAPP_FIELDS.map((field) => field.env)) {
+      expect(whatsappKeys.platformKeys).toContain(key);
+      expect(discordKeys.sharedKeys).not.toContain(key);
+    }
+    for (const key of DISCORD_FIELDS.map((field) => field.env)) {
+      expect(discordKeys.platformKeys).toContain(key);
+      expect(whatsappKeys.sharedKeys).not.toContain(key);
+    }
+
+    const sharedPreview = buildSharedEnvLines({ MONITORING_TOKEN: 'real-generated-monitoring-token' }).join('\n');
+    expect(redactEnvContent(sharedPreview)).toContain('MONITORING_TOKEN=[REDACTED]');
+    expect(redactEnvContent(sharedPreview)).not.toContain('real-generated-monitoring-token');
+  });
+
+  it('has the setup wizard emit env files through the shared line builders', () => {
+    const setupSource = readFileSync(new URL('../scripts/setup.mjs', import.meta.url), 'utf-8');
+
+    expect(setupSource).toMatch(/buildSharedEnvLines\(finalEnv\)\.join\('\\n'\)/);
+    expect(setupSource).toMatch(/buildPlatformEnvLines\('discord', finalEnv\)\.join\('\\n'\)/);
+    expect(setupSource).toMatch(/buildPlatformEnvLines\('whatsapp', finalEnv\)\.join\('\\n'\)/);
+  });
+
+  it('resolves the non-interactive messaging platform with a discord default', () => {
+    expect(DEFAULT_MESSAGING_PLATFORM).toBe('discord');
+    expect(resolveMessagingPlatform(cli({}), {})).toBe('discord');
+    expect(resolveMessagingPlatform(cli({ platform: 'whatsapp' }), {})).toBe('whatsapp');
+    expect(resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'whatsapp' })).toBe('whatsapp');
+    expect(resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toBe('discord');
   });
 });

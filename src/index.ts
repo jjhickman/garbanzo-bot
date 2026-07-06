@@ -2,10 +2,11 @@ import { randomBytes } from 'crypto';
 import { closeDb, scheduleMaintenance } from './utils/db.js';
 import { getPlatformRuntime } from './platforms/index.js';
 import { logger } from './middleware/logger.js';
-import { config } from './utils/config.js';
+import { config, loadedEnvFiles } from './utils/config.js';
 import { startHealthServer, stopHealthServer, startMemoryWatchdog } from './middleware/health.js';
 import { clearRetryQueue } from './middleware/retry.js';
 import { startOllamaWarmup, stopOllamaWarmup } from './ai/ollama.js';
+import { getPersonaName } from './ai/persona.js';
 import { createLoginRequestHandler } from './platforms/whatsapp/login-server.js';
 import { isNetworkExposedHost, resolveLoginHosts, shouldEnableWhatsAppLogin } from './platforms/whatsapp/login-url.js';
 import type { PlatformRuntime } from './platforms/types.js';
@@ -42,8 +43,10 @@ async function main(): Promise<void> {
     healthBindHost: config.HEALTH_BIND_HOST,
     ollamaUrl: config.OLLAMA_BASE_URL,
     logLevel: config.LOG_LEVEL,
+    envFiles: loadedEnvFiles,
   }, 'Configuration loaded');
 
+  const monitoringToken = config.MONITORING_TOKEN ?? randomBytes(24).toString('hex');
   const loginToken = config.WHATSAPP_LOGIN_TOKEN ?? randomBytes(24).toString('hex');
   const whatsAppLoginEnabled = shouldEnableWhatsAppLogin(
     config.MESSAGING_PLATFORM,
@@ -52,11 +55,17 @@ async function main(): Promise<void> {
   );
   const loginHandler = whatsAppLoginEnabled ? createLoginRequestHandler({ token: loginToken }) : undefined;
 
+  if ((config.METRICS_ENABLED || config.ADMIN_PAGE_ENABLED) && !config.MONITORING_TOKEN) {
+    logger.info(
+      'Ops endpoints are gated by a per-run token; pin MONITORING_TOKEN in .env to enable scraping/admin access.',
+    );
+  }
+
   // Start health check server + memory watchdog for monitoring
   startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
     metricsEnabled: config.METRICS_ENABLED,
     adminEnabled: config.ADMIN_PAGE_ENABLED,
-    authToken: loginToken,
+    authToken: monitoringToken,
     extraHandler: loginHandler,
   });
   startMemoryWatchdog();
@@ -106,7 +115,7 @@ async function main(): Promise<void> {
   activeRuntime = runtime;
   logger.info({ platform: runtime.platform }, 'Starting platform runtime');
   await runtime.start();
-  logger.info('🫘 Garbanzo Bean is online and listening');
+  logger.info(`${getPersonaName()} is online and listening`);
 }
 
 main().catch((err) => {

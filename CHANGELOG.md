@@ -6,6 +6,27 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Docker Compose now uses platform profiles in one file. Set `COMPOSE_PROFILES` and migrate to `.env`, `.env.discord`, and `.env.whatsapp` before deploying v2.
+- `MONITORING_TOKEN` replaces the old monitoring/admin use of `WHATSAPP_LOGIN_TOKEN`. The old fallback behavior is gone; `WHATSAPP_LOGIN_TOKEN` now gates only the WhatsApp login page.
+- `MESSAGING_PLATFORM` now defaults to `discord`.
+- Env loading is layered. Shared values live in `.env`; platform-specific values live in `.env.discord` and `.env.whatsapp`.
+- The setup wizard now writes the split env-file layout instead of a single all-in-one env file.
+
+### Added
+
+- Persona-file identity: startup and prompt identity derive from the loaded persona document through `getPersonaName()`.
+- Native env layering through the config loader, matching Docker Compose env file order.
+- Grafana `$job` dashboard filtering for viewing Discord and WhatsApp instances together or one at a time.
+- Host Ollama support for containers through `host.docker.internal` extra hosts.
+
+### Changed
+
+- Discord is the default platform path in docs, setup, and config examples.
+- Band mode runs on the Discord compose profile with `.env.discord` and `BAND_FEATURES_ENABLED=true`.
+- Prometheus scrapes both platform jobs: `discord:3002` and `whatsapp:3001`.
+
 ## [1.1.0] — 2026-07-04
 
 ### Added
@@ -16,7 +37,7 @@ All notable changes to Garbanzo are documented here.
   - Song catalog (`!song`) with key, tempo, and status.
   - Practice tools: rehearsals with reminders (`!rehearsal`), availability (`!available`), setlists (`!setlist`), and a practice agenda (`!agenda`).
   - Songwriting: idea capture from text or a dropped audio clip transcribed via Whisper (`!idea`), and per-song sections, lyrics, and chords (`!section`, `!lyrics`).
-- `docker-compose.remy.yml` to run Remy beside Garbanzo on one host, and setup wizard support for provisioning a Discord deployment.
+- Legacy Remy compose overlay support for running Remy beside Garbanzo on one host, and setup wizard support for provisioning a Discord deployment.
 
 ### Changed
 
@@ -55,7 +76,7 @@ All notable changes to Garbanzo are documented here.
 
 - Community/admin Prometheus metric families for lifetime activity, daily group gauges, memory facts, pending/sent event reminders, rate-limit rejections, tool-call outcomes, and AI cost/request/error totals.
 - Bearer auth support for `/metrics` and `/admin`, alongside the existing query-token flow.
-- Self-hosted Prometheus + Grafana monitoring stack (`docker compose --profile monitoring`).
+- Self-hosted Prometheus + Grafana monitoring stack.
 
 ## [1.0.2] — 2026-07-02
 
@@ -156,7 +177,7 @@ First stable release. Every item below shipped as an individually reviewed PR (#
 - Added `npm run release:deploy:verify` helper to deploy a target tag, verify health/readiness, and optionally auto-rollback.
 - `release:deploy:verify` now accepts both `--flag value` and `--flag=value` forms for safer CLI usage in scripts.
 - Added an AWS CDK static-site stack (`GarbanzoSiteStack`) to publish `website/` to S3 + CloudFront.
-- Added local Discord demo runtime scaffolding (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
+- Added local Discord demo runtime (`DISCORD_DEMO`) with HTTP simulation and parity tests, mirroring the Slack demo pattern.
 - Added explicit Gemini integration coverage tests (`tests/gemini.test.ts`) and updated README provider docs to include Gemini configuration and pricing fields.
 - Added optional custom-domain support to the static-site stack (`siteDomainName` + `siteHostedZoneId`).
 - Added GitHub Actions static-site deploy workflow (`deploy-support-site.yml`) for website/CDK site changes.

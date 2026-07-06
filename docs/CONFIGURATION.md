@@ -2,11 +2,35 @@
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Garbanzo uses layered env files.
+
+- `.env` is the shared layer: compose profiles, AI provider keys, monitoring,
+  vector memory, metadata, persistence, and common integrations.
+- `.env.discord` is the Discord instance layer: Discord app tokens, channel
+  bindings, band-mode settings, and optional Discord-specific overrides.
+- `.env.whatsapp` is the WhatsApp instance layer: owner JID, browser login, bot
+  phone number, outbound safety, and WhatsApp event-reminder settings.
+
+Docker Compose loads files in this order for each bot service:
+`.env`, then `.env.discord` or `.env.whatsapp`. Later files override earlier
+files. Native runs use the same layering through the config loader's
+`applyEnvLayers`, so `npm run dev` and `npm run start` read the same split
+layout. Empty optional values such as `QDRANT_API_KEY=` are treated as unset.
+
+Copy `.env.example` to `.env`, then copy the platform example for every profile
+you enable:
+
+```bash
+cp .env.example .env
+cp .env.discord.example .env.discord
+# Optional WhatsApp instance:
+# cp .env.whatsapp.example .env.whatsapp
+```
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `MESSAGING_PLATFORM` | No | Messaging runtime target (`whatsapp`, `slack`, `discord`, `teams`) |
+| `COMPOSE_PROFILES` | Docker | Compose profile list, for example `discord`, `whatsapp`, or `discord,whatsapp,monitoring` |
+| `MESSAGING_PLATFORM` | No | Messaging runtime target (`discord`, `whatsapp`, `slack`, `teams`); defaults to `discord` and is pinned per bot service in `docker-compose.yml` |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (default: `openai,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-5-20251001`) |
@@ -47,6 +71,9 @@ Copy `.env.example` to `.env` and configure:
 | `SLACK_TOKEN_ROTATE_MIN_BUFFER` | Optional | Minutes before expiry to refresh (default `5`) |
 | `DISCORD_BOT_TOKEN` | Discord only | Official Discord bot token |
 | `DISCORD_PUBLIC_KEY` | Discord only | Discord interactions signature public key |
+| `DISCORD_OWNER_ID` | Discord only | Discord owner user ID for escalation and owner commands |
+| `DISCORD_GATEWAY_ENABLED` | Discord only | Enable Discord Gateway runtime (default: `true`) |
+| `DISCORD_CHANNELS_CONFIG_PATH` | Discord only | Channel/role config path (default: `config/discord-channels.json`) |
 | `OLLAMA_BASE_URL` | No | Local model inference (default: `http://127.0.0.1:11434`) |
 | `DB_DIALECT` | No | Database backend: `sqlite` (default) or `postgres` |
 | `DATABASE_URL` | Postgres only | Full Postgres connection string (alternative to individual `POSTGRES_*` vars) |
@@ -66,7 +93,7 @@ Copy `.env.example` to `.env` and configure:
 | `MEMORY_AUTO_EXTRACT_MIN_MESSAGES` | No | Per-group messages required between extraction attempts (default: `25`) |
 | `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
 | `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
-| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `deterministic` (default) or `openai` |
+| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `openai` (default) or `deterministic` |
 | `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
 | `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
 | `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
@@ -74,20 +101,32 @@ Copy `.env.example` to `.env` and configure:
 | `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `METRICS_ENABLED` | No | Enable Prometheus `/metrics` scraping on the health server (default: `false`), including expanded community/admin metric families; token auth accepts either `?token=` or `Authorization: Bearer`. |
+| `MONITORING_TOKEN` | Monitoring/admin | Token for `/metrics`, `/admin`, Prometheus scrapes, and Grafana admin password fallback |
+| `GRAFANA_ADMIN_PASSWORD` | Monitoring only | Optional Grafana admin password override; defaults to `MONITORING_TOKEN` when unset |
 | `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
-| `WHATSAPP_LOGIN_TOKEN` | No | Pin the login/metrics/admin token instead of generating one per run (guards `/whatsapp/login*`, `/metrics`, and `/admin`) |
+| `WHATSAPP_LOGIN_TOKEN` | WhatsApp only | Pin the WhatsApp browser-login token instead of generating one per run; it only guards `/whatsapp/login*` |
 | `ADMIN_PAGE_ENABLED` | No | Owner admin page at `/admin` + `/admin.json` on the health port (default: `true`; only served when a token exists) |
 | `EVENT_REMINDERS_ENABLED` | No | Enable Events-group reminder capture and scheduled reminder sends (default: `true`) |
 | `EVENT_REMINDER_LEAD_MINUTES` | No | Minutes before a parsed event start time to post a reminder (default: `120`) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
-| `OWNER_JID` | Yes | Owner identifier used for admin alerts (WhatsApp JID, Slack user/channel, or Discord user/channel) |
+| `OWNER_JID` | WhatsApp only | Owner WhatsApp JID; required only when `MESSAGING_PLATFORM=whatsapp` |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 
+## Setup Wizard
+
+Run `npm run setup` for an interactive setup. The wizard leads with Discord,
+then writes the shared `.env` plus the env file for the platform you selected
+(`.env.discord` or `.env.whatsapp`). To run both platforms, run the wizard
+once per platform or copy the other example file by hand. Shared provider,
+monitoring, vector, and integration values stay in `.env`; platform-only
+values stay in the platform layer.
+
 ## Owner admin page
 
-`http://<host>:3001/admin?token=<WHATSAPP_LOGIN_TOKEN>` renders a token-gated,
+`http://<host>:3002/admin?token=<MONITORING_TOKEN>` on Discord or
+`http://<host>:3001/admin?token=<MONITORING_TOKEN>` on WhatsApp renders a token-gated,
 auto-refreshing snapshot of today's usage: AI spend vs. the $1 alert threshold,
 per-provider calls/tokens/cost, per-group activity (messages, active users, bot
 replies, moderation flags, AI errors), and the WhatsApp outbound-safety
@@ -244,8 +283,10 @@ OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
   `npm run openai:login` also falls back to this paste prompt if the callback never
   arrives.) In Docker, the login script isn't in the image — run it on the host to
   write `data/openai-oauth.json`, then load it into the container's volume:
-  `docker compose cp data/openai-oauth.json garbanzo:/app/data/openai-oauth.json`
-  and `docker compose exec -u root garbanzo chown garbanzo:garbanzo /app/data/openai-oauth.json`.
+  `docker compose cp data/openai-oauth.json discord:/app/data/openai-oauth.json`
+  and `docker compose exec -u root discord chown garbanzo:garbanzo /app/data/openai-oauth.json`
+  for the Discord service. Use `whatsapp` instead of `discord` for a WhatsApp
+  instance.
 
   > ⚠️ **Unofficial and against OpenAI's Terms of Service.** It reuses the Codex
   > OAuth client to call OpenAI's private ChatGPT backend (SSE streaming) and

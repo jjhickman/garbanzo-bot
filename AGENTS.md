@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-**Garbanzo** is a multi-platform community bot serving a 120+ member Boston-area meetup group. WhatsApp (via the Baileys unofficial WhatsApp Web API) is the production platform; Discord, Slack, and Teams adapters exist behind a shared platform abstraction (`src/core/` + `src/platforms/`). Messages route to AI models via a configurable cloud failover order (`AI_PROVIDER_ORDER`) plus local Ollama for simple queries.
+**Garbanzo** is a multi-platform community bot. Discord (official Gateway API) is the first-class default platform; WhatsApp (via the Baileys unofficial WhatsApp Web API) is fully supported and runs the original 120+ member Boston-area meetup deployment. Platform adapters sit behind a shared abstraction (`src/core/` + `src/platforms/`), and instances compose via docker profiles. Messages route to AI models via a configurable cloud failover order (`AI_PROVIDER_ORDER`) plus local Ollama for simple queries.
 
 The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy community connector.
 
 ## Stack
 
 - **Runtime:** Node.js 20+ with TypeScript (ES Modules)
-- **WhatsApp:** `@whiskeysockets/baileys` v6 (multi-device, socket-based)
+- **WhatsApp:** `@whiskeysockets/baileys` v7 (multi-device, socket-based)
 - **AI:** Configurable cloud failover order (`AI_PROVIDER_ORDER`) + Ollama (local for simple queries)
 - **Validation:** Zod for runtime type checking
 - **Logging:** Pino
@@ -131,7 +131,7 @@ garbanzo-bot/
 │   │   ├── groups-config.ts  # Group config, JID mapping, per-group personas
 │   │   └── vision.ts, poll-payload.ts, message-ref.ts
 │   ├── platforms/            # One directory per platform, each with adapter + runtime
-│   │   ├── whatsapp/         # PRODUCTION. Baileys socket, anti-ban outbound safety,
+│   │   ├── whatsapp/         # Baileys socket, anti-ban outbound safety,
 │   │   │                     #   owner commands, login server/store, digest, recaps,
 │   │   │                     #   event reminders, media, mentions, reactions
 │   │   ├── discord/          # Gateway runtime + demo server
@@ -191,9 +191,12 @@ Settled questions — **do not relitigate these**; propose a change only with ne
 
 - **OpenAI is the primary AI provider** (owner decision, 2026-06). Anthropic/Gemini/Bedrock/Ollama are failover via `AI_PROVIDER_ORDER`. When an integration misbehaves, fix the integration — do not propose switching primary provider.
 - **Production models: `gpt-5.4-mini` primary, `claude-haiku-4-5` fallback, prompt caching on** (2026-07-01).
-- **One deployment = one platform** (`MESSAGING_PLATFORM`). WhatsApp is production; Discord/Slack are demo-grade; Teams is a stub. Multi-tenant single-deployment was not chosen.
+- **One process = one platform** (`MESSAGING_PLATFORM`). Discord is the first-class default platform through the official API; WhatsApp is fully supported through unofficial Baileys with documented account-risk safety; instances compose via platform profiles.
 - **Discord runs a real discord.js Gateway** (opt-in channels, `requireMention` default true); owner model = `DISCORD_OWNER_ID` (user id) + resolved DM channel for escalation; schedulers/welcome bound in the Discord runtime; WhatsApp login bootstrap is whatsapp-only.
-- **Remy band features are gated behind `BAND_FEATURES_ENABLED`** (default false → community/WhatsApp bot unaffected). The band knowledge base adds ONE structured table (`songs`: title/key/tempo/status[idea|rough|tight|gig-ready]/notes) — the keystone for practice/songwriting — while members/gear/decisions/gigs REUSE the existing memory+Qdrant fact pipeline (no new fact infra). `!song` (add/list/show/set/delete) routes through the shared group dispatch, gated on owner OR Discord band-member (roles plumbed from the gateway as `senderRoleIds` → `isBandMember`; core never imports discord-config). Read tools `list_band_songs`/`find_band_song` + a bounded catalog block in the system/Ollama prompt are all flag-gated. Deploy Remy beside Garbanzo via `docker-compose.remy.yml` (separate volume/port/`remy_memory` collection, shared Qdrant); `npm run setup` provisions the Discord/Remy env.
+- **Platform-named infra is the v2 model**: compose profiles/services/jobs/env files are `discord`, `whatsapp`, and `monitoring`; persona names such as Remy do not name infrastructure.
+- **Persona identity is file-driven**: `getPersonaName()` derives display identity from the loaded persona document; personas are configurable, and Garbanzo is the framework name.
+- **Layered env files + `COMPOSE_PROFILES` are the deployment model**: `.env` holds shared values, `.env.discord` and `.env.whatsapp` hold instance deltas, and Docker/native runs apply the same layering.
+- **Remy band features are gated behind `BAND_FEATURES_ENABLED`** (default false → community/WhatsApp bot unaffected). The band knowledge base adds ONE structured table (`songs`: title/key/tempo/status[idea|rough|tight|gig-ready]/notes) — the keystone for practice/songwriting — while members/gear/decisions/gigs REUSE the existing memory+Qdrant fact pipeline (no new fact infra). `!song` (add/list/show/set/delete) routes through the shared group dispatch, gated on owner OR Discord band-member (roles plumbed from the gateway as `senderRoleIds` → `isBandMember`; core never imports discord-config). Read tools `list_band_songs`/`find_band_song` + a bounded catalog block in the system/Ollama prompt are all flag-gated. Deploy Remy as band mode on the Discord profile with `.env.discord`, `BAND_FEATURES_ENABLED=true`, and optional `remy_memory`; `npm run setup` provisions the split env files.
 - **Remy practice features** (sub-project 2, all `BAND_FEATURES_ENABLED`-gated) add four tables following the `songs` 8-sync-point pattern: `rehearsals` (+ `!rehearsal` schedule/list/show/cancel/note + a Discord 5-min reminder poller + optional weekly agenda auto-post), `availability` (+ `!available <id> yes|no|maybe` — a STORED command, NOT a poll, because Discord's `sendPoll` is a text stub that can't capture votes; read back in `!rehearsal show`), and `setlists`+`setlist_songs` (+ `!setlist` create/add/remove/move/show referencing songs). `!agenda` is a pure LLM-free builder (mirrors `buildWeeklyRecap`). AI tools `next_rehearsal`/`current_setlist` gated. sqlite runs WITHOUT `PRAGMA foreign_keys=ON`, so FK `ON DELETE CASCADE` is inert — cascade cleanup is done IN CODE (`deleteSong`/`deleteSetlist` clear `setlist_songs`); rehearsals are soft-cancelled, never hard-deleted. Follow-ups: availability read-back shows raw Discord IDs (needs display-name plumbing), scheduler binders gate on `EVENT_REMINDERS_ENABLED` not the band flag.
 - **Remy songwriting features** (sub-project 3, all `BAND_FEATURES_ENABLED`-gated) add `song_ideas` + `song_sections` tables. **Discord audio-attachment capture is greenfield here:** `InboundMessage.audio?: {url, contentType}` is populated by the Discord gateway (first `audio/*` attachment by content-type or `.m4a/.ogg/.mp3/.wav/.webm` extension) and threaded through the dispatch — Discord previously discarded all attachments. `!idea capture` stores a song idea from text OR a dropped clip: it `fetch()`es the CDN url and transcribes via the existing `transcribeAudio` (Whisper/Speaches at `WHISPER_URL`), storing the transcript + audio url. **It degrades gracefully** — if the Whisper server is unreachable / fetch fails / transcript is null, the idea is still stored (audio url set, transcript null); the audio path NEVER crashes the reply. We store the transcript + Discord CDN url, NOT raw audio bytes (no blob store). `!idea promote` creates a song (`status: 'idea'`) — the idea→demo→ready pipeline reuses `songs.status`, no new field. `!section`/`!lyrics` build per-song structure (kind/lyrics/chords → `formatSongSheet`, the Headchart seed). AI tools `get_song_sections`/`list_song_ideas` gated. `deleteSong` also clears `song_sections` + nulls `song_ideas.song_id` in code (sqlite FK inert). WHISPER_URL is the only new (optional) external dependency. Deferred: live voice-channel recording, blob storage, AI-generated lyrics.
 - **Web search is multi-provider with priority Firecrawl → Brave → Google PSE → SearXNG** (PRs #216, #220). `web_search` tool results get a 6,000-char budget vs 1,500 for other tools, to allow extracted page content.
@@ -204,7 +207,7 @@ Settled questions — **do not relitigate these**; propose a change only with ne
 - **Moderation is human-in-the-loop**: the bot warns in-group and DMs the owner; only the owner acts. Never auto-ban, never let members direct moderation.
 - **Git/GitHub: PRs only, the owner merges** — agents never self-merge or bypass branch protection. Commits use the GitHub noreply email (`25596491+jjhickman@users.noreply.github.com`); personal emails are blocked by the gitleaks PII rule.
 - **Public-facing copy (README, website, Docker Hub) carries no AI-writing tells** (PRs #212–#214): no em-dash chains, no "X, not Y" constructions, no model-name dropping; plain register.
-- **Releases**: tagged versions publish images to GHCR + Docker Hub; production runs on a Raspberry Pi 5 via Docker Compose. Grafana admin password intentionally defaults to `WHATSAPP_LOGIN_TOKEN` (PR #209).
+- **Releases**: tagged versions publish images to GHCR + Docker Hub; production runs on a Raspberry Pi 5 via Docker Compose. `MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and Grafana admin password fallback; `WHATSAPP_LOGIN_TOKEN` gates only the WhatsApp login page.
 - **Prompt changes are regression-tested against `tests/evals/prompt-eval-set.json`** (2026-07-03) — when changing PERSONA.md, persona.ts, or tools.ts, check the relevant eval categories before merging.
 
 ## Code Style

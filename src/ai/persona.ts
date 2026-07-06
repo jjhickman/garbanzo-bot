@@ -12,17 +12,61 @@ import { formatMemoriesForPrompt } from '../utils/db.js';
 import { getSearchProviderName } from '../features/web-search.js';
 import { formatBandKnowledgeForPrompt } from '../features/band-knowledge.js';
 
+const DEFAULT_PERSONA_NAME = 'Garbanzo Bean';
+
+function derivePersonaName(doc: string): string {
+  const headingMatch = /^#\s+(.+)$/m.exec(doc);
+  if (!headingMatch) return DEFAULT_PERSONA_NAME;
+
+  const name = headingMatch[1]
+    .trim()
+    .replace(/\s+[-—]\s*persona\s+document\s*$/i, '')
+    .replace(/\s+[-—]\s*persona\s*$/i, '')
+    .replace(/[\s\uFE0F\u200D\p{Extended_Pictographic}]+$/gu, '')
+    .trim();
+
+  return name || DEFAULT_PERSONA_NAME;
+}
+
 // Load persona at startup
 const defaultPersonaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
 const platformPersonaPath = resolve(PROJECT_ROOT, 'docs', 'personas', `${config.MESSAGING_PLATFORM}.md`);
 
 let personaDoc: string;
+let loadedPersonaFile: string | null = null;
 try {
   const chosen = existsSync(platformPersonaPath) ? platformPersonaPath : defaultPersonaPath;
   personaDoc = readFileSync(chosen, 'utf-8');
+  loadedPersonaFile = chosen;
 } catch {
   logger.warn('PERSONA.md not found — using minimal system prompt');
   personaDoc = 'You are Garbanzo Bean, a community chat bot. Be warm, direct, and helpful.';
+}
+
+/** First emoji in the persona doc's heading ('' when the heading has none). */
+function derivePersonaEmoji(doc: string): string {
+  const headingMatch = /^#\s+(.+)$/m.exec(doc);
+  if (!headingMatch) return '';
+  const emojiMatch = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/u.exec(headingMatch[1]);
+  return emojiMatch?.[0] ?? '';
+}
+
+const personaName = derivePersonaName(personaDoc);
+const personaEmoji = derivePersonaEmoji(personaDoc);
+if (loadedPersonaFile) {
+  logger.info(
+    { personaFile: loadedPersonaFile, platform: config.MESSAGING_PLATFORM, personaName },
+    'Persona loaded',
+  );
+}
+
+export function getPersonaName(): string {
+  return personaName;
+}
+
+/** Persona's signature emoji from its doc heading, or '' — never hardcode one. */
+export function getPersonaEmoji(): string {
+  return personaEmoji;
 }
 
 export interface MessageContext {
@@ -42,7 +86,7 @@ export function buildFormattingInstruction(platform: MessagingPlatform): string 
 export function buildDistilledIdentityBlock(platform: MessagingPlatform): string {
   if (platform === 'discord') {
     return [
-      "You are Remy, a warm, direct assistant for a band's Discord.",
+      `You are ${personaName}, a warm, direct assistant for a band's Discord.`,
       'Personality:',
       '- Music-literate and practical — help with practice, writing music, and coordinating.',
       '- Warm and direct — friendly without being fake. Skip "Great question!" and just answer.',
@@ -53,7 +97,7 @@ export function buildDistilledIdentityBlock(platform: MessagingPlatform): string
   }
 
   return [
-    'You are Garbanzo Bean 🫘, a WhatsApp community bot for a 120-member Boston-area meetup group (ages 25-45).',
+    `You are ${personaName} 🫘, a WhatsApp community bot for a 120-member Boston-area meetup group (ages 25-45).`,
     'Personality:',
     '- Warm and direct — friendly without being fake. Skip "Great question!" and just answer.',
     '- Knowledgeable about Boston — restaurants, neighborhoods, the T, local culture.',
