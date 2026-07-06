@@ -23,6 +23,8 @@ import {
 const DiscordAuthorSchema = z.object({
   id: z.string(),
   bot: z.boolean().optional(),
+  globalName: z.string().optional(),
+  username: z.string().optional(),
 });
 
 const DiscordMentionSchema = z.object({
@@ -43,6 +45,7 @@ const DiscordMessageCreateSchema = z.object({
   }).nullable().optional(),
   senderRoleIds: z.array(z.string()).optional(),
   member: z.object({
+    displayName: z.string().optional(),
     roles: z.array(z.string()).optional(),
   }).optional(),
   attachments: z.array(z.unknown()).optional(),
@@ -72,11 +75,23 @@ function parseDiscordTimestamp(ts: string): number {
   return parsed;
 }
 
+function cleanOptionalName(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveDiscordSenderName(event: DiscordMessageCreate): string | undefined {
+  return cleanOptionalName(event.member?.displayName)
+    ?? cleanOptionalName(event.author.globalName)
+    ?? cleanOptionalName(event.author.username);
+}
+
 function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): DiscordInbound {
   return {
     platform: 'discord',
     chatId: event.channel_id,
     senderId: event.author.id,
+    senderName: resolveDiscordSenderName(event),
     messageId: event.id,
     fromSelf: false,
     isStatusBroadcast: false,

@@ -85,6 +85,11 @@ export function resolveWhatsAppSenderJid(msg: WAMessage, chatId: string): string
   return key.remoteJidAlt ?? key.senderPn ?? sender;
 }
 
+function cleanOptionalName(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
 // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT — an incoming edit arrives
 // as a protocolMessage envelope that normalizeMessageContent does NOT unwrap
 // (it only unwraps ephemeral/viewOnce/editedMessage wrappers on outbound).
@@ -126,6 +131,7 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     platform: 'whatsapp',
     chatId,
     senderId,
+    senderName: cleanOptionalName(msg.pushName),
     messageId: msg.key.id ?? undefined,
     editOfMessageId: edit?.editOfMessageId,
     fromSelf: !!msg.key.fromMe,

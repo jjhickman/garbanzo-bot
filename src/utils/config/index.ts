@@ -3,6 +3,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { aiSchema } from './ai.js';
 import { bandSchema } from './band.js';
+import { bridgeSchema } from './bridge.js';
 import { coreSchema } from './core.js';
 import { discordSchema } from './discord.js';
 import { integrationsSchema } from './integrations.js';
@@ -26,6 +27,7 @@ const envSchema = coreSchema
   .merge(whatsappSchema)
   .merge(discordSchema)
   .merge(bandSchema)
+  .merge(bridgeSchema)
   .merge(vectorSchema)
   .merge(monitoringSchema)
   .merge(integrationsSchema)
@@ -118,6 +120,16 @@ if (parsed.data.DEMO_TURNSTILE_ENABLED) {
   }
 }
 
+if (parsed.data.BRIDGE_ENABLED && parsed.data.BRIDGE_TRANSPORT === 'amqp' && !parsed.data.BRIDGE_BROKER_URL) {
+  console.error('❌ BRIDGE_TRANSPORT=amqp requires BRIDGE_BROKER_URL when BRIDGE_ENABLED=true');
+  process.exit(1);
+}
+
+if (parsed.data.BRIDGE_ENABLED && parsed.data.BRIDGE_TRANSPORT === 'http' && !parsed.data.MONITORING_TOKEN) {
+  console.error('❌ bridge http transport authenticates with MONITORING_TOKEN — set it in .env');
+  process.exit(1);
+}
+
 if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_DELAY_MS) {
   console.error('❌ WHATSAPP_SAFETY_MIN_DELAY_MS must be less than or equal to WHATSAPP_SAFETY_MAX_DELAY_MS');
   process.exit(1);
@@ -127,4 +139,5 @@ export const config = {
   ...parsed.data,
   AI_PROVIDER_ORDER: normalizedProviderOrder,
 };
+export const instanceId = config.INSTANCE_ID ?? config.MESSAGING_PLATFORM;
 export { PROJECT_ROOT };

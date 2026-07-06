@@ -86,6 +86,40 @@ describe('LID sender resolution', () => {
     expect(inbound?.senderId).toBe('15551234567@s.whatsapp.net');
     expect(inbound?.chatId).toBe('184468458393129@lid'); // replies must target the original chat
   });
+
+  it('normalizes WhatsApp pushName into senderName', () => {
+    const msg = {
+      ...waMessage({
+        remoteJid: '120363423357339667@g.us',
+        participant: '15551234567@s.whatsapp.net',
+        id: 'A6',
+      }),
+      pushName: '  Ana  ',
+    } as WAMessage;
+
+    const inbound = normalizeWhatsAppInboundMessage(sock, msg);
+
+    expect(inbound?.senderName).toBe('Ana');
+  });
+
+  it('leaves senderName undefined when WhatsApp pushName is absent or blank', () => {
+    const withoutPushName = normalizeWhatsAppInboundMessage(sock, waMessage({
+      remoteJid: '120363423357339667@g.us',
+      participant: '15551234567@s.whatsapp.net',
+      id: 'A7',
+    }));
+    const blankPushName = normalizeWhatsAppInboundMessage(sock, {
+      ...waMessage({
+        remoteJid: '120363423357339667@g.us',
+        participant: '15551234567@s.whatsapp.net',
+        id: 'A8',
+      }),
+      pushName: '   ',
+    } as WAMessage);
+
+    expect(withoutPushName?.senderName).toBeUndefined();
+    expect(blankPushName?.senderName).toBeUndefined();
+  });
 });
 
 describe('owner match is LID/device tolerant', () => {
