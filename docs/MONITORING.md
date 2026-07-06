@@ -19,35 +19,41 @@ Three layers, all optional, all runnable on a Pi-class host:
 
 ```bash
 # 1. In .env:
+#    COMPOSE_PROFILES=discord,monitoring
 #    METRICS_ENABLED=true
-#    WHATSAPP_LOGIN_TOKEN=<pin a value>   # must be pinned — it authenticates scrapes
-#                                         # AND doubles as the Grafana admin password
+#    MONITORING_TOKEN=<pin a value>       # authenticates /metrics, /admin, scrapes,
+#                                         # and Grafana admin login unless overridden
 #    GRAFANA_ADMIN_PASSWORD=<optional>    # only if you want a separate Grafana login
 
-# 2. Start the stack alongside the bot:
-docker compose --profile monitoring up -d
+# 2. Start the selected profiles:
+docker compose up -d
 ```
 
-That's it. The Prometheus container reads `WHATSAPP_LOGIN_TOKEN` from your `.env`
+Use `COMPOSE_PROFILES=discord,whatsapp,monitoring` to run both platform
+instances and the monitoring stack together.
+
+That's it. The Prometheus container reads `MONITORING_TOKEN` from your `.env`
 at start (via the compose file) and authenticates its scrapes with it —
 no token files to create. If the token isn't set, the container exits with a
 clear error instead of scraping blind.
 
 - **Grafana**: `http://<pi>:3000` — the **Garbanzo — Community Ops** dashboard
   is pre-provisioned and loads immediately. Anonymous LAN users can *view*;
-  editing needs the admin login (`admin` / your `WHATSAPP_LOGIN_TOKEN`, or
-  `GRAFANA_ADMIN_PASSWORD` if you set one). Sharing the token is a
-  deliberate single-owner convenience — note it also guards the WhatsApp
-  re-link page, so set a separate `GRAFANA_ADMIN_PASSWORD` if others can
-  reach Grafana on your network.
+  editing needs the admin login (`admin` / your `MONITORING_TOKEN`, or
+  `GRAFANA_ADMIN_PASSWORD` if you set one). Set a separate
+  `GRAFANA_ADMIN_PASSWORD` if others can reach Grafana on your network.
   Grafana listens on the LAN by design (view from any device); if your LAN is
   untrusted, restrict port 3000 with an iptables `DOCKER-USER` allowlist or
   bind it to `127.0.0.1` in compose and front it with a reverse proxy.
 - **Prometheus**: `http://127.0.0.1:9090` (localhost-only, for debugging queries).
+- **Scrape targets**: `discord:3002` and `whatsapp:3001`. If one profile is not
+  running, that target appears down by design.
+- **Dashboard instance picker**: the `$job` variable lets you view all bot
+  instances together or select `discord` or `whatsapp` one at a time.
 - Retention: 30 days. Memory: both containers are capped at 300MB each.
-- Disable anytime: `docker compose --profile monitoring down` (bot unaffected;
-  add `-v` only if you also want to drop the metrics history — never affects
-  bot data, which lives in separate volumes).
+- Disable anytime: remove `monitoring` from `COMPOSE_PROFILES` and run
+  `docker compose up -d`. Add `-v` only if you also want to drop the metrics
+  history; bot data lives in separate volumes.
 
 ### The dashboard, row by row (what to actually look at)
 
@@ -81,8 +87,10 @@ All metrics are prefixed `garbanzo_`. Counters reset on restart —
 `event_reminders_pending`, `event_reminders_sent_total` — plus the original
 ops families (connection, staleness, reconnects, memory, anti-ban, backups).
 
-Scrape auth: `/metrics` accepts `Authorization: Bearer <token>` (what
-Prometheus uses) or `?token=` (handy for `curl`).
+Scrape auth: `/metrics` accepts `Authorization: Bearer <MONITORING_TOKEN>` (what
+Prometheus uses) or `?token=<MONITORING_TOKEN>` (handy for `curl`). The same
+token gates `/admin` unless it is unset, in which case the bot generates a
+per-run token and logs how to pin one.
 
 ## Uptime Kuma (alerting)
 
@@ -90,7 +98,8 @@ Kuma pages you; Grafana explains why. Recommended monitors:
 
 | Monitor | URL | Trigger |
 |---|---|---|
-| HTTP | `http://<pi>:3001/health/ready` | non-200 → WhatsApp disconnected |
+| HTTP | `http://<pi>:3002/health/ready` | non-200 -> Discord unhealthy |
+| HTTP | `http://<pi>:3001/health/ready` | non-200 -> WhatsApp disconnected |
 | Keyword | `http://<pi>:3001/health`, keyword `"integrityOk":true` | nightly backup went bad |
 | Keyword | `http://<pi>:3001/health`, keyword `"paused":false` | anti-ban layer paused sends |
 

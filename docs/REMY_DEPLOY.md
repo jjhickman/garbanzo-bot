@@ -1,28 +1,53 @@
 # Remy Deploy
 
-Run Remy beside the WhatsApp Garbanzo container with the compose overlay:
+Remy is band mode running on the Discord profile. The old Remy compose overlay
+is gone; use the main `docker-compose.yml` profiles and `.env.discord`.
+
+## Setup
 
 ```bash
-cp .env.remy.example .env.remy
-# Fill in Discord and AI provider values.
-
-# The remy service bind-mounts config/discord-channels.json read-only, so it
-# must exist as a FILE before you start (Docker would otherwise create an empty
-# directory at that path and channel config would fail to load):
+cp .env.example .env
+cp .env.discord.example .env.discord
 cp config/discord-channels.example.json config/discord-channels.json
-# Fill in your channel/role ids, then:
-
-docker compose -f docker-compose.yml -f docker-compose.remy.yml up -d
 ```
 
-The overlay adds a second `remy` service that uses the same published Garbanzo image as the base `garbanzo` service, but runs with `MESSAGING_PLATFORM=discord`.
+In `.env`:
 
-## Isolation
+```bash
+COMPOSE_PROFILES=discord
+```
 
-- Data is separate: Remy writes SQLite/runtime state to `remy_data:/app/data`, not `garbanzo_data`.
-- Health is separate: Remy publishes `127.0.0.1:3002:3002`, leaving Garbanzo on `3001`.
-- Vector memory is separate: Remy sets `QDRANT_COLLECTION=remy_memory`, leaving Garbanzo's `garbanzo_memory` collection untouched.
-- Qdrant is shared: the overlay depends on the base `qdrant` service and does not redefine it.
-- Discord config is separate: Remy mounts `./config/discord-channels.json` and should use a distinct Discord app/token from any other deployment.
+Add shared provider, vector, and monitoring values in `.env`.
 
-Keep `.env.remy` local and gitignored. It should contain the real `DISCORD_BOT_TOKEN`, `DISCORD_OWNER_ID`, and one configured AI provider key.
+In `.env.discord`:
+
+```bash
+DISCORD_BOT_TOKEN=...
+DISCORD_OWNER_ID=...
+BAND_FEATURES_ENABLED=true
+# Optional audio transcription for dropped clips:
+# WHISPER_URL=http://192.168.1.10:8090
+# Optional separate vector collection:
+# QDRANT_COLLECTION=remy_memory
+```
+
+Fill `config/discord-channels.json` with the channel and role IDs for the band
+server before starting Docker. The compose file bind-mounts that path read-only,
+so it must exist as a file before `docker compose up`.
+
+Start:
+
+```bash
+docker compose up -d
+docker compose logs -f discord
+```
+
+Health:
+
+```bash
+curl http://127.0.0.1:3002/health
+```
+
+Band commands remain gated by `BAND_FEATURES_ENABLED=true`. Shared provider,
+monitoring, and vector settings inherit from `.env`; Discord app, channel, role,
+band, and transcription settings live in `.env.discord`.

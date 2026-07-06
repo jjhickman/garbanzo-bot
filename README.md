@@ -19,10 +19,10 @@ Garbanzo is an AI chat operations platform for communities and small teams. It c
 - Multi-provider LLM routing (OpenAI GPT-5 via the Responses API, Claude, Gemini, Bedrock, OpenRouter) with failover, native tool calling, and optional local Ollama for low-cost/simple traffic.
 - Community workflows for introductions, summaries, events + reminders, polls, recommendations, feedback, curated **and automatic** community memory, weekly recaps, and owner digests.
 - Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs — callable by name or invoked naturally by the model when tool calling is on.
-- WhatsApp production runtime (Baileys v7) with browser login, a full Discord runtime (discord.js Gateway) that reads and replies in channels, and a Slack scaffold with demo mode.
+- Discord runtime (discord.js Gateway) with opt-in channels, WhatsApp runtime (Baileys v7) with browser login and anti-ban outbound safety, and Slack support with demo mode.
 - Band mode (`BAND_FEATURES_ENABLED`): the same image also runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription.
 - Operational guardrails: health/readiness endpoints, verified off-machine backups, anti-ban outbound safety, retry queue, moderation review (edit-aware), rate limits, and per-group feature allowlists.
-- Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard (`docker compose --profile monitoring up -d`).
+- Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard enabled with the `monitoring` compose profile.
 - Docker-first deployment with SQLite by default, optional Postgres, and a self-hosted Qdrant vector store for semantic recall.
 
 ## See it in action
@@ -84,32 +84,47 @@ Requirements: Docker + Docker Compose for the default deployment; Node.js 20+ on
 git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
 
-# 2. Run interactive setup (messaging platform, provider order, models, feature profile, optional PERSONA.md import, groups)
-npm run setup
+# 2. Create shared env and choose profiles
+cp .env.example .env
+# In .env: set COMPOSE_PROFILES=discord, add one AI provider key, and set MONITORING_TOKEN if using monitoring.
 
-# 3. Start default deployment (Docker Compose)
+# 3. Create a platform env file. Discord is the default profile.
+cp .env.discord.example .env.discord
+# Fill in DISCORD_BOT_TOKEN, DISCORD_OWNER_ID, and channel config.
+cp config/discord-channels.example.json config/discord-channels.json
+
+# Optional WhatsApp instance:
+# cp .env.whatsapp.example .env.whatsapp
+# In .env: set COMPOSE_PROFILES=discord,whatsapp
+# Fill in OWNER_JID and WhatsApp settings.
+
+# 4. Start the selected profile set
 docker compose up -d
 
-# Optional: pull official Docker Hub image directly
+# Optional: pull official Docker Hub image directly or pin the compose image
 # docker pull jjhickman/garbanzo:1.1.0
+# APP_VERSION=1.1.0 docker compose pull
+# APP_VERSION=1.1.0 docker compose up -d
 
-# 4. Watch logs (and complete platform auth/linking if prompted)
-docker compose logs -f garbanzo
+# 5. Watch logs
+docker compose logs -f discord
+# For WhatsApp: docker compose logs -f whatsapp
 
-# 5. Health check
-curl http://127.0.0.1:3001/health
+# 6. Health check
+curl http://127.0.0.1:3002/health
+# For WhatsApp: curl http://127.0.0.1:3001/health
 
-# 6. First AI response test (in chat)
+# 7. First AI response test (in chat)
 # @garbanzo !summary
 # @garbanzo plan dinner in somerville this friday
 
 # Optional: monitoring stack (Prometheus + Grafana dashboard)
-# In .env: METRICS_ENABLED=true and a pinned WHATSAPP_LOGIN_TOKEN
-docker compose --profile monitoring up -d
-# Grafana: http://<host>:3000 (login: admin / your WHATSAPP_LOGIN_TOKEN)
+# In .env: set COMPOSE_PROFILES=discord,monitoring, METRICS_ENABLED=true, and MONITORING_TOKEN.
+docker compose up -d
+# Grafana: http://<host>:3000 (login: admin / your MONITORING_TOKEN)
 ```
 
-If you want the fastest non-chat test path first, run Slack demo mode and post a demo payload to `http://127.0.0.1:3002/demo/chat`.
+For a guided setup, run `npm run setup`. The wizard leads with Discord and writes `.env`, `.env.discord`, and `.env.whatsapp` as needed.
 
 ## Table of Contents
 [Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Monitoring & Observability](#monitoring--observability) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)
@@ -163,7 +178,7 @@ Run the same bot as a band assistant on Discord. Everything below stays off unle
 - **Song ideas** — `!idea capture` from text or a dropped audio clip (transcribed via a Whisper server at `WHISPER_URL`); `!idea promote` turns an idea into a catalog song
 - **Sections and lyrics** — `!section` and `!lyrics` organize each song's structure, words, and chords
 
-Deploy Remy beside a community instance with `docker-compose.remy.yml`: [docs/REMY_DEPLOY.md](docs/REMY_DEPLOY.md)
+Deploy band mode on the Discord profile with `.env.discord`, `BAND_FEATURES_ENABLED=true`, and `config/discord-channels.json`: [docs/REMY_DEPLOY.md](docs/REMY_DEPLOY.md)
 ### Moderation & Safety
 - Content moderation: regex patterns + OpenAI Moderation API (human-in-the-loop)
 - Strike tracking with soft-mute after threshold
@@ -187,14 +202,14 @@ Deploy Remy beside a community instance with `docker-compose.remy.yml`: [docs/RE
 - `!catchup intros` — recent introduction summaries
 
 ## Configuration
-Copy `.env.example` to `.env`, then set provider credentials, owner identity, health bind options, and optional integration keys. Group names, per-group personas, mention patterns, and feature allowlists live in `config/groups.json`.
+Copy `.env.example` to `.env`, then set shared provider, monitoring, vector, and integration values. Copy `.env.discord.example` to `.env.discord` for Discord or `.env.whatsapp.example` to `.env.whatsapp` for WhatsApp. Group names, per-group personas, mention patterns, and feature allowlists live in platform config files under `config/`.
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 
 <a id="platforms--login"></a>
 
 ## Platforms & Login
-WhatsApp is the default runtime and links through a token-gated browser page on the health server. Discord runs a full Gateway connection: the bot reads and replies in opt-in channels, welcomes new members, and posts scheduled digests, recaps, and reminders (channel and role config lives in `config/discord-channels.json`). Slack has a runtime scaffold plus a local demo mode for pipeline verification without a full app setup.
+Discord is the default runtime and uses the official Gateway API. The bot reads and replies in opt-in channels, welcomes new members, and posts scheduled digests, recaps, and reminders (channel and role config lives in `config/discord-channels.json`). WhatsApp is fully supported through Baileys, an unofficial WhatsApp Web API, which carries account risk; keep the anti-ban safety layer enabled. Slack has support plus a local demo mode for pipeline verification without a full app setup.
 Setup details: [docs/PLATFORMS.md](docs/PLATFORMS.md)
 
 <a id="ai-providers--routing"></a>
@@ -222,14 +237,14 @@ Default Docker Compose deployment:
 
 ```bash
 docker compose up -d
-docker compose logs -f garbanzo
-curl http://127.0.0.1:3001/health
+docker compose logs -f discord
+curl http://127.0.0.1:3002/health
 ```
 
 Pinned production pull:
 
 ```bash
-APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
+APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 APP_VERSION=1.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
@@ -245,7 +260,7 @@ Cross-platform portable binaries are published on version tags (`v*`) as release
 Three built-in layers, all optional (guide: [docs/MONITORING.md](docs/MONITORING.md)):
 
 1. **`/admin` page** — token-gated usage & cost snapshot (daily AI spend, provider mix, per-group activity, anti-ban counters) served from the health port. Zero setup.
-2. **Prometheus + Grafana** — a full stack that runs beside the bot on the same host (`docker compose --profile monitoring up -d`), with a pre-provisioned **Community Ops** dashboard: messages and replies by group, AI cost by provider, tool usage, anti-ban trends, and backup integrity, over 30 days of history.
+2. **Prometheus + Grafana** — a full stack that runs beside selected bot profiles on the same host (`COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`), with a pre-provisioned **Community Ops** dashboard: messages and replies by group, AI cost by provider, tool usage, anti-ban trends, and backup integrity, over 30 days of history.
 
 <p align="center">
   <img src="docs/assets/screenshots/site/grafana-community-ops.png" width="900" alt="Pre-provisioned Grafana Community Ops dashboard for Garbanzo" />
@@ -289,7 +304,7 @@ npm run start        # Production (from dist/)
 ## Docs
 Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md)
 
-Operations: [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
+Operations: [MIGRATION-2.0.md](docs/MIGRATION-2.0.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
 
 Design & internals: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [IMPROVEMENTS.md](docs/IMPROVEMENTS.md), [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md), [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md), [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md), [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 
