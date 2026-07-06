@@ -52,7 +52,8 @@ export const SHARED_FIELDS = [
   { env: 'BRIDGE_ENABLED', cli: 'bridge-enabled', default: '' },
   { env: 'INSTANCE_ID', cli: 'instance-id', default: '' },
   { env: 'BRIDGE_TRANSPORT', cli: 'bridge-transport', default: '' },
-  { env: 'BRIDGE_BROKER_URL', cli: 'bridge-broker-url', default: '' },
+  // secret: the amqp url may embed the broker password (amqp://user:pass@host).
+  { env: 'BRIDGE_BROKER_URL', cli: 'bridge-broker-url', default: '', secret: true },
   { env: 'BRIDGE_BROKER_USER', cli: 'bridge-broker-user', default: '' },
   { env: 'BRIDGE_BROKER_PASSWORD', cli: 'bridge-broker-password', default: '', secret: true },
   { env: 'BRIDGE_SUMMARY_INTERVAL_MINUTES', cli: 'bridge-summary-interval-minutes', default: '' },
@@ -274,6 +275,7 @@ export function redactEnvContent(content) {
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
     'BRIDGE_BROKER_PASSWORD=',
+    'BRIDGE_BROKER_URL=',
   ];
 
   return content
