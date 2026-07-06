@@ -70,8 +70,14 @@ export function createAmqpBridgeTransport({ instanceId, brokerUrl }: AmqpTranspo
 
   async function connectChannel(): Promise<ConfirmChannel> {
     if (!url) throw new Error('BRIDGE_BROKER_URL is required for the amqp bridge transport');
+    if (stopped) throw new Error('bridge amqp transport is stopped');
 
     const conn = await amqplib.connect(url);
+    if (stopped) {
+      // stop() raced an in-flight reconnect — do not silently reopen.
+      await conn.close().catch(() => undefined);
+      throw new Error('bridge amqp transport stopped during reconnect');
+    }
     conn.on('close', () => handleConnectionLoss('closed'));
     conn.on('error', (err) => handleConnectionLoss('error', err));
 
