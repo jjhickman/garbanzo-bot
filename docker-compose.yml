@@ -43,6 +43,7 @@ services:
     volumes:
       - discord_data:/app/data
       - ./config/discord-channels.json:/app/config/discord-channels.json:ro
+      - ./config/bridge-map.json:/app/config/bridge-map.json:ro
     deploy:
       resources:
         limits:
@@ -80,6 +81,7 @@ services:
       - baileys_auth:/app/baileys_auth
       - garbanzo_data:/app/data
       - ./config/groups.json:/app/config/groups.json:ro
+      - ./config/bridge-map.json:/app/config/bridge-map.json:ro
       # Optional: mount local voice models (Piper TTS)
       # Uncomment if you have Piper voice models on the host:
       # - ./data/voices:/app/data/voices:ro
@@ -166,6 +168,41 @@ services:
     depends_on:
       - prometheus
 
+  # Optional message broker for cross-instance bridging (v3). Enable by
+  # including broker in COMPOSE_PROFILES and setting BRIDGE_BROKER_PASSWORD.
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: garbanzo-rabbitmq
+    profiles: ["broker"]
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=${BRIDGE_BROKER_USER:-garbanzo}
+      - RABBITMQ_DEFAULT_PASS=${BRIDGE_BROKER_PASSWORD:-}
+    # Refuses to start when BRIDGE_BROKER_PASSWORD is unset; enforced here
+    # (not via ${VAR:?}) so plain `docker compose up` without the broker
+    # profile keeps working.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$RABBITMQ_DEFAULT_PASS" ]; then
+          echo "Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile" >&2
+          exit 1
+        fi
+        exec docker-entrypoint.sh rabbitmq-server
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # Management UI is localhost-only; the AMQP port (5672) is reachable only
+    # over the compose network, never published to the host.
+    ports:
+      - "127.0.0.1:15672:15672"
+    mem_limit: 400m
+
 volumes:
   baileys_auth:
     name: garbanzo-bot-auth
@@ -179,3 +216,5 @@ volumes:
     name: garbanzo-bot-prometheus
   grafana_data:
     name: garbanzo-bot-grafana
+  rabbitmq_data:
+    name: garbanzo-bot-rabbitmq

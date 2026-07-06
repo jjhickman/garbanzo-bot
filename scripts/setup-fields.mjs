@@ -47,6 +47,18 @@ export const SHARED_FIELDS = [
   { env: 'GITHUB_ISSUES_TOKEN', cli: 'github-issues-token', default: '', secret: true },
   { env: 'GITHUB_ISSUES_REPO', cli: 'github-issues-repo', default: 'owner/repo' },
   { env: 'MONITORING_TOKEN', cli: 'monitoring-token', default: '', secret: true },
+  // Bridging (v3) — no interactive prompt flow; documented for manual setup
+  // (docs/BRIDGING.md). All optional, default off.
+  { env: 'BRIDGE_ENABLED', cli: 'bridge-enabled', default: '' },
+  { env: 'INSTANCE_ID', cli: 'instance-id', default: '' },
+  { env: 'BRIDGE_TRANSPORT', cli: 'bridge-transport', default: '' },
+  { env: 'BRIDGE_BROKER_URL', cli: 'bridge-broker-url', default: '' },
+  { env: 'BRIDGE_BROKER_USER', cli: 'bridge-broker-user', default: '' },
+  { env: 'BRIDGE_BROKER_PASSWORD', cli: 'bridge-broker-password', default: '', secret: true },
+  { env: 'BRIDGE_SUMMARY_INTERVAL_MINUTES', cli: 'bridge-summary-interval-minutes', default: '' },
+  { env: 'BRIDGE_MAX_TEXT', cli: 'bridge-max-text', default: '' },
+  { env: 'SHARED_MEMORY_ENABLED', cli: 'shared-memory-enabled', default: '' },
+  { env: 'QDRANT_SHARED_COLLECTION', cli: 'qdrant-shared-collection', default: '' },
 ];
 
 export const WHATSAPP_FIELDS = [
@@ -154,6 +166,18 @@ export function buildSharedEnvLines(values) {
     envLine(values, 'METRICS_ENABLED'),
     envLine(values, 'MONITORING_TOKEN'),
     '',
+    '# Bridging (v3) — cross-instance relay, default off (docs/BRIDGING.md)',
+    envLine(values, 'BRIDGE_ENABLED'),
+    envLine(values, 'INSTANCE_ID'),
+    envLine(values, 'BRIDGE_TRANSPORT'),
+    envLine(values, 'BRIDGE_BROKER_URL'),
+    envLine(values, 'BRIDGE_BROKER_USER'),
+    envLine(values, 'BRIDGE_BROKER_PASSWORD'),
+    envLine(values, 'BRIDGE_SUMMARY_INTERVAL_MINUTES'),
+    envLine(values, 'BRIDGE_MAX_TEXT'),
+    envLine(values, 'SHARED_MEMORY_ENABLED'),
+    envLine(values, 'QDRANT_SHARED_COLLECTION'),
+    '',
   ];
 }
 
@@ -249,6 +273,7 @@ export function redactEnvContent(content) {
     'DISCORD_BOT_TOKEN=',
     'OWNER_JID=',
     'BOT_PHONE_NUMBER=',
+    'BRIDGE_BROKER_PASSWORD=',
   ];
 
   return content
