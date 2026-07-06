@@ -103,6 +103,16 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): *[voice note]*');
   });
 
+  it('hard-clamps the composed string when the sender name alone exceeds BRIDGE_MAX_TEXT', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+    const absurdName = 'x'.repeat(2000);
+
+    await deliver.deliver(envelope({ text: 'hello', origin: { senderName: absurdName } }));
+
+    const sentText = sendText.mock.calls[0]?.[1] ?? '';
+    expect(sentText.length).toBeLessThanOrEqual(config.BRIDGE_MAX_TEXT);
+  });
+
   it('keeps the attribution prefix when truncating long bodies', async () => {
     const { deliver, sendText } = deliverer({ platform: 'discord' });
     const prefix = 'Ana (WhatsApp): ';

@@ -135,9 +135,21 @@ if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_D
   process.exit(1);
 }
 
+// Smart default for QDRANT_COLLECTION: when INSTANCE_ID is explicitly set and
+// QDRANT_COLLECTION is not, namespace the local vector collection per instance
+// so two instances sharing the default Qdrant deployment don't silently
+// bleed facts into each other. An explicit QDRANT_COLLECTION always wins, and
+// single-instance deployments (no INSTANCE_ID) keep the plain default —
+// zero behavior change for existing users.
+const qdrantCollectionExplicit = process.env.QDRANT_COLLECTION !== undefined;
+const derivedQdrantCollection = !qdrantCollectionExplicit && parsed.data.INSTANCE_ID
+  ? `garbanzo_memory_${parsed.data.INSTANCE_ID}`
+  : parsed.data.QDRANT_COLLECTION;
+
 export const config = {
   ...parsed.data,
   AI_PROVIDER_ORDER: normalizedProviderOrder,
+  QDRANT_COLLECTION: derivedQdrantCollection,
 };
 export const instanceId = config.INSTANCE_ID ?? config.MESSAGING_PLATFORM;
 export { PROJECT_ROOT };

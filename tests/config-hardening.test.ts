@@ -171,4 +171,42 @@ describe('config hardening', () => {
     expect(config.OWNER_JID).toBe('test_owner@s.whatsapp.net');
     expect(exitSpy).not.toHaveBeenCalled();
   });
+
+  describe('QDRANT_COLLECTION smart default (per-instance isolation)', () => {
+    it('keeps the plain default when INSTANCE_ID is unset (single-instance upgrade path)', async () => {
+      const { config } = await importConfigWithEnv({
+        MESSAGING_PLATFORM: 'discord',
+        INSTANCE_ID: undefined,
+        QDRANT_COLLECTION: undefined,
+      });
+
+      expect(config.INSTANCE_ID).toBeUndefined();
+      expect(config.QDRANT_COLLECTION).toBe('garbanzo_memory');
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it('namespaces the collection to the instance when INSTANCE_ID is set and QDRANT_COLLECTION is not', async () => {
+      const { config } = await importConfigWithEnv({
+        MESSAGING_PLATFORM: 'discord',
+        INSTANCE_ID: 'whatsapp-band',
+        QDRANT_COLLECTION: undefined,
+      });
+
+      expect(config.INSTANCE_ID).toBe('whatsapp-band');
+      expect(config.QDRANT_COLLECTION).toBe('garbanzo_memory_whatsapp-band');
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it('lets an explicit QDRANT_COLLECTION win even when INSTANCE_ID is set', async () => {
+      const { config } = await importConfigWithEnv({
+        MESSAGING_PLATFORM: 'discord',
+        INSTANCE_ID: 'whatsapp-band',
+        QDRANT_COLLECTION: 'custom_collection',
+      });
+
+      expect(config.INSTANCE_ID).toBe('whatsapp-band');
+      expect(config.QDRANT_COLLECTION).toBe('custom_collection');
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+  });
 });

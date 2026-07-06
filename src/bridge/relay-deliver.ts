@@ -59,7 +59,12 @@ function relayText(envelope: BridgeEnvelope, targetPlatform: MessagingPlatform):
     ? envelope.text
     : translateFormatting(envelope.text, envelope.origin.platform, targetPlatform);
 
-  return `${prefix}${truncateBody(body, config.BRIDGE_MAX_TEXT - prefix.length)}`;
+  const composed = `${prefix}${truncateBody(body, config.BRIDGE_MAX_TEXT - prefix.length)}`;
+
+  // The prefix itself is attacker/user-controlled (senderName), so it can
+  // alone exceed BRIDGE_MAX_TEXT even after truncateBody clamps the body to
+  // an empty string. Hard-truncate the whole composed string as a backstop.
+  return truncate(composed, config.BRIDGE_MAX_TEXT);
 }
 
 function truncateBody(body: string, maxLength: number): string {
@@ -103,9 +108,6 @@ function statusFromMessage(message: string): number | null {
 }
 
 function parseDiscordRetryAfterMs(err: unknown): number {
-  const fromStructure = parseRetryAfterValue(readRetryAfterField(err));
-  if (fromStructure !== null) return fromStructure;
-
   const message = err instanceof Error ? err.message : String(err);
   const body = message.slice(message.indexOf('): ') + 3);
   const fromJson = parseJsonRetryAfter(body);
@@ -113,12 +115,6 @@ function parseDiscordRetryAfterMs(err: unknown): number {
 
   const fromText = /retry[-_ ]after["':=\s]+([0-9]+(?:\.[0-9]+)?)/i.exec(message);
   return parseRetryAfterValue(fromText?.[1]) ?? 0;
-}
-
-function readRetryAfterField(err: unknown): unknown {
-  if (typeof err !== 'object' || err === null) return null;
-  const record = err as Record<string, unknown>;
-  return record.retryAfter ?? record.retry_after;
 }
 
 function parseJsonRetryAfter(raw: string): number | null {

@@ -28,8 +28,33 @@ Two independent tiers:
 | `BRIDGE_MAX_TEXT` | `1500` | Max characters per relayed/digest message |
 | `SHARED_MEMORY_ENABLED` | `false` | Master switch for Tier 1 shared memory |
 | `QDRANT_SHARED_COLLECTION` | `garbanzo_shared` | Qdrant collection used for shared facts |
+| `QDRANT_COLLECTION` | `garbanzo_memory`, or `garbanzo_memory_<INSTANCE_ID>` when `INSTANCE_ID` is set and this is left unset | Local Qdrant collection for this instance's own facts (see [Local memory isolation](#local-memory-isolation)) |
 
 Full descriptions and defaults: [docs/CONFIGURATION.md](CONFIGURATION.md).
+
+## Local memory isolation
+
+**Every instance needs its own local fact collection.** Bridging only shares
+what the owner explicitly runs `!memory share <id>` on (Tier 1, above) — it
+never shares raw local memory. But if two instances point at the same Qdrant
+deployment and both fall back to the same collection name, every locally
+indexed fact (session memory, auto-extracted facts, everything under plain
+`!memory`) becomes visible to both instances, silently, with no share command
+involved. That defeats isolation even when bridging itself is off.
+
+`QDRANT_COLLECTION` defaults to `garbanzo_memory`. The moment you set
+`INSTANCE_ID` for a deployment and leave `QDRANT_COLLECTION` unset, the
+collection automatically becomes `garbanzo_memory_<INSTANCE_ID>` instead — so
+running two or more instances with distinct `INSTANCE_ID`s against one Qdrant
+server already gives each one an isolated local collection with no extra
+config. A single-instance deployment that never sets `INSTANCE_ID` is
+unaffected and keeps `garbanzo_memory`. An explicit `QDRANT_COLLECTION` always
+wins over the derived name, for the rare case where you want to pin it
+yourself.
+
+The shared collection (`QDRANT_SHARED_COLLECTION`, Tier 1 above) is a
+separate, deliberate exception to this isolation — the only path into it is
+`!memory share`.
 
 ## Quick start (HTTP transport, two instances)
 
@@ -221,7 +246,10 @@ isolation needs nothing, since every flag in the [flags summary](#flags-summary)
 defaults off. It keeps its existing `whatsapp` profile, `.env.whatsapp`, and
 `config/groups.json`. `config/bridge-map.json` stays mounted into this
 container like every other service, but since `BRIDGE_ENABLED` is unset it is
-never read.
+never read. It also never sets `INSTANCE_ID`, so it keeps the plain
+`garbanzo_memory` local collection (see
+[Local memory isolation](#local-memory-isolation)) — its own facts, isolated
+from both band instances below.
 
 ### 2. Band WhatsApp bot (second phone number)
 
@@ -289,6 +317,11 @@ INSTANCE_ID=whatsapp-band
 `MONITORING_TOKEN` lives in the shared `.env` and must be the same value used
 by `remy` below.
 
+Because `INSTANCE_ID=whatsapp-band` is set and `QDRANT_COLLECTION` is not,
+this instance automatically gets its own local collection,
+`garbanzo_memory_whatsapp-band` — isolated from the community bot's
+`garbanzo_memory` and from `remy`'s collection below, with no extra config.
+
 Because this is a brand-new linked WhatsApp account, the anti-ban warm-up
 ramp starts over from scratch for it: `WHATSAPP_SAFETY_DAY1_LIMIT` (default
 2000) and `WHATSAPP_SAFETY_WARMUP_DAYS` (default 10 days) apply to this
@@ -310,7 +343,10 @@ INSTANCE_ID=remy
 
 `INSTANCE_ID` is deployment identity, a separate concept from persona naming
 or compose service naming — the compose service stays named `discord`, but
-the bridge and shared-memory system address this deployment as `remy`.
+the bridge and shared-memory system address this deployment as `remy`. The
+same `INSTANCE_ID` also drives local memory isolation: since
+`QDRANT_COLLECTION` is left unset here, this deployment's local facts land in
+`garbanzo_memory_remy`, distinct from both WhatsApp instances.
 
 ### The bridge-map pair
 

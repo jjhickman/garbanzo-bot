@@ -72,8 +72,25 @@ const countMessages = db.prepare(`
   SELECT COUNT(*) as count FROM messages
 `);
 
+/** Max age for bridge_seen dedup keys and terminal bridge_outbox rows, in days. */
+const BRIDGE_RETENTION_DAYS = 30;
+
+// bridge_seen.seen_at and bridge_outbox.created_at are stored as Date.now()
+// milliseconds (unlike messages.timestamp, which is epoch seconds), so these
+// use a millisecond cutoff.
+const pruneOldBridgeSeen = db.prepare(`
+  DELETE FROM bridge_seen WHERE seen_at < ?
+`);
+
+const pruneOldTerminalBridgeOutbox = db.prepare(`
+  DELETE FROM bridge_outbox WHERE status IN ('sent', 'dead') AND created_at < ?
+`);
+
 /**
  * Prune messages older than 30 days, then run VACUUM to reclaim space.
+ * Also prunes stale bridge dedup keys (`bridge_seen`) and terminal
+ * (`sent`/`dead`) `bridge_outbox` rows older than 30 days, so the bridge
+ * tables don't grow unbounded across long-running deployments.
  * Returns stats about what was cleaned.
  */
 export function runMaintenance(): MaintenanceStats {
@@ -83,8 +100,12 @@ export function runMaintenance(): MaintenanceStats {
   const result = pruneOldByAge.run(cutoff);
   const pruned = result.changes;
 
+  const bridgeCutoffMs = Date.now() - (BRIDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const bridgeSeenPruned = pruneOldBridgeSeen.run(bridgeCutoffMs).changes;
+  const bridgeOutboxPruned = pruneOldTerminalBridgeOutbox.run(bridgeCutoffMs).changes;
+
   // Only VACUUM if we actually deleted something (VACUUM is expensive)
-  if (pruned > 0) {
+  if (pruned > 0 || bridgeSeenPruned > 0 || bridgeOutboxPruned > 0) {
     db.exec('VACUUM');
   }
 
@@ -95,6 +116,9 @@ export function runMaintenance(): MaintenanceStats {
     beforeCount,
     afterCount,
     retentionDays: MESSAGE_RETENTION_DAYS,
+    bridgeSeenPruned,
+    bridgeOutboxPruned,
+    bridgeRetentionDays: BRIDGE_RETENTION_DAYS,
   }, 'Database maintenance complete');
 
   return { pruned, beforeCount, afterCount };
