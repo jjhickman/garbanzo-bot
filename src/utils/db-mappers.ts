@@ -1,13 +1,15 @@
 import type {
   Availability,
   AvailabilityResponse,
+  BridgeOutboxEntry,
+  BridgeOutboxStatus,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
   EventReminderStatus,
   FeedbackEntry,
   MemberProfile,
-  MemoryEntry,
+  LocalMemoryEntry,
   Rehearsal,
   RehearsalStatus,
   SectionKind,
@@ -201,6 +203,17 @@ export interface WhatsAppSafetyStateRow {
   updated_at: DbNumeric | null;
 }
 
+export interface BridgeOutboxRow {
+  id: DbNumeric | null;
+  envelope_json: string;
+  target_instance: string;
+  status: BridgeOutboxStatus;
+  attempts: DbNumeric | null;
+  next_attempt_at: DbNumeric | null;
+  last_error: string | null;
+  created_at: DbNumeric | null;
+}
+
 export function mapDbMessage(row: MessageRow): DbMessage {
   return {
     sender: row.sender,
@@ -269,7 +282,7 @@ export function mapFeedbackEntry(row: FeedbackRow): FeedbackEntry {
   };
 }
 
-export function mapMemoryEntry(row: MemoryRow): MemoryEntry {
+export function mapMemoryEntry(row: MemoryRow): LocalMemoryEntry {
   return {
     id: toNumber(row.id),
     fact: row.fact,
@@ -410,5 +423,18 @@ export function mapWhatsAppSafetyState(row: WhatsAppSafetyStateRow): WhatsAppSaf
     score: toNumber(row.score),
     reasons: parseJsonArray(row.reasons),
     updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapBridgeOutboxEntry(row: BridgeOutboxRow): BridgeOutboxEntry {
+  return {
+    id: toNumber(row.id),
+    envelopeJson: row.envelope_json,
+    targetInstance: row.target_instance,
+    status: row.status,
+    attempts: toNumber(row.attempts),
+    nextAttemptAt: toNumber(row.next_attempt_at),
+    lastError: row.last_error,
+    createdAt: toNumber(row.created_at),
   };
 }

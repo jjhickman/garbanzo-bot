@@ -43,13 +43,25 @@ export interface FeedbackEntry {
   timestamp: number;
 }
 
-export interface MemoryEntry {
+export interface LocalMemoryEntry {
   id: number;
   fact: string;
   category: string;
   source: string;
   created_at: number;
+  shared?: false;
 }
+
+export interface SharedMemoryEntry {
+  fact: string;
+  category: string;
+  source: 'shared';
+  created_at: number;
+  shared: true;
+  originInstance: string;
+}
+
+export type MemoryEntry = LocalMemoryEntry | SharedMemoryEntry;
 
 export type SongStatus = 'idea' | 'rough' | 'tight' | 'gig-ready';
 
@@ -244,4 +256,23 @@ export interface WhatsAppSafetyMetrics {
   paused: boolean;
   risk: WhatsAppRiskLevel;
   score: number;
+}
+
+export type BridgeOutboxStatus = 'pending' | 'sent' | 'dead';
+
+export interface BridgeOutboxEntry {
+  id: number;
+  envelopeJson: string;
+  targetInstance: string;
+  status: BridgeOutboxStatus;
+  attempts: number;
+  nextAttemptAt: number;
+  lastError: string | null;
+  createdAt: number;
+}
+
+export interface BridgeOutboxCounts {
+  pending: number;
+  sent: number;
+  dead: number;
 }

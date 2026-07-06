@@ -1,0 +1,31 @@
+{
+  "_comment": "Copy to config/bridge-map.json and replace ids with your instance ids, channel ids, and WhatsApp group JIDs. Shared memory and relays stay disabled unless their feature flags are enabled.",
+  "instances": [
+    {
+      "_comment": "Discord Remy instance; url is used by the HTTP transport in a later bridge task.",
+      "id": "remy",
+      "platform": "discord",
+      "url": "http://discord:3002"
+    },
+    {
+      "_comment": "WhatsApp Garbanzo instance; url is used by the HTTP transport in a later bridge task.",
+      "id": "garbanzo",
+      "platform": "whatsapp",
+      "url": "http://whatsapp:3001"
+    }
+  ],
+  "routes": [
+    {
+      "_comment": "Bridge the Remy Discord channel with the Garbanzo WhatsApp group. Commands are not relayed by default.",
+      "id": "remy-garbanzo-main",
+      "endpoints": [
+        { "instance": "remy", "chatId": "111111111111111111" },
+        { "instance": "garbanzo", "chatId": "120363000000000000@g.us" }
+      ],
+      "direction": "both",
+      "modeToWhatsApp": "summary",
+      "modeToDiscord": "verbatim",
+      "relayCommands": false
+    }
+  ]
+}

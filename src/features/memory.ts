@@ -5,6 +5,8 @@
  *   !memory                       — list all stored facts
  *   !memory add <category> <fact> — store a new owner fact
  *   !memory delete <id>           — remove a fact
+ *   !memory share <id>            — copy a fact to shared cross-instance memory
+ *   !memory unshare <id>          — remove a fact from shared cross-instance memory
  *   !memory search <keyword>      — search facts
  *
  * Facts are automatically injected into the AI system prompt so
@@ -20,6 +22,8 @@ import {
   searchMemory,
   type MemoryEntry,
 } from '../utils/db.js';
+import { config } from '../utils/config.js';
+import { deleteSharedFact, indexSharedFact } from '../utils/vector-memory.js';
 
 /**
  * Handle !memory owner commands. Returns a response string.
@@ -70,6 +74,42 @@ export async function handleMemory(args: string): Promise<string> {
     return deleted ? `🗑️ Memory #${id} deleted.` : `❌ Memory #${id} not found.`;
   }
 
+  // !memory share <id>
+  if (trimmed.toLowerCase().startsWith('share ')) {
+    if (!config.SHARED_MEMORY_ENABLED) {
+      return '🔒 Shared memory is disabled. Set SHARED_MEMORY_ENABLED=true to share curated facts.';
+    }
+
+    const idStr = trimmed.split(/\s+/)[1];
+    const id = parseInt(idStr, 10);
+    if (isNaN(id)) return '❌ Provide a memory ID: `!memory share 3`';
+
+    const memories = await getAllMemories();
+    const memory = memories.find((entry) => entry.id === id);
+    if (!memory) return `❌ Memory #${id} not found.`;
+
+    const shared = await indexSharedFact({ localId: id, text: memory.fact, category: memory.category });
+    return shared
+      ? `✅ Memory #${id} shared.`
+      : `❌ Memory #${id} could not be shared right now.`;
+  }
+
+  // !memory unshare <id>
+  if (trimmed.toLowerCase().startsWith('unshare ')) {
+    if (!config.SHARED_MEMORY_ENABLED) {
+      return '🔒 Shared memory is disabled. Set SHARED_MEMORY_ENABLED=true to unshare curated facts.';
+    }
+
+    const idStr = trimmed.split(/\s+/)[1];
+    const id = parseInt(idStr, 10);
+    if (isNaN(id)) return '❌ Provide a memory ID: `!memory unshare 3`';
+
+    const unshared = await deleteSharedFact(id);
+    return unshared
+      ? `🗑️ Memory #${id} unshared.`
+      : `❌ Memory #${id} could not be unshared right now.`;
+  }
+
   // !memory search <keyword>
   if (trimmed.toLowerCase().startsWith('search ')) {
     const keyword = trimmed.slice(7).trim();
@@ -88,6 +128,7 @@ export async function handleMemory(args: string): Promise<string> {
     '  `!memory` — list all facts, including auto-extracted facts',
     '  `!memory add <category> <fact>` — store an owner fact',
     '  `!memory delete <id>` — remove a fact',
+    '  `!memory share <id>` / `!memory unshare <id>` — manage explicit shared memory',
     '  `!memory search <keyword>` — search facts',
     '',
     'Categories: events, venues, members, traditions, general',
@@ -122,6 +163,10 @@ function formatMemoryList(memories: MemoryEntry[], header: string): string {
   for (const [cat, entries] of byCategory) {
     lines.push(`*${cat}:*`);
     for (const e of entries) {
+      if (e.shared) {
+        lines.push(`  (shared from ${e.originInstance}) — ${e.fact}`);
+        continue;
+      }
       const sourceTag = e.source === 'auto' ? ' (auto)' : '';
       lines.push(`  #${e.id}${sourceTag} — ${e.fact}`);
     }

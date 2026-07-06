@@ -158,7 +158,10 @@ const tools: AiTool[] = [
       const results = await searchMemory(keyword, 5);
       if (results.length === 0) return `No community memory found for "${keyword}".`;
       return results
-        .map((memory) => `- ${memory.fact} (${memory.category})`)
+        .map((memory) => {
+          const origin = memory.shared ? `, shared from ${memory.originInstance}` : '';
+          return `- ${memory.fact} (${memory.category}${origin})`;
+        })
         .join('\n');
     },
   ),

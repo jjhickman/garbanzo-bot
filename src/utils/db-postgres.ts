@@ -4,6 +4,7 @@ import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 import { logger } from '../middleware/logger.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
+import type { BridgeEnvelope } from '../bridge/envelope.js';
 import { PROJECT_ROOT, config } from './config.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import { indexSession } from './vector-memory.js';
@@ -60,6 +61,8 @@ import type {
   Availability,
   AvailabilityResponse,
   BackupIntegrityStatus,
+  BridgeOutboxCounts,
+  BridgeOutboxEntry,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -67,6 +70,7 @@ import type {
   FeedbackEntry,
   MaintenanceStats,
   MemberProfile,
+  LocalMemoryEntry,
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
@@ -951,6 +955,34 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return mapWhatsAppSafetyMetrics(counts.rows[0], state);
     },
 
+    async enqueueBridgeOutbox(_envelope: BridgeEnvelope): Promise<BridgeOutboxEntry> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async claimDueBridgeOutbox(_limit: number): Promise<BridgeOutboxEntry[]> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async markBridgeOutboxSent(_id: number): Promise<boolean> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async markBridgeOutboxDead(_id: number, _error: string): Promise<boolean> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async bumpBridgeOutboxAttempt(_id: number, _nextAt: number, _error: string): Promise<boolean> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
+    async bridgeSeenInsert(_key: string): Promise<boolean> {
+      throw new Error('Bridge deduplication is not implemented for postgres backend yet');
+    },
+
+    async bridgeOutboxCounts(): Promise<BridgeOutboxCounts> {
+      return { pending: 0, sent: 0, dead: 0 };
+    },
+
     async submitFeedback(
       type: 'suggestion' | 'bug',
       sender: string,
@@ -1047,7 +1079,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return (res.rowCount ?? 0) > 0;
     },
 
-    async addMemory(fact: string, category: string = 'general', source: string = 'owner'): Promise<MemoryEntry> {
+    async addMemory(fact: string, category: string = 'general', source: string = 'owner'): Promise<LocalMemoryEntry> {
       const ts = Math.floor(Date.now() / 1000);
       const res = await pool.query<MemoryRow>(
         `INSERT INTO memory (fact, category, source, created_at)
@@ -1059,7 +1091,7 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return mapMemoryEntry(res.rows[0]);
     },
 
-    async getAllMemories(): Promise<MemoryEntry[]> {
+    async getAllMemories(): Promise<LocalMemoryEntry[]> {
       const res = await pool.query<MemoryRow>('SELECT * FROM memory ORDER BY category, created_at DESC');
       return res.rows.map(mapMemoryEntry);
     },

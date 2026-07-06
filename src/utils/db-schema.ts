@@ -305,6 +305,26 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_song_sections_song_position
     ON song_sections (song_id, position);
+
+  CREATE TABLE IF NOT EXISTS bridge_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    envelope_json TEXT NOT NULL,
+    target_instance TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending','sent','dead')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER NOT NULL,
+    last_error TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_bridge_outbox_status_next_attempt
+    ON bridge_outbox (status, next_attempt_at);
+
+  CREATE TABLE IF NOT EXISTS bridge_seen (
+    idempotency_key TEXT PRIMARY KEY,
+    seen_at INTEGER NOT NULL
+  );
 `);
 
 interface TableColumnInfo {

@@ -1,8 +1,11 @@
+import type { BridgeEnvelope } from '../bridge/envelope.js';
 import type {
   Availability,
   AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
+  BridgeOutboxCounts,
+  BridgeOutboxEntry,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -10,6 +13,7 @@ import type {
   MaintenanceStats,
   MemberProfile,
   MemoryEntry,
+  LocalMemoryEntry,
   ModerationEntry,
   NewEventReminder,
   Rehearsal,
@@ -92,6 +96,15 @@ export interface DbBackend {
   setWhatsAppSafetyState(paused: boolean, risk: WhatsAppRiskLevel, score: number, reasons: string[]): Promise<void>;
   getWhatsAppSafetyMetrics(hourSince: number, daySince: number): Promise<WhatsAppSafetyMetrics>;
 
+  // Bridge durable outbox and receiver deduplication
+  enqueueBridgeOutbox(envelope: BridgeEnvelope): Promise<BridgeOutboxEntry>;
+  claimDueBridgeOutbox(limit: number): Promise<BridgeOutboxEntry[]>;
+  markBridgeOutboxSent(id: number): Promise<boolean>;
+  markBridgeOutboxDead(id: number, error: string): Promise<boolean>;
+  bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
+  bridgeSeenInsert(key: string): Promise<boolean>;
+  bridgeOutboxCounts(): Promise<BridgeOutboxCounts>;
+
   // Feedback
   submitFeedback(type: 'suggestion' | 'bug', sender: string, groupJid: string | null, text: string): Promise<FeedbackEntry>;
   getOpenFeedback(): Promise<FeedbackEntry[]>;
@@ -102,8 +115,8 @@ export interface DbBackend {
   linkFeedbackToGitHubIssue(id: number, issueNumber: number, issueUrl: string): Promise<boolean>;
 
   // Memory
-  addMemory(fact: string, category?: string, source?: string): Promise<MemoryEntry>;
-  getAllMemories(): Promise<MemoryEntry[]>;
+  addMemory(fact: string, category?: string, source?: string): Promise<LocalMemoryEntry>;
+  getAllMemories(): Promise<LocalMemoryEntry[]>;
   deleteMemory(id: number): Promise<boolean>;
   searchMemory(keyword: string, limit?: number): Promise<MemoryEntry[]>;
   formatMemoriesForPrompt(): Promise<string>;

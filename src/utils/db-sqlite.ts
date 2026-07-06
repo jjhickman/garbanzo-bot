@@ -9,11 +9,13 @@ import { stopMaintenance } from './db-maintenance.js';
 import { logger } from '../middleware/logger.js';
 import { config } from './config.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
+import type { BridgeEnvelope } from '../bridge/envelope.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapAvailability,
+  mapBridgeOutboxEntry,
   mapDailyGroupActivity,
   mapDbMessage,
   mapEventReminder,
@@ -31,6 +33,7 @@ import {
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
   type AvailabilityRow,
+  type BridgeOutboxRow,
   type DailyGroupActivityRow,
   type EventReminderRow,
   type FeedbackRow,
@@ -62,10 +65,13 @@ import type {
   Availability,
   AvailabilityResponse,
   BackfillSession,
+  BridgeOutboxCounts,
+  BridgeOutboxEntry,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
   FeedbackEntry,
+  LocalMemoryEntry,
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
@@ -428,6 +434,35 @@ const upsertWhatsAppSafetyState = db.prepare(
      reasons = excluded.reasons,
      updated_at = excluded.updated_at`,
 );
+const insertBridgeOutbox = db.prepare(
+  `INSERT INTO bridge_outbox
+   (envelope_json, target_instance, status, attempts, next_attempt_at, created_at)
+   VALUES (?, ?, 'pending', 0, ?, ?)`,
+);
+const selectBridgeOutboxById = db.prepare(`SELECT * FROM bridge_outbox WHERE id = ?`);
+const selectDueBridgeOutbox = db.prepare(
+  `SELECT * FROM bridge_outbox
+   WHERE status = 'pending' AND next_attempt_at <= ?
+   ORDER BY next_attempt_at ASC, id ASC
+   LIMIT ?`,
+);
+const updateBridgeOutboxSent = db.prepare(
+  `UPDATE bridge_outbox SET status = 'sent', last_error = NULL WHERE id = ?`,
+);
+const updateBridgeOutboxDead = db.prepare(
+  `UPDATE bridge_outbox SET status = 'dead', last_error = ? WHERE id = ?`,
+);
+const updateBridgeOutboxAttempt = db.prepare(
+  `UPDATE bridge_outbox
+   SET attempts = attempts + 1, next_attempt_at = ?, last_error = ?
+   WHERE id = ? AND status = 'pending'`,
+);
+const insertBridgeSeen = db.prepare(
+  `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
+);
+const selectBridgeOutboxCounts = db.prepare(
+  `SELECT status, COUNT(*) AS count FROM bridge_outbox GROUP BY status`,
+);
 const selectWhatsAppMetricCounts = db.prepare(
   `SELECT
      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
@@ -775,6 +810,49 @@ export function getWhatsAppSafetyMetrics(hourSince: number, daySince: number): W
   return mapWhatsAppSafetyMetrics(counts, state);
 }
 
+// ── Public API: Bridge Outbox ──────────────────────────────────────
+
+export function enqueueBridgeOutbox(envelope: BridgeEnvelope): BridgeOutboxEntry {
+  const now = Date.now();
+  const result = insertBridgeOutbox.run(
+    JSON.stringify(envelope),
+    envelope.targetInstance,
+    now,
+    now,
+  );
+  return mapBridgeOutboxEntry(selectBridgeOutboxById.get(result.lastInsertRowid) as BridgeOutboxRow);
+}
+
+export function claimDueBridgeOutbox(limit: number): BridgeOutboxEntry[] {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  return (selectDueBridgeOutbox.all(Date.now(), safeLimit) as BridgeOutboxRow[]).map(mapBridgeOutboxEntry);
+}
+
+export function markBridgeOutboxSent(id: number): boolean {
+  return updateBridgeOutboxSent.run(id).changes > 0;
+}
+
+export function markBridgeOutboxDead(id: number, error: string): boolean {
+  return updateBridgeOutboxDead.run(error, id).changes > 0;
+}
+
+export function bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): boolean {
+  return updateBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
+}
+
+export function bridgeSeenInsert(key: string): boolean {
+  return insertBridgeSeen.run(key, Date.now()).changes > 0;
+}
+
+export function bridgeOutboxCounts(): BridgeOutboxCounts {
+  const counts: BridgeOutboxCounts = { pending: 0, sent: 0, dead: 0 };
+  const rows = selectBridgeOutboxCounts.all() as Array<{ status: keyof BridgeOutboxCounts; count: number }>;
+  for (const row of rows) {
+    counts[row.status] = toNumber(row.count);
+  }
+  return counts;
+}
+
 // ── Public API: Feedback ────────────────────────────────────────────
 
 /** Submit a new feature suggestion or bug report */
@@ -846,14 +924,14 @@ export function linkFeedbackToGitHubIssue(
 // ── Public API: Memory ──────────────────────────────────────────────
 
 /** Store a new community fact */
-export function addMemory(fact: string, category: string = 'general', source: string = 'owner'): MemoryEntry {
+export function addMemory(fact: string, category: string = 'general', source: string = 'owner'): LocalMemoryEntry {
   const ts = Math.floor(Date.now() / 1000);
   const result = insertMemory.run(fact, category, source, ts);
   return { id: Number(result.lastInsertRowid), fact, category, source, created_at: ts };
 }
 
 /** Get all stored memories */
-export function getAllMemories(): MemoryEntry[] {
+export function getAllMemories(): LocalMemoryEntry[] {
   return (selectAllMemories.all() as MemoryRow[]).map(mapMemoryEntry);
 }
 
@@ -1371,6 +1449,15 @@ export function createSqliteBackend(): DbBackend {
     },
     getWhatsAppSafetyMetrics: async (hourSince: number, daySince: number) =>
       getWhatsAppSafetyMetrics(hourSince, daySince),
+
+    enqueueBridgeOutbox: async (envelope: BridgeEnvelope) => enqueueBridgeOutbox(envelope),
+    claimDueBridgeOutbox: async (limit: number) => claimDueBridgeOutbox(limit),
+    markBridgeOutboxSent: async (id: number) => markBridgeOutboxSent(id),
+    markBridgeOutboxDead: async (id: number, error: string) => markBridgeOutboxDead(id, error),
+    bumpBridgeOutboxAttempt: async (id: number, nextAt: number, error: string) =>
+      bumpBridgeOutboxAttempt(id, nextAt, error),
+    bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
+    bridgeOutboxCounts: async () => bridgeOutboxCounts(),
 
     submitFeedback: async (
       type: 'suggestion' | 'bug',

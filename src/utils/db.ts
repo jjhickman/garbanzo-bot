@@ -5,7 +5,7 @@
 import { config } from './config.js';
 import { logger } from '../middleware/logger.js';
 import type { DbBackend } from './db-backend.js';
-import type { MemoryEntry } from './db-types.js';
+import type { LocalMemoryEntry, MemoryEntry, SharedMemoryEntry } from './db-types.js';
 import { deleteFact, indexFact } from './vector-memory.js';
 
 export type {
@@ -13,6 +13,8 @@ export type {
   AvailabilityResponse,
   BackfillSession,
   BackupIntegrityStatus,
+  BridgeOutboxCounts,
+  BridgeOutboxEntry,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
@@ -104,6 +106,15 @@ export const getWhatsAppSafetyState = backend.getWhatsAppSafetyState;
 export const setWhatsAppSafetyState = backend.setWhatsAppSafetyState;
 export const getWhatsAppSafetyMetrics = backend.getWhatsAppSafetyMetrics;
 
+// Bridge durable outbox and receiver deduplication
+export const enqueueBridgeOutbox = backend.enqueueBridgeOutbox;
+export const claimDueBridgeOutbox = backend.claimDueBridgeOutbox;
+export const markBridgeOutboxSent = backend.markBridgeOutboxSent;
+export const markBridgeOutboxDead = backend.markBridgeOutboxDead;
+export const bumpBridgeOutboxAttempt = backend.bumpBridgeOutboxAttempt;
+export const bridgeSeenInsert = backend.bridgeSeenInsert;
+export const bridgeOutboxCounts = backend.bridgeOutboxCounts;
+
 // Feedback
 export const submitFeedback = backend.submitFeedback;
 export const getOpenFeedback = backend.getOpenFeedback;
@@ -118,7 +129,7 @@ export async function addMemory(
   fact: string,
   category?: string,
   source?: string,
-): Promise<MemoryEntry> {
+): Promise<LocalMemoryEntry> {
   const entry = await backend.addMemory(fact, category, source);
   void indexFact({
     refId: String(entry.id),
@@ -138,16 +149,33 @@ export async function deleteMemory(id: number): Promise<boolean> {
 export async function searchMemory(keyword: string, limit = 10): Promise<MemoryEntry[]> {
   const { searchFacts } = await import('./vector-memory.js');
   const hits = await searchFacts(keyword, limit);
+  let localResults: MemoryEntry[];
   if (hits.length > 0) {
-    return hits.map((h) => ({
+    localResults = hits.map((h) => ({
       id: Number(h.payload.refId),
       fact: h.payload.text,
       category: String(h.payload.extra?.category ?? 'general'),
       source: 'auto',
       created_at: h.payload.createdAt,
     }));
+  } else {
+    localResults = await backend.searchMemory(keyword, limit);
   }
-  return backend.searchMemory(keyword, limit);
+
+  if (!config.SHARED_MEMORY_ENABLED) return localResults;
+
+  const { searchSharedFacts } = await import('./vector-memory.js');
+  const sharedHits = await searchSharedFacts(keyword, 4);
+  const sharedResults: SharedMemoryEntry[] = sharedHits.map((hit) => ({
+    shared: true,
+    originInstance: hit.originInstance,
+    fact: hit.text,
+    category: hit.category,
+    source: 'shared',
+    created_at: 0,
+  }));
+
+  return [...localResults, ...sharedResults];
 }
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
 
