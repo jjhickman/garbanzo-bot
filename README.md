@@ -124,7 +124,7 @@ docker compose up -d
 # Grafana: http://<host>:3000 (login: admin / your MONITORING_TOKEN)
 ```
 
-For a guided setup, run `npm run setup`. The wizard leads with Discord and writes `.env`, `.env.discord`, and `.env.whatsapp` as needed.
+For a guided setup, run `npm run setup`. The wizard leads with Discord and writes `.env` plus the env file for the platform you pick.
 
 ## Table of Contents
 [Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Monitoring & Observability](#monitoring--observability) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)

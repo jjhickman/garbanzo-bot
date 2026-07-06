@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-**Garbanzo** is a multi-platform community bot serving a 120+ member Boston-area meetup group. WhatsApp (via the Baileys unofficial WhatsApp Web API) is the production platform; Discord, Slack, and Teams adapters exist behind a shared platform abstraction (`src/core/` + `src/platforms/`). Messages route to AI models via a configurable cloud failover order (`AI_PROVIDER_ORDER`) plus local Ollama for simple queries.
+**Garbanzo** is a multi-platform community bot. Discord (official Gateway API) is the first-class default platform; WhatsApp (via the Baileys unofficial WhatsApp Web API) is fully supported and runs the original 120+ member Boston-area meetup deployment. Platform adapters sit behind a shared abstraction (`src/core/` + `src/platforms/`), and instances compose via docker profiles. Messages route to AI models via a configurable cloud failover order (`AI_PROVIDER_ORDER`) plus local Ollama for simple queries.
 
 The bot's persona is **Garbanzo Bean** 🫘 — a warm, direct, Boston-savvy community connector.
 
 ## Stack
 
 - **Runtime:** Node.js 20+ with TypeScript (ES Modules)
-- **WhatsApp:** `@whiskeysockets/baileys` v6 (multi-device, socket-based)
+- **WhatsApp:** `@whiskeysockets/baileys` v7 (multi-device, socket-based)
 - **AI:** Configurable cloud failover order (`AI_PROVIDER_ORDER`) + Ollama (local for simple queries)
 - **Validation:** Zod for runtime type checking
 - **Logging:** Pino
@@ -131,7 +131,7 @@ garbanzo-bot/
 │   │   ├── groups-config.ts  # Group config, JID mapping, per-group personas
 │   │   └── vision.ts, poll-payload.ts, message-ref.ts
 │   ├── platforms/            # One directory per platform, each with adapter + runtime
-│   │   ├── whatsapp/         # PRODUCTION. Baileys socket, anti-ban outbound safety,
+│   │   ├── whatsapp/         # Baileys socket, anti-ban outbound safety,
 │   │   │                     #   owner commands, login server/store, digest, recaps,
 │   │   │                     #   event reminders, media, mentions, reactions
 │   │   ├── discord/          # Gateway runtime + demo server

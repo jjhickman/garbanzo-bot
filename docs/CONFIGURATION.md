@@ -93,7 +93,7 @@ cp .env.discord.example .env.discord
 | `MEMORY_AUTO_EXTRACT_MIN_MESSAGES` | No | Per-group messages required between extraction attempts (default: `25`) |
 | `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
 | `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
-| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `deterministic` (default) or `openai` |
+| `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `openai` (default) or `deterministic` |
 | `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
 | `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
 | `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
@@ -117,10 +117,11 @@ Features degrade gracefully when API keys are missing — the bot won't crash, i
 ## Setup Wizard
 
 Run `npm run setup` for an interactive setup. The wizard leads with Discord,
-then writes the shared `.env` plus `.env.discord` and/or `.env.whatsapp` based
-on the selected platform profiles. Shared provider, monitoring, vector, and
-integration values stay in `.env`; platform-only values stay in the platform
-layer.
+then writes the shared `.env` plus the env file for the platform you selected
+(`.env.discord` or `.env.whatsapp`). To run both platforms, run the wizard
+once per platform or copy the other example file by hand. Shared provider,
+monitoring, vector, and integration values stay in `.env`; platform-only
+values stay in the platform layer.
 
 ## Owner admin page
 
