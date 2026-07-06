@@ -6,6 +6,8 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-07-06
+
 ### Breaking changes
 
 - Docker Compose now uses platform profiles in one file. Set `COMPOSE_PROFILES` and migrate to `.env`, `.env.discord`, and `.env.whatsapp` before deploying v2.
