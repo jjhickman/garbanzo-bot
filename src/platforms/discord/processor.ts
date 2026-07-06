@@ -8,6 +8,7 @@ import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
+import { captureForBridge } from '../../bridge/capture-hook.js';
 
 import type { DiscordInbound } from './inbound.js';
 import {
@@ -207,6 +208,8 @@ async function processDiscordInbound(
         await messenger.sendText(m.chatId, response, { replyTo: m.raw });
       }
     },
+
+    captureForBridge,
   }, {
     ownerId: env.ownerId,
     isGroupEnabled: channelEnabled,

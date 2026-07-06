@@ -8,6 +8,7 @@ import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
 import type { SlackInbound } from './inbound.js';
 import { isFeatureEnabled } from '../../core/groups-config.js';
+import { captureForBridge } from '../../bridge/capture-hook.js';
 
 const SlackEventSchema = z.object({
   type: z.string().optional(),
@@ -147,6 +148,8 @@ async function processSlackInbound(
         await messenger.sendText(m.chatId, response, { replyTo: m.raw });
       }
     },
+
+    captureForBridge,
   }, {
     ownerId: env.ownerId,
     isGroupEnabled: () => true,

@@ -980,6 +980,10 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       throw new Error('Bridge deduplication is not implemented for postgres backend yet');
     },
 
+    async bridgeSeenDelete(_key: string): Promise<boolean> {
+      throw new Error('Bridge deduplication is not implemented for postgres backend yet');
+    },
+
     async bridgeOutboxCounts(): Promise<BridgeOutboxCounts> {
       throw new Error('Bridge outbox is not implemented for postgres backend yet');
     },

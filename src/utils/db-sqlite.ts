@@ -510,6 +510,9 @@ const updateBridgeOutboxAttempt = db.prepare(
 const insertBridgeSeen = db.prepare(
   `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
 );
+const deleteBridgeSeen = db.prepare(
+  `DELETE FROM bridge_seen WHERE idempotency_key = ?`,
+);
 const insertBridgeBuffer = db.prepare(
   `INSERT INTO bridge_buffer (route_id, envelope_json, buffered_at) VALUES (?, ?, ?)`,
 );
@@ -911,6 +914,17 @@ export function bumpBridgeOutboxAttempt(id: number, nextAt: number, error: strin
 
 export function bridgeSeenInsert(key: string): boolean {
   return insertBridgeSeen.run(key, Date.now()).changes > 0;
+}
+
+/**
+ * Remove a dedup key inserted by `bridgeSeenInsert`. Used when a delivery
+ * attempt throws AFTER the key was inserted (T6-review required fix): without
+ * this, a thrown delivery error would leave the key seen, so the sender's
+ * retry of the SAME message would be silently dropped as a duplicate instead
+ * of being retried fresh.
+ */
+export function bridgeSeenDelete(key: string): boolean {
+  return deleteBridgeSeen.run(key).changes > 0;
 }
 
 export function bridgeOutboxCounts(): BridgeOutboxCounts {
@@ -1572,6 +1586,7 @@ export function createSqliteBackend(): DbBackend {
     bumpBridgeOutboxAttempt: async (id: number, nextAt: number, error: string) =>
       bumpBridgeOutboxAttempt(id, nextAt, error),
     bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
+    bridgeSeenDelete: async (key: string) => bridgeSeenDelete(key),
     bridgeOutboxCounts: async () => bridgeOutboxCounts(),
 
     appendBridgeBuffer: async (routeId: string, envelopeJson: string): Promise<void> => {

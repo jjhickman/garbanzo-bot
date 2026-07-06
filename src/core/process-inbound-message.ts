@@ -33,6 +33,14 @@ export interface CoreMessageHooks {
     inbound: InboundMessage;
     text: string;
   }): Promise<void>;
+
+  /**
+   * Optional cross-platform bridge relay capture, called once right before
+   * dispatch. Implementations MUST be synchronous and fire-and-forget (never
+   * throw, never block) — see `src/bridge/relay-capture.ts`. Core stays
+   * bridge-agnostic: this file never imports anything from `src/bridge/`.
+   */
+  captureForBridge?(inbound: InboundMessage): void;
 }
 
 /**
@@ -178,6 +186,13 @@ export async function processInboundMessage(
       logger.error({ err, remoteJid: inbound.chatId, senderJid: inbound.senderId, msgId: inbound.messageId }, 'Failed to send reaction');
     }
     return;
+  }
+
+  // Bridge relay capture — fire-and-forget, must never block or fail the reply path.
+  try {
+    hooks.captureForBridge?.(inbound);
+  } catch (err) {
+    logger.error({ err, chatId: inbound.chatId }, 'Bridge capture hook threw synchronously');
   }
 
   // Dispatch

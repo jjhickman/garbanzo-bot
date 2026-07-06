@@ -1,5 +1,6 @@
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
+import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import type { PlatformRuntime } from '../types.js';
 
 import { createDiscordAdapter } from './adapter.js';
@@ -47,6 +48,7 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
     scheduleWeeklyRecap: deps.scheduleWeeklyRecap ?? scheduleDiscordWeeklyRecap,
   };
   let gatewayClient: DiscordGatewayRuntimeClient | null = null;
+  let currentMessenger: PlatformMessenger | null = null;
   const disposers: Array<() => void> = [];
 
   function disposeAll(): void {
@@ -66,6 +68,7 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
 
       if (token && config.DISCORD_GATEWAY_ENABLED) {
         const adapter = runtimeDeps.createAdapter(token);
+        currentMessenger = adapter;
         const ownerUserId = runtimeDeps.getOwnerId();
 
         if (!ownerUserId) {
@@ -145,9 +148,13 @@ export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRun
       disposeAll();
       const client = gatewayClient;
       gatewayClient = null;
+      currentMessenger = null;
       if (client) {
         await client.stop();
       }
+    },
+    getMessenger(): PlatformMessenger | null {
+      return currentMessenger;
     },
   };
 }

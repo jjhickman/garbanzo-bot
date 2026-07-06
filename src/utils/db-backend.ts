@@ -104,6 +104,7 @@ export interface DbBackend {
   markBridgeOutboxDead(id: number, error: string): Promise<boolean>;
   bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
   bridgeSeenInsert(key: string): Promise<boolean>;
+  bridgeSeenDelete(key: string): Promise<boolean>;
   bridgeOutboxCounts(): Promise<BridgeOutboxCounts>;
 
   // Bridge summary buffer (rate-safe WhatsApp relay mode, Task 7)

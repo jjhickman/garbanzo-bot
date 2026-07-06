@@ -115,6 +115,7 @@ export const markBridgeOutboxSent = backend.markBridgeOutboxSent;
 export const markBridgeOutboxDead = backend.markBridgeOutboxDead;
 export const bumpBridgeOutboxAttempt = backend.bumpBridgeOutboxAttempt;
 export const bridgeSeenInsert = backend.bridgeSeenInsert;
+export const bridgeSeenDelete = backend.bridgeSeenDelete;
 export const bridgeOutboxCounts = backend.bridgeOutboxCounts;
 
 // Bridge summary buffer (rate-safe WhatsApp relay mode, Task 7)
