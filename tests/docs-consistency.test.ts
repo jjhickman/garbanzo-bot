@@ -104,9 +104,9 @@ function markdownImages(text: string): string[] {
 
 function isScopedRelativeDocLink(target: string): boolean {
   const cleanTarget = target.replace(/^<|>$/g, '');
-  return cleanTarget.startsWith('./')
-    || cleanTarget.startsWith('../')
-    || cleanTarget.startsWith('docs/');
+  // Any non-URL, non-anchor target is treated as repo-relative so bare paths
+  // like deploy/helm/README.md or scripts/garbanzo.service are checked too.
+  return !/^(?:https?:|mailto:|#)/i.test(cleanTarget);
 }
 
 function isLocalImageTarget(target: string): boolean {

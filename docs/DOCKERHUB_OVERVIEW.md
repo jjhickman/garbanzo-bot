@@ -7,7 +7,7 @@ Garbanzo is an AI chat operations platform packaged for Docker-first self-hostin
 This image is built for operators and small teams that want:
 
 - Multi-provider AI routing with configurable failover order across OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, plus optional local Ollama
-- **Native tool calling** — the model invokes weather/transit/venues/news/books/memory integrations mid-reply
+- **Native tool calling**: the model invokes weather/transit/venues/news/books/memory integrations mid-reply
 - Session memory with vector retrieval, plus **automatic community-memory extraction** (opt-in)
 - Cross-instance bridging for mapped Discord channels and WhatsApp groups over HTTP or AMQP
 - Multi-instance deployment with `INSTANCE_ID`, isolated volumes, and same-account WhatsApp linked-device patterns
@@ -62,9 +62,9 @@ Grafana, append `,monitoring`, set `METRICS_ENABLED=true`, and set
 ## Key Features
 
 - **AI routing:** configurable provider failover order across OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter with per-provider model overrides
-- **Tool calling:** opt-in native function calling (`AI_TOOL_CALLING`) so members ask naturally — "is the red line running?" — instead of using bang commands
+- **Tool calling:** opt-in native function calling (`AI_TOOL_CALLING`) lets members ask naturally ("is the red line running?") without bang commands
 - **Community memory:** owner-curated facts plus opt-in automatic extraction (`MEMORY_AUTO_EXTRACT`), injected into the AI prompt and managed with `!memory`
-- **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
+- **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval, so the bot remembers what was discussed across sessions
 - **Vector memory:** session summaries and community facts are embedded into a self-hosted Qdrant store, with automatic keyword fallback when Qdrant is unavailable
 - **RAG federation:** read-only Qdrant sources from `config/rag-sources.json` can add bounded source hits to prompts
 - **Storage:** SQLite (default) or Postgres for relational state; Qdrant for vectors
