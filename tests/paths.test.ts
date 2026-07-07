@@ -228,12 +228,14 @@ describe('config env layering honors GARBANZO_HOME', () => {
 // PACKAGE_ROOT (isPackagedInstall() above treats a present sentinel as an
 // installed topology, no questions asked).
 describe('no stale packaged sentinel after a plain build', () => {
+  // A cold tsc on a CI runner can exceed vitest's 5s default (same pattern
+  // as the helm lint test): give the compile an explicit budget.
   it('dist/.packaged does not exist after `npm run build`', () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const sentinelPath = join(repoRoot, 'dist', '.packaged');
 
-    execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'pipe' });
+    execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'pipe', timeout: 110_000 });
 
     expect(existsSync(sentinelPath)).toBe(false);
-  });
+  }, 120_000);
 });
