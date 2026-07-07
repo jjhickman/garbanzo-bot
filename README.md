@@ -49,21 +49,17 @@ Node.js 20+ is required either way. Docker Compose is only needed for the full-s
 ### Quick start (no Docker)
 
 ```bash
-git clone https://github.com/jjhickman/garbanzo-bot.git
-cd garbanzo-bot
-npm ci
-npm run setup
+npx garbanzo-bot setup
 ```
 
-The wizard collects your AI provider keys, your messaging platform, and (for Discord) walks through the developer portal to gather a bot token, an owner user ID, and at least one channel to enable. When it finishes:
+The wizard collects your AI provider keys, your messaging platform, and (for Discord) walks through the developer portal to gather a bot token, an owner user ID, and at least one channel to enable. Configuration and data live in `~/.garbanzo`. To run the bot and keep it running:
 
 ```bash
-npm run build && npm start
+npm install -g garbanzo-bot
+garbanzo start
 ```
 
-Check your environment with `node dist/cli.js doctor` (Node version, config files, provider keys, optional binaries) and install a service that survives reboots with `node dist/cli.js service install` (systemd on Linux, launchd on macOS). Once the `garbanzo-bot` package is published, both become `garbanzo doctor` and `garbanzo service install`.
-
-> Coming soon: once `garbanzo-bot` is published to npm, this door becomes `npx garbanzo-bot setup`, with no git clone required.
+Check your environment with `garbanzo doctor` (Node version, config files, provider keys, optional binaries) and install a service that survives reboots with `garbanzo service install` (systemd on Linux, launchd on macOS). Prefer working from a checkout? The git-clone path works the same: clone, `npm ci`, `npm run setup`, then `npm run build && npm start`.
 
 This path skips the monitoring stack, the RabbitMQ bridging transport, and container isolation, and defaults to keyword-only memory (`VECTOR_STORE=none`) instead of Qdrant semantic memory. See [docs/QUICKSTART.md](docs/QUICKSTART.md) for the full walkthrough, including updates, backups, running as a service, and enabling Qdrant.
 
