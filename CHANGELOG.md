@@ -6,6 +6,8 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-07-06
+
 ### Added
 
 - Cross-platform bridging (`BRIDGE_ENABLED`, default off): message relay between mapped Discord channels and WhatsApp groups defined in `config/bridge-map.json`, with a durable per-instance outbox, `http` and `amqp` (RabbitMQ) transports, and a receiver endpoint at `/bridge/inbound` on the health port.
