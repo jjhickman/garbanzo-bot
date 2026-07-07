@@ -2,11 +2,11 @@
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
-Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers with optional local Ollama, then applies community workflows and integrations inside group chat.
+Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers with optional local OpenAI API-compatible providers, then applies community workflows and integrations inside group chat.
 
 This image is built for operators and small teams that want:
 
-- Multi-provider AI routing with configurable failover order across OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, plus optional local Ollama
+- Multi-provider AI routing with configurable failover order across OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, plus any local OpenAI API-compatible provider
 - **Native tool calling**: the model invokes weather/transit/venues/news/books/memory integrations mid-reply
 - Session memory with vector retrieval, plus **automatic community-memory extraction** (opt-in)
 - Cross-instance bridging for mapped Discord channels and WhatsApp groups over HTTP or AMQP
@@ -18,7 +18,7 @@ This image is built for operators and small teams that want:
 - Docker-first deployment with persistent auth, SQLite or Postgres state, and a self-hosted Qdrant vector store for semantic recall
 - RAG federation for read-only Qdrant sources at prompt time
 - Helm chart under `deploy/helm/` for Kubernetes operators
-- Band mode (`BAND_FEATURES_ENABLED`): the same image runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription
+- Band features (`BAND_FEATURES_ENABLED`): an optional feature set for bands with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription
 
 ## Quick Start (Docker Compose)
 
@@ -71,7 +71,7 @@ Grafana, append `,monitoring`, set `METRICS_ENABLED=true`, and set
 - **Platforms:** Discord (default Gateway runtime with opt-in channels), WhatsApp (Baileys runtime with browser login and anti-ban outbound safety), Slack (support plus demo mode)
 - **Bridging:** mapped chats relay between instances through HTTP or AMQP, with per-route summary or verbatim modes
 - **Multi-instance:** `INSTANCE_ID` separates deployment identity, metrics, shared-fact ids, and local vector collections; same-account WhatsApp deployments use separate linked-device auth volumes
-- **Band mode:** `BAND_FEATURES_ENABLED=true` turns on the Remy band assistant on the Discord profile (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`)
+- **Band features:** `BAND_FEATURES_ENABLED=true` turns on the band feature set (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`)
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
 - **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
 - **Kubernetes:** Helm chart in `deploy/helm/` for operators who run Garbanzo on a cluster

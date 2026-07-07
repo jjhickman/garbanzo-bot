@@ -209,7 +209,7 @@ chmod +x .git/hooks/pre-commit
 - Dry-run (prints recommended config): `npm run host:fail2ban`
 - Apply (installs + writes `/etc/fail2ban/jail.d/garbanzo-sshd.local` + enables service):
   - `npm run host:fail2ban -- --apply`
-  - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 100.64.0.0/10 192.168.50.0/24"`
+  - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 <vpn-range> <lan-range>"`
 - Requires sudo (script now reports clearly when no interactive TTY is available)
 
 ## Runtime Hardening Updates
@@ -234,7 +234,7 @@ chmod +x .git/hooks/pre-commit
 
 | # | Finding | Fix Applied | Verified |
 |---|---------|-------------|----------|
-| 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`) | ✅ 4 rules active |
+| 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH plus your VPN and LAN ranges | ✅ 4 rules active |
 | 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
 | 4 | Tailscale Funnel exposing legacy services | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
 | 5 | Port 18790 on `0.0.0.0` | Stopped + disabled legacy webhooks service via `systemctl --user` | ✅ Port closed |

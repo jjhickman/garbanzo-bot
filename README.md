@@ -11,14 +11,14 @@ Self-hosted AI operations layer for group chat: Discord-first, WhatsApp-supporte
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Garbanzo runs useful AI workflows where a group already talks. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across Discord and WhatsApp instances from one codebase.
+Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord and WhatsApp today, with Telegram and Matrix adapters in development.
 
 ## Why Garbanzo
-- Runs on your hardware with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
-- One core pipeline spans Discord and WhatsApp, with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
-- Multi-provider AI routing covers OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, and local Ollama fallback. See [configuration](docs/CONFIGURATION.md).
+- Runs anywhere, including self-hosted, with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
+- One core pipeline spans multiple messaging platforms (WhatsApp, Discord, Slack, Telegram, and more), with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
+- Multi-provider AI routing covers OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, and *any* OpenAI API-compatible model provider, providing fallback and resiliency. See [configuration](docs/CONFIGURATION.md).
 - WhatsApp support includes browser login and outbound safety designed around the Baileys account-risk model. See the [outbound safety ADR](docs/ADR-0001-whatsapp-outbound-safety.md).
-- Persona, locale, provider order, integrations, groups, and deployment identity are configuration. Garbanzo is the framework; your instance can be named for your community.
+- The persona model shapes the whole bot: a markdown file defines who your bot is, how it talks, and what it cares about, and every surface follows it, including its name, replies, and prompts. Locale, provider order, integrations, and groups are configuration too. See [customization](docs/CUSTOMIZATION.md).
 
 <a id="features"></a>
 
@@ -26,13 +26,13 @@ Garbanzo runs useful AI workflows where a group already talks. It can answer que
 - **AI chat and memory** - mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
 - **Community workflows** - introductions, welcomes, summaries, event reminders, polls, profiles, recommendations, release notes, feedback, and owner digests. [Architecture](docs/ARCHITECTURE.md), [customization](docs/CUSTOMIZATION.md)
 - **Integrations** - weather, transit, venues, news, books, web search, D&D dice/lookups, character PDFs, speech transcription, and language detection. [Configuration](docs/CONFIGURATION.md)
-- **Band mode** - Remy mode on Discord adds songs, rehearsals, availability, setlists, practice agendas, idea capture, audio transcription, sections, and lyrics. [Remy deploy](docs/REMY_DEPLOY.md)
+- **Band features** - an optional feature set adds songs, rehearsals, availability, setlists, practice agendas, idea capture, audio transcription, sections, and lyrics. [Band deployment](docs/BAND_FEATURES.md)
 - **Moderation and safety** - mention gating, feature allowlists, prompt sanitization, owner alerts, rate limits, retry queues, and WhatsApp outbound controls. [Security](docs/SECURITY.md)
 - **Operations** - health and readiness endpoints, `/admin`, Prometheus metrics, Grafana dashboards, Uptime Kuma checks, backups, release pinning, Compose, Helm, and systemd. [Monitoring](docs/MONITORING.md), [backups](docs/BACKUPS.md)
 
 ## See It In Action
 
-Real outputs from deployed Garbanzo instances:
+Real interactions from communities powered by Garbanzo:
 
 | Capability | Screenshot |
 |---|---|
@@ -103,8 +103,9 @@ Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 - **Discord** - default runtime using the official Gateway API, opt-in channels, owner escalation, welcomes, scheduled recaps, reminders, and band-mode roles.
 - **WhatsApp** - fully supported through Baileys v7, browser login, linked-device auth persistence, group config, and anti-ban outbound safety.
 - **Slack** - Events API support plus a local demo mode for pipeline checks.
+- **Telegram and Matrix** - the platform architecture supports them; adapters are in development.
 
-Bridging connects one Discord channel and one WhatsApp group into a single operating room while keeping each bot instance independent. HTTP transport fits two instances; the `broker` profile adds RabbitMQ for larger or longer-outage topologies. Same-account WhatsApp companion instances use `WHATSAPP_CHAT_SCOPE=configured` and `WHATSAPP_SET_PROFILE_NAME=false` on secondary linked devices; hard isolation uses a second WhatsApp number. Start with [docs/BRIDGING.md](docs/BRIDGING.md).
+Bridging connects channels and groups across platforms into a single conversation while keeping each bot instance independent. Transports scale from a simple two-instance setup to a message broker for larger topologies, and instances can share one account or stay fully isolated. Setup, topology options, and rate-safety details live in [docs/BRIDGING.md](docs/BRIDGING.md).
 
 ## Memory & Knowledge
 - **Conversation context** keeps recent chat available to the model.
@@ -119,7 +120,7 @@ See [docs/RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [docs/BRIDGING.md](docs/BR
 
 ## AI Routing
 
-Set `AI_PROVIDER_ORDER` to choose cloud failover order across OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter. Ollama can handle simple local queries through `OLLAMA_BASE_URL` and `OLLAMA_MODEL`. Native tool calling is controlled by `AI_TOOL_CALLING`; when enabled, providers can call Garbanzo integrations during a reply.
+Set `AI_PROVIDER_ORDER` to choose failover order across OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter, and point simple queries at any OpenAI API-compatible model provider, local or remote. Native tool calling is controlled by `AI_TOOL_CALLING`; when enabled, providers can call Garbanzo integrations during a reply.
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
@@ -151,7 +152,7 @@ See [deploy/helm/README.md](deploy/helm/README.md). Native Node deployments can 
 
 ## Monitoring & Backups
 
-`MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and the Grafana admin password fallback. With `COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`, the dashboard has a `$job` picker for all instances or one service at a time. Uptime Kuma should watch `/health/ready` on `3002` for Discord and `3001` for WhatsApp.
+`MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and the Grafana admin password fallback. With `COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`, the dashboard has a `$job` picker for all instances or one service at a time. Monitoring services should watch `/health/ready` on the configured port for each messaging instance.
 
 <p align="center">
   <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoints" />
@@ -163,7 +164,7 @@ Nightly off-machine backup guidance covers credentials, database state, verifica
 
 ## Customizing For Your Community
 
-Garbanzo is configurable first. The flagship deployment happens to be Boston-area because its env values, group mappings, persona files, and transit settings are Boston-specific.
+Garbanzo is configurable first. The default persona is a Boston meetup WhatsApp community bot.
 
 - Persona identity comes from [docs/PERSONA.md](docs/PERSONA.md) and optional platform persona files.
 - Locale behavior comes from env values for weather, transit, venue search, news, web search, and language settings.
@@ -193,7 +194,7 @@ Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Project principles: 
 
 Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [PERSONA.md](docs/PERSONA.md)
 
-Operations: [BRIDGING.md](docs/BRIDGING.md), [RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [POSTGRES_MIGRATION_RUNBOOK.md](docs/POSTGRES_MIGRATION_RUNBOOK.md), [ADR-0001-whatsapp-outbound-safety.md](docs/ADR-0001-whatsapp-outbound-safety.md)
+Operations: [BRIDGING.md](docs/BRIDGING.md), [RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [RELEASES.md](docs/RELEASES.md), [BAND_FEATURES.md](docs/BAND_FEATURES.md), [POSTGRES_MIGRATION_RUNBOOK.md](docs/POSTGRES_MIGRATION_RUNBOOK.md), [ADR-0001-whatsapp-outbound-safety.md](docs/ADR-0001-whatsapp-outbound-safety.md)
 
 Design and development: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 

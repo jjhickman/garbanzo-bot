@@ -6,9 +6,9 @@ Garbanzo is a Discord-first, multi-platform community bot. One process runs one 
 ## Runtime Shape
 
 - **Entry and lifecycle:** startup, config validation, health server, maintenance jobs, bridge lifecycle, and platform runtime selection.
-- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp is fully supported through Baileys and the outbound-safety layer. Slack has a scaffold and demo support. Teams is a stub.
+- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp and Discord are fully supported. Slack, Telegram, and Matrix are in development.
 - **Core pipeline:** platform-neutral inbound processing, group command routing, owner DM routing, response generation, and outbound messenger contracts.
-- **AI layer:** provider failover through `AI_PROVIDER_ORDER`, optional local Ollama for simple queries, shared tool definitions, and provider-specific request builders.
+- **AI layer:** provider failover through `AI_PROVIDER_ORDER`, optional local OpenAI API-compatible AI provider for simple queries, shared tool definitions, and provider-specific request builders.
 - **Persistence:** SQLite is the default source of record. Postgres support exists behind the database backend layer for managed deployments.
 - **Vector memory:** Qdrant is the single vector store for semantic memory and shared facts. `VECTOR_STORE=none` falls back to keyword-only memory search.
 - **Operations:** Pino logs, health/readiness endpoints, token-gated admin and metrics surfaces, Prometheus/Grafana, retries, stats, and backup metadata.
