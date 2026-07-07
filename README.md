@@ -1,5 +1,8 @@
 # Garbanzo
-> Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
+
+Self-hosted AI operations layer for group chat: Discord-first, WhatsApp-supported, and bridgeable into one conversation.
+
+> Website: https://garbanzobot.com | Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
 
@@ -8,239 +11,59 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Garbanzo is an AI chat operations platform for communities and small teams. It combines multi-provider LLM routing, practical automations, and Docker-first deployment so you can run useful AI workflows directly in group chat.
+Garbanzo runs useful AI workflows where a group already talks. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across Discord and WhatsApp instances from one codebase.
 
-**Website:** [garbanzobot.com](https://garbanzobot.com)
-<p align="center">
-  <a href="https://garbanzobot.com"><img src="docs/assets/screenshots/site/garbanzobot-home.png" width="900" alt="garbanzobot.com — hero with a live WhatsApp-style chat panel showing Garbanzo answering a transit question" /></a>
-</p>
+## Why Garbanzo
+- Runs on your hardware with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
+- One core pipeline spans Discord and WhatsApp, with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
+- Multi-provider AI routing covers OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, and local Ollama fallback. See [configuration](docs/CONFIGURATION.md).
+- WhatsApp support includes browser login and outbound safety designed around the Baileys account-risk model. See the [outbound safety ADR](docs/ADR-0001-whatsapp-outbound-safety.md).
+- Persona, locale, provider order, integrations, groups, and deployment identity are configuration. Garbanzo is the framework; your instance can be named for your community.
 
-## Highlights
-- Multi-provider LLM routing (OpenAI GPT-5 via the Responses API, Claude, Gemini, Bedrock, OpenRouter) with failover, native tool calling, and optional local Ollama for low-cost/simple traffic.
-- Community workflows for introductions, summaries, events + reminders, polls, recommendations, feedback, curated **and automatic** community memory, weekly recaps, and owner digests.
-- Practical integrations for weather, MBTA transit, news, venues, books, D&D dice/lookups, and character sheet PDFs — callable by name or invoked naturally by the model when tool calling is on.
-- Discord runtime (discord.js Gateway) with opt-in channels, WhatsApp runtime (Baileys v7) with browser login and anti-ban outbound safety, and Slack support with demo mode.
-- Band mode (`BAND_FEATURES_ENABLED`): the same image also runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription.
-- Operational guardrails: health/readiness endpoints, verified off-machine backups, anti-ban outbound safety, retry queue, moderation review (edit-aware), rate limits, and per-group feature allowlists.
-- Observability built in: token-gated `/admin` usage & cost page, Prometheus metrics, and a pre-provisioned Grafana dashboard enabled with the `monitoring` compose profile.
-- Docker-first deployment with SQLite by default, optional Postgres, and a self-hosted Qdrant vector store for semantic recall.
-- Cross-platform bridging: relay chat between Discord and WhatsApp instances and share curated community memory across them, off by default — see [docs/BRIDGING.md](docs/BRIDGING.md).
+<a id="features"></a>
 
-## See it in action
-A few real screenshots from Garbanzo in WhatsApp (real outputs, not mockups).
+## What It Does
+- **AI chat and memory** - mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
+- **Community workflows** - introductions, welcomes, summaries, event reminders, polls, profiles, recommendations, release notes, feedback, and owner digests. [Architecture](docs/ARCHITECTURE.md), [customization](docs/CUSTOMIZATION.md)
+- **Integrations** - weather, transit, venues, news, books, web search, D&D dice/lookups, character PDFs, speech transcription, and language detection. [Configuration](docs/CONFIGURATION.md)
+- **Band mode** - Remy mode on Discord adds songs, rehearsals, availability, setlists, practice agendas, idea capture, audio transcription, sections, and lyrics. [Remy deploy](docs/REMY_DEPLOY.md)
+- **Moderation and safety** - mention gating, feature allowlists, prompt sanitization, owner alerts, rate limits, retry queues, and WhatsApp outbound controls. [Security](docs/SECURITY.md)
+- **Operations** - health and readiness endpoints, `/admin`, Prometheus metrics, Grafana dashboards, Uptime Kuma checks, backups, release pinning, Compose, Helm, and systemd. [Monitoring](docs/MONITORING.md), [backups](docs/BACKUPS.md)
 
-### Help + command discovery
-In a busy group chat, "help" should be fast, readable, and copy/pasteable.
-<p align="center">
-  <img src="docs/assets/screenshots/real/help-usage.jpg" width="420" alt="Help + command discovery" />
-</p>
+## See It In Action
 
-### Introductions welcome
-Introductions are the one place Garbanzo replies without needing an @mention.
-<p align="center">
-  <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="420" alt="Introductions welcome" />
-</p>
+Real outputs from deployed Garbanzo instances:
 
-### Weather report
-Quick, local weather for planning (default city is configurable).
-<p align="center">
-  <img src="docs/assets/screenshots/real/weather-report.jpg" width="420" alt="Weather report" />
-</p>
-
-### MBTA alerts
-Transit alerts + delays when the group is trying to meet up.
-<p align="center">
-  <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="420" alt="MBTA alerts" />
-</p>
-
-### Restaurant recommendations
-Local recommendations tuned to Boston-area neighborhoods.
-<p align="center">
-  <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="420" alt="Restaurant recommendations" />
-</p>
-
-### Local news
-Quick headlines and links when someone asks what's happening in the city.
-<p align="center">
-  <img src="docs/assets/screenshots/real/news.jpg" width="420" alt="Local news" />
-</p>
-
-### Book recommendations
-A lightweight example of "community concierge" behavior beyond Q&A.
-<p align="center">
-  <img src="docs/assets/screenshots/real/book-recommendations.jpg" width="420" alt="Book recommendations" />
-</p>
-
-### D&D character sheet generator
-Structured output + a real PDF attachment for tabletop groups.
-<p align="center">
-  <img src="docs/assets/screenshots/real/dnd-character.jpg" width="420" alt="D&D character sheet generator" />
-</p>
+| Capability | Screenshot |
+|---|---|
+| Help and command discovery | <img src="docs/assets/screenshots/real/help-usage.jpg" width="300" alt="Help and command discovery" /> |
+| First-time introduction welcome | <img src="docs/assets/screenshots/real/introductions-welcome.jpg" width="300" alt="Introduction welcome" /> |
+| Local weather planning | <img src="docs/assets/screenshots/real/weather-report.jpg" width="300" alt="Weather report" /> |
+| Transit alerts | <img src="docs/assets/screenshots/real/mbta-alerts.jpg" width="300" alt="Transit alerts" /> |
+| Local recommendations | <img src="docs/assets/screenshots/real/restaurant-recommendations.jpg" width="300" alt="Restaurant recommendations" /> |
 
 ## Quick Start
-Requirements: Docker + Docker Compose for the default deployment; Node.js 20+ only for the setup wizard and local development.
+
+Requirements: Docker and Docker Compose for the default path. Node.js 20+ is only needed for the setup wizard and local development.
 
 ```bash
-# 1. Clone
 git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
 
-# 2. Create shared env and choose profiles
 cp .env.example .env
-# In .env: set COMPOSE_PROFILES=discord, add one AI provider key, and set MONITORING_TOKEN if using monitoring.
-
-# 3. Create a platform env file. Discord is the default profile.
 cp .env.discord.example .env.discord
-# Fill in DISCORD_BOT_TOKEN, DISCORD_OWNER_ID, and channel config.
 cp config/discord-channels.example.json config/discord-channels.json
-
-# Optional WhatsApp instance:
-# cp .env.whatsapp.example .env.whatsapp
-# In .env: set COMPOSE_PROFILES=discord,whatsapp
-# Fill in OWNER_JID and WhatsApp settings.
-
-# 4. Start the selected profile set
-docker compose up -d
-
-# Optional: pull official Docker Hub image directly or pin the compose image
-# docker pull jjhickman/garbanzo:3.1.0
-# APP_VERSION=3.1.0 docker compose pull
-# APP_VERSION=3.1.0 docker compose up -d
-
-# 5. Watch logs
-docker compose logs -f discord
-# For WhatsApp: docker compose logs -f whatsapp
-
-# 6. Health check
-curl http://127.0.0.1:3002/health
-# For WhatsApp: curl http://127.0.0.1:3001/health
-
-# 7. First AI response test (in chat)
-# @garbanzo !summary
-# @garbanzo plan dinner in somerville this friday
-
-# Optional: monitoring stack (Prometheus + Grafana dashboard)
-# In .env: set COMPOSE_PROFILES=discord,monitoring, METRICS_ENABLED=true, and MONITORING_TOKEN.
-docker compose up -d
-# Grafana: http://<host>:3000 (login: admin / your MONITORING_TOKEN)
 ```
 
-For a guided setup, run `npm run setup`. The wizard leads with Discord and writes `.env` plus the env file for the platform you pick.
+In `.env`, set:
 
-## Table of Contents
-[Features](#features) · [Configuration](#configuration) · [Platforms & Login](#platforms--login) · [AI Providers & Routing](#ai-providers--routing) · [Deployment](#deployment) · [Monitoring & Observability](#monitoring--observability) · [Customizing for Your Community](#customizing-for-your-community) · [Architecture & Stack](#architecture--stack) · [Development](#development) · [Docs](#docs) · [Contributing - Support - License](#contributing---support---license)
+```bash
+COMPOSE_PROFILES=discord
+AI_PROVIDER_ORDER=openai,anthropic
+MONITORING_TOKEN=<pin-a-token-if-using-admin-or-monitoring>
+```
 
-## Features
-### AI Chat Capabilities
-- Responds to `@garbanzo` mentions with configurable cloud AI failover order (`AI_PROVIDER_ORDER`)
-- **Native tool calling** (`AI_TOOL_CALLING`) — the model invokes weather/transit/venues/news/books/memory tools mid-reply, so members ask naturally instead of using commands
-- **Automatic community memory** (`MEMORY_AUTO_EXTRACT`) — durable facts are extracted asynchronously from conversation, deduped, capped, and curated with `!memory`
-- Local Ollama fallback for simple queries (model via `OLLAMA_MODEL`; runs 1-3B models on a Pi 5 — see docs/INFRASTRUCTURE.md)
-- Conversation context from SQLite or Postgres — remembers recent messages per group
-- **Session memory** — conversations are sessionized by inactivity gap, extractively summarized, and stored with vector embeddings for long-horizon recall (e.g., "what did we decide about trivia last week?")
-- **Semantic retrieval** — session summaries and message hits are merged and reranked with a unified scoring model (recency decay, token overlap, coverage deduplication) before injection into the AI prompt
-- **Vector memory (Qdrant)** — session summaries and community facts are embedded with OpenAI `text-embedding-3-small` into a self-hosted Qdrant store; keyword search takes over automatically when Qdrant is unavailable, and `VECTOR_STORE=none` keeps keyword-only
-- Multi-language detection (14 languages) — responds in the user's language
-- Custom per-group persona — different tone per group (casual in General, structured in Events)
-- Context compression — recent messages verbatim, older messages extractively compressed, session summaries for long-range context
-### Community Workflows
-- **Introductions** — AI-powered personal welcomes for new member introductions (no @mention needed)
-- **Welcome messages** — greets new participants when they join a group
-- **Events** — detects event proposals, enriches with weather/transit/AI logistics, and posts a reminder before start time (`!events` to manage)
-- **Weekly recap** — `!recap` and a scheduled Sunday owner DM: 7-day totals, most active groups, unique participants
-- **Polls** — native WhatsApp polls: `!poll Question? / A / B / C`
-- **Profiles** — opt-in interest tracking: `!profile interests hiking, cooking`
-- **Recommendations** — `!recommend` suggests events based on your interests
-- **Summaries** — `!summary` / `!catchup` for "what did I miss?" recaps
-- **Feedback** — `!suggest`, `!bug`, `!upvote` for community-driven improvements
-- **Daily digest** — owner-only summary of daily bot activity
-### External Integrations
-- **Weather** — `!weather` / `!forecast` via Google Weather API (default: Boston)
-- **MBTA Transit** — `!transit` / `!mbta` for real-time alerts, predictions, schedules
-- **News** — `!news [topic]` via NewsAPI
-- **Venues** — `!venue bars in somerville` via Google Places API
-- **Books** — `!book [title]` via Open Library API
-### D&D 5e
-- **Dice** — `!roll 2d6+3`, `!roll d20`
-- **Lookups** — `!dnd spell fireball`, `!dnd monster goblin`
-- **Character sheets** — `!character elf wizard` generates a filled PDF (official WotC template, levels 1-20)
-### Fun
-- `!trivia` — random or category-specific trivia
-- `!fact` — random fun fact
-- `!today` — this day in history
-- `!icebreaker` — conversation starters (40 curated, Boston-themed)
-### Band Mode (Remy)
-Run the same bot as a band assistant on Discord. Everything below stays off unless `BAND_FEATURES_ENABLED=true`, so community deployments are unaffected.
-- **Song catalog** — `!song add/list/show/set/delete` with key, tempo, and status (idea, rough, tight, gig-ready)
-- **Rehearsals** — `!rehearsal schedule/list/show/cancel/note`, with a Discord reminder before each one
-- **Availability** — `!available <id> yes|no|maybe`, read back in `!rehearsal show`
-- **Setlists** — `!setlist create/add/remove/move/show`, ordered lists built from the song catalog
-- **Practice agenda** — `!agenda` shows the next rehearsal, songs needing work, and the current setlist
-- **Song ideas** — `!idea capture` from text or a dropped audio clip (transcribed via a Whisper server at `WHISPER_URL`); `!idea promote` turns an idea into a catalog song
-- **Sections and lyrics** — `!section` and `!lyrics` organize each song's structure, words, and chords
-
-Deploy band mode on the Discord profile with `.env.discord`, `BAND_FEATURES_ENABLED=true`, and `config/discord-channels.json`: [docs/REMY_DEPLOY.md](docs/REMY_DEPLOY.md)
-### Cross-platform bridging
-Off by default (`BRIDGE_ENABLED`, `SHARED_MEMORY_ENABLED`). Two independent tiers:
-- **Shared memory** — `!memory share <id>` / `!memory unshare <id>` explicitly copies a curated fact into a shared collection that other instances can read, namespaced by instance id so nothing collides and nothing is shared automatically.
-- **Message bridging** — `config/bridge-map.json` maps channels/groups across instances; relayed messages carry attribution (`Ana (Discord): ...`), and WhatsApp-bound relays default to a periodic digest so they never bypass the anti-ban outbound-safety layer.
-
-Works over plain HTTP for two instances, or a RabbitMQ broker profile for three or more. Full setup: [docs/BRIDGING.md](docs/BRIDGING.md)
-### Moderation & Safety
-- Content moderation: regex patterns + OpenAI Moderation API (human-in-the-loop)
-- Strike tracking with soft-mute after threshold
-- Input sanitization: control chars, message length, prompt injection detection
-- All flags sent to owner DM — bot never auto-acts on content
-### Owner Commands (DM only)
-- `!memory add/delete/search` — manage long-term community facts injected into AI context
-- `!feedback` — review pending suggestions and bug reports
-- `!release rules` — show member-facing release update rules
-- `!release preview <notes>` — lint + preview release notes without sending
-- `!release send <notes>` — broadcast release notes to all enabled groups
-- `!release send <group> <notes>` — broadcast release notes to one group
-- `!release send changelog [lines]` — broadcast latest changelog snippet
-- `!release internal <notes>` — keep update operator-only (no broadcast)
-- `!strikes` — view moderation strike counts
-- `!digest` — preview daily activity summary
-- `!recap` — weekly community recap (also DM'd every Sunday evening)
-- `!events` / `!events cancel <id>` — manage upcoming event reminders
-- `!whatsapp status|pause|resume|held|release|discard` — anti-ban outbound safety controls
-- `!support [broadcast]` — share support links (optionally to all groups)
-- `!catchup intros` — recent introduction summaries
-
-## Configuration
-Copy `.env.example` to `.env`, then set shared provider, monitoring, vector, and integration values. Copy `.env.discord.example` to `.env.discord` for Discord or `.env.whatsapp.example` to `.env.whatsapp` for WhatsApp. Group names, per-group personas, mention patterns, and feature allowlists live in platform config files under `config/`.
-Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
-Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
-
-<a id="platforms--login"></a>
-
-## Platforms & Login
-Discord is the default runtime and uses the official Gateway API. The bot reads and replies in opt-in channels, welcomes new members, and posts scheduled digests, recaps, and reminders (channel and role config lives in `config/discord-channels.json`). WhatsApp is fully supported through Baileys, an unofficial WhatsApp Web API, which carries account risk; keep the anti-ban safety layer enabled. Slack has support plus a local demo mode for pipeline verification without a full app setup.
-Setup details: [docs/PLATFORMS.md](docs/PLATFORMS.md)
-
-<a id="ai-providers--routing"></a>
-
-## AI Providers & Routing
-- **Multi-provider cloud failover:** route across Claude, OpenAI, Gemini, Bedrock, and OpenRouter with configurable priority (`AI_PROVIDER_ORDER`)
-- **Hybrid cloud + local mode:** use Ollama for low-cost/simple requests while reserving cloud models for high-complexity prompts
-- **Per-provider model control:** set explicit model overrides (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `BEDROCK_MODEL_ID`)
-- **Cost-aware operations:** token and pricing fields support practical cost tracking and routing decisions
-
-| Provider | Primary Strength | Typical Role in Routing |
-|----------|------------------|-------------------------|
-| Anthropic Claude | nuanced reasoning, long-form quality | quality fallback or alternate primary |
-| OpenAI | GPT-5 family via the Responses API, strong tool calling | default primary (`openai,anthropic`) |
-| Gemini | speed and cost efficiency | fast primary for high-volume traffic |
-| OpenRouter | model marketplace flexibility | portability/fallback layer |
-| AWS Bedrock | managed AWS inference + IAM-native auth | cloud provider in failover order |
-| Ollama (local) | privacy + near-zero marginal cost | simple-query local path |
-OpenAI supports `OPENAI_AUTH_MODE=apikey` by default. Experimental `OPENAI_AUTH_MODE=oauth` can sign in with ChatGPT and store tokens in `data/openai-oauth.json`.
-> Warning: OAuth mode is unofficial and against OpenAI's ToS — it uses a private ChatGPT backend (SSE) and can break without notice. Verified working 2026-07-02, but never make it your only provider.
-Headless/manual auth and Docker token injection: [docs/CONFIGURATION.md#openai-oauth-experimental](docs/CONFIGURATION.md#openai-oauth-experimental)
-
-## Deployment
-Default Docker Compose deployment:
+In `.env.discord`, set `DISCORD_BOT_TOKEN`, `DISCORD_OWNER_ID`, and the channel config values used by `config/discord-channels.json`. Add at least one provider key in `.env`.
 
 ```bash
 docker compose up -d
@@ -248,87 +71,144 @@ docker compose logs -f discord
 curl http://127.0.0.1:3002/health
 ```
 
-Pinned production pull:
+In an allowed Discord channel, mention the bot. For example, if the persona is Garbanzo:
+
+```text
+@garbanzo summarize what I missed today
+@garbanzo is the train running on time?
+```
+
+For the guided wizard:
+
+```bash
+npm run setup
+```
+
+Optional WhatsApp instance:
+
+```bash
+cp .env.whatsapp.example .env.whatsapp
+# In .env: COMPOSE_PROFILES=discord,whatsapp
+# In .env.whatsapp: set OWNER_JID and WhatsApp options.
+docker compose up -d
+docker compose logs -f whatsapp
+curl http://127.0.0.1:3001/health
+```
+
+Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
+
+<a id="platforms--login"></a>
+
+## Platforms & Bridging
+- **Discord** - default runtime using the official Gateway API, opt-in channels, owner escalation, welcomes, scheduled recaps, reminders, and band-mode roles.
+- **WhatsApp** - fully supported through Baileys v7, browser login, linked-device auth persistence, group config, and anti-ban outbound safety.
+- **Slack** - Events API support plus a local demo mode for pipeline checks.
+
+Bridging connects one Discord channel and one WhatsApp group into a single operating room while keeping each bot instance independent. HTTP transport fits two instances; the `broker` profile adds RabbitMQ for larger or longer-outage topologies. Same-account WhatsApp companion instances use `WHATSAPP_CHAT_SCOPE=configured` and `WHATSAPP_SET_PROFILE_NAME=false` on secondary linked devices; hard isolation uses a second WhatsApp number. Start with [docs/BRIDGING.md](docs/BRIDGING.md).
+
+## Memory & Knowledge
+- **Conversation context** keeps recent chat available to the model.
+- **Session memory** summarizes inactive stretches and stores long-horizon recall.
+- **Curated facts** are owner-managed through `!memory`; optional auto-extraction stays local and capped.
+- **Shared facts** are explicit only: `!memory share <id>` writes a namespaced fact to the shared Qdrant collection for peer instances.
+- **RAG federation** searches read-only Qdrant sources such as runbooks or archives at prompt time without writing to them.
+
+See [docs/RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [docs/BRIDGING.md](docs/BRIDGING.md), and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+<a id="ai-providers--routing"></a>
+
+## AI Routing
+
+Set `AI_PROVIDER_ORDER` to choose cloud failover order across OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter. Ollama can handle simple local queries through `OLLAMA_BASE_URL` and `OLLAMA_MODEL`. Native tool calling is controlled by `AI_TOOL_CALLING`; when enabled, providers can call Garbanzo integrations during a reply.
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## Deployment
+
+Compose is the default release path:
+
+```bash
+APP_VERSION=3.1.0 docker compose pull
+APP_VERSION=3.1.0 docker compose up -d
+```
+
+Production overlay:
 
 ```bash
 APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-Local development build:
+Kubernetes operators can install one bot instance per Helm release:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+helm install garbanzo ./deploy/helm/garbanzo --set platform=discord --set instanceId=discord-main
 ```
 
-Kubernetes (Helm):
+See [deploy/helm/README.md](deploy/helm/README.md). Native Node deployments can use [scripts/garbanzo.service](scripts/garbanzo.service) with the same layered env files.
 
-The Helm chart is a single-instance distribution artifact for operators who
-already run Kubernetes. Compose remains the default deployment path. See
-[deploy/helm/README.md](deploy/helm/README.md).
+<a id="monitoring--observability"></a>
 
-Cross-platform portable binaries are published on version tags (`v*`) as release assets. Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
-### Monitoring & Observability
+## Monitoring & Backups
 
-Three built-in layers, all optional (guide: [docs/MONITORING.md](docs/MONITORING.md)):
-
-1. **`/admin` page** — token-gated usage & cost snapshot (daily AI spend, provider mix, per-group activity, anti-ban counters) served from the health port. Zero setup.
-2. **Prometheus + Grafana** — a full stack that runs beside selected bot profiles on the same host (`COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`), with a pre-provisioned **Community Ops** dashboard: messages and replies by group, AI cost by provider, tool usage, anti-ban trends, and backup integrity, over 30 days of history.
+`MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and the Grafana admin password fallback. With `COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`, the dashboard has a `$job` picker for all instances or one service at a time. Uptime Kuma should watch `/health/ready` on `3002` for Discord and `3001` for WhatsApp.
 
 <p align="center">
-  <img src="docs/assets/screenshots/site/grafana-community-ops.png" width="900" alt="Pre-provisioned Grafana Community Ops dashboard for Garbanzo" />
+  <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoints" />
 </p>
 
-3. **Uptime Kuma** (or any HTTP monitor) — `/health/ready` returns non-200 the moment WhatsApp disconnects, ideal for push alerting:
+Nightly off-machine backup guidance covers credentials, database state, verification, retention, and restore: [docs/BACKUPS.md](docs/BACKUPS.md). Monitoring setup and metrics are in [docs/MONITORING.md](docs/MONITORING.md).
 
-<p align="center">
-  <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoint" />
-</p>
+<a id="configuration"></a>
 
-The `/health` endpoint reports connection status, uptime, memory, message staleness, and backup integrity as JSON. Deep Kuma settings and LAN firewall examples: [docs/INFRASTRUCTURE.md#monitoring--lan-firewall](docs/INFRASTRUCTURE.md#monitoring--lan-firewall)
+## Customizing For Your Community
 
-### Backups
+Garbanzo is configurable first. The flagship deployment happens to be Boston-area because its env values, group mappings, persona files, and transit settings are Boston-specific.
 
-Nightly off-machine backups of the WhatsApp credentials + database (systemd timer, verification, retention, one-command restore): [docs/BACKUPS.md](docs/BACKUPS.md)
+- Persona identity comes from [docs/PERSONA.md](docs/PERSONA.md) and optional platform persona files.
+- Locale behavior comes from env values for weather, transit, venue search, news, web search, and language settings.
+- Discord channels live in `config/discord-channels.json`; WhatsApp groups live in `config/groups.json`.
+- Feature allowlists, mention requirements, owner controls, provider order, vector memory, and bridge identity are env/config choices.
 
-## Customizing for Your Community
-Garbanzo was built for Boston, but the architecture is locale-agnostic. Customize the persona, transit provider, weather defaults, groups, mention patterns, icebreakers, and memory facts.
-Guide: [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)
+See [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), and [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 <a id="architecture--stack"></a>
-
-## Architecture & Stack
-Garbanzo separates a platform-agnostic core pipeline from runtime adapters under `src/platforms/*`. It runs on Node.js 20+ and TypeScript ES Modules with Zod validation, Pino structured logging, Vitest tests, and SQLite by default. Postgres is available for larger deployments, and a self-hosted Qdrant store handles vector memory and semantic retrieval.
-Full walkthrough: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Development
 
 ```bash
-npm run dev          # Hot-reload (tsx watch)
+npm run dev          # Hot reload
 npm run setup        # Interactive setup wizard
 npm run typecheck    # Type-check only
 npm run lint         # ESLint
-npm run test         # Run all tests
-npm run check        # Full pre-commit: secrets + typecheck + lint + test
+npm run test         # Vitest
+npm run check        # Secrets, deps audit, typecheck, lint, tests
 npm run build        # Compile to dist/
-npm run start        # Production (from dist/)
+npm run start        # Run dist/
 ```
 
+Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Project principles: [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
+
 ## Docs
-Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [SETUP_EXAMPLES.md](docs/SETUP_EXAMPLES.md), [PERSONA.md](docs/PERSONA.md), [BRIDGING.md](docs/BRIDGING.md)
 
-Operations: [MIGRATION-2.0.md](docs/MIGRATION-2.0.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [TESTING-1.0.0.md](docs/TESTING-1.0.0.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md)
+Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [PERSONA.md](docs/PERSONA.md)
 
-Design & internals: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [IMPROVEMENTS.md](docs/IMPROVEMENTS.md), [VECTOR_MEMORY_IMPLEMENTATION_SPEC.md](docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md), [VECTOR_DB_PLAN.md](docs/VECTOR_DB_PLAN.md), [MULTI_PLATFORM.md](docs/MULTI_PLATFORM.md), [PROMOTION_SNIPPETS.md](docs/PROMOTION_SNIPPETS.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
+Operations: [BRIDGING.md](docs/BRIDGING.md), [RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [RELEASES.md](docs/RELEASES.md), [REMY_DEPLOY.md](docs/REMY_DEPLOY.md), [POSTGRES_MIGRATION_RUNBOOK.md](docs/POSTGRES_MIGRATION_RUNBOOK.md), [ADR-0001-whatsapp-outbound-safety.md](docs/ADR-0001-whatsapp-outbound-safety.md)
+
+Design and development: [ARCHITECTURE.md](docs/ARCHITECTURE.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md), [ROADMAP.md](docs/ROADMAP.md), [AWS.md](docs/AWS.md), [SCALING.md](docs/SCALING.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md)
 
 ## Contributing - Support - License
-Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Support funds provider integrations, AI workflow improvements, and reliable releases:
+
+Contributions are welcome through pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md). Before pushing, run:
+
+```bash
+npm run check
+npm run gh:dependabot
+```
+
+Support funds provider integrations, AI workflow improvements, and release maintenance:
 
 - Patreon: https://www.patreon.com/c/garbanzobot
 - GitHub Sponsors: https://github.com/sponsors/jjhickman
-Main branch stability:
-- `ci.yml` runs `npm run check` on PRs and pushes to `main`
-- `CODEOWNERS` requires owner review coverage
-- `pull_request_template.md` enforces verification checklist discipline
-- Dependabot and release workflows keep npm, Docker, and published image paths maintained
-Garbanzo is licensed under [Apache License 2.0](LICENSE). See `LICENSE_FAQ.md` for a quick guide.
+
+Garbanzo is licensed under [Apache License 2.0](LICENSE). See [LICENSE_FAQ.md](LICENSE_FAQ.md).
