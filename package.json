@@ -74,6 +74,14 @@
   },
   "author": "Josh Hickman",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjhickman/garbanzo-bot.git"
+  },
+  "homepage": "https://garbanzobot.com",
+  "bugs": {
+    "url": "https://github.com/jjhickman/garbanzo-bot/issues"
+  },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1080.0",
     "@hapi/boom": "^10.0.1",
