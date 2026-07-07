@@ -40,7 +40,18 @@ const SERVICE_NAME = 'garbanzo.service';
 const PLIST_NAME = 'com.garbanzo.bot.plist';
 
 export function isEphemeralNpxRoot(packageRoot: string): boolean {
-  return packageRoot.includes('/.npm/_npx/') || packageRoot.includes('\\.npm\\_npx\\') || packageRoot.includes('_cacache');
+  // Segment-based so a project dir merely containing these words never
+  // matches; covers npm (_npx/_cacache incl. Windows npm-cache), pnpm dlx,
+  // and yarn dlx extraction dirs.
+  const normalized = packageRoot.replaceAll('\\', '/');
+  return (
+    /\/\.npm\/_npx\//.test(normalized) ||
+    /\/npm-cache\/_npx\//i.test(normalized) ||
+    /\/_npx\//.test(normalized) ||
+    /\/_cacache\//.test(normalized) ||
+    /\/dlx-[^/]+\//.test(normalized) ||
+    /\/xfs-[0-9a-f]+\//.test(normalized)
+  );
 }
 
 function xmlEscape(value: string): string {
@@ -53,8 +64,10 @@ function xmlEscape(value: string): string {
 }
 
 function systemdEscape(value: string): string {
-  if (/^[A-Za-z0-9_/@%+=:,.-]+$/.test(value)) return value;
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  // systemd expands % specifiers in unit values; literal % must be doubled.
+  const escaped = value.replaceAll('%', '%%');
+  if (/^[A-Za-z0-9_/@%+=:,.-]+$/.test(escaped)) return escaped;
+  return `"${escaped.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
 function replaceOrAppend(lines: string[], prefix: string, value: string, insertAfterPrefix: string): string[] {
@@ -166,48 +179,38 @@ function printNpxRefusal(printer: CliPrinter, packageRoot: string): void {
   ].join('\n'));
 }
 
-function printLinuxCommands(printer: CliPrinter, system: boolean, servicePath: string): void {
-  if (system) {
-    printer.stdout([
-      `Wrote ${servicePath}`,
-      'Run these commands to enable it:',
-      '  sudo systemctl daemon-reload',
-      `  sudo systemctl enable --now ${SERVICE_NAME}`,
-      `  journalctl -u ${SERVICE_NAME} -f`,
-      '',
-    ].join('\n'));
-    return;
-  }
-
+function printLinuxCommands(printer: CliPrinter, system: boolean, servicePath: string, nodePath: string): void {
+  const prefix = system ? 'sudo systemctl' : 'systemctl --user';
+  const journal = system ? `journalctl -u ${SERVICE_NAME} -f` : `journalctl --user -u ${SERVICE_NAME} -f`;
   printer.stdout([
     `Wrote ${servicePath}`,
     'Run these commands to enable it:',
-    '  systemctl --user daemon-reload',
-    `  systemctl --user enable --now ${SERVICE_NAME}`,
-    `  journalctl --user -u ${SERVICE_NAME} -f`,
+    `  ${prefix} daemon-reload`,
+    `  ${prefix} enable --now ${SERVICE_NAME}`,
+    `  ${journal}`,
+    `Note: the service pins node at ${nodePath}. Version managers (nvm/asdf) move`,
+    "this path on upgrades - re-run 'garbanzo service install' after changing Node.",
     '',
   ].join('\n'));
 }
 
-function printLinuxUninstallCommands(printer: CliPrinter, system: boolean, servicePath: string): void {
-  if (system) {
-    printer.stdout([
-      `Removed ${servicePath}`,
-      'Run these commands to finish uninstalling:',
-      `  sudo systemctl disable --now ${SERVICE_NAME}`,
-      '  sudo systemctl daemon-reload',
-      '',
-    ].join('\n'));
-    return;
+function printLinuxUninstallCommands(printer: CliPrinter, system: boolean, servicePath: string, existed: boolean): void {
+  const prefix = system ? 'sudo systemctl' : 'systemctl --user';
+  const lines = existed
+    ? [
+        `Removed ${servicePath}`,
+        'If the service is still running, stop it and reload:',
+        `  ${prefix} stop ${SERVICE_NAME}`,
+        `  ${prefix} daemon-reload`,
+      ]
+    : [`Nothing to remove at ${servicePath}`];
+
+  const otherPath = linuxServicePath(!system);
+  if (!existed && existsSync(otherPath)) {
+    lines.push(`A unit exists at ${otherPath} - re-run with${system ? 'out' : ''} --system to remove it.`);
   }
 
-  printer.stdout([
-    `Removed ${servicePath}`,
-    'Run these commands to finish uninstalling:',
-    `  systemctl --user disable --now ${SERVICE_NAME}`,
-    '  systemctl --user daemon-reload',
-    '',
-  ].join('\n'));
+  printer.stdout([...lines, ''].join('\n'));
 }
 
 function printWindowsGuidance(printer: CliPrinter, packageRoot: string): void {
@@ -240,11 +243,13 @@ export async function runServiceCommand(options: ServiceOptions, printer: CliPri
   if (platform === 'darwin') {
     const plistPath = launchdPath();
     if (options.action === 'uninstall') {
+      const existed = existsSync(plistPath);
       await rm(plistPath, { force: true });
       printer.stdout([
-        `Removed ${plistPath}`,
-        'Run this command if the agent is loaded:',
-        `  launchctl unload ${plistPath}`,
+        existed ? `Removed ${plistPath}` : `Nothing to remove at ${plistPath}`,
+        ...(existed
+          ? ['Run this command if the agent is loaded:', '  launchctl bootout gui/$(id -u)/com.garbanzo.bot']
+          : []),
         '',
       ].join('\n'));
       return 0;
@@ -268,14 +273,21 @@ export async function runServiceCommand(options: ServiceOptions, printer: CliPri
 
   const servicePath = linuxServicePath(options.system);
   if (options.action === 'uninstall') {
+    const existed = existsSync(servicePath);
     await rm(servicePath, { force: true });
-    printLinuxUninstallCommands(printer, options.system, servicePath);
+    printLinuxUninstallCommands(printer, options.system, servicePath, existed);
     return 0;
   }
 
-  const template = existsSync(options.templatePath)
-    ? await readFile(options.templatePath, 'utf8')
-    : '';
+  if (!existsSync(options.templatePath)) {
+    printer.stderr([
+      `Service template not found: ${options.templatePath}`,
+      'This install is missing its shipped files; reinstall the package and retry.',
+      '',
+    ].join('\n'));
+    return 1;
+  }
+  const template = await readFile(options.templatePath, 'utf8');
   const entry = resolveServiceEntry(options.packageRoot);
   await writeFileCreatingParents(servicePath, renderSystemdUnit({
     template,
@@ -284,6 +296,6 @@ export async function runServiceCommand(options: ServiceOptions, printer: CliPri
     homeDir: options.homeDir,
     ...entry,
   }));
-  printLinuxCommands(printer, options.system, servicePath);
+  printLinuxCommands(printer, options.system, servicePath, nodePath);
   return 0;
 }

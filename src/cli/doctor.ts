@@ -220,26 +220,29 @@ function providerBooleans(env: NodeJS.ProcessEnv): DoctorReport['providers'] {
   return {
     openrouter: Boolean(env.OPENROUTER_API_KEY),
     anthropic: Boolean(env.ANTHROPIC_API_KEY),
-    openai: Boolean(env.OPENAI_API_KEY),
+    // The runtime counts OAuth mode as configured even without a key
+    openai: Boolean(env.OPENAI_API_KEY) || env.OPENAI_AUTH_MODE === 'oauth',
     gemini: Boolean(env.GEMINI_API_KEY),
     bedrock: Boolean(env.BEDROCK_MODEL_ID),
   };
 }
 
 function parseHealthPort(env: NodeJS.ProcessEnv): number {
+  // Mirror the runtime schema (min 1): values the runtime would reject
+  // must not make doctor report a different, "available" port.
   const candidate = Number(env.HEALTH_PORT ?? DEFAULT_HEALTH_PORT);
-  if (!Number.isInteger(candidate) || candidate < 0 || candidate > 65535) return DEFAULT_HEALTH_PORT;
+  if (!Number.isInteger(candidate) || candidate < 1 || candidate > 65535) return DEFAULT_HEALTH_PORT;
   return candidate;
 }
 
-function probeHealthPort(port: number): Promise<DoctorReport['healthPort']> {
+function probeHealthPort(port: number, bindHost: string): Promise<DoctorReport['healthPort']> {
   return new Promise((resolveProbe) => {
     const server = createServer();
 
     server.once('error', (err: NodeJS.ErrnoException) => {
       resolveProbe({ port, available: false, error: err.code ?? err.message });
     });
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, bindHost, () => {
       server.close(() => {
         resolveProbe({ port, available: true, error: null });
       });
@@ -310,7 +313,10 @@ export async function collectDoctorReport(options: DoctorOptions): Promise<Docto
       piper: await binaryStatus('piper', layered.env, 'PIPER_BIN'),
     },
     providers: providerBooleans(layered.env),
-    healthPort: await probeHealthPort(parseHealthPort(layered.env)),
+    healthPort: await probeHealthPort(
+      parseHealthPort(layered.env),
+      layered.env.HEALTH_BIND_HOST?.trim() || '127.0.0.1',
+    ),
     version: {
       current: currentPackageVersion(options.packageRoot),
       latest: version.latest,

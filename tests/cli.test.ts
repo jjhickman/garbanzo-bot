@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -38,23 +38,17 @@ function runCliSubprocess(args: string[], env: NodeJS.ProcessEnv): Promise<{ cod
   });
 }
 
+// Minimal explicit env, NOT a scrubbed copy of process.env: inheriting the
+// parent env leaves holes (e.g. OPENAI_AUTH_MODE=oauth satisfies runtime
+// config validation with no key set) that would make the isolation proof
+// vacuous on a developer machine.
 function cleanCliEnv(home: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, GARBANZO_HOME: home };
-  for (const key of [
-    'MESSAGING_PLATFORM',
-    'OWNER_JID',
-    'OPENROUTER_API_KEY',
-    'ANTHROPIC_API_KEY',
-    'OPENAI_API_KEY',
-    'GEMINI_API_KEY',
-    'BEDROCK_MODEL_ID',
-    'AI_PROVIDER_ORDER',
-    'DISCORD_BOT_TOKEN',
-    'DISCORD_OWNER_ID',
-  ]) {
-    delete env[key];
-  }
-  return env;
+  return {
+    PATH: process.env.PATH,
+    HOME: home,
+    GARBANZO_HOME: home,
+    GARBANZO_DOCTOR_OFFLINE: '1',
+  };
 }
 
 describe('CLI routing', () => {
@@ -101,6 +95,34 @@ describe('CLI import isolation', () => {
       const result = await runCliSubprocess(['doctor'], cleanCliEnv(home));
 
       expect(result.code).toBe(0);
+    });
+  });
+
+  it('prints setup help in a clean home without importing runtime config', async () => {
+    await withTempDir(async (home) => {
+      const result = await runCliSubprocess(['setup', '--help'], cleanCliEnv(home));
+
+      expect(result.code).toBe(0);
+    });
+  });
+
+  it('executes when invoked through a symlink, as npm bin shims are on POSIX', async () => {
+    await withTempDir(async (home) => {
+      const linkPath = join(home, 'garbanzo');
+      await symlink(resolve('src/cli.ts'), linkPath);
+
+      const unknown = await new Promise<{ code: number | null }>((resolveResult, reject) => {
+        const child = spawn(process.execPath, ['--import', 'tsx', linkPath, 'definitely-not-a-command'], {
+          cwd: resolve('.'),
+          env: cleanCliEnv(home),
+          stdio: 'ignore',
+        });
+        child.on('error', reject);
+        child.on('close', (code) => resolveResult({ code }));
+      });
+
+      // A silent no-op would exit 0 here; real execution must exit 1.
+      expect(unknown.code).toBe(1);
     });
   });
 });
@@ -202,7 +224,49 @@ describe('service install rendering', () => {
   it('detects ephemeral npx cache roots', () => {
     expect(isEphemeralNpxRoot('/home/operator/.npm/_npx/abc/node_modules/garbanzo-bot')).toBe(true);
     expect(isEphemeralNpxRoot('/home/operator/.npm/_cacache/tmp/garbanzo-bot')).toBe(true);
+    expect(isEphemeralNpxRoot('C:\\Users\\op\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\garbanzo-bot')).toBe(true);
+    expect(isEphemeralNpxRoot('/home/op/.cache/pnpm/dlx-91ab2c/node_modules/garbanzo-bot')).toBe(true);
+    expect(isEphemeralNpxRoot('/tmp/xfs-0a1b2c3d/dlx/node_modules/garbanzo-bot')).toBe(true);
     expect(isEphemeralNpxRoot('/usr/local/lib/node_modules/garbanzo-bot')).toBe(false);
+    // Segment matching: names merely containing the keywords are not caches
+    expect(isEphemeralNpxRoot('/home/op/projects/db_cacache_tools/node_modules/garbanzo-bot')).toBe(false);
+  });
+
+  it('escapes literal % for systemd specifier expansion', () => {
+    const unit = renderSystemdUnit({
+      template: ['[Unit]', '[Service]', 'Environment=NODE_ENV=production', '[Install]'].join('\n'),
+      nodePath: '/usr/bin/node',
+      packageRoot: '/srv/my%20apps/garbanzo',
+      homeDir: '/home/op/.garbanzo',
+      entryPath: '/srv/my%20apps/garbanzo/dist/cli.js',
+      entryArgs: ['start'],
+    });
+
+    expect(unit).toContain('WorkingDirectory=/srv/my%%20apps/garbanzo');
+    // No lone % (unescaped specifier) may survive anywhere in the unit
+    expect(unit).not.toMatch(/(?<!%)%(?!%)/);
+  });
+
+  it('errors loudly instead of writing a unit from a missing template', async () => {
+    await withTempDir(async (home) => {
+      const { runServiceCommand } = await import('../src/cli/service-install.js');
+      let stderr = '';
+      const code = await runServiceCommand({
+        action: 'install',
+        force: false,
+        system: false,
+        packageRoot: home,
+        homeDir: home,
+        templatePath: join(home, 'missing', 'garbanzo.service'),
+        platform: 'linux',
+      }, {
+        stdout: () => {},
+        stderr: (message) => { stderr += message; },
+      });
+
+      expect(code).toBe(1);
+      expect(stderr).toContain('Service template not found');
+    });
   });
 });
 

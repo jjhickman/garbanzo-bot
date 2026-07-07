@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -130,6 +131,7 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
       packageRoot: PACKAGE_ROOT,
       homeDir: GARBANZO_HOME_DIR,
       mode: resolveMode(process.env.GARBANZO_HOME, isPackagedInstall()),
+      skipRegistry: process.env.GARBANZO_DOCTOR_OFFLINE === '1',
     });
     printer.stdout(formatDoctorReport(report));
     return report.node.ok ? 0 : 1;
@@ -150,9 +152,19 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
   }, printer);
 }
 
-const isDirectRun = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// npm bin entries are symlinks on POSIX while Node realpaths import.meta.url,
+// so the comparison must realpath argv[1] too or the installed command no-ops.
+function isDirectRun(): boolean {
+  const argv1 = process.argv[1];
+  if (argv1 === undefined) return false;
+  try {
+    return realpathSync(argv1) === fileURLToPath(import.meta.url);
+  } catch {
+    return resolve(argv1) === fileURLToPath(import.meta.url);
+  }
+}
 
-if (isDirectRun) {
+if (isDirectRun()) {
   runCli().then((code) => {
     process.exitCode = code;
   }).catch((err: unknown) => {
