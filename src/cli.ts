@@ -76,11 +76,27 @@ async function packageVersion(): Promise<string> {
   }
 }
 
-function spawnSetup(setupPath: string, args: string[]): Promise<number> {
+function spawnSetup(setupPath: string, args: string[], homeDir: string): Promise<number> {
   return new Promise((resolveSpawn, reject) => {
     const child = spawn(process.execPath, [setupPath, ...args], {
       stdio: 'inherit',
-      env: process.env,
+      env: {
+        ...process.env,
+        // GARBANZO_CLI=1 tells the wizard it was spawned by the packaged CLI
+        // binary (scripts/setup.mjs keys packaged-mode behavior off it — no
+        // `npm install`, "garbanzo start" as the next-steps command).
+        GARBANZO_CLI: '1',
+        // setup.mjs can't import src/utils/paths.js (import-isolation
+        // invariant), so it re-derives its own output root from the raw
+        // GARBANZO_HOME env var. Forward the already-resolved
+        // GARBANZO_HOME_DIR so a packaged run — sentinel-driven, no explicit
+        // GARBANZO_HOME set by the operator — still writes into ~/.garbanzo
+        // instead of falling back to the (possibly read-only) install
+        // directory. Byte-identical in repo/Docker mode, where
+        // GARBANZO_HOME_DIR already equals what setup.mjs would resolve on
+        // its own.
+        GARBANZO_HOME: homeDir,
+      },
     });
     child.on('error', reject);
     child.on('close', (code, signal) => {
@@ -118,8 +134,8 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
   }
 
   if (parsed.kind === 'setup') {
-    const { assetPath } = await import('./utils/paths.js');
-    return spawnSetup(assetPath('scripts', 'setup.mjs'), parsed.args);
+    const { assetPath, GARBANZO_HOME_DIR } = await import('./utils/paths.js');
+    return spawnSetup(assetPath('scripts', 'setup.mjs'), parsed.args, GARBANZO_HOME_DIR);
   }
 
   if (parsed.kind === 'doctor') {

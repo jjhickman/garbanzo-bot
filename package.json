@@ -1,11 +1,29 @@
 {
-  "name": "garbanzo",
+  "name": "garbanzo-bot",
   "version": "3.1.0",
   "description": "Garbanzo Bean — AI chat operations platform with multi-provider LLM routing and integrations",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "garbanzo": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "config/*.example.json",
+    "docs/PERSONA.md",
+    "docs/personas",
+    "templates",
+    "scripts/setup.mjs",
+    "scripts/setup-fields.mjs",
+    "scripts/garbanzo.service",
+    "src/utils/postgres-schema.sql",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build && node scripts/pack-sentinel.mjs write",
+    "postpack": "node scripts/pack-sentinel.mjs remove",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "dev:once": "tsx src/index.ts",

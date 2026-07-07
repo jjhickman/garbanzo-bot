@@ -1,6 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveHomeFrom } from '../src/utils/paths.js';
@@ -213,5 +215,25 @@ describe('config env layering honors GARBANZO_HOME', () => {
     expect(pathsModule.GARBANZO_HOME_DIR).toBe(pathsModule.PACKAGE_ROOT);
     expect(configModule.PROJECT_ROOT).toBe(pathsModule.PACKAGE_ROOT);
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── No-stale-sentinel regression (T6 hard gate) ─────────────────────────────
+//
+// dist/.packaged is written ONLY by the publish/pack build (package.json
+// "prepack" -> scripts/pack-sentinel.mjs write) and removed immediately after
+// by "postpack". A plain `npm run build` (tsc only) must never leave the
+// sentinel behind in a repo checkout's dist/ — if it did, every subsequent
+// repo-mode run would misresolve GARBANZO_HOME_DIR to ~/.garbanzo instead of
+// PACKAGE_ROOT (isPackagedInstall() above treats a present sentinel as an
+// installed topology, no questions asked).
+describe('no stale packaged sentinel after a plain build', () => {
+  it('dist/.packaged does not exist after `npm run build`', () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const sentinelPath = join(repoRoot, 'dist', '.packaged');
+
+    execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'pipe' });
+
+    expect(existsSync(sentinelPath)).toBe(false);
   });
 });

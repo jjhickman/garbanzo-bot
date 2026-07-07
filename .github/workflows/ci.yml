@@ -136,6 +136,34 @@ jobs:
           VECTOR_EMBEDDING_DIMENSIONS: "256"
         run: npx vitest run tests/vector-memory-integration.test.ts
 
+  pack-rehearsal:
+    name: Pack Rehearsal (npm packaging)
+    # BLOCKING — release gate for the npm packaging path (T6/D6): proves the
+    # published tarball is self-contained using the real prepack build (tsc +
+    # dist/.packaged sentinel). Installs the tarball into a temp prefix and
+    # asserts: the bin symlink runs, doctor resolves mode=packaged +
+    # home=$HOME/.garbanzo with no GARBANZO_HOME set (the mode-resolution
+    # hard gate), non-interactive setup writes the quickstart file set, the
+    # installed package boots to a 200 /health, and the service template ships.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run pack rehearsal
+        run: bash scripts/pack-rehearsal.sh
+
   smoke-experimental-platforms:
     name: smoke (experimental platforms)
     # Non-blocking this release (D5/T7): Windows/macOS support is

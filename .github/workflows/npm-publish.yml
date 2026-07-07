@@ -1,0 +1,69 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git ref to publish (tag like v3.2.0). Default: current ref'
+        required: false
+
+permissions:
+  contents: read
+  # Required for npm --provenance attestation
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish garbanzo-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check npm token availability
+        id: token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice (NPM_TOKEN not configured)
+        if: ${{ steps.token.outputs.available != 'true' }}
+        run: |
+          echo "::notice title=npm publish skipped::NPM_TOKEN secret is not configured. \
+          Create an npm account/token with publish rights for 'garbanzo-bot' and add it \
+          as the NPM_TOKEN repository secret to enable publishing on release tags."
+
+      - name: Checkout
+        if: ${{ steps.token.outputs.available == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || github.ref }}
+
+      - name: Setup Node.js
+        if: ${{ steps.token.outputs.available == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        if: ${{ steps.token.outputs.available == 'true' }}
+        run: npm ci
+
+      - name: Pack rehearsal (pre-publish gate)
+        if: ${{ steps.token.outputs.available == 'true' }}
+        run: bash scripts/pack-rehearsal.sh
+
+      - name: Publish with provenance
+        if: ${{ steps.token.outputs.available == 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
