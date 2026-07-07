@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { load } from 'js-yaml';
 
@@ -58,7 +59,12 @@ describe('garbanzo helm chart', () => {
     expect(chart.apiVersion).toBe('v2');
     expect(chart.name).toBe('garbanzo');
     expect(chart.version).toBe('0.1.0');
-    expect(chart.appVersion).toBe('3.0.0');
+    // Release coherence: the chart must ship the same app version the
+    // package does — catches a forgotten Chart.yaml bump at release time.
+    const pkg = JSON.parse(readFileSync(resolve(chartDir, '../../../package.json'), 'utf-8')) as {
+      version: string;
+    };
+    expect(chart.appVersion).toBe(pkg.version);
 
     expect(values.image?.repository).toBe('ghcr.io/jjhickman/garbanzo');
     expect(values.image?.tag).toBe('');
