@@ -70,11 +70,13 @@ export async function startConnection(
       markLinked();
       safety?.onConnected();
 
-      // Set the bot's display name so it shows correctly in groups.
-      const desiredName = getPersonaName();
-      sock.updateProfileName(desiredName).catch((err) => {
-        logger.warn({ err, desiredName }, 'Failed to set profile name — may need to set manually in WhatsApp');
-      });
+      if (config.WHATSAPP_SET_PROFILE_NAME) {
+        // Set the account display name so it shows correctly in groups.
+        const desiredName = getPersonaName();
+        sock.updateProfileName(desiredName).catch((err) => {
+          logger.warn({ err, desiredName }, 'Failed to set profile name — may need to set manually in WhatsApp');
+        });
+      }
 
       onReady(protectedSock);
     }

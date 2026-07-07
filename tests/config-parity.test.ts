@@ -40,6 +40,8 @@ const canonicalEnv = {
   OLLAMA_MODEL: 'llama-test',
   BOT_PHONE_NUMBER: '15550000000',
   WHATSAPP_LOGIN_MODE: 'both',
+  WHATSAPP_CHAT_SCOPE: 'configured',
+  WHATSAPP_SET_PROFILE_NAME: 'false',
   WHATSAPP_LOGIN_TOKEN: 'login-token',
   WHATSAPP_SAFETY_ENABLED: 'false',
   WHATSAPP_SAFETY_MAX_PER_MINUTE: '7',
@@ -286,6 +288,7 @@ describe('config module parity', () => {
         "VECTOR_STORE",
         "WEB_SEARCH_PROVIDER",
         "WEEKLY_RECAP_ENABLED",
+        "WHATSAPP_CHAT_SCOPE",
         "WHATSAPP_LOGIN_MODE",
         "WHATSAPP_LOGIN_TOKEN",
         "WHATSAPP_SAFETY_AUTO_PAUSE_AT",
@@ -297,6 +300,7 @@ describe('config module parity', () => {
         "WHATSAPP_SAFETY_MAX_PER_MINUTE",
         "WHATSAPP_SAFETY_MIN_DELAY_MS",
         "WHATSAPP_SAFETY_WARMUP_DAYS",
+        "WHATSAPP_SET_PROFILE_NAME",
       ]
     `);
     expect({
@@ -339,6 +343,10 @@ describe('config module parity', () => {
         sessionMemory: config.CONTEXT_SESSION_MEMORY_ENABLED,
         memoryAutoExtract: config.MEMORY_AUTO_EXTRACT,
         bandFeatures: config.BAND_FEATURES_ENABLED,
+        whatsappSetProfileName: config.WHATSAPP_SET_PROFILE_NAME,
+      },
+      whatsapp: {
+        chatScope: config.WHATSAPP_CHAT_SCOPE,
       },
       numbers: {
         healthPort: config.HEALTH_PORT,
@@ -371,6 +379,7 @@ describe('config module parity', () => {
           "turnstile": true,
           "weeklyRecap": false,
           "whatsappSafety": false,
+          "whatsappSetProfileName": false,
         },
         "bridge": {
           "brokerUrl": "amqp://bridge-broker",
@@ -409,6 +418,9 @@ describe('config module parity', () => {
           "ollama": "http://localhost:11434",
           "qdrant": "http://qdrant.local:6333",
           "searxng": "http://searxng.local",
+        },
+        "whatsapp": {
+          "chatScope": "configured",
         },
       }
     `);

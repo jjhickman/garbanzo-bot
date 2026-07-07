@@ -78,6 +78,7 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
   }, {
     ownerId: ownerJid,
     isGroupEnabled,
+    shouldIngestGroupChat: config.WHATSAPP_CHAT_SCOPE === 'configured' ? isGroupEnabled : undefined,
     introductionsChatId: getEnabledGroupJidByName('Introductions'),
     eventsChatId: getEnabledGroupJidByName('Events'),
     handleIntroduction,

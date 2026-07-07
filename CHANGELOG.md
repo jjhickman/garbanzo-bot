@@ -6,6 +6,12 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `WHATSAPP_CHAT_SCOPE=configured` lets a WhatsApp linked-device instance ingest only groups enabled in its own `config/groups.json`, while DMs still flow for owner commands.
+- `WHATSAPP_SET_PROFILE_NAME=false` disables account-level profile-name updates on secondary WhatsApp linked-device instances.
+- Docs now cover same-account WhatsApp companion-device bridge deployments, the hard-isolation second-number option, and 3.x candidate follow-ups.
+
 ## [3.0.0] — 2026-07-06
 
 ### Added

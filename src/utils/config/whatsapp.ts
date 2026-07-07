@@ -5,6 +5,8 @@ export const whatsappSchema = z.object({
   // WhatsApp
   BOT_PHONE_NUMBER: optionalString,
   WHATSAPP_LOGIN_MODE: z.enum(['web', 'terminal', 'both']).default('web'),
+  WHATSAPP_CHAT_SCOPE: z.enum(['all', 'configured']).default('all'),
+  WHATSAPP_SET_PROFILE_NAME: booleanFromEnv.default(true),
   // Empty string normalizes to undefined so a strong random token is generated at
   // startup instead of an all-empty (bypassable) token guard.
   WHATSAPP_LOGIN_TOKEN: z.preprocess(

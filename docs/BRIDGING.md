@@ -235,29 +235,33 @@ containers on the compose network as `rabbitmq:5672`.
 ## Worked example — three instances
 
 This is the target topology for a group running both a community bot and a
-band bot: an isolated WhatsApp community bot, a second WhatsApp number for
-the band, and a Discord band bot (Remy), with the two band-facing instances
-bridged and the community bot left alone.
+band bot: the original WhatsApp community bot, a second linked companion
+device on the same WhatsApp account for the band-facing groups, and a Discord
+band bot (Remy), with the two band-facing instances bridged and the community
+bot left alone.
 
 ### 1. Isolated WhatsApp community bot
 
-The original community deployment. No bridge or shared-memory flags at all —
-isolation needs nothing, since every flag in the [flags summary](#flags-summary)
-defaults off. It keeps its existing `whatsapp` profile, `.env.whatsapp`, and
-`config/groups.json`. `config/bridge-map.json` stays mounted into this
-container like every other service, but since `BRIDGE_ENABLED` is unset it is
-never read. It also never sets `INSTANCE_ID`, so it keeps the plain
-`garbanzo_memory` local collection (see
-[Local memory isolation](#local-memory-isolation)) — its own facts, isolated
-from both band instances below.
+The original community deployment keeps its existing `whatsapp` profile,
+`.env.whatsapp`, and `config/groups.json`. If you also run the band instance
+below on the same WhatsApp account, set:
 
-### 2. Band WhatsApp bot (second phone number)
+```bash
+WHATSAPP_CHAT_SCOPE=configured
+```
 
-A second WhatsApp instance, on its own phone number, running band mode.
-Follow the compose-copy pattern: duplicate the existing `whatsapp` service
-block under a new name, with a fresh `INSTANCE_ID`, its own env file, and
-fresh volumes (a different linked WhatsApp account needs its own Baileys
-auth state and its own database):
+That makes the instance ingest only groups enabled in its own
+`config/groups.json`. DMs still work for owner commands. No bridge or
+shared-memory flags are needed here unless this community instance is also
+part of a route.
+
+### 2. Band WhatsApp bot (same account companion device)
+
+The primary path is a second linked companion device on the same WhatsApp
+account. Create a second service with its own auth volume, start it, then link
+it from the phone through WhatsApp's Linked Devices screen. Follow the
+compose-copy pattern: duplicate the existing `whatsapp` service block under a
+new name, with a fresh `INSTANCE_ID`, its own env file, and fresh volumes:
 
 ```yaml
   whatsapp-band:
@@ -306,13 +310,27 @@ volumes:
 ```
 
 Add `whatsapp-band` to `COMPOSE_PROFILES` and create `.env.whatsapp-band`
-with that number's `OWNER_JID`, `BOT_PHONE_NUMBER`, and login settings, plus:
+with the owner JID, phone number, and login settings for the shared account,
+plus:
 
 ```bash
 # in .env.whatsapp-band
 BRIDGE_ENABLED=true
 INSTANCE_ID=whatsapp-band
+WHATSAPP_CHAT_SCOPE=configured
+WHATSAPP_SET_PROFILE_NAME=false
 ```
+
+For same-account operation, `WHATSAPP_CHAT_SCOPE=configured` must be set on
+both WhatsApp instances. Each instance then sees only groups enabled in the
+`groups.json` mounted into that container. Any bridged WhatsApp chat must be
+an enabled group in that instance's `groups.json`, or it will not be ingested
+or bridged.
+
+Set `WHATSAPP_SET_PROFILE_NAME=false` on the secondary instance. WhatsApp
+profile names are account-level, so two linked-device instances otherwise
+fight over one display name. The primary instance can keep the default
+`WHATSAPP_SET_PROFILE_NAME=true`.
 
 `MONITORING_TOKEN` lives in the shared `.env` and must be the same value used
 by `remy` below.
@@ -322,13 +340,19 @@ this instance automatically gets its own local collection,
 `garbanzo_memory_whatsapp-band` — isolated from the community bot's
 `garbanzo_memory` and from `remy`'s collection below, with no extra config.
 
-Because this is a brand-new linked WhatsApp account, the anti-ban warm-up
-ramp starts over from scratch for it: `WHATSAPP_SAFETY_DAY1_LIMIT` (default
-2000) and `WHATSAPP_SAFETY_WARMUP_DAYS` (default 10 days) apply to this
-number exactly as they did to the original community number's launch.
-Nothing about the first number's send history or reputation carries over —
-treat this second number as a fresh account (light usage during warm-up)
-even though the bot software has run in production for a long time.
+The outbound safety budgets are enforced per instance, but WhatsApp still sees
+one account's aggregate behavior. If the shared number is banned or limited,
+every linked device on that number is affected.
+
+### Alternative: second number for hard isolation
+
+For hard isolation, use a second WhatsApp number instead of a same-account
+linked companion device. Keep the separate service, env file, auth volume, data
+volume, and `INSTANCE_ID`, then link that service to the second account. This
+gives the band bot its own WhatsApp reputation and account-level profile name,
+at the cost of operating another number. Treat it as a fresh account during
+warm-up: `WHATSAPP_SAFETY_DAY1_LIMIT` and `WHATSAPP_SAFETY_WARMUP_DAYS` apply
+from that number's first day.
 
 ### 3. Band Discord bot (Remy)
 

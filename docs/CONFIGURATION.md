@@ -109,6 +109,8 @@ cp .env.discord.example .env.discord
 | `GRAFANA_ADMIN_PASSWORD` | Monitoring only | Optional Grafana admin password override; defaults to `MONITORING_TOKEN` when unset |
 | `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
 | `WHATSAPP_LOGIN_TOKEN` | WhatsApp only | Pin the WhatsApp browser-login token instead of generating one per run; it only guards `/whatsapp/login*` |
+| `WHATSAPP_CHAT_SCOPE` | No | WhatsApp inbound scope: `all` (default) ingests every delivered chat; `configured` ingests only enabled groups from `config/groups.json`, while DMs still flow |
+| `WHATSAPP_SET_PROFILE_NAME` | No | Set the WhatsApp account profile name on connect (default: `true`); set `false` on secondary linked-device instances sharing one account |
 | `ADMIN_PAGE_ENABLED` | No | Owner admin page at `/admin` + `/admin.json` on the health port (default: `true`; only served when a token exists) |
 | `EVENT_REMINDERS_ENABLED` | No | Enable Events-group reminder capture and scheduled reminder sends (default: `true`) |
 | `EVENT_REMINDER_LEAD_MINUTES` | No | Minutes before a parsed event start time to post a reminder (default: `120`) |

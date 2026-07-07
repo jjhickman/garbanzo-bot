@@ -67,6 +67,8 @@ export const WHATSAPP_FIELDS = [
   { env: 'BOT_PHONE_NUMBER', cli: 'bot-phone-number', default: '' },
   { env: 'WHATSAPP_LOGIN_MODE', cli: 'whatsapp-login-mode', default: 'web' },
   { env: 'WHATSAPP_LOGIN_TOKEN', cli: 'whatsapp-login-token', default: '', secret: true, note: '(gates only the WhatsApp browser-login page)' },
+  { env: 'WHATSAPP_CHAT_SCOPE', cli: 'whatsapp-chat-scope', default: 'all' },
+  { env: 'WHATSAPP_SET_PROFILE_NAME', cli: 'whatsapp-set-profile-name', default: 'true' },
 ];
 
 export const DISCORD_FIELDS = [
@@ -208,6 +210,8 @@ export function buildPlatformEnvLines(platform, values) {
       envLine(values, 'BOT_PHONE_NUMBER'),
       envLine(values, 'WHATSAPP_LOGIN_MODE'),
       envLine(values, 'WHATSAPP_LOGIN_TOKEN'),
+      envLine(values, 'WHATSAPP_CHAT_SCOPE'),
+      envLine(values, 'WHATSAPP_SET_PROFILE_NAME'),
       '',
     ];
   }
