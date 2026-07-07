@@ -26,8 +26,11 @@ function source(overrides: Partial<RagSource>): RagSource {
 
 async function loadFederation(enabled = true) {
   vi.resetModules();
+  vi.doMock('../src/utils/paths.js', () => ({
+    homePath: (...segments: string[]) => ['/tmp', ...segments].join('/'),
+    assetPath: (...segments: string[]) => ['/tmp', ...segments].join('/'),
+  }));
   vi.doMock('../src/utils/config.js', () => ({
-    PROJECT_ROOT: '/tmp',
     config: {
       RAG_FEDERATION_ENABLED: enabled,
       QDRANT_URL: 'http://qdrant.local:6333',
@@ -52,6 +55,7 @@ describe('RAG source federation', () => {
   afterEach(() => {
     vi.resetModules();
     vi.doUnmock('../src/utils/config.js');
+    vi.doUnmock('../src/utils/paths.js');
     vi.doUnmock('../src/middleware/logger.js');
     vi.restoreAllMocks();
     vi.useRealTimers();

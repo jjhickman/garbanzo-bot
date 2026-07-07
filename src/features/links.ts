@@ -9,17 +9,18 @@
  * General URLs use native fetch + basic HTML→text extraction.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { readFile, unlink, stat } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { execFile } from 'node:child_process';
+import { readFile, unlink, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { logger } from '../middleware/logger.js';
 import { transcribeAudio } from './voice.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const YT_DLP_BIN = process.env.YT_DLP_BIN ?? 'yt-dlp';
+const YT_DLP_MAX_BUFFER = 2 * 1024 * 1024;
 
 // ── URL extraction ──────────────────────────────────────────────────
 
@@ -65,12 +66,23 @@ async function transcribeYouTube(url: string): Promise<string | null> {
 
   try {
     // Download audio only, max 15 min, best quality audio
-    await execAsync(
-      `"${YT_DLP_BIN}" -x --audio-format m4a --audio-quality 0 ` +
-      `--max-filesize 50M ` +
-      `--match-filter "duration < 900" ` +
-      `-o "${tmpAudio}" "${url}" 2>&1`,
-      { timeout: 120000 },
+    await execFileAsync(
+      YT_DLP_BIN,
+      [
+        '-x',
+        '--audio-format',
+        'm4a',
+        '--audio-quality',
+        '0',
+        '--max-filesize',
+        '50M',
+        '--match-filter',
+        'duration < 900',
+        '-o',
+        tmpAudio,
+        url,
+      ],
+      { timeout: 120000, maxBuffer: YT_DLP_MAX_BUFFER },
     );
 
     // Check file exists and has content
@@ -111,9 +123,10 @@ async function getYouTubeMetadata(url: string): Promise<{
   channel: string;
 } | null> {
   try {
-    const { stdout } = await execAsync(
-      `"${YT_DLP_BIN}" --print "%(title)s|||%(duration)s|||%(channel)s" --no-download "${url}" 2>/dev/null`,
-      { timeout: 15000 },
+    const { stdout } = await execFileAsync(
+      YT_DLP_BIN,
+      ['--print', '%(title)s|||%(duration)s|||%(channel)s', '--no-download', url],
+      { timeout: 15000, maxBuffer: YT_DLP_MAX_BUFFER },
     );
     const [title, durationStr, channel] = stdout.trim().split('|||');
     return {

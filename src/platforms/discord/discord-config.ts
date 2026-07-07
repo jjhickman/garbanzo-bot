@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
 import { logger } from '../../middleware/logger.js';
-import { config, PROJECT_ROOT } from '../../utils/config.js';
+import { config } from '../../utils/config.js';
+import { homePath } from '../../utils/paths.js';
 
 const DiscordChannelConfigSchema = z.object({
   name: z.string(),
@@ -29,7 +30,7 @@ const DEFAULT_DISCORD_CHANNELS_CONFIG: DiscordChannelsConfig = {
 };
 
 function resolveDiscordConfigPath(path: string): string {
-  return isAbsolute(path) ? path : resolve(PROJECT_ROOT, path);
+  return isAbsolute(path) ? path : homePath(path);
 }
 
 function loadDiscordChannelsConfig(): DiscordChannelsConfig {

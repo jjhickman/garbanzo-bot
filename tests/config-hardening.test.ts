@@ -133,6 +133,27 @@ describe('config hardening', () => {
     );
   });
 
+  it('treats blank bridge values as unset, falling through to defaults (setup wizard writes KEY= lines)', async () => {
+    // Regression (T6 pack rehearsal): the setup wizard's non-interactive
+    // writer emits every bridge key unconditionally — blank when bridging
+    // isn't configured. A written-but-empty value must behave exactly like
+    // an absent one, not fail enum/coercion/min-length validation and kill
+    // the boot with process.exit(1).
+    const { config } = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'discord',
+      BRIDGE_TRANSPORT: '',
+      BRIDGE_SUMMARY_INTERVAL_MINUTES: '',
+      BRIDGE_MAX_TEXT: '',
+      QDRANT_SHARED_COLLECTION: '',
+    });
+
+    expect(config.BRIDGE_TRANSPORT).toBe('http');
+    expect(config.BRIDGE_SUMMARY_INTERVAL_MINUTES).toBe(15);
+    expect(config.BRIDGE_MAX_TEXT).toBe(1500);
+    expect(config.QDRANT_SHARED_COLLECTION).toBe('garbanzo_shared');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
   it('accepts enabled http bridge config when MONITORING_TOKEN is set', async () => {
     const { config } = await importConfigWithEnv({
       MESSAGING_PLATFORM: 'discord',

@@ -1,9 +1,9 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import { AntiBan, type HealthStatus } from 'baileys-antiban';
-import { resolve } from 'path';
 
 import { logger } from '../../middleware/logger.js';
-import { PROJECT_ROOT, config } from '../../utils/config.js';
+import { config } from '../../utils/config.js';
+import { homePath } from '../../utils/paths.js';
 import {
   countWhatsAppSentSince,
   createWhatsAppOutboundJob,
@@ -93,7 +93,7 @@ export class WhatsAppOutboundSafety {
       warmupDays: config.WHATSAPP_SAFETY_WARMUP_DAYS,
       day1Limit: config.WHATSAPP_SAFETY_DAY1_LIMIT,
       autoPauseAt: config.WHATSAPP_SAFETY_AUTO_PAUSE_AT,
-      persist: resolve(PROJECT_ROOT, 'data', 'whatsapp-antiban-state.json'),
+      persist: homePath('data', 'whatsapp-antiban-state.json'),
       logging: false,
       onRiskChange: (status) => {
         void this.persistRiskStatus(status);

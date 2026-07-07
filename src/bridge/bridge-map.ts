@@ -1,12 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { homePath } from '../utils/paths.js';
 
-const BRIDGE_MAP_PATH = resolve(PROJECT_ROOT, 'config/bridge-map.json');
+const BRIDGE_MAP_PATH = homePath('config/bridge-map.json');
 
 const BridgeEndpointSchema = z.object({
   instance: z.string().min(1),

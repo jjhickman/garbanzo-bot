@@ -27,8 +27,12 @@ const dbMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/utils/config.js', () => ({
-  PROJECT_ROOT: '/tmp',
   config: configMock,
+}));
+
+vi.mock('../src/utils/paths.js', () => ({
+  homePath: (...segments: string[]) => ['/tmp', ...segments].join('/'),
+  assetPath: (...segments: string[]) => ['/tmp', ...segments].join('/'),
 }));
 
 vi.mock('../src/middleware/logger.js', () => ({

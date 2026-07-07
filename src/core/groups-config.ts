@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 
-import { PROJECT_ROOT } from '../utils/config.js';
+import { logger } from '../middleware/logger.js';
+import { homePath } from '../utils/paths.js';
 
 // ── Zod schema for config/groups.json ───────────────────────────────
 
@@ -24,11 +24,50 @@ const GroupsConfigSchema = z.object({
   }),
 });
 
-// Load and validate group config from JSON at startup
-const configPath = resolve(PROJECT_ROOT, 'config', 'groups.json');
-const groupsConfig = GroupsConfigSchema.parse(
-  JSON.parse(readFileSync(configPath, 'utf-8')),
-);
+type GroupsConfig = z.infer<typeof GroupsConfigSchema>;
+
+const DEFAULT_GROUPS_CONFIG: GroupsConfig = {
+  groups: {},
+  mentionPatterns: [],
+  admins: {
+    owner: { name: '', jid: '' },
+    moderators: [],
+  },
+};
+
+function errorReason(err: unknown): string {
+  if (err instanceof z.ZodError) {
+    return `schema validation failed: ${err.issues
+      .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+      .join('; ')}`;
+  }
+
+  if (err instanceof Error) return err.message.replace(/\s+/g, ' ');
+
+  return String(err).replace(/\s+/g, ' ');
+}
+
+const configPath = homePath('config', 'groups.json');
+
+function loadGroupsConfig(): GroupsConfig {
+  if (!existsSync(configPath)) {
+    logger.warn({ path: configPath }, 'Groups config file not found; using empty groups config');
+    return DEFAULT_GROUPS_CONFIG;
+  }
+
+  try {
+    const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as unknown;
+    return GroupsConfigSchema.parse(raw);
+  } catch (err) {
+    logger.error(
+      { path: configPath, reason: errorReason(err) },
+      'Failed to load groups config; using empty groups config',
+    );
+    return DEFAULT_GROUPS_CONFIG;
+  }
+}
+
+const groupsConfig = loadGroupsConfig();
 
 /** All configured group JIDs */
 export const GROUP_IDS = groupsConfig.groups;

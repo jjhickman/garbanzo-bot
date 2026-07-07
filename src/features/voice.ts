@@ -14,22 +14,26 @@
  * the bot auto-selects a Spanish voice.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFile, readFile, unlink } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join, resolve } from 'path';
-import { existsSync } from 'fs';
+import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { writeFile, readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { homePath } from '../utils/paths.js';
 import { detectLanguage } from './language.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const WHISPER_URL = process.env.WHISPER_URL ?? 'http://127.0.0.1:8090';
 const PIPER_BIN = process.env.PIPER_BIN ?? '/home/linuxbrew/.linuxbrew/bin/piper';
-const VOICES_DIR = resolve(PROJECT_ROOT, 'data', 'voices');
+const VOICES_DIR = homePath('data', 'voices');
 const WHISPER_TIMEOUT_MS = 30_000;
+const PIPER_TIMEOUT_MS = 30_000;
+const FFMPEG_TIMEOUT_MS = 15_000;
+const MEDIA_PROCESS_MAX_BUFFER = 1024 * 1024;
+const PROCESS_STDERR_MAX_BYTES = 64 * 1024;
 
 // ── Voice registry ──────────────────────────────────────────────────
 
@@ -136,17 +140,13 @@ export async function textToSpeech(text: string, voiceId?: string): Promise<Buff
 
   try {
     // Piper: text → WAV
-    // Escape text for shell (remove quotes, limit length)
-    const safeText = text.slice(0, 1000).replace(/'/g, "'\\''");
-    await execAsync(
-      `echo '${safeText}' | "${PIPER_BIN}" -m "${modelPath}" -f "${tmpWav}" 2>/dev/null`,
-      { timeout: 30000 },
-    );
+    await runPiper(text.slice(0, 1000), modelPath, tmpWav);
 
     // FFmpeg: WAV → OGG Opus (WhatsApp voice note format)
-    await execAsync(
-      `ffmpeg -y -i "${tmpWav}" -c:a libopus -b:a 48k -ar 48000 -ac 1 "${tmpOgg}" 2>/dev/null`,
-      { timeout: 15000 },
+    await execFileAsync(
+      'ffmpeg',
+      ['-y', '-i', tmpWav, '-c:a', 'libopus', '-b:a', '48k', '-ar', '48000', '-ac', '1', tmpOgg],
+      { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: MEDIA_PROCESS_MAX_BUFFER },
     );
 
     const oggBuffer = await readFile(tmpOgg);
@@ -159,6 +159,69 @@ export async function textToSpeech(text: string, voiceId?: string): Promise<Buff
     await unlink(tmpWav).catch(() => {});
     await unlink(tmpOgg).catch(() => {});
   }
+}
+
+async function runPiper(text: string, modelPath: string, outputPath: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(PIPER_BIN, ['-m', modelPath, '-f', outputPath], {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+
+    const stderrChunks: Buffer[] = [];
+    let stderrBytes = 0;
+    let timedOut = false;
+    let settled = false;
+
+    const stderrText = (): string => Buffer.concat(stderrChunks).toString('utf8');
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(err);
+    };
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, PIPER_TIMEOUT_MS);
+
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const remainingBytes = PROCESS_STDERR_MAX_BYTES - stderrBytes;
+      if (remainingBytes > 0) {
+        stderrChunks.push(buffer.subarray(0, remainingBytes));
+      }
+      stderrBytes += buffer.length;
+    });
+
+    child.on('error', fail);
+    child.stdin?.on('error', fail);
+    child.on('close', (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(buildProcessError(`Piper timed out after ${PIPER_TIMEOUT_MS}ms`, code, signal, stderrText()));
+        return;
+      }
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(buildProcessError(`Piper exited with code ${code ?? 'null'}`, code, signal, stderrText()));
+    });
+
+    child.stdin?.end(text);
+  });
+}
+
+function buildProcessError(
+  message: string,
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  stderr: string,
+): Error & { code: number | null; signal: NodeJS.Signals | null; stderr: string } {
+  return Object.assign(new Error(message), { code, signal, stderr });
 }
 
 /**

@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
 import { logger } from '../middleware/logger.js';
-import { config, PROJECT_ROOT } from './config.js';
+import { config } from './config.js';
+import { homePath } from './paths.js';
 
-const RAG_SOURCES_PATH = resolve(PROJECT_ROOT, 'config/rag-sources.json');
+const RAG_SOURCES_PATH = homePath('config/rag-sources.json');
 
 const optionalNonEmptyString = z.preprocess(
   (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),

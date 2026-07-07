@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from 'fs';
-import { resolve } from 'path';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 import { logger } from '../middleware/logger.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
 import type { BridgeEnvelope } from '../bridge/envelope.js';
-import { PROJECT_ROOT, config } from './config.js';
+import { config } from './config.js';
+import { assetPath } from './paths.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
@@ -199,8 +199,8 @@ function resolvePostgresConnectionString(): string {
 
 function resolveSchemaPath(): string | undefined {
   const candidates = [
-    resolve(PROJECT_ROOT, 'src', 'utils', 'postgres-schema.sql'),
-    resolve(PROJECT_ROOT, 'dist', 'utils', 'postgres-schema.sql'),
+    assetPath('src', 'utils', 'postgres-schema.sql'),
+    assetPath('dist', 'utils', 'postgres-schema.sql'),
   ];
 
   for (const candidate of candidates) {

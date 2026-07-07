@@ -9,16 +9,16 @@ import makeWASocket, {
 import type { ILogger } from '@whiskeysockets/baileys/lib/Utils/logger.js';
 import { Boom } from '@hapi/boom';
 import { classifyDisconnect } from 'baileys-antiban';
-import { resolve } from 'path';
 
 import { logger } from '../../middleware/logger.js';
-import { config, PROJECT_ROOT } from '../../utils/config.js';
+import { config } from '../../utils/config.js';
+import { homePath } from '../../utils/paths.js';
 import { markConnected, markDisconnected } from '../../middleware/health.js';
 import { getPersonaName } from '../../ai/persona.js';
 import { createProtectedWhatsAppSocket, getWhatsAppOutboundSafety } from './outbound-safety.js';
 import { markLinked, markUnlinked, routeLoginQr, setActiveSocket } from './login-store.js';
 
-const AUTH_DIR = resolve(PROJECT_ROOT, 'baileys_auth');
+const AUTH_DIR = homePath('baileys_auth');
 const baileysLogger = logger.child({ module: 'baileys' });
 
 // Suppress Baileys internal noise

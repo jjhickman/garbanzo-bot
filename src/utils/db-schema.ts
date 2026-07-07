@@ -10,7 +10,8 @@ import { resolve } from 'path';
 import { mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT, config } from './config.js';
+import { config } from './config.js';
+import { homePath } from './paths.js';
 
 function isTestRuntime(): boolean {
   // Vitest runs tests in multiple node processes by default; having all workers
@@ -25,7 +26,7 @@ function isTestRuntime(): boolean {
 
 export const DB_DIR = isTestRuntime()
   ? resolve(tmpdir(), 'garbanzo-bot-tests', String(process.pid))
-  : resolve(PROJECT_ROOT, 'data');
+  : homePath('data');
 
 export const DB_PATH = resolve(DB_DIR, 'garbanzo.db');
 

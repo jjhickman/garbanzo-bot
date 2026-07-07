@@ -15,10 +15,9 @@
  */
 
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
 import { GROUP_IDS } from '../core/groups-config.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { assetPath } from '../utils/paths.js';
 
 let cachedVersion: string | null = null;
 let cachedChangelogSnippet: string | null = null;
@@ -62,7 +61,7 @@ function getAppVersion(): string {
   }
 
   try {
-    const pkgPath = resolve(PROJECT_ROOT, 'package.json');
+    const pkgPath = assetPath('package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string };
     const version = pkg.version?.trim();
     if (version) {
@@ -81,7 +80,7 @@ function getChangelogSnippet(maxLines: number = 8): string {
   if (cachedChangelogSnippet && maxLines === 8) return cachedChangelogSnippet;
 
   try {
-    const changelogPath = resolve(PROJECT_ROOT, 'CHANGELOG.md');
+    const changelogPath = assetPath('CHANGELOG.md');
     const lines = readFileSync(changelogPath, 'utf-8').split('\n');
     const sectionHeaders: number[] = [];
 

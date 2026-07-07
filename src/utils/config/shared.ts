@@ -50,6 +50,17 @@ export function applyEnvLayers(options: EnvLayerOptions): EnvLayerResult {
   return { env, loadedEnvFiles, platform };
 }
 
+// Reusable for wrapping z.coerce.number()/z.enum()/z.string() fields that
+// carry a .default(...): the setup wizard's non-interactive writer always
+// emits `KEY=value` (envLine in scripts/setup-fields.mjs), including an
+// empty value for fields nobody configured. Without this, an empty string
+// reaches the base schema directly — coercing to 0 (failing a `.min()`),
+// failing z.enum's fixed value set, or failing z.string().min(1) — instead
+// of falling through to the intended default. See src/utils/config/bridge.ts.
+export function blankToUndefined(value: unknown): unknown {
+  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+}
+
 export const optionalUrl = z.preprocess(
   (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
   z.string().url().optional(),

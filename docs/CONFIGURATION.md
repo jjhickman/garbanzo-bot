@@ -94,7 +94,7 @@ cp .env.discord.example .env.discord
 | `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
 | `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
 | `VECTOR_STORE` | No | Vector backend: `qdrant` (default) or `none` (keyword-only, no embeddings) |
-| `QDRANT_URL` | No | Qdrant server URL (default: `http://qdrant:6333`) |
+| `QDRANT_URL` | No | Qdrant server URL (default: `http://127.0.0.1:6333`) |
 | `QDRANT_API_KEY` | No | Qdrant API key, if the server requires one |
 | `QDRANT_COLLECTION` | No | Local Qdrant collection for this instance's own facts. Default is `garbanzo_memory`, unless `INSTANCE_ID` is set and this is left unset, in which case it defaults to `garbanzo_memory_<INSTANCE_ID>` so two instances on the same Qdrant deployment don't silently share facts. An explicit value always wins. See [docs/BRIDGING.md](BRIDGING.md) for the multi-instance isolation rule. |
 | `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `openai` (default) or `deterministic` |
@@ -127,6 +127,8 @@ cp .env.discord.example .env.discord
 | `BRIDGE_MAX_TEXT` | No | Max characters per relayed/digest bridge message (default: `1500`) |
 | `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
 | `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
+
+Docker Compose sets `QDRANT_URL=http://qdrant:6333` explicitly for bot services on the compose network.
 
 Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
 

@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import { existsSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { aiSchema } from './ai.js';
 import { bandSchema } from './band.js';
 import { bridgeSchema } from './bridge.js';
@@ -13,15 +11,15 @@ import { ragSchema } from './rag.js';
 import { applyEnvLayers } from './shared.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
+import { GARBANZO_HOME_DIR, PACKAGE_ROOT, homePath } from '../paths.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const processWithPkg = process as NodeJS.Process & { pkg?: unknown };
-const PROJECT_ROOT = processWithPkg.pkg
-  ? dirname(process.execPath)
-  : resolve(__dirname, '../../..');
+// PROJECT_ROOT is retained as an alias of PACKAGE_ROOT so existing imports
+// keep compiling; new call sites should prefer assetPath()/homePath() from
+// utils/paths.js directly.
+const PROJECT_ROOT = PACKAGE_ROOT;
 
 const realEnv = { ...process.env };
-const envLayerResult = applyEnvLayers({ baseDir: PROJECT_ROOT, realEnv });
+const envLayerResult = applyEnvLayers({ baseDir: GARBANZO_HOME_DIR, realEnv });
 export const loadedEnvFiles = envLayerResult.loadedEnvFiles;
 
 const envSchema = coreSchema
@@ -133,7 +131,7 @@ if (parsed.data.BRIDGE_ENABLED && parsed.data.BRIDGE_TRANSPORT === 'http' && !pa
   process.exit(1);
 }
 
-if (parsed.data.RAG_FEDERATION_ENABLED && !existsSync(resolve(PROJECT_ROOT, 'config/rag-sources.json'))) {
+if (parsed.data.RAG_FEDERATION_ENABLED && !existsSync(homePath('config/rag-sources.json'))) {
   console.warn('⚠️ RAG_FEDERATION_ENABLED=true but config/rag-sources.json is not readable; federation disabled');
 }
 

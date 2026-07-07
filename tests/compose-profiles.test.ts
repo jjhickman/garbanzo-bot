@@ -169,10 +169,20 @@ describe('platform-profile compose contract', () => {
     const whatsapp = service(compose, 'whatsapp');
 
     expect(envEntries(discord)).toEqual(
-      expect.arrayContaining(['MESSAGING_PLATFORM=discord', 'HEALTH_PORT=3002']),
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=discord',
+        'HEALTH_PORT=3002',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+      ]),
     );
     expect(envEntries(whatsapp)).toEqual(
-      expect.arrayContaining(['MESSAGING_PLATFORM=whatsapp', 'HEALTH_PORT=3001']),
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=whatsapp',
+        'HEALTH_PORT=3001',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+      ]),
     );
 
     expect(toStringList(discord.ports)).toContain('127.0.0.1:3002:3002');

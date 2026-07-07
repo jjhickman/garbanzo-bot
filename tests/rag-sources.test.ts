@@ -18,11 +18,14 @@ async function makeProjectRoot(): Promise<string> {
 async function loadModule(projectRoot: string) {
   vi.resetModules();
   vi.doMock('../src/utils/config.js', () => ({
-    PROJECT_ROOT: projectRoot,
     config: {
       QDRANT_URL: 'http://qdrant.local:6333',
       QDRANT_API_KEY: undefined,
     },
+  }));
+  vi.doMock('../src/utils/paths.js', () => ({
+    homePath: (...segments: string[]) => join(projectRoot, ...segments),
+    assetPath: (...segments: string[]) => join(projectRoot, ...segments),
   }));
   vi.doMock('../src/middleware/logger.js', () => ({
     logger: { warn: vi.fn(), debug: vi.fn() },
@@ -34,6 +37,7 @@ describe('RAG sources config loader', () => {
   afterEach(() => {
     vi.resetModules();
     vi.doUnmock('../src/utils/config.js');
+    vi.doUnmock('../src/utils/paths.js');
     vi.doUnmock('../src/middleware/logger.js');
   });
 

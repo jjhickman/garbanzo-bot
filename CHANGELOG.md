@@ -6,9 +6,62 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-07-07
+
+Adoption release: Garbanzo now runs without Docker, from a guided setup to a
+system service, on a single always-on machine.
+
 ### Added
 
-- `save_community_memory` AI tool: the bot can now save a community fact when someone explicitly asks it to remember something, instead of only searching existing memory. Saves are validated (category and length), deduplicated against existing facts, rate-limited per process window, tagged with an `ai-tool` source visible in `!memory list` as `(ai)`, and never enter the shared cross-instance collection.
+- No-Docker deployment path: `docs/QUICKSTART.md` walks a single-instance
+  setup end to end. The README Quick Start now offers both doors (bare Node
+  and the full Docker stack).
+- `garbanzo` CLI (`dist/cli.js`): `setup` (spawns the wizard), `start`,
+  `doctor` (environment report: mode, config presence, optional binaries,
+  provider key presence, health-port availability, current vs latest
+  version), and `service install|uninstall` (systemd/launchd generation with
+  resolved paths; refuses ephemeral npx caches; never invokes systemctl
+  itself).
+- npm packaging as `garbanzo-bot` with a `garbanzo` bin: shipped assets
+  (wizard, personas, config examples, service template), a packaged-install
+  sentinel so mutable state resolves to `~/.garbanzo`, a blocking pack
+  rehearsal in CI that installs the tarball and boots it, and a tag-triggered
+  publish workflow (skips with a notice until an `NPM_TOKEN` secret exists).
+- `GARBANZO_HOME`: mutable state (database, WhatsApp auth, config JSON, env
+  files, persona overrides) resolves to an explicit home directory —
+  repo/Docker deployments are unchanged; npm installs default to
+  `~/.garbanzo`.
+- `save_community_memory` AI tool: the bot can now save a community fact when
+  someone explicitly asks it to remember something, instead of only searching
+  existing memory. Saves are validated (category and length), deduplicated
+  against existing facts, rate-limited per process window, tagged with an
+  `ai-tool` source visible in `!memory list` as `(ai)`, and never enter the
+  shared cross-instance collection.
+- CI smoke matrix boots the built app on Windows and macOS (non-blocking;
+  Windows is experimental this release).
+
+### Changed
+
+- The setup wizard is native-first: a complete Discord walkthrough (portal
+  steps, generated invite URL, required intents), hard-gated credentials and
+  channel with snowflake validation, no `COMPOSE_PROFILES` written on the
+  native path, keyword memory (`VECTOR_STORE=none`) as the native default,
+  and merge semantics for existing channel configs on re-run.
+- `config/groups.json` loads fail-soft: a missing file yields an empty groups
+  config with a warning instead of crashing startup; malformed files log the
+  path and reason.
+- `QDRANT_URL` defaults to `http://127.0.0.1:6333`. Docker Compose and the
+  Helm chart pin the in-cluster hostname explicitly (operator `.env`
+  overrides still win), so containerized deployments are unaffected.
+- Media integrations (ffmpeg, yt-dlp, Piper) run via argument arrays instead
+  of shell strings; behavior is unchanged and Windows-compatible.
+
+### Fixed
+
+- Blank `KEY=` lines in env files no longer fail validation for bridge and
+  shared-memory settings; empty values fall back to defaults.
+- Short "remember that..." messages route to a tool-capable model instead of
+  the local fallback, which cannot save memories and now says so.
 
 ## [3.1.0] — 2026-07-07
 
