@@ -193,18 +193,62 @@ describe('config hardening', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
-  it.each(['telegram', 'matrix'] as const)(
-    'accepts MESSAGING_PLATFORM=%s at the config layer (no runtime yet — enum groundwork only)',
-    async (platform) => {
-      const { config, instanceId } = await importConfigWithEnv({
-        MESSAGING_PLATFORM: platform,
-      });
+  it('accepts MESSAGING_PLATFORM=matrix at the config layer (no runtime yet — enum groundwork only)', async () => {
+    const { config, instanceId } = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+    });
 
-      expect(config.MESSAGING_PLATFORM).toBe(platform);
-      expect(instanceId).toBe(platform);
-      expect(exitSpy).not.toHaveBeenCalled();
-    },
-  );
+    expect(config.MESSAGING_PLATFORM).toBe('matrix');
+    expect(instanceId).toBe('matrix');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('requires TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID when MESSAGING_PLATFORM=telegram', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: undefined,
+      TELEGRAM_OWNER_ID: undefined,
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'TELEGRAM_BOT_TOKEN is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'TELEGRAM_OWNER_ID is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+      ),
+    );
+  });
+
+  it('rejects a non-numeric TELEGRAM_OWNER_ID', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: 'test_bot_token',
+      TELEGRAM_OWNER_ID: 'not-a-number',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TELEGRAM_OWNER_ID must be numeric'),
+    );
+  });
+
+  it('accepts telegram config when TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID are present', async () => {
+    const { config, instanceId } = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: 'test_bot_token',
+      TELEGRAM_OWNER_ID: '123456789',
+    });
+
+    expect(config.MESSAGING_PLATFORM).toBe('telegram');
+    expect(config.TELEGRAM_BOT_TOKEN).toBe('test_bot_token');
+    expect(config.TELEGRAM_OWNER_ID).toBe('123456789');
+    expect(instanceId).toBe('telegram');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
 
   it('still rejects the removed teams platform value', async () => {
     await expect(importConfigWithEnv({

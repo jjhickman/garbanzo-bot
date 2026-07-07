@@ -58,9 +58,16 @@ export interface InboundMessage {
 
   /**
    * An audio attachment on the message, where the platform surfaces it
-   * (Discord); undefined otherwise.
+   * (Discord, Telegram); undefined otherwise.
+   *
+   * `buffer` is Telegram-only: Telegram file URLs embed the bot token
+   * (`api.telegram.org/file/bot<TOKEN>/...`), so the Telegram adapter never
+   * puts that URL here — `url` is a safe, non-fetchable placeholder
+   * (`telegram-file:<file_id>`) and `buffer` carries the already-downloaded
+   * bytes for consumers that need the audio content. See
+   * `src/platforms/telegram/telegram-voice.ts`.
    */
-  audio?: { url: string; contentType: string };
+  audio?: { url: string; contentType: string; buffer?: Buffer };
 
   /** Platform-specific raw message for advanced operations. */
   raw: MessageRef;

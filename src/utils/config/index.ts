@@ -9,6 +9,7 @@ import { integrationsSchema } from './integrations.js';
 import { monitoringSchema } from './monitoring.js';
 import { ragSchema } from './rag.js';
 import { applyEnvLayers } from './shared.js';
+import { telegramSchema } from './telegram.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
 import { GARBANZO_HOME_DIR, PACKAGE_ROOT, homePath } from '../paths.js';
@@ -26,6 +27,7 @@ const envSchema = coreSchema
   .merge(aiSchema)
   .merge(whatsappSchema)
   .merge(discordSchema)
+  .merge(telegramSchema)
   .merge(bandSchema)
   .merge(bridgeSchema)
   .merge(ragSchema)
@@ -38,6 +40,34 @@ const envSchema = coreSchema
         code: z.ZodIssueCode.custom,
         path: ['OWNER_JID'],
         message: 'OWNER_JID is required when MESSAGING_PLATFORM=whatsapp — set it in .env.whatsapp',
+      });
+    }
+
+    if (env.MESSAGING_PLATFORM === 'telegram') {
+      if (!env.TELEGRAM_BOT_TOKEN) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TELEGRAM_BOT_TOKEN'],
+          message: 'TELEGRAM_BOT_TOKEN is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+        });
+      }
+      if (!env.TELEGRAM_OWNER_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TELEGRAM_OWNER_ID'],
+          message: 'TELEGRAM_OWNER_ID is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+        });
+      }
+    }
+
+    // Validated regardless of platform — a non-numeric value is never
+    // useful (Telegram user ids are always digits), so catch it at boot
+    // even if it was set on the "wrong" platform's env layer.
+    if (env.TELEGRAM_OWNER_ID && !/^\d+$/.test(env.TELEGRAM_OWNER_ID)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TELEGRAM_OWNER_ID'],
+        message: 'TELEGRAM_OWNER_ID must be numeric (a Telegram user id)',
       });
     }
   });

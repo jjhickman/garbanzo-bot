@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to config/telegram-chats.json and replace ids with real Telegram chat ids (groups/supergroups use negative ids).",
+  "ownerId": "111111111",
+  "chats": {
+    "-1001234567890": {
+      "_comment": "Privacy mode ON (BotFather default, recommended): the bot only receives commands/mentions/replies here, matching requireMention: true.",
+      "name": "general",
+      "enabled": true,
+      "requireMention": true
+    },
+    "-1009876543210": {
+      "_comment": "requireMention: false only does something useful once you disable privacy mode for this bot via BotFather — otherwise Telegram itself still withholds ordinary messages from the bot.",
+      "name": "announcements",
+      "enabled": true,
+      "requireMention": false,
+      "enabledFeatures": ["events", "weather"]
+    }
+  }
+}
