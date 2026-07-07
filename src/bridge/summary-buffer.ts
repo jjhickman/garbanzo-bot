@@ -133,7 +133,9 @@ export function createSummaryBuffer(options: SummaryBufferOptions): SummaryBuffe
     }
 
     const [firstEnvelope] = envelopes;
-    const header = `${platformLabel(firstEnvelope.origin.platform)} — last ${intervalMinutes} min:`;
+    const label = platformLabel(firstEnvelope.origin.platform);
+    const headerLabel = firstEnvelope.origin.chatName ? `${label} ${firstEnvelope.origin.chatName}` : label;
+    const header = `${headerLabel} — last ${intervalMinutes} min:`;
     const lines = envelopes.map((envelope) => envelopeLine(envelope, targetPlatform));
     const text = buildDigestText(header, lines, maxText);
 

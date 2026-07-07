@@ -42,6 +42,58 @@ function buildRelayBody(inbound: InboundMessage): RelayBody | null {
   return null;
 }
 
+async function buildAudioOnlyRelayBody(inbound: InboundMessage): Promise<RelayBody> {
+  if (!process.env.WHISPER_URL || !inbound.audio) return { text: '[voice note]', kind: 'media-placeholder' };
+
+  try {
+    const response = await fetch(inbound.audio.url);
+    if (!response.ok) return { text: '[voice note]', kind: 'media-placeholder' };
+
+    const { transcribeAudio } = await import('../features/voice.js');
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const transcript = await transcribeAudio(audioBuffer, inbound.audio.contentType);
+    const cleanTranscript = transcript?.trim();
+    if (!cleanTranscript) return { text: '[voice note]', kind: 'media-placeholder' };
+
+    return { text: `🎤 ${cleanTranscript}`, kind: 'message' };
+  } catch {
+    return { text: '[voice note]', kind: 'media-placeholder' };
+  }
+}
+
+function buildEnvelope(params: {
+  inbound: InboundMessage;
+  instanceId: string;
+  messageId: string;
+  route: BridgeRoute;
+  target: { instance: string; chatId: string };
+  body: RelayBody;
+}): BridgeEnvelope {
+  return {
+    v: 1,
+    routeId: params.route.id,
+    origin: {
+      instance: params.instanceId,
+      platform: params.inbound.platform,
+      chatId: params.inbound.chatId,
+      chatName: params.inbound.chatName?.trim() ? params.inbound.chatName : undefined,
+      messageId: params.messageId,
+      senderId: params.inbound.senderId,
+      senderName: params.inbound.senderName?.trim() ? params.inbound.senderName : undefined,
+    },
+    targetInstance: params.target.instance,
+    targetChatId: params.target.chatId,
+    text: params.body.text,
+    kind: params.body.kind,
+    sentAtMs: Date.now(),
+    idempotencyKey: buildIdempotencyKey({
+      instance: params.instanceId,
+      chatId: params.inbound.chatId,
+      messageId: params.messageId,
+    }),
+  };
+}
+
 export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCaptureOptions): RelayCapture {
   return {
     capture(inbound: InboundMessage): void {
@@ -55,35 +107,26 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
         logger.debug({ routeId: route.id, chatId: inbound.chatId }, 'Bridge capture: skipping message without a messageId');
         return;
       }
+      const messageId = inbound.messageId;
 
       const target = otherEndpoint(route, instanceId);
       if (!target) return;
 
+      if (inbound.audio && !inbound.text && process.env.WHISPER_URL) {
+        void (async () => {
+          const body = await buildAudioOnlyRelayBody(inbound);
+          const envelope = buildEnvelope({ inbound, instanceId, messageId, route, target, body });
+          await enqueue(envelope);
+        })().catch((err) => {
+          logger.error({ err, routeId: route.id }, 'Bridge capture: enqueue failed');
+        });
+        return;
+      }
+
       const body = buildRelayBody(inbound);
       if (!body) return;
 
-      const envelope: BridgeEnvelope = {
-        v: 1,
-        routeId: route.id,
-        origin: {
-          instance: instanceId,
-          platform: inbound.platform,
-          chatId: inbound.chatId,
-          messageId: inbound.messageId,
-          senderId: inbound.senderId,
-          senderName: inbound.senderName?.trim() ? inbound.senderName : undefined,
-        },
-        targetInstance: target.instance,
-        targetChatId: target.chatId,
-        text: body.text,
-        kind: body.kind,
-        sentAtMs: Date.now(),
-        idempotencyKey: buildIdempotencyKey({
-          instance: instanceId,
-          chatId: inbound.chatId,
-          messageId: inbound.messageId,
-        }),
-      };
+      const envelope = buildEnvelope({ inbound, instanceId, messageId, route, target, body });
 
       void enqueue(envelope).catch((err) => {
         logger.error({ err, routeId: route.id }, 'Bridge capture: enqueue failed');

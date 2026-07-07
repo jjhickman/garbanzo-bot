@@ -54,7 +54,8 @@ export function createRelayDeliverer({
 function relayText(envelope: BridgeEnvelope, targetPlatform: MessagingPlatform): string {
   const label = platformLabel(envelope.origin.platform);
   const who = envelope.origin.senderName ?? envelope.origin.senderId;
-  const prefix = `${who} (${label}): `;
+  const prefixLabel = envelope.origin.chatName ? `${label} · ${envelope.origin.chatName}` : label;
+  const prefix = `${who} (${prefixLabel}): `;
   const body = envelope.kind === 'media-placeholder'
     ? envelope.text
     : translateFormatting(envelope.text, envelope.origin.platform, targetPlatform);

@@ -13,8 +13,15 @@ Two independent tiers:
   never leave the instance they were created on.
 - **Tier 2 - message bridging.** Chat routes defined in
   `config/bridge-map.json` relay text between mapped channels/groups, with
-  attribution (`Ana (Discord): ...`), through a durable per-instance outbox
-  and a pluggable transport (HTTP or AMQP).
+  attribution (`Ana (Discord · practice): ...` when a configured chat name is
+  available), through a durable per-instance outbox and a pluggable transport
+  (HTTP or AMQP).
+
+Bridge envelope schemas are strict. The current envelope includes optional
+origin chat display names for better attribution, so bridged instances should
+be upgraded together; a newer sender can produce envelopes that a v3.0.0 peer
+rejects. Bridging is default-off, so existing deployments that have not
+enabled it are unaffected.
 
 ## Flags summary
 
@@ -120,6 +127,12 @@ plain HTTP with no extra containers.
        Discord endpoint.
      - `relayCommands` - `false` by default. When false, messages starting
        with `!` (bang commands like `!weather`) are not relayed.
+     - `ingestRelayed` - `false` by default. When true, successfully delivered
+       verbatim relays are recorded in the receiving chat's conversation
+       context with origin attribution. This makes relayed content available
+       to that receiving bot's later context/memory flow, so only enable it
+       for routes where both sides should inform the receiver's local context.
+       Summary-mode digests and held/buffered sends are never ingested.
 
    Example, bridging one Discord channel with one WhatsApp group:
 
@@ -139,7 +152,8 @@ plain HTTP with no extra containers.
          "direction": "both",
          "modeToWhatsApp": "summary",
          "modeToDiscord": "verbatim",
-         "relayCommands": false
+         "relayCommands": false,
+         "ingestRelayed": false
        }
      ]
    }
@@ -181,7 +195,7 @@ plain HTTP with no extra containers.
      with attribution:
 
      ```
-     Ana (Discord): hey what time is practice tonight
+     Ana (Discord · practice): hey what time is practice tonight
      ```
 
      Going the other way (WhatsApp -> Discord, summary by default), the
@@ -189,7 +203,7 @@ plain HTTP with no extra containers.
      `BRIDGE_SUMMARY_INTERVAL_MINUTES`:
 
      ```
-     WhatsApp — last 15 min:
+     WhatsApp General — last 15 min:
      • Sam: 7pm as usual
      ```
 
@@ -437,6 +451,14 @@ replacing them with a `… (+N earlier messages)` marker, and fall back to a
 hard character cut (`...`) only if even the header would otherwise overflow.
 Verbatim relays truncate the message body the same way, keeping the
 attribution prefix intact.
+
+Textless Discord-origin audio attachments can be relayed as transcripts when
+`WHISPER_URL` is set and reachable. The receiving side sees the transcript as
+a normal relayed message prefixed with `🎤`; if fetch or transcription fails,
+the bridge falls back to `[voice note]`. WhatsApp voice notes do not currently
+provide a fetchable URL on `InboundMessage` because Baileys media requires
+`downloadMediaMessage`, so WhatsApp-origin voice notes relay as placeholders
+for now. Cross-platform WhatsApp media download is a roadmap item.
 
 ## Shared memory
 

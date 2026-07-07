@@ -3,7 +3,7 @@ process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeMap } from '../src/bridge/bridge-map.js';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createRelayCapture } from '../src/bridge/relay-capture.js';
@@ -71,12 +71,22 @@ function inbound(overrides: Partial<InboundMessage> = {}): InboundMessage {
   };
 }
 
+async function tickMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function capture(instanceId: string, map: BridgeMap = MAP) {
   const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
   return { relay: createRelayCapture({ instanceId, bridgeMap: map, enqueue }), enqueue };
 }
 
 describe('createRelayCapture', () => {
+  afterEach(() => {
+    delete process.env.WHISPER_URL;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it('enqueues a text message envelope addressed to the route\'s other endpoint', () => {
     const { relay, enqueue } = capture('discord-band');
 
@@ -101,6 +111,14 @@ describe('createRelayCapture', () => {
         senderName: 'Ana',
       },
     });
+  });
+
+  it('carries the configured chat display name on the envelope origin', () => {
+    const { relay, enqueue } = capture('discord-band');
+
+    relay.capture(inbound({ chatName: 'practice' }));
+
+    expect(enqueue.mock.calls[0]?.[0].origin.chatName).toBe('practice');
   });
 
   it('is a no-op when no route matches the chat id', () => {
@@ -164,6 +182,89 @@ describe('createRelayCapture', () => {
     expect(enqueue.mock.calls[0]?.[0]).toMatchObject({ kind: 'media-placeholder', text: '[voice note]' });
   });
 
+  it('transcribes a Discord audio-only message when WHISPER_URL is configured', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3])));
+    const transcribeAudio = vi.fn(async () => 'bring the charts');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
+    await tickMicrotasks();
+
+    expect(fetchMock).toHaveBeenCalledWith('https://cdn.example/a.ogg');
+    expect(transcribeAudio).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), 'audio/ogg');
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'message',
+      text: '🎤 bring the charts',
+    }));
+  });
+
+  it('falls back to the voice-note placeholder when audio transcription returns null', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(new Uint8Array([4, 5, 6]))));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => null) }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
+    await tickMicrotasks();
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'media-placeholder',
+      text: '[voice note]',
+    }));
+  });
+
+  it('falls back to the voice-note placeholder when audio fetch fails', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => {
+      throw new Error('cdn unavailable');
+    }));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => 'unused') }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
+    await tickMicrotasks();
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'media-placeholder',
+      text: '[voice note]',
+    }));
+  });
+
+  it('does not block the sync capture path while audio transcription is pending', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    let releaseFetch: (() => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(
+      () => new Promise<Response>((resolve) => {
+        releaseFetch = () => resolve(new Response(new Uint8Array([7, 8, 9])));
+      }),
+    ));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => 'later') }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    const result = relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
+
+    expect(result).toBeUndefined();
+    expect(enqueue).not.toHaveBeenCalled();
+    releaseFetch?.();
+    await tickMicrotasks();
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ text: '🎤 later' }));
+  });
+
   it('builds an image placeholder for visual-media-only messages', () => {
     const { relay, enqueue } = capture('discord-band');
 
@@ -205,7 +306,7 @@ describe('createRelayCapture', () => {
     expect(() => relay.capture(inbound())).not.toThrow();
 
     // Let the rejected microtask settle before the test ends.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tickMicrotasks();
   });
 
   it('capture() returns synchronously without awaiting the enqueue promise', () => {

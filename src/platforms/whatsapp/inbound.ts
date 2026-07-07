@@ -8,6 +8,7 @@ import { hasVisualMedia } from './media.js';
 import { getSenderJid, isGroupJid, isLidJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
 import type { MessageRef } from '../../core/message-ref.js';
+import { getGroupName } from '../../core/groups-config.js';
 import { createWhatsAppInboundMessageRef } from './message-ref.js';
 
 type MessageKeyWithLegacyPn = WAMessage['key'] & {
@@ -90,6 +91,11 @@ function cleanOptionalName(value: string | null | undefined): string | undefined
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
+function resolveWhatsAppChatName(chatId: string): string | undefined {
+  const groupName = getGroupName(chatId);
+  return groupName === 'Unknown Group' ? undefined : groupName;
+}
+
 // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT — an incoming edit arrives
 // as a protocolMessage envelope that normalizeMessageContent does NOT unwrap
 // (it only unwraps ephemeral/viewOnce/editedMessage wrappers on outbound).
@@ -130,6 +136,7 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
   return {
     platform: 'whatsapp',
     chatId,
+    chatName: isGroupJid(chatId) ? resolveWhatsAppChatName(chatId) : undefined,
     senderId,
     senderName: cleanOptionalName(msg.pushName),
     messageId: msg.key.id ?? undefined,
