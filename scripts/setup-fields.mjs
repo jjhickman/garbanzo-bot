@@ -317,13 +317,17 @@ export const DEFAULT_MESSAGING_PLATFORM = 'discord';
 
 /**
  * Non-interactive messaging platform resolution: CLI flag wins, then the
- * existing .env value, then the Discord-first default. Unrecognized values
- * fall back to the default rather than erroring, mirroring the prior inline
- * ternary in setup.mjs.
+ * existing .env value, then the Discord-first default. An EXPLICIT value the
+ * wizard doesn't support is an error, never a silent fall-through to the
+ * default — silently writing a discord config for --platform=teams (or a
+ * platform whose wizard flow hasn't landed yet) misleads the operator twice.
  */
 export function resolveMessagingPlatform(cli, existing) {
-  const requested = (cli.options.platform || existing.MESSAGING_PLATFORM || DEFAULT_MESSAGING_PLATFORM)
-    .trim()
-    .toLowerCase();
-  return MESSAGING_PLATFORMS.includes(requested) ? requested : DEFAULT_MESSAGING_PLATFORM;
+  const explicit = cli.options.platform || existing.MESSAGING_PLATFORM;
+  const requested = (explicit || DEFAULT_MESSAGING_PLATFORM).trim().toLowerCase();
+  if (MESSAGING_PLATFORMS.includes(requested)) return requested;
+  throw new Error(
+    `Unsupported platform "${requested}". The setup wizard supports: ${MESSAGING_PLATFORMS.join(', ')}. ` +
+    'Teams was removed (its SDK was archived); update MESSAGING_PLATFORM in your env file.',
+  );
 }

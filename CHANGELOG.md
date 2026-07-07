@@ -18,7 +18,9 @@ All notable changes to Garbanzo are documented here.
   have existed. The bridge-map loader's error now names the offending
   instance/route entry (by id, or by index when the entry has no usable id)
   so operators can find and fix the bad entry without cross-referencing
-  indices by hand.
+  indices by hand. If an old setup wrote `MESSAGING_PLATFORM=teams` into
+  your env file, boot and the setup wizard both fail with a clear message —
+  change the value to a supported platform.
 
 ### Added
 

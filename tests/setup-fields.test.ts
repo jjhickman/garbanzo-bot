@@ -262,6 +262,13 @@ describe('setup field resolver', () => {
     expect(resolveMessagingPlatform(cli({}), {})).toBe('discord');
     expect(resolveMessagingPlatform(cli({ platform: 'whatsapp' }), {})).toBe('whatsapp');
     expect(resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'whatsapp' })).toBe('whatsapp');
-    expect(resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toBe('discord');
+  });
+
+  it('rejects explicit platform values the wizard does not support instead of silently defaulting', () => {
+    expect(() => resolveMessagingPlatform(cli({ platform: 'teams' }), {})).toThrow(/Unsupported platform "teams"/);
+    expect(() => resolveMessagingPlatform(cli({ platform: 'telegram' }), {})).toThrow(/discord, whatsapp, slack/);
+    expect(() => resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toThrow(/Unsupported platform/);
+    // An existing .env carrying a removed platform must also fail loudly, not migrate silently
+    expect(() => resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'teams' })).toThrow(/Unsupported platform "teams"/);
   });
 });
