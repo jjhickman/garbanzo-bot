@@ -118,71 +118,24 @@ npm run rotate:gh-secrets
 
 ## Project Structure
 
-```
-garbanzo-bot/
-├── src/
-│   ├── index.ts              # Entry point — selects platform runtime, starts bot
-│   ├── core/                 # Platform-agnostic message pipeline
-│   │   ├── messaging-platform.ts / messaging-adapter.ts / platform-messenger.ts
-│   │   │                     # Platform abstraction: adapter contract + outbound messenger
-│   │   ├── inbound-message.ts / process-inbound-message.ts / process-group-message.ts
-│   │   │                     # Normalized inbound shape + shared processing pipeline
-│   │   ├── response-router.ts # Bang commands + natural-language feature routing
-│   │   ├── groups-config.ts  # Group config, JID mapping, per-group personas
-│   │   └── vision.ts, poll-payload.ts, message-ref.ts
-│   ├── platforms/            # One directory per platform, each with adapter + runtime
-│   │   ├── whatsapp/         # Baileys socket, anti-ban outbound safety,
-│   │   │                     #   owner commands, login server/store, digest, recaps,
-│   │   │                     #   event reminders, media, mentions, reactions
-│   │   ├── discord/          # Gateway runtime + demo server
-│   │   ├── slack/            # Events server, token manager, demo servers
-│   │   └── teams/            # Runtime stub
-│   ├── ai/
-│   │   ├── router.ts         # Model selection (cloud vs Ollama) + cost tracking
-│   │   ├── cloud-providers.ts / cloud-call.ts # Shared request builders/parsers per provider API
-│   │   ├── claude.ts, chatgpt.ts, gemini.ts, bedrock.ts, ollama.ts # Provider callers
-│   │   ├── openai-oauth.ts   # OpenAI PKCE OAuth flow
-│   │   ├── persona.ts        # System prompt builder (loads docs/PERSONA.md + docs/personas/<platform>.md)
-│   │   ├── tools.ts          # AI tool definitions (weather, transit, venues, news, books, web_search, memory)
-│   │   └── tool-loop.ts      # Provider-agnostic tool-calling loop
-│   ├── features/             # Each feature = one file (or directory), max ~300 lines
-│   │                         # weather, transit, venues, news, books, web-search, events,
-│   │                         # moderation, introductions, memory(+extract), polls, profiles,
-│   │                         # recap, digest, dnd, character/, voice, language, fun, help, …
-│   ├── middleware/
-│   │   ├── rate-limit.ts     # Per-user/per-group rate limiting
-│   │   ├── logger.ts         # Structured logging (Pino)
-│   │   ├── context.ts        # Two-tier context compression + caching
-│   │   ├── stats.ts          # Token estimation, cost tracking, tool-call counters
-│   │   ├── health.ts         # HTTP health/metrics endpoints + memory watchdog
-│   │   ├── admin-page.ts     # Token-gated owner admin page (/admin)
-│   │   ├── retry.ts          # Dead letter retry queue
-│   │   └── sanitize.ts       # Input sanitization + prompt injection detection
-│   └── utils/
-│       ├── config.ts         # Env var loading + Zod validation
-│       ├── db.ts             # DB barrel; db-backend.ts selects SQLite (default) or Postgres
-│       ├── db-sqlite.ts, db-postgres.ts, db-schema.ts, db-profiles.ts, db-maintenance.ts, …
-│       ├── embedding-provider.ts, text-embedding.ts, reranker.ts, eval-retrieval.ts
-│       │                     # Retrieval/vector-memory groundwork (see docs/VECTOR_DB_PLAN.md)
-│       ├── session-summary.ts, session-backfill.ts
-│       └── formatting.ts, jid.ts
-├── config/groups.json        # Group ID → name mapping + per-group settings
-├── docs/                     # PERSONA.md (runtime prompt), personas/<platform>.md overrides,
-│                             # ARCHITECTURE, SECURITY, MONITORING, PLATFORMS, RELEASES,
-│                             # ADR-0001 (outbound safety), POSTGRES_MIGRATION_RUNBOOK, …
-├── monitoring/               # Self-hosted Prometheus + Grafana stack
-├── infra/                    # Deployment infrastructure
-├── website/                  # garbanzobot.com static site
-├── data/                     # Runtime data (gitignored DBs, persisted state)
-├── scripts/                  # setup wizard, gh account helpers, secret rotation/audit
-├── tests/                    # Vitest, 66 test files / 700+ tests
-│   └── evals/                # Prompt-behavior eval set (see tests/evals/README.md)
-├── Dockerfile                # Multi-stage build (node:22-alpine, dumb-init)
-├── docker-compose*.yml       # dev / prod / aws variants
-├── baileys_auth/             # Baileys auth state (gitignored)
-├── .env / .env.example       # Secrets (gitignored) / template
-├── .gitleaks.toml            # Secret + PII scanning config
-└── AGENTS.md                 # This file
+File-level layout changes often — trust the directory purposes, explore the live tree, and use the Decisions Log below as authoritative context.
+
+```text
+src/core/ - platform-agnostic inbound and outbound message pipeline.
+src/platforms/<name>/ - one adapter plus runtime per platform.
+src/bridge/ - cross-instance relay: capture to outbox to transport to deliver.
+src/ai/ - AI routing, provider integrations, persona loading, and tools.
+src/features/ - feature modules, usually one file per feature.
+src/middleware/ - health, admin, rate-limit, context, retry, and request safety layers.
+src/utils/ - shared persistence, formatting, RAG/vector, embedding, reranking, and support utilities.
+src/utils/config/ - modular environment schema and config validation.
+config/ - runtime JSON config families for Discord channels, bridge map, RAG sources, and WhatsApp groups.
+docs/ - operator docs, architecture notes, runbooks, personas, and docs/_internal/ process records.
+deploy/helm/ - Kubernetes Helm deployment assets.
+monitoring/ - self-hosted Prometheus and Grafana stack.
+tests/ - Vitest suites and prompt evals.
+website/ - garbanzobot.com static site.
+scripts/ - setup, release, audit, account, and operations helpers.
 ```
 
 ## Decisions Log
@@ -201,7 +154,7 @@ Settled questions — **do not relitigate these**; propose a change only with ne
 - **Remy songwriting features** (sub-project 3, all `BAND_FEATURES_ENABLED`-gated) add `song_ideas` + `song_sections` tables. **Discord audio-attachment capture is greenfield here:** `InboundMessage.audio?: {url, contentType}` is populated by the Discord gateway (first `audio/*` attachment by content-type or `.m4a/.ogg/.mp3/.wav/.webm` extension) and threaded through the dispatch — Discord previously discarded all attachments. `!idea capture` stores a song idea from text OR a dropped clip: it `fetch()`es the CDN url and transcribes via the existing `transcribeAudio` (Whisper/Speaches at `WHISPER_URL`), storing the transcript + audio url. **It degrades gracefully** — if the Whisper server is unreachable / fetch fails / transcript is null, the idea is still stored (audio url set, transcript null); the audio path NEVER crashes the reply. We store the transcript + Discord CDN url, NOT raw audio bytes (no blob store). `!idea promote` creates a song (`status: 'idea'`) — the idea→demo→ready pipeline reuses `songs.status`, no new field. `!section`/`!lyrics` build per-song structure (kind/lyrics/chords → `formatSongSheet`, the Headchart seed). AI tools `get_song_sections`/`list_song_ideas` gated. `deleteSong` also clears `song_sections` + nulls `song_ideas.song_id` in code (sqlite FK inert). WHISPER_URL is the only new (optional) external dependency. Deferred: live voice-channel recording, blob storage, AI-generated lyrics.
 - **Web search is multi-provider with priority Firecrawl → Brave → Google PSE → SearXNG** (PRs #216, #220). `web_search` tool results get a 6,000-char budget vs 1,500 for other tools, to allow extracted page content.
 - **The system prompt must explicitly direct models to prefer tools over training data** (PR #218) — without it, models answer factual questions from stale memory. Preserve this directive in any prompt rewrite.
-- **Storage: SQLite is the default backend**; Postgres exists behind `db-backend.ts` (runbook: `docs/POSTGRES_MIGRATION_RUNBOOK.md`). Vector memory is planned, not enabled (`docs/VECTOR_MEMORY_IMPLEMENTATION_SPEC.md`).
+- **Storage: SQLite is the default backend**; Postgres exists behind `db-backend.ts` (runbook: `docs/POSTGRES_MIGRATION_RUNBOOK.md`).
 - **Vector memory: self-hosted Qdrant is the single vector store** (2026-07-03). Relational DB is source of record; all embeddings live in Qdrant (`garbanzo_memory`). pgvector removed. Semantic search works in SQLite deployments. `VECTOR_STORE=none` = keyword-only. Embeddings: OpenAI `text-embedding-3-small` @ 1536; deterministic is tests/offline only and never mixed into a live collection.
 - **WhatsApp anti-ban is load-bearing**: Baileys 7.x + baileys-antiban, outbound safety rules in `docs/ADR-0001-whatsapp-outbound-safety.md`, warm-up limits `day1Limit`/`maxPerDay` = 2000. Never bypass the outbound-safety layer.
 - **Moderation is human-in-the-loop**: the bot warns in-group and DMs the owner; only the owner acts. Never auto-ban, never let members direct moderation.
@@ -301,7 +254,7 @@ npm run test:watch
 - Changing the AI model routing logic
 - Modifying the Baileys connection config
 - Adding new WhatsApp group bindings
-- Any changes to `config/groups.json`
+- Any changes to runtime JSON configs under `config/` (groups, Discord channels, bridge map, RAG sources)
 - Creating new feature files in `src/features/`
 - Modifying systemd service files or deployment scripts
 
