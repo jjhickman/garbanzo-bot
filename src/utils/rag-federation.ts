@@ -10,6 +10,8 @@ import { loadRagSources, type RagSource, type RagSourcesConfig } from './rag-sou
 const FEDERATED_PROMPT_MAX_HITS = 3;
 const FEDERATED_PROMPT_LINE_TEXT_MAX = 300;
 const FEDERATED_PROMPT_BLOCK_MAX = 1500;
+const QDRANT_CLIENT_TIMEOUT_MS = 5_000;
+const SOURCE_QUERY_DEADLINE_MS = 4_000;
 
 export interface FederatedRagHit {
   sourceId: string;
@@ -25,7 +27,7 @@ interface RagReadHit {
 }
 
 interface RagReadStore {
-  search(vector: number[], opts: { limit: number }): Promise<RagReadHit[]>;
+  readonly search: (vector: number[], opts: { limit: number }) => Promise<RagReadHit[]>;
 }
 
 type RagEmbedder = (text: string) => Promise<number[]>;
@@ -102,7 +104,11 @@ function lazyQdrantClient(source: RagSource): QdrantClientLike {
   let clientPromise: Promise<QdrantClientLike> | null = null;
   const client = async (): Promise<QdrantClientLike> => {
     clientPromise ??= import('@qdrant/js-client-rest').then(({ QdrantClient }) =>
-      new QdrantClient({ url: source.url, apiKey: source.apiKey }) as unknown as QdrantClientLike);
+      new QdrantClient({
+        url: source.url,
+        apiKey: source.apiKey,
+        timeout: QDRANT_CLIENT_TIMEOUT_MS,
+      }) as unknown as QdrantClientLike);
     return clientPromise;
   };
 
@@ -117,10 +123,13 @@ function lazyQdrantClient(source: RagSource): QdrantClientLike {
 }
 
 function defaultCreateStore(source: RagSource): RagReadStore {
-  return createQdrantVectorStore({
+  // Pick off only the search method so callers (and future edits) can never
+  // reach the underlying store's write/admin surface (upsert/delete/etc).
+  const { search } = createQdrantVectorStore({
     client: lazyQdrantClient(source),
     collection: source.collection,
   });
+  return { search };
 }
 
 let deps: RagFederationDeps = {
@@ -157,33 +166,60 @@ function payloadText(payload: unknown, textField: string): string | null {
   return typeof text === 'string' && text.trim() ? text : null;
 }
 
+// Races `promise` against a timer so one unreachable/slow source can never stall
+// the whole federated query. The timer is always cleared (and unref'd, so it
+// can't hold the process or a fake-timers test open) once either side settles.
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`source query deadline of ${ms}ms exceeded`)), ms);
+    timer.unref?.();
+  });
+
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
+async function querySource(source: RagSource, query: string): Promise<FederatedRagHit[]> {
+  const vector = await deps.createEmbedder(source)(query);
+  const hits = await sourceStore(source).search(vector, { limit: source.maxHits });
+
+  const hitsForSource: FederatedRagHit[] = [];
+  for (const hit of hits.filter((candidate) => candidate.score >= source.minScore).slice(0, source.maxHits)) {
+    const text = payloadText(hit.payload, source.textField);
+    if (!text) continue;
+    hitsForSource.push({
+      sourceId: source.id,
+      label: source.label,
+      text,
+      score: hit.score,
+    });
+  }
+  return hitsForSource;
+}
+
 export async function searchFederatedSources(query: string, chatId: string): Promise<FederatedRagHit[]> {
   if (!config.RAG_FEDERATION_ENABLED || !query.trim()) return [];
 
   const sources = deps.loadSources();
   if (!sources) return [];
 
-  const results: FederatedRagHit[] = [];
-  for (const source of sources.sources) {
-    if (!source.enabled || !allowedForChat(source, chatId)) continue;
+  const activeSources = sources.sources.filter((source) => source.enabled && allowedForChat(source, chatId));
 
-    try {
-      const vector = await deps.createEmbedder(source)(query);
-      const hits = await sourceStore(source).search(vector, { limit: source.maxHits });
-      for (const hit of hits.filter((candidate) => candidate.score >= source.minScore).slice(0, source.maxHits)) {
-        const text = payloadText(hit.payload, source.textField);
-        if (!text) continue;
-        results.push({
-          sourceId: source.id,
-          label: source.label,
-          text,
-          score: hit.score,
-        });
-      }
-    } catch (err) {
-      logger.warn({ err, sourceId: source.id }, 'Federated RAG source failed; continuing without it');
+  // Query every source concurrently (each bounded by its own deadline) so one
+  // slow/unreachable source cannot stall the others.
+  const settled = await Promise.allSettled(
+    activeSources.map((source) => withDeadline(querySource(source, query), SOURCE_QUERY_DEADLINE_MS)),
+  );
+
+  const results: FederatedRagHit[] = [];
+  settled.forEach((outcome, index) => {
+    const source = activeSources[index];
+    if (outcome.status === 'rejected') {
+      logger.warn({ err: outcome.reason, sourceId: source.id }, 'Federated RAG source failed; continuing without it');
+      return;
     }
-  }
+    results.push(...outcome.value);
+  });
 
   return results;
 }

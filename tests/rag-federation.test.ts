@@ -54,6 +54,7 @@ describe('RAG source federation', () => {
     vi.doUnmock('../src/utils/config.js');
     vi.doUnmock('../src/middleware/logger.js');
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('embeds each source with that source embedding config and maps labels/text fields', async () => {
@@ -174,6 +175,89 @@ describe('RAG source federation', () => {
 
     await expect(mod.searchFederatedSources('query', 'chat-a')).resolves.toEqual([
       { sourceId: 'healthy', label: 'Healthy', text: 'healthy text', score: 0.88 },
+    ]);
+  });
+
+  it('isolates a source whose store.search itself rejects, keeping healthy source hits', async () => {
+    const mod = await loadFederation();
+
+    mod.__setRagFederationDepsForTests({
+      loadSources: () => ({
+        sources: [
+          source({ id: 'broken-store', label: 'Broken store' }),
+          source({ id: 'healthy', label: 'Healthy' }),
+        ],
+      }),
+      createEmbedder: () => async () => [1, 2, 3],
+      createStore: (s) => ({
+        search: vi.fn(async () => {
+          if (s.id === 'broken-store') throw new Error('search rejected');
+          return [{ id: 'ok', score: 0.88, payload: { text: 'healthy text' } }];
+        }),
+      }),
+    });
+
+    await expect(mod.searchFederatedSources('query', 'chat-a')).resolves.toEqual([
+      { sourceId: 'healthy', label: 'Healthy', text: 'healthy text', score: 0.88 },
+    ]);
+  });
+
+  it('treats a source that exceeds its query deadline as a skipped source, without blocking a fast source', async () => {
+    vi.useFakeTimers();
+    const mod = await loadFederation();
+
+    mod.__setRagFederationDepsForTests({
+      loadSources: () => ({
+        sources: [
+          source({ id: 'slow', label: 'Slow' }),
+          source({ id: 'fast', label: 'Fast' }),
+        ],
+      }),
+      createEmbedder: () => async () => [1, 2, 3],
+      createStore: (s) => ({
+        search: vi.fn(() => {
+          if (s.id === 'slow') return new Promise(() => { /* never resolves */ });
+          return Promise.resolve([{ id: 'ok', score: 0.9, payload: { text: 'fast text' } }]);
+        }),
+      }),
+    });
+
+    const resultPromise = mod.searchFederatedSources('query', 'chat-a');
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    await expect(resultPromise).resolves.toEqual([
+      { sourceId: 'fast', label: 'Fast', text: 'fast text', score: 0.9 },
+    ]);
+  });
+
+  it('preserves result ordering by source config order regardless of completion order', async () => {
+    vi.useFakeTimers();
+    const mod = await loadFederation();
+
+    mod.__setRagFederationDepsForTests({
+      loadSources: () => ({
+        sources: [
+          source({ id: 'first-configured', label: 'First' }),
+          source({ id: 'second-configured', label: 'Second' }),
+        ],
+      }),
+      createEmbedder: () => async () => [1, 2, 3],
+      createStore: (s) => ({
+        // The first-configured source resolves *later* than the second, so a
+        // completion-order result would put "Second" ahead of "First".
+        search: vi.fn(() => new Promise((resolve) => {
+          setTimeout(() => resolve([{ id: s.id, score: 0.9, payload: { text: s.label } }]),
+            s.id === 'first-configured' ? 200 : 50);
+        })),
+      }),
+    });
+
+    const resultPromise = mod.searchFederatedSources('query', 'chat-a');
+    await vi.advanceTimersByTimeAsync(200);
+
+    await expect(resultPromise).resolves.toEqual([
+      { sourceId: 'first-configured', label: 'First', text: 'First', score: 0.9 },
+      { sourceId: 'second-configured', label: 'Second', text: 'Second', score: 0.9 },
     ]);
   });
 
