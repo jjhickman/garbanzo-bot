@@ -98,6 +98,12 @@ spec:
               subPath: bridge-map.json
               readOnly: true
             {{- end }}
+            {{- if .Values.configFiles.ragSourcesJson }}
+            - name: config
+              mountPath: /app/config/rag-sources.json
+              subPath: rag-sources.json
+              readOnly: true
+            {{- end }}
             {{- end }}
           {{- end }}
       {{- if or .Values.persistence.data.enabled .Values.persistence.whatsappAuth.enabled (include "garbanzo.hasConfigFiles" .) }}

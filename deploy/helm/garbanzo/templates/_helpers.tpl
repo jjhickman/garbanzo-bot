@@ -64,7 +64,7 @@ Secret name for envFrom.
 True when chart-managed config files should be rendered.
 */}}
 {{- define "garbanzo.hasConfigFiles" -}}
-{{- if or .Values.configFiles.groupsJson .Values.configFiles.discordChannelsJson .Values.configFiles.bridgeMapJson -}}
+{{- if or .Values.configFiles.groupsJson .Values.configFiles.discordChannelsJson .Values.configFiles.bridgeMapJson .Values.configFiles.ragSourcesJson -}}
 true
 {{- end -}}
 {{- end -}}

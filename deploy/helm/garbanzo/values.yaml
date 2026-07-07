@@ -30,6 +30,7 @@ configFiles:
   groupsJson: ""
   discordChannelsJson: ""
   bridgeMapJson: ""
+  ragSourcesJson: ""
 
 qdrant:
   enabled: false

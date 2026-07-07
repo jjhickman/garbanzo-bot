@@ -25,7 +25,7 @@ async function loadModule(projectRoot: string) {
     },
   }));
   vi.doMock('../src/middleware/logger.js', () => ({
-    logger: { warn: vi.fn() },
+    logger: { warn: vi.fn(), debug: vi.fn() },
   }));
   return import('../src/utils/rag-sources.js');
 }

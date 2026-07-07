@@ -18,4 +18,8 @@ data:
   bridge-map.json: |
 {{ .Values.configFiles.bridgeMapJson | nindent 4 }}
   {{- end }}
+  {{- if .Values.configFiles.ragSourcesJson }}
+  rag-sources.json: |
+{{ .Values.configFiles.ragSourcesJson | nindent 4 }}
+  {{- end }}
 {{- end }}

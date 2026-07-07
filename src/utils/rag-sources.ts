@@ -79,7 +79,7 @@ export function loadRagSources(): RagSourcesConfig | null {
   if (loadedRagSources !== undefined) return loadedRagSources;
 
   if (!existsSync(RAG_SOURCES_PATH)) {
-    logger.warn({ path: RAG_SOURCES_PATH }, 'RAG sources config file not found; federation disabled');
+    logger.debug({ path: RAG_SOURCES_PATH }, 'RAG sources config file not found; federation disabled');
     loadedRagSources = null;
     return loadedRagSources;
   }
