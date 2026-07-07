@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { writeFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +6,8 @@ import { promisify } from 'node:util';
 
 import { logger } from '../middleware/logger.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const MEDIA_PROCESS_MAX_BUFFER = 1024 * 1024;
 
 export type VisionMediaType = 'image' | 'video' | 'sticker' | 'gif';
 
@@ -66,8 +67,10 @@ async function extractVideoFrames(videoBuffer: Buffer): Promise<VisionImage[]> {
   try {
     await writeFile(tmpVideo, videoBuffer);
 
-    const { stdout: durationOut } = await execAsync(
-      `ffprobe -v error -show_entries format=duration -of csv=p=0 "${tmpVideo}"`,
+    const { stdout: durationOut } = await execFileAsync(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpVideo],
+      { maxBuffer: MEDIA_PROCESS_MAX_BUFFER },
     );
     const duration = Number.parseFloat(durationOut.trim()) || 5;
 
@@ -79,8 +82,10 @@ async function extractVideoFrames(videoBuffer: Buffer): Promise<VisionImage[]> {
       filter = 'fps=1/10';
     }
 
-    await execAsync(
-      `ffmpeg -y -i "${tmpVideo}" -vf "${filter}" -frames:v 10 -q:v 2 "${tmpFrame}" 2>/dev/null`,
+    await execFileAsync(
+      'ffmpeg',
+      ['-y', '-i', tmpVideo, '-vf', filter, '-frames:v', '10', '-q:v', '2', tmpFrame],
+      { maxBuffer: MEDIA_PROCESS_MAX_BUFFER },
     );
 
     const frames: VisionImage[] = [];
