@@ -76,6 +76,18 @@ function buildDiscordInviteUrl(clientId) {
   return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&scope=bot&permissions=${DISCORD_INVITE_PERMISSIONS}`;
 }
 
+// Discord snowflake IDs (channel/user/application IDs) are 17-20 digit
+// numbers. Free-text values like '#general' or a channel *name* are silently
+// ignored by the runtime (adapter/gateway-client look up by numeric ID), so
+// the wizard validates the shape here rather than letting a bad value
+// through to a config file the bot will quietly ignore.
+const SNOWFLAKE_RE = /^\d{17,20}$/;
+function isSnowflake(value) {
+  return SNOWFLAKE_RE.test(String(value ?? '').trim());
+}
+const SNOWFLAKE_HINT = 'a Discord snowflake ID is 17-20 digits, numbers only — enable Developer '
+  + 'Mode (User Settings -> Advanced), then right-click the channel/user/application and choose "Copy ID"';
+
 let DEFAULT_APP_VERSION = '0.1.0';
 try {
   const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8'));
@@ -229,6 +241,114 @@ async function promptChoice(rl, question, options, defaultIndex = 0) {
   return picked - 1;
 }
 
+// Interactive re-prompt loop for a FIELD_TABLE field that must resolve to a
+// non-empty (and optionally validated) value. Blank input falls back to the
+// existing .env value (the wizard's usual "keep current value" convention);
+// only a genuinely empty *resolved* value triggers a re-prompt, so re-runs
+// against a populated .env don't force retyping secrets/IDs that are already
+// set.
+async function promptRequiredField(rl, field, existing, { validate, invalidHint } = {}) {
+  const label = field.note ? `${field.env} ${field.note}` : field.env;
+  while (true) {
+    const raw = (await rl.question(`${label} [${promptHint(field, existing)}]: `)).trim();
+    const value = raw || (existing[field.env] || '').trim();
+    if (!value) {
+      output.write(`   ⚠️ ${field.env} is required.\n`);
+      continue;
+    }
+    if (validate && !validate(value)) {
+      output.write(`   ⚠️ "${value}" doesn't look like ${invalidHint || 'a valid value'}.\n`);
+      continue;
+    }
+    return value;
+  }
+}
+
+// Collects one { id, name } channel entry interactively, re-prompting on
+// empty/invalid input until a valid snowflake is given.
+async function promptChannelEntry(rl) {
+  let channelId = '';
+  while (!channelId) {
+    const answer = (await rl.question('   Channel ID to enable: ')).trim();
+    if (!answer) {
+      output.write('   ⚠️ A channel ID is required — the quickstart cannot finish with zero enabled channels.\n');
+      continue;
+    }
+    if (!isSnowflake(answer)) {
+      output.write(`   ⚠️ "${answer}" doesn't look like a Discord channel ID — ${SNOWFLAKE_HINT}.\n`);
+      continue;
+    }
+    channelId = answer;
+  }
+  const channelName = (await rl.question('   Channel name/label [general]: ')).trim() || 'general';
+  return { id: channelId, name: channelName };
+}
+
+// Resolves the full set of enabled Discord channels for this run (M1/H3):
+//   - Reads any existing config/discord-channels.json.
+//   - Merges in --discord-channel-id(s) from this run rather than silently
+//     discarding them when a file already exists.
+//   - Guarantees the quickstart can never finish with zero enabled channels,
+//     even when an existing file's channels are all disabled: non-interactive
+//     fails with a clear message, interactive re-prompts as if the file were
+//     absent (merging the new entry into the existing map).
+// Returns { channelsMap, changed, ownerId } — `changed` tells the caller
+// whether config/discord-channels.json needs to be (re)written at all; when
+// false the existing file is left completely untouched.
+async function resolveDiscordChannels({ nonInteractive, cli, rl }) {
+  let existingConfig = null;
+  if (existsSync(DISCORD_CHANNELS_PATH)) {
+    try {
+      existingConfig = JSON.parse(readFileSync(DISCORD_CHANNELS_PATH, 'utf-8'));
+    } catch (err) {
+      throw new Error(`config/discord-channels.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const channelsMap = { ...(existingConfig?.channels ?? {}) };
+  let changed = false;
+
+  const explicitIds = parseCsv(cli.options['discord-channel-id'] ?? cli.options['discord-channel-ids'] ?? '');
+  const invalidIds = explicitIds.filter((id) => !isSnowflake(id));
+  if (invalidIds.length > 0) {
+    throw new Error(
+      `--discord-channel-id(s) contains a value that doesn't look like a Discord channel ID (${SNOWFLAKE_HINT}): `
+      + invalidIds.map((id) => `"${id}"`).join(', '),
+    );
+  }
+  if (explicitIds.length > 0) {
+    // Object keys naturally dedupe repeated ids from --discord-channel-ids.
+    const explicitName = (cli.options['discord-channel-name'] || 'general').trim() || 'general';
+    for (const id of explicitIds) {
+      channelsMap[id] = { name: explicitName, enabled: true, requireMention: true };
+    }
+    changed = true;
+  }
+
+  const countEnabled = () => Object.values(channelsMap).filter((entry) => entry && entry.enabled).length;
+
+  if (countEnabled() === 0) {
+    if (nonInteractive) {
+      throw new Error(
+        'Discord quickstart requires at least one channel to enable — the bot ignores every ' +
+        'channel until one is enabled. Pass --discord-channel-id=<channel id> (enable Developer Mode, ' +
+        'right-click the channel, "Copy Channel ID") or run interactively.',
+      );
+    }
+    if (existingConfig) {
+      output.write('\n⚠️ config/discord-channels.json exists but has zero enabled channels — the quickstart cannot finish like that.\n');
+    }
+    output.write('\n5) At least one channel to enable: with Developer Mode on, right-click a channel\n');
+    output.write('   in your server and choose "Copy Channel ID". The bot ignores every channel until\n');
+    output.write('   one is enabled here — you can add more later by editing config/discord-channels.json\n');
+    output.write('   (schema: config/discord-channels.example.json).\n');
+    const entry = await promptChannelEntry(rl);
+    channelsMap[entry.id] = { name: entry.name, enabled: true, requireMention: true };
+    changed = true;
+  }
+
+  return { channelsMap, changed, ownerId: existingConfig?.ownerId };
+}
+
 async function main() {
   const cli = parseArgs(process.argv.slice(2));
   const nonInteractive = cli.flags.has('non-interactive');
@@ -247,6 +367,12 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=owner/repo --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-client-id=123... --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
+    output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-owner-id=456... --discord-channel-ids=789...,790... --discord-channel-name=general --install-deps=false --vector-store=none --providers=openai --openai-key=$OPENAI_API_KEY\n');
+    output.write('\nOther non-interactive flags:\n');
+    output.write('  --discord-channel-ids   comma-separated Discord channel IDs to enable (alias for --discord-channel-id)\n');
+    output.write('  --discord-channel-name  label applied to every channel in --discord-channel-id(s) (default: general)\n');
+    output.write('  --install-deps          true/false — run `npm install` before writing config (default: true unless GARBANZO_CLI=1)\n');
+    output.write('  --vector-store          native deploy target only — VECTOR_STORE value written to .env (default: none)\n');
     process.exit(0);
   }
 
@@ -270,6 +396,23 @@ async function main() {
   }
 
   const rl = createInterface({ input, output });
+
+  // M3: if stdin hits EOF while a question is still pending (piped-empty
+  // stdin, a closed terminal, etc.), the readline/promises `question()`
+  // promise never settles — nothing else keeps the event loop alive, so the
+  // process exits 0 with no message once the loop drains. `intentionalClose`
+  // is set right before *our own* `rl.close()` call in the `finally` below
+  // (which covers both the success and the caught-error paths, the latter
+  // already reported by main().catch), so this handler only fires for a
+  // close we didn't ask for.
+  let intentionalClose = false;
+  rl.on('close', () => {
+    if (!intentionalClose) {
+      process.stderr.write('Setup aborted before completion\n');
+      process.exit(1);
+    }
+  });
+
   const rootExisting = parseEnvFile(ENV_PATH);
   let existing = rootExisting;
 
@@ -357,14 +500,34 @@ async function main() {
     let bandDeployment = false;
     let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
     let discordClientId = '';
-    // Entries collected for config/discord-channels.json: { id, name }. Only
-    // populated when the file doesn't already exist — see the write step below.
-    let discordChannelEntries = [];
+    // Populated below by resolveDiscordChannels() once token/owner ID are
+    // resolved; { channelsMap, changed, ownerId }.
+    let discordChannelsMap = {};
+    let discordChannelsChanged = false;
+    let existingChannelsOwnerId;
     if (messagingPlatform === 'discord') {
       if (nonInteractive) {
         discordClientId = (cli.options['discord-client-id'] ?? existing.DISCORD_CLIENT_ID ?? '').trim();
+        if (discordClientId && !isSnowflake(discordClientId)) {
+          throw new Error(`--discord-client-id "${discordClientId}" doesn't look like a Discord application ID — ${SNOWFLAKE_HINT}.`);
+        }
         for (const field of DISCORD_FIELDS.filter((candidate) => candidate.env !== 'BAND_FEATURES_ENABLED')) {
           discordEnv[field.env] = await resolveText(field.env);
+        }
+        if (!discordEnv.DISCORD_BOT_TOKEN) {
+          throw new Error(
+            'Discord quickstart requires a bot token — pass --discord-bot-token=<token> ' +
+            '(Developer Portal -> Bot page -> Reset Token) or run interactively.',
+          );
+        }
+        if (!discordEnv.DISCORD_OWNER_ID) {
+          throw new Error(
+            'Discord quickstart requires an owner user ID — pass --discord-owner-id=<id> ' +
+            '(enable Developer Mode, right-click your name/avatar, "Copy User ID") or run interactively.',
+          );
+        }
+        if (!isSnowflake(discordEnv.DISCORD_OWNER_ID)) {
+          throw new Error(`--discord-owner-id "${discordEnv.DISCORD_OWNER_ID}" doesn't look like a Discord user ID — ${SNOWFLAKE_HINT}.`);
         }
       } else {
         // Portal-order walkthrough (D3): client ID -> bot token (create-app +
@@ -375,13 +538,17 @@ async function main() {
         output.write('   https://discord.com/developers/applications\n');
 
         output.write('\n1) Create (or open) an application at the link above.\n');
-        discordClientId = (await rl.question(`   Application (client) ID [${existing.DISCORD_CLIENT_ID || 'empty'}]: `)).trim()
-          || existing.DISCORD_CLIENT_ID || '';
+        while (true) {
+          const answer = (await rl.question(`   Application (client) ID [${existing.DISCORD_CLIENT_ID || 'empty'}]: `)).trim();
+          discordClientId = answer || existing.DISCORD_CLIENT_ID || '';
+          if (!discordClientId || isSnowflake(discordClientId)) break;
+          output.write(`   ⚠️ "${discordClientId}" doesn't look like a Discord application ID — ${SNOWFLAKE_HINT}.\n`);
+        }
 
         output.write('\n2) Open the "Bot" page for that application:\n');
         output.write(`   - Enable: ${DISCORD_PRIVILEGED_INTENTS.join(', ')}.\n`);
         output.write('   - Click "Reset Token" (or "Copy") to get the bot token.\n');
-        discordEnv.DISCORD_BOT_TOKEN = await resolveText('DISCORD_BOT_TOKEN');
+        discordEnv.DISCORD_BOT_TOKEN = await promptRequiredField(rl, getField('DISCORD_BOT_TOKEN'), existing);
 
         if (discordClientId) {
           output.write('\n3) Invite the bot to your server with this URL:\n');
@@ -392,23 +559,10 @@ async function main() {
 
         output.write('\n4) Owner user ID: in Discord, enable Developer Mode (User Settings -> Advanced),\n');
         output.write('   then right-click your own name/avatar and choose "Copy User ID".\n');
-        discordEnv.DISCORD_OWNER_ID = await resolveText('DISCORD_OWNER_ID');
-
-        if (!existsSync(DISCORD_CHANNELS_PATH)) {
-          output.write('\n5) At least one channel to enable: with Developer Mode on, right-click a channel\n');
-          output.write('   in your server and choose "Copy Channel ID". The bot ignores every channel until\n');
-          output.write('   one is enabled here — you can add more later by editing config/discord-channels.json\n');
-          output.write('   (schema: config/discord-channels.example.json).\n');
-          let channelId = '';
-          while (!channelId) {
-            channelId = (await rl.question('   Channel ID to enable: ')).trim();
-            if (!channelId) {
-              output.write('   ⚠️ A channel ID is required — the quickstart cannot finish with zero enabled channels.\n');
-            }
-          }
-          const channelName = (await rl.question('   Channel name/label [general]: ')).trim() || 'general';
-          discordChannelEntries = [{ id: channelId, name: channelName }];
-        }
+        discordEnv.DISCORD_OWNER_ID = await promptRequiredField(rl, getField('DISCORD_OWNER_ID'), existing, {
+          validate: isSnowflake,
+          invalidHint: `a Discord user ID — ${SNOWFLAKE_HINT}`,
+        });
 
         output.write('\nOptional Discord settings:\n');
         discordEnv.DISCORD_PUBLIC_KEY = await resolveText('DISCORD_PUBLIC_KEY');
@@ -417,19 +571,11 @@ async function main() {
         discordEnv.DISCORD_RECAP_CHANNEL_ID = await resolveText('DISCORD_RECAP_CHANNEL_ID');
       }
 
-      if (nonInteractive && !existsSync(DISCORD_CHANNELS_PATH)) {
-        const channelCsv = cli.options['discord-channel-id'] ?? cli.options['discord-channel-ids'] ?? '';
-        const ids = parseCsv(channelCsv);
-        if (ids.length === 0) {
-          throw new Error(
-            'Discord quickstart requires at least one channel to enable — the bot ignores every ' +
-            'channel until one is enabled. Pass --discord-channel-id=<channel id> (enable Developer Mode, ' +
-            'right-click the channel, "Copy Channel ID") or run interactively.',
-          );
-        }
-        const channelName = (cli.options['discord-channel-name'] || 'general').trim() || 'general';
-        discordChannelEntries = ids.map((id) => ({ id, name: channelName }));
-      }
+      ({
+        channelsMap: discordChannelsMap,
+        changed: discordChannelsChanged,
+        ownerId: existingChannelsOwnerId,
+      } = await resolveDiscordChannels({ nonInteractive, cli, rl }));
 
       if (nonInteractive) {
         const bandValue = resolveEnvField(getField('BAND_FEATURES_ENABLED'), cli, existing);
@@ -581,7 +727,18 @@ async function main() {
     const bedrockPricingInputPerM = await resolveText('BEDROCK_PRICING_INPUT_PER_M');
     const bedrockPricingOutputPerM = await resolveText('BEDROCK_PRICING_OUTPUT_PER_M');
 
-    const ollamaBaseUrl = await resolveText('OLLAMA_BASE_URL');
+    // The field default (http://host.docker.internal:11434) only resolves
+    // from inside a Docker container; native runs need the loopback address
+    // instead (M2). resolveText() always falls back to the field's static
+    // default when nothing else is set, which would otherwise make the
+    // native default in finalEnv.OLLAMA_BASE_URL below dead code — so pick
+    // the default here based on deployTarget, and still respect an explicit
+    // CLI flag / existing .env value either way.
+    const ollamaField = getField('OLLAMA_BASE_URL');
+    const ollamaDefault = deployTarget === 'native' ? 'http://127.0.0.1:11434' : ollamaField.default;
+    const ollamaBaseUrl = nonInteractive
+      ? (cli.options[ollamaField.cli] ?? existing.OLLAMA_BASE_URL ?? ollamaDefault)
+      : (await rl.question(`${ollamaField.env} (native runs: http://127.0.0.1:11434) [${existing.OLLAMA_BASE_URL ?? ollamaDefault}]: `)).trim() || ollamaDefault;
     if (messagingPlatform === 'whatsapp') {
       for (const field of WHATSAPP_FIELDS) {
         whatsappEnv[field.env] = await resolveText(field.env);
@@ -834,6 +991,11 @@ async function main() {
       if (dryRun) {
         output.write(`🧪 Dry-run: would replace docs/PERSONA.md from ${customPersonaSourcePath}\n`);
       } else {
+        // Unlike the .env/config writes (which mkdir OUTPUT_ROOT/config
+        // themselves), OUTPUT_ROOT/docs is never created elsewhere — a fresh
+        // GARBANZO_HOME has no docs/ dir, so writeFileSync would ENOENT
+        // without this (H1).
+        mkdirSync(dirname(PERSONA_PATH), { recursive: true });
         if (existsSync(PERSONA_PATH)) {
           copyFileSync(PERSONA_PATH, `${PERSONA_PATH}.bak`);
           output.write('🗂️ Existing docs/PERSONA.md backed up to docs/PERSONA.md.bak\n');
@@ -888,23 +1050,20 @@ async function main() {
       output.write('ℹ️ Skipped groups.json generation (only needed for WhatsApp runtime).\n');
     }
 
-    // The quickstart cannot complete with zero enabled channels (D3) — the
-    // walkthrough above already enforces at least one entry in
-    // discordChannelEntries whenever DISCORD_CHANNELS_PATH doesn't exist yet,
-    // so the empty-entries branch here is a defensive fallback, not the
-    // normal path.
+    // The quickstart cannot complete with zero enabled channels (D3) —
+    // resolveDiscordChannels() above already enforces this (failing outright
+    // non-interactively, or re-prompting interactively) and merges any
+    // --discord-channel-id(s) from this run into an existing file (M1)
+    // instead of silently discarding them, so `discordChannelsChanged` here
+    // just decides whether the file needs to be (re)written at all.
     if (messagingPlatform === 'discord') {
-      if (existsSync(DISCORD_CHANNELS_PATH)) {
+      if (!discordChannelsChanged) {
         output.write('ℹ️ Using existing config/discord-channels.json; leaving it unchanged.\n');
-      } else if (discordChannelEntries.length > 0) {
+      } else {
+        const resolvedOwnerId = existingChannelsOwnerId || finalEnv.DISCORD_OWNER_ID;
         const channelsConfig = {
-          ...(finalEnv.DISCORD_OWNER_ID ? { ownerId: finalEnv.DISCORD_OWNER_ID } : {}),
-          channels: Object.fromEntries(
-            discordChannelEntries.map((entry) => [
-              entry.id,
-              { name: entry.name, enabled: true, requireMention: true },
-            ]),
-          ),
+          ...(resolvedOwnerId ? { ownerId: resolvedOwnerId } : {}),
+          channels: discordChannelsMap,
         };
 
         if (dryRun) {
@@ -914,13 +1073,15 @@ async function main() {
           output.write('--- end discord-channels.json preview ---\n');
         } else {
           mkdirSync(resolve(OUTPUT_ROOT, 'config'), { recursive: true });
+          if (existsSync(DISCORD_CHANNELS_PATH)) {
+            copyFileSync(DISCORD_CHANNELS_PATH, `${DISCORD_CHANNELS_PATH}.bak`);
+            output.write('🗂️ Existing config/discord-channels.json backed up to config/discord-channels.json.bak\n');
+          }
           writeFileSync(DISCORD_CHANNELS_PATH, `${JSON.stringify(channelsConfig, null, 2)}\n`, 'utf-8');
-          const count = discordChannelEntries.length;
+          const count = Object.values(discordChannelsMap).filter((entry) => entry && entry.enabled).length;
           output.write(`✅ Wrote config/discord-channels.json with ${count} enabled channel${count === 1 ? '' : 's'}\n`);
         }
         output.write('ℹ️ Add more channels later by editing config/discord-channels.json (schema: config/discord-channels.example.json).\n');
-      } else {
-        output.write('⚠️ No channel was collected; config/discord-channels.json was not written. The bot will ignore every channel until you create one (see config/discord-channels.example.json).\n');
       }
     }
 
@@ -974,7 +1135,8 @@ async function main() {
       output.write(`- Discord gateway enabled: ${finalEnv.DISCORD_GATEWAY_ENABLED}\n`);
       output.write(`- Band deployment (Remy): ${finalEnv.BAND_FEATURES_ENABLED}\n`);
       output.write(`- Qdrant collection: ${finalEnv.QDRANT_COLLECTION}\n`);
-      output.write(`- Enabled channels: ${discordChannelEntries.length > 0 ? discordChannelEntries.map((entry) => entry.id).join(', ') : '(existing config/discord-channels.json unchanged)'}\n`);
+      const enabledChannelIds = Object.keys(discordChannelsMap).filter((id) => discordChannelsMap[id]?.enabled);
+      output.write(`- Enabled channels: ${discordChannelsChanged ? enabledChannelIds.join(', ') : '(existing config/discord-channels.json unchanged)'}\n`);
       if (discordClientId) {
         output.write(`- Invite URL: ${buildDiscordInviteUrl(discordClientId)}\n`);
       }
@@ -998,6 +1160,7 @@ async function main() {
     }
     output.write('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   } finally {
+    intentionalClose = true;
     rl.close();
   }
 }
