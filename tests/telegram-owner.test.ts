@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { resolveOwnerChatId } from '../src/platforms/telegram/telegram-owner.js';
 
@@ -47,5 +47,59 @@ describe('resolveOwnerChatId', () => {
     };
 
     await expect(resolveOwnerChatId('tok123', 'owner1', { fetchFn })).resolves.toBeNull();
+  });
+
+  it('F9 (T2 review): never logs the bot token, even when the non-ok response body embeds it', async () => {
+    const loggerWarn = vi.fn();
+    vi.resetModules();
+    vi.doMock('../src/middleware/logger.js', () => ({
+      logger: { warn: loggerWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), fatal: vi.fn() },
+    }));
+
+    const { resolveOwnerChatId: resolveWithMockedLogger } = await import('../src/platforms/telegram/telegram-owner.js');
+
+    const token = 'super-secret-owner-token';
+    const fetchFn: typeof fetch = async (url) => makeResponse({
+      ok: false,
+      status: 500,
+      text: `upstream failed for ${String(url)}`,
+    });
+
+    const result = await resolveWithMockedLogger(token, 'owner1', { fetchFn });
+
+    expect(result).toBeNull();
+    expect(loggerWarn).toHaveBeenCalled();
+    for (const call of loggerWarn.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(token);
+    }
+
+    vi.doUnmock('../src/middleware/logger.js');
+    vi.resetModules();
+  });
+
+  it('F9 (T2 review): never logs the bot token when fetch throws an error embedding it', async () => {
+    const loggerWarn = vi.fn();
+    vi.resetModules();
+    vi.doMock('../src/middleware/logger.js', () => ({
+      logger: { warn: loggerWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), fatal: vi.fn() },
+    }));
+
+    const { resolveOwnerChatId: resolveWithMockedLogger } = await import('../src/platforms/telegram/telegram-owner.js');
+
+    const token = 'super-secret-owner-token';
+    const fetchFn: typeof fetch = async () => {
+      throw new Error(`network failed for https://api.telegram.org/bot${token}/getChat`);
+    };
+
+    const result = await resolveWithMockedLogger(token, 'owner1', { fetchFn });
+
+    expect(result).toBeNull();
+    expect(loggerWarn).toHaveBeenCalled();
+    for (const call of loggerWarn.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(token);
+    }
+
+    vi.doUnmock('../src/middleware/logger.js');
+    vi.resetModules();
   });
 });

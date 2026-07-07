@@ -16,12 +16,27 @@ import { homePath } from '../../utils/paths.js';
 const TelegramChatConfigSchema = z.object({
   name: z.string(),
   enabled: z.boolean().default(true),
-  // Privacy mode ON (BotFather default) already limits the bot to seeing
-  // commands/mentions/replies — requireMention:true is the matching,
-  // recommended default. Disabling privacy mode via BotFather is what makes
-  // requireMention:false meaningful (the bot then sees every message in the
-  // group). See processor.ts for how both modes are handled on the inbound
-  // path.
+  // PRIVACY MODE — corrected premise (T2 review, F2): Telegram's group
+  // "privacy mode" (BotFather default: ON) does NOT merely "limit the bot
+  // to commands/mentions/replies" — in privacy-ON groups the bot NEVER
+  // receives plain text at all, including plain @username mentions and our
+  // `!command` convention (those are ordinary text messages to Telegram).
+  // Privacy-ON only forwards native `/command` messages, direct replies to
+  // one of the bot's own messages, and via-bot messages. Since this
+  // processor understands `!command` and literal "@username" text, neither
+  // of which privacy-ON ever delivers, a requireMention:true chat under
+  // privacy-ON is effectively REPLY-ONLY, and requireMention:false chats
+  // receive nothing.
+  //
+  // RECOMMENDED setup: disable privacy mode via BotFather (`/setprivacy` ->
+  // Disable) so the bot sees every message, and keep requireMention:true
+  // here so it only RESPONDS to @mentions/replies/!commands — this is the
+  // same shape as Discord's MessageContent intent + requireMention:true
+  // (Telegram seeing everything is not the same as the bot acting on
+  // everything). Privacy-ON is a valid, degraded, commands-and-replies-only
+  // fallback for operators who don't want to touch BotFather settings — not
+  // the recommended default. See processor.ts for how both modes are
+  // handled on the inbound path.
   requireMention: z.boolean().default(true),
   enabledFeatures: z.array(z.string()).optional(),
   // Reserved for a future per-chat persona override (not wired yet in T2 —
@@ -29,7 +44,9 @@ const TelegramChatConfigSchema = z.object({
   persona: z.string().optional(),
 });
 
-const TelegramChatsConfigSchema = z.object({
+// Exported (F10, T2 review) so tests can validate config/telegram-chats.example.json
+// against the exact schema the loader uses, mirroring the bridge-map/rag-sources example tests.
+export const TelegramChatsConfigSchema = z.object({
   ownerId: z.string().optional(),
   chats: z.record(z.string(), TelegramChatConfigSchema),
 });

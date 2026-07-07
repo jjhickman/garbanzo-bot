@@ -3,13 +3,13 @@
   "ownerId": "111111111",
   "chats": {
     "-1001234567890": {
-      "_comment": "Privacy mode ON (BotFather default, recommended): the bot only receives commands/mentions/replies here, matching requireMention: true.",
+      "_comment": "Recommended setup: disable privacy mode for this bot via BotFather (/setprivacy -> Disable) so it can see every message in this group, then keep requireMention: true so it only RESPONDS to @mentions/replies/!commands — the same shape as Discord's MessageContent intent + requireMention. Privacy mode ON (BotFather default) is a degraded fallback: Telegram withholds plain text, @mentions, and !commands from privacy-ON bots, so a requireMention: true chat becomes effectively reply-only.",
       "name": "general",
       "enabled": true,
       "requireMention": true
     },
     "-1009876543210": {
-      "_comment": "requireMention: false only does something useful once you disable privacy mode for this bot via BotFather — otherwise Telegram itself still withholds ordinary messages from the bot.",
+      "_comment": "requireMention: false only receives every message once privacy mode is disabled for this bot via BotFather — with privacy mode ON, Telegram withholds ordinary messages from the bot regardless of this setting.",
       "name": "announcements",
       "enabled": true,
       "requireMention": false,

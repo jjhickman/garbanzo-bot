@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
 import { logger } from '../../middleware/logger.js';
+import { config } from '../../utils/config.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
 import { processGroupMessage } from '../../core/process-group-message.js';
 import { getResponse } from '../../core/response-router.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
+import { transcribeAudio } from '../../features/voice.js';
 
 import type { TelegramInbound } from './inbound.js';
 import {
@@ -15,6 +17,13 @@ import {
   isTelegramFeatureEnabled,
   telegramChatRequiresMention,
 } from './telegram-config.js';
+
+// F1 (T2 review): shared with the bridge's own media-placeholder text
+// (src/bridge/relay-capture.ts uses the same literal) — a voice note that
+// can't be transcribed still reaches the core pipeline as text instead of
+// being silently dropped, per the v3.3 plan's WS3 placeholder-on-failure
+// semantics.
+const VOICE_NOTE_PLACEHOLDER = '[voice note]';
 
 const TelegramAudioSchema = z.object({
   url: z.string(),
@@ -67,6 +76,38 @@ function normalizeTelegramInbound(event: TelegramEvent): TelegramInbound {
       },
     }),
   };
+}
+
+/**
+ * F1 (T2 review): captionless voice messages leave `event.text` empty, and
+ * the core gate at process-inbound-message.ts drops any message with no
+ * text and no visual media — so voice was previously dead code end to end.
+ * This mirrors whatsapp/processor.ts's inline transcription (reuse, not a
+ * fork), transcribing the already-downloaded buffer (client.ts's
+ * downloadTelegramVoice) via the same Whisper-backed transcribeAudio path.
+ * Unlike whatsapp/processor.ts today, failure never drops the message: per
+ * the v3.3 plan's WS3 semantics, a failed/unavailable transcription
+ * continues with a `[voice note]` placeholder so moderation, capture, and
+ * bridging still see SOMETHING rather than silence.
+ */
+async function resolveVoiceText(event: TelegramEvent): Promise<string> {
+  // A captioned voice message already has text (client.ts maps `caption`
+  // into `text`) — only a captionless voice message needs transcription.
+  if (event.text || !event.audio) return event.text;
+
+  if (!event.audio.buffer) {
+    logger.debug('Telegram voice message download unavailable — using placeholder');
+    return VOICE_NOTE_PLACEHOLDER;
+  }
+
+  const transcript = await transcribeAudio(event.audio.buffer, event.audio.contentType);
+  if (!transcript) {
+    logger.debug('Telegram voice message transcription failed — using placeholder');
+    return VOICE_NOTE_PLACEHOLDER;
+  }
+
+  logger.info({ transcriptLen: transcript.length }, 'Telegram voice message transcribed');
+  return transcript;
 }
 
 function buildTelegramMentionRegex(botUsername: string | undefined): RegExp | null {
@@ -155,6 +196,14 @@ async function processTelegramInbound(
   }, {
     ownerId: env.ownerId,
     isGroupEnabled: chatEnabled,
+    // F6 (T2 review): default 'configured' (deliberately different from
+    // WhatsApp's 'all' default) — anyone can add a Telegram bot to any
+    // group, so an unconfigured group must not get ingested (recorded,
+    // moderated, bridge-captured) by default the way an unconfigured
+    // WhatsApp/Discord chat does. Operators who DO want every group
+    // ingested (matching WhatsApp's default) can opt in via
+    // TELEGRAM_CHAT_SCOPE=all.
+    shouldIngestGroupChat: config.TELEGRAM_CHAT_SCOPE === 'configured' ? chatEnabled : undefined,
     // Introductions/events passive-detection channels are not part of the
     // Telegram core adapter (T2 scope) — reuse the same core pipeline with
     // both disabled rather than forking it.
@@ -180,6 +229,7 @@ export async function processTelegramEvent(
     return;
   }
 
-  const inbound = normalizeTelegramInbound(parsed.data);
+  const resolvedText = await resolveVoiceText(parsed.data);
+  const inbound = normalizeTelegramInbound({ ...parsed.data, text: resolvedText });
   await processTelegramInbound(messenger, inbound, env);
 }

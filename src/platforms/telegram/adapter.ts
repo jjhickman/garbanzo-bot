@@ -2,10 +2,20 @@ import { createMessageRef, type MessageRef } from '../../core/message-ref.js';
 import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, DocumentPayload, AudioPayload } from '../../core/platform-messenger.js';
 import { logger } from '../../middleware/logger.js';
+import { recordMarkdownV2Fallback } from '../../middleware/stats.js';
 
 import { toTelegramMarkdownV2 } from './markdown.js';
 
-const MAX_RETRY_AFTER_MS = 10_000;
+// F5 (T2 review): Telegram's documented per-chat/per-group rate limit
+// windows run up to a minute; capping the honored `retry_after` at the old
+// 10s made the single retry futile for anything past that (we'd wait 10s,
+// retry immediately, and get 429'd again since the real window hadn't
+// elapsed). Honor the FULL retry_after up to this cap; beyond it, don't
+// sleep-and-fail — throw immediately so the caller (bridge outbox, etc.)
+// can back off and reschedule using the real retry_after carried on the
+// error, rather than the adapter blocking the caller for up to a minute.
+const MAX_RETRY_AFTER_MS = 60_000;
+const SAMPLE_MAX_CHARS = 80;
 
 interface TelegramApiOkResponse<T> {
   ok: true;
@@ -72,6 +82,11 @@ async function callTelegramApi<T>(
  * single-retry shape (src/bridge/relay-deliver.ts), but lives in the
  * adapter's send path per plan direction so every caller gets the same
  * protection, not just bridge relays.
+ *
+ * F5 (T2 review): a `retry_after` beyond MAX_RETRY_AFTER_MS is NOT worth a
+ * blocking sleep-then-fail — that just makes the caller wait the max cap
+ * and still get a 429. Surface it immediately instead; `TelegramApiError`
+ * carries `retryAfterSeconds` so callers/outbox can reschedule accurately.
  */
 async function telegramApiRequest<T>(
   token: string,
@@ -83,7 +98,16 @@ async function telegramApiRequest<T>(
   } catch (err) {
     if (!isRetryable429(err)) throw err;
 
-    const waitMs = Math.min((err.retryAfterSeconds ?? 1) * 1000, MAX_RETRY_AFTER_MS);
+    const retryAfterSeconds = err.retryAfterSeconds ?? 1;
+    const waitMs = retryAfterSeconds * 1000;
+    if (waitMs > MAX_RETRY_AFTER_MS) {
+      logger.warn(
+        { method, retryAfterSeconds },
+        'Telegram 429 — retry_after exceeds cap, throwing immediately instead of sleep-and-fail',
+      );
+      throw err;
+    }
+
     logger.warn({ method, waitMs }, 'Telegram 429 — waiting retry_after once before retrying');
     await sleep(waitMs);
     return await callTelegramApi<T>(token, method, body);
@@ -130,9 +154,13 @@ export function createTelegramAdapter(token: string): PlatformMessenger {
 
       // Fail-soft (plan requirement): our MarkdownV2 translation missed an
       // edge case — retry once as plain text rather than dropping the
-      // message outright.
+      // message outright. F3 (T2 review): count the fallback (mirrors
+      // recordToolCall's counter idiom) and log a truncated, already-escaped
+      // sample of the string that failed to parse so translator gaps are
+      // both visible in metrics and diagnosable from the log line alone.
+      recordMarkdownV2Fallback('telegram');
       logger.warn(
-        { err: err.message, chatId },
+        { err: err.message, chatId, markdownSample: markdown.slice(0, SAMPLE_MAX_CHARS) },
         'Telegram MarkdownV2 parse error — retrying once as plain text',
       );
       return await telegramApiRequest<TelegramSentMessage>(token, 'sendMessage', {

@@ -1,5 +1,7 @@
 import { logger } from '../../middleware/logger.js';
 
+import { redactToken } from './telegram-voice.js';
+
 interface TelegramGetChatResponse {
   ok?: boolean;
   result?: { id?: number | string };
@@ -29,7 +31,10 @@ export async function resolveOwnerChatId(
 
     if (!response.ok) {
       const text = await response.text();
-      logger.warn({ status: response.status, error: text }, 'Telegram owner chat resolution failed');
+      // F9 (T2 review): apply the same redactToken defense telegram-voice.ts
+      // uses — Telegram error bodies can echo back request details, and this
+      // request URL carries the bot token.
+      logger.warn({ status: response.status, error: redactToken(text, token) }, 'Telegram owner chat resolution failed');
       return null;
     }
 
@@ -41,7 +46,8 @@ export async function resolveOwnerChatId(
 
     return String(json.result.id);
   } catch (err) {
-    logger.warn({ err }, 'Telegram owner chat resolution failed');
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: redactToken(message, token) }, 'Telegram owner chat resolution failed');
     return null;
   }
 }

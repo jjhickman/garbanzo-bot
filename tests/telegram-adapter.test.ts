@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTelegramAdapter } from '../src/platforms/telegram/adapter.js';
+import { createTelegramAdapter, TelegramApiError } from '../src/platforms/telegram/adapter.js';
 import { createMessageRef } from '../src/core/message-ref.js';
 
 const TOKEN = 'test-bot-token';
@@ -146,6 +146,64 @@ describe('Telegram adapter — sendText / MarkdownV2', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
+
+  it('honors the full retry_after up to the 60s cap without clamping to a lower wait (F5)', async () => {
+    vi.useFakeTimers();
+    const calls: CapturedCall[] = [];
+    let attempt = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      attempt += 1;
+      if (attempt === 1) {
+        return jsonResponse({
+          ok: false,
+          error_code: 429,
+          description: 'Too Many Requests: retry after 45',
+          parameters: { retry_after: 45 },
+        });
+      }
+      return jsonResponse({ ok: true, result: { message_id: 46 } });
+    }));
+
+    const adapter = createTelegramAdapter(TOKEN);
+    const sendPromise = adapter.sendText('chat-1', 'medium wait');
+
+    await vi.advanceTimersByTimeAsync(44_999);
+    expect(calls).toHaveLength(1); // still waiting the full 45s — not clamped to the old 10s cap
+
+    await vi.advanceTimersByTimeAsync(1);
+    await sendPromise;
+
+    expect(calls).toHaveLength(2);
+
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('throws immediately (no sleep) when retry_after exceeds the 60s cap, carrying retryAfterSeconds on the error (F5)', async () => {
+    vi.useFakeTimers();
+    const calls: CapturedCall[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return jsonResponse({
+        ok: false,
+        error_code: 429,
+        description: 'Too Many Requests: retry after 90',
+        parameters: { retry_after: 90 },
+      });
+    }));
+
+    const adapter = createTelegramAdapter(TOKEN);
+    const result = await adapter.sendText('chat-1', 'way too limited').catch((err: unknown) => err);
+
+    expect(result).toBeInstanceOf(TelegramApiError);
+    expect((result as TelegramApiError).retryAfterSeconds).toBe(90);
+    // No retry attempt — sleeping the max cap and failing anyway is pointless.
+    expect(calls).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
 });
 
 describe('Telegram adapter — document / audio / delete', () => {
@@ -234,5 +292,50 @@ describe('Telegram adapter — document / audio / delete', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe('Telegram adapter — MarkdownV2 fallback observability (F3)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it('records a markdownV2 fallback counter and logs a truncated sample on a parse-entities error', async () => {
+    const recordMarkdownV2Fallback = vi.fn();
+    const loggerWarn = vi.fn();
+    vi.doMock('../src/middleware/stats.js', () => ({ recordMarkdownV2Fallback }));
+    vi.doMock('../src/middleware/logger.js', () => ({
+      logger: { warn: loggerWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), fatal: vi.fn() },
+    }));
+
+    const { createTelegramAdapter: createAdapterWithMocks } = await import('../src/platforms/telegram/adapter.js');
+
+    let attempt = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        return jsonResponse({
+          ok: false,
+          error_code: 400,
+          description: "Bad Request: can't parse entities: Character '.' is reserved",
+        });
+      }
+      return jsonResponse({ ok: true, result: { message_id: 60 } });
+    }));
+
+    const longText = `a${'.'.repeat(120)}b`;
+    const adapter = createAdapterWithMocks(TOKEN);
+    await adapter.sendText('chat-1', longText);
+
+    expect(recordMarkdownV2Fallback).toHaveBeenCalledWith('telegram');
+    expect(loggerWarn).toHaveBeenCalledTimes(1);
+    const [warnPayload] = loggerWarn.mock.calls[0] as [{ markdownSample: string }];
+    expect(warnPayload.markdownSample.length).toBeLessThanOrEqual(80);
+    expect(warnPayload.markdownSample.length).toBeLessThan(longText.length);
+
+    vi.unstubAllGlobals();
+    vi.doUnmock('../src/middleware/stats.js');
+    vi.doUnmock('../src/middleware/logger.js');
   });
 });

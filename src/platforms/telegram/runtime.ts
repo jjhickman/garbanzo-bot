@@ -17,13 +17,15 @@ export interface TelegramRuntimeDeps {
 
 type TelegramClient = ReturnType<typeof createTelegramClient>;
 
-// Health/staleness reporting: Discord's runtime does not feed connection
-// state into src/middleware/health.ts at all (markConnected/markDisconnected
-// are wired only from the WhatsApp connection module) — "consistent with
-// discord's runtime" means matching that absence rather than inventing new
-// wiring here. If a future task wants Telegram connection state on
-// /health, it should extend health.ts for every platform at once rather
-// than have Telegram alone poke at WhatsApp-shaped globals.
+// Health/staleness reporting (T2 review, F4): this WAS a deliberate absence
+// matching Discord's runtime (which still does not feed connection state
+// into src/middleware/health.ts). That absence left /health/ready
+// permanently 503 for Telegram even when long-polling was healthy — a
+// worse outcome than the inconsistency. client.ts now calls
+// markConnected()/markDisconnected() directly (successful poll start /
+// poll loop death or stop), so Telegram intentionally reports where
+// Discord still doesn't. Discord's absence is a separate, untouched
+// decision — see this file's own history, not a signal to copy here.
 export function createTelegramRuntime(deps: TelegramRuntimeDeps = {}): PlatformRuntime {
   const runtimeDeps = {
     createAdapter: deps.createAdapter ?? createTelegramAdapter,

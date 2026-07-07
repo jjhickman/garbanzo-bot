@@ -11,7 +11,13 @@ import { logger } from '../../middleware/logger.js';
  * of the token before logging.
  */
 
-function redactToken(message: string, token: string): string {
+/**
+ * Scrub a bot token out of arbitrary text before logging. Exported (F9, T2
+ * review) so every Telegram module that logs a raw HTTP response body/error
+ * — not just this one — reuses the SAME defense rather than forking it;
+ * see telegram-owner.ts.
+ */
+export function redactToken(message: string, token: string): string {
   return token ? message.split(token).join('[redacted]') : message;
 }
 

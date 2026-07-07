@@ -286,6 +286,7 @@ describe('config module parity', () => {
         "SUPPORT_MESSAGE",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHATS_CONFIG_PATH",
+        "TELEGRAM_CHAT_SCOPE",
         "TELEGRAM_OWNER_ID",
         "VECTOR_EMBEDDING_DIMENSIONS",
         "VECTOR_EMBEDDING_MAX_CHARS",

@@ -5,9 +5,9 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 process.env.TELEGRAM_OWNER_ID ??= '111';
 process.env.TELEGRAM_BOT_TOKEN ??= 'test_tg_token';
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -191,5 +191,12 @@ describe('Telegram chat config', () => {
 
     vi.doUnmock('../src/utils/config.js');
     rmSync(join(path, '..'), { recursive: true, force: true });
+  });
+
+  it('F10 (T2 review): keeps config/telegram-chats.example.json valid against the loader schema', async () => {
+    const { TelegramChatsConfigSchema } = await import('../src/platforms/telegram/telegram-config.js');
+    const example = JSON.parse(readFileSync(resolve('config/telegram-chats.example.json'), 'utf8')) as unknown;
+
+    expect(TelegramChatsConfigSchema.safeParse(example).success).toBe(true);
   });
 });

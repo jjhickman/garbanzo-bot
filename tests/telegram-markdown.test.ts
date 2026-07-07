@@ -138,3 +138,35 @@ describe('toTelegramMarkdownV2 — pathological / malformed input', () => {
     expect(toTelegramMarkdownV2(input)).toBe('\\*not\nclosed\\*');
   });
 });
+
+describe('toTelegramMarkdownV2 — false-pairing guard (T2 review, F3)', () => {
+  it('does not bold arithmetic asterisks with whitespace on both sides', () => {
+    expect(toTelegramMarkdownV2('a * b * c')).toBe('a \\* b \\* c');
+  });
+
+  it('does not bold a whitespace-delimited multiplication expression', () => {
+    expect(toTelegramMarkdownV2('5 * 3 * 2 = 30')).toBe('5 \\* 3 \\* 2 \\= 30');
+  });
+
+  it('does not italicize across unrelated underscores in snake_case identifiers', () => {
+    expect(toTelegramMarkdownV2('use snake_case and other_var here'))
+      .toBe('use snake\\_case and other\\_var here');
+  });
+
+  it('does not italicize an underscore-delimited segment inside a URL path', () => {
+    expect(toTelegramMarkdownV2('https://example.com/some_page_here'))
+      .toBe('https://example\\.com/some\\_page\\_here');
+  });
+
+  it('escapes every underscore in an adjacent-double-underscore run rather than guessing a pairing', () => {
+    expect(toTelegramMarkdownV2('foo_bar__baz_qux')).toBe('foo\\_bar\\_\\_baz\\_qux');
+  });
+
+  it('escapes every underscore in a leading/adjacent/trailing double-underscore run', () => {
+    expect(toTelegramMarkdownV2('_a__b_')).toBe('\\_a\\_\\_b\\_');
+  });
+
+  it('still allows genuine word-boundary-delimited italics next to punctuation', () => {
+    expect(toTelegramMarkdownV2('say (_hi_) now')).toBe('say \\(_hi_\\) now');
+  });
+});

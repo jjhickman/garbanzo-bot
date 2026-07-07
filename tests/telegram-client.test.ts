@@ -146,7 +146,10 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     vi.restoreAllMocks();
   });
 
-  async function setup() {
+  async function setup(options: {
+    isChatEnabled?: (chatId: string) => boolean;
+    botStartImpl?: (opts?: { onStart?: (info: { id: number; username?: string }) => void }) => Promise<void>;
+  } = {}) {
     const sendText = vi.fn(async () => undefined);
     const createTelegramAdapter = vi.fn(() => ({
       platform: 'telegram' as const,
@@ -158,14 +161,17 @@ describe('Telegram client — end-to-end message handler wiring', () => {
       deleteMessage: vi.fn(async () => undefined),
     }));
     const processTelegramEvent = vi.fn(async () => undefined);
-    const isTelegramChatEnabled = vi.fn(() => true);
+    const isTelegramChatEnabled = vi.fn(options.isChatEnabled ?? (() => true));
     const getTelegramChatName = vi.fn(() => undefined);
     const downloadTelegramVoice = vi.fn(async () => Buffer.from([9, 9, 9]));
+    const markConnected = vi.fn();
+    const markDisconnected = vi.fn();
 
     vi.doMock('../src/platforms/telegram/adapter.js', () => ({ createTelegramAdapter }));
     vi.doMock('../src/platforms/telegram/processor.js', () => ({ processTelegramEvent }));
     vi.doMock('../src/platforms/telegram/telegram-config.js', () => ({ isTelegramChatEnabled, getTelegramChatName }));
     vi.doMock('../src/platforms/telegram/telegram-voice.js', () => ({ downloadTelegramVoice }));
+    vi.doMock('../src/middleware/health.js', () => ({ markConnected, markDisconnected }));
 
     const module = await import('../src/platforms/telegram/client.js');
     const bot = {
@@ -175,7 +181,7 @@ describe('Telegram client — end-to-end message handler wiring', () => {
       }),
       catch: vi.fn(),
       init: vi.fn(async () => undefined),
-      start: vi.fn(async () => undefined),
+      start: vi.fn(options.botStartImpl ?? (async () => undefined)),
       stop: vi.fn(async () => undefined),
       botInfo: { id: BOT.id, username: BOT.username },
     };
@@ -187,7 +193,10 @@ describe('Telegram client — end-to-end message handler wiring', () => {
       botFactory: () => bot,
     });
 
-    return { client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramVoice };
+    return {
+      client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramVoice,
+      markConnected, markDisconnected,
+    };
   }
 
   it('registers a message handler and resolves bot identity from init() before any update', async () => {
@@ -321,5 +330,155 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     await client.stop();
 
     expect(bot.stop).toHaveBeenCalled();
+  });
+
+  it('F7 (T2 review): does not call downloadTelegramVoice for a disabled/unconfigured group chat', async () => {
+    const { client, bot, processTelegramEvent, downloadTelegramVoice, isTelegramChatEnabled } = await setup({
+      isChatEnabled: () => false,
+    });
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 10,
+          date: 1_735_689_600,
+          chat: { id: -100999, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          voice: { file_id: 'voice-file-gated', file_unique_id: 'u3', duration: 3, mime_type: 'audio/ogg' },
+        },
+      },
+      me: BOT,
+    });
+
+    expect(isTelegramChatEnabled).toHaveBeenCalledWith('-100999');
+    expect(downloadTelegramVoice).not.toHaveBeenCalled();
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.audio).toBeUndefined();
+  });
+
+  it('F7 (T2 review): still downloads voice for a DM (private chat), which is never chat-config-gated', async () => {
+    const { client, bot, downloadTelegramVoice, isTelegramChatEnabled } = await setup({
+      isChatEnabled: () => false,
+    });
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 11,
+          date: 1_735_689_600,
+          chat: { id: 111, type: 'private' },
+          from: { id: 111, first_name: 'Owner' },
+          voice: { file_id: 'voice-file-dm', file_unique_id: 'u4', duration: 3, mime_type: 'audio/ogg' },
+        },
+      },
+      me: BOT,
+    });
+
+    expect(isTelegramChatEnabled).not.toHaveBeenCalled();
+    expect(downloadTelegramVoice).toHaveBeenCalledWith('super-secret-token-abc', 'voice-file-dm');
+  });
+
+  it('F7 (T2 review): still downloads voice for an enabled group chat', async () => {
+    const { client, bot, downloadTelegramVoice } = await setup({ isChatEnabled: () => true });
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 12,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          voice: { file_id: 'voice-file-enabled', file_unique_id: 'u5', duration: 3, mime_type: 'audio/ogg' },
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramVoice).toHaveBeenCalledWith('super-secret-token-abc', 'voice-file-enabled');
+  });
+
+  it('F8 (T2 review): does not false-positive a bot username substring inside a longer @mention-like token', async () => {
+    const { client, bot, processTelegramEvent } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 13,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          // BOT.username is 'GarbanzoBot' — this embeds it as a substring
+          // inside a longer token that is NOT actually a mention.
+          text: 'email me at @GarbanzoBotmail.com please',
+        },
+      },
+      me: BOT,
+    });
+
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.mentionedIds).toEqual([]);
+  });
+
+  it('F8 (T2 review): still recognizes a genuine @username mention at a word boundary', async () => {
+    const { client, bot, processTelegramEvent } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 14,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          text: 'hey @GarbanzoBot, help me out',
+        },
+      },
+      me: BOT,
+    });
+
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.mentionedIds).toEqual([String(BOT.id)]);
+  });
+
+  it('F4 (T2 review): marks health connected once long-polling starts successfully', async () => {
+    const { client, markConnected, markDisconnected } = await setup({
+      botStartImpl: async (opts) => {
+        opts?.onStart?.({ id: BOT.id, username: BOT.username });
+      },
+    });
+
+    await client.start();
+
+    expect(markConnected).toHaveBeenCalledTimes(1);
+    expect(markDisconnected).not.toHaveBeenCalled();
+  });
+
+  it('F4 (T2 review): marks health disconnected when the poll loop dies on a rethrown error (e.g. 401/409)', async () => {
+    const authError = new Error('401: Unauthorized');
+    const { client, markDisconnected } = await setup({
+      botStartImpl: async () => {
+        throw authError;
+      },
+    });
+
+    await client.start();
+    // start() intentionally does not await the polling promise — let the
+    // rejection's .catch() microtask run.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(markDisconnected).toHaveBeenCalledTimes(1);
+  });
+
+  it('F4 (T2 review): marks health disconnected on an intentional stop()', async () => {
+    const { client, markDisconnected } = await setup();
+    await client.start();
+    await client.stop();
+
+    expect(markDisconnected).toHaveBeenCalledTimes(1);
   });
 });

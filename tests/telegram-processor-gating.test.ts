@@ -254,3 +254,137 @@ describe('Telegram processor — chat gating + requireMention + senderName plumb
     expect(messenger.sendText).not.toHaveBeenCalled();
   });
 });
+
+describe('Telegram processor — voice transcription (F1, T2 review)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  function setupVoiceMocks(transcribeAudio: ReturnType<typeof vi.fn>) {
+    const mocks = setupMocks();
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio }));
+    return mocks;
+  }
+
+  it('transcribes a captionless voice message with a downloaded buffer and dispatches the transcript', async () => {
+    const transcribeAudio = vi.fn(async () => 'hello from the transcript');
+    const mocks = setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      // chatId 'open' does not require a mention (setupMocks), so the
+      // resolved transcript is dispatched without needing a bang/mention.
+      baseEvent({
+        chatId: 'open',
+        text: '',
+        audio: { url: 'telegram-file:voice-1', contentType: 'audio/ogg', buffer: Buffer.from([1, 2, 3]) },
+      }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    expect(transcribeAudio).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), 'audio/ogg');
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      'hello from the transcript',
+      expect.anything(),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it('falls back to the [voice note] placeholder (never drops the message) when transcription fails', async () => {
+    const transcribeAudio = vi.fn(async () => null);
+    const mocks = setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      baseEvent({
+        chatId: 'open',
+        text: '',
+        audio: { url: 'telegram-file:voice-2', contentType: 'audio/ogg', buffer: Buffer.from([9]) },
+      }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      '[voice note]',
+      expect.anything(),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it('falls back to the [voice note] placeholder (never drops the message) when the buffer failed to download', async () => {
+    const transcribeAudio = vi.fn(async () => 'should not be called');
+    const mocks = setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      baseEvent({
+        chatId: 'open',
+        text: '',
+        audio: { url: 'telegram-file:voice-3', contentType: 'audio/ogg' }, // no buffer — download failed
+      }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    expect(transcribeAudio).not.toHaveBeenCalled();
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      '[voice note]',
+      expect.anything(),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it('does not transcribe when the voice message already has caption text', async () => {
+    const transcribeAudio = vi.fn(async () => 'should not be called either');
+    const mocks = setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      baseEvent({
+        text: '!weather has a caption',
+        audio: { url: 'telegram-file:voice-4', contentType: 'audio/ogg', buffer: Buffer.from([1]) },
+      }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    expect(transcribeAudio).not.toHaveBeenCalled();
+    expect(mocks.getResponse).toHaveBeenCalledWith(
+      '!weather has a caption',
+      expect.anything(),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it('a captionless voice message with no audio.buffer previously passed [voice note] through recording — RED-guard: without transcription, an empty-text captionless voice would be silently dropped by the core gate', async () => {
+    // This test documents the F1 regression this fix closes: before the
+    // fix, `text` stayed '' for a captionless voice message and
+    // process-inbound-message.ts's `!inbound.text && !hasMedia` gate
+    // silently dropped it. The placeholder fallback above proves that no
+    // longer happens.
+    const transcribeAudio = vi.fn(async () => null);
+    setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      baseEvent({ text: '', audio: undefined }), // no voice at all — genuinely empty message
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    // No media, no text, no voice — correctly dropped (unaffected by F1).
+    expect(messenger.sendText).not.toHaveBeenCalled();
+  });
+});

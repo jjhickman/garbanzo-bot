@@ -25,7 +25,11 @@ export interface CoreMessageHooks {
     inbound: InboundMessage;
     text: string;
     hasMedia: boolean;
-    audio?: { url: string; contentType: string };
+    // `buffer` is Telegram-only (F1, T2 review) — see InboundMessage.audio's
+    // doc comment. Downstream consumers (e.g. the songwriting `!idea`
+    // handler) prefer it over re-fetching `url`, which for Telegram is a
+    // safe, non-fetchable placeholder.
+    audio?: { url: string; contentType: string; buffer?: Buffer };
   }): Promise<void>;
 
   /** Continue into platform-specific owner DM handling. */

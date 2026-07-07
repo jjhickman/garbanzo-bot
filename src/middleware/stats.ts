@@ -75,6 +75,7 @@ export interface LifetimeCounters {
   rateLimitedTotal: number;
   toolCalls: ReadonlyMap<string, Readonly<Record<ToolCallOutcome, number>>>;
   eventRemindersSentTotal: number;
+  markdownV2FallbacksByPlatform: ReadonlyMap<string, number>;
 }
 
 let current: StatsSnapshot = freshStats();
@@ -90,6 +91,7 @@ const lifetime = {
   rateLimitedTotal: 0,
   toolCalls: new Map<string, Record<ToolCallOutcome, number>>(),
   eventRemindersSentTotal: 0,
+  markdownV2FallbacksByPlatform: new Map<string, number>(),
 };
 
 function freshStats(): StatsSnapshot {
@@ -223,6 +225,19 @@ export function recordToolCall(tool: string, outcome: ToolCallOutcome): void {
 /** Record a successfully sent event reminder. */
 export function recordEventReminderSent(): void {
   lifetime.eventRemindersSentTotal++;
+}
+
+/**
+ * Record a MarkdownV2-parse fallback (mirrors `recordToolCall`'s
+ * increment-a-lifetime-map idiom). Currently only Telegram's adapter can
+ * trigger this — our WhatsApp-style-markdown-to-MarkdownV2 translator missed
+ * an edge case, Telegram's `sendMessage` 400'd, and the adapter retried once
+ * as plain text (see `src/platforms/telegram/adapter.ts`). Counting this
+ * makes translator gaps visible instead of only showing up as a WARN log
+ * line nobody is watching.
+ */
+export function recordMarkdownV2Fallback(platform: string): void {
+  incrementCounter(lifetime.markdownV2FallbacksByPlatform, platform);
 }
 
 export function recordSessionSummaryLifecycle(
@@ -423,6 +438,7 @@ export function getLifetimeCounters(): LifetimeCounters {
       Array.from(lifetime.toolCalls, ([tool, counts]) => [tool, { ...counts }]),
     ),
     eventRemindersSentTotal: lifetime.eventRemindersSentTotal,
+    markdownV2FallbacksByPlatform: new Map(lifetime.markdownV2FallbacksByPlatform),
   };
 }
 

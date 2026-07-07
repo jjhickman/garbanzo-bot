@@ -1,4 +1,5 @@
 import { logger } from '../../middleware/logger.js';
+import { markConnected, markDisconnected } from '../../middleware/health.js';
 
 import { createTelegramAdapter } from './adapter.js';
 import { isTelegramChatEnabled } from './telegram-config.js';
@@ -76,6 +77,19 @@ function buildSenderName(from: RawTelegramUser | undefined): string | undefined 
 }
 
 /**
+ * True when `text` contains an `@username` mention of the bot as a whole
+ * token — F8 (T2 review): a plain case-insensitive `.includes()` false-
+ * positives on substrings, e.g. bot username `mybot` matching inside
+ * `@mybotmail.com`. The mention must be followed by a non-word character
+ * (anything other than `[A-Za-z0-9_]`) or the end of the string.
+ */
+function hasBotUsernameMention(text: string, username: string | undefined): boolean {
+  if (!username || username.trim().length === 0) return false;
+  const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`@${escaped}(?![A-Za-z0-9_])`, 'i').test(text);
+}
+
+/**
  * Pure mapping from a raw Telegram message to a normalized payload —
  * mirrors Discord gateway-client.ts's mapMessageToPayload. Resolves the
  * "was the bot addressed" signal (a reply to one of the bot's own messages,
@@ -93,9 +107,7 @@ export function mapTelegramMessageToPayload(
   const replyToMessage = message.reply_to_message;
   const quotedText = replyToMessage?.text ?? replyToMessage?.caption;
   const isReplyToBot = bot.id !== undefined && replyToMessage?.from?.id === bot.id;
-  const mentionsBotByUsername = !!bot.username
-    && bot.username.trim().length > 0
-    && text.toLowerCase().includes(`@${bot.username.toLowerCase()}`);
+  const mentionsBotByUsername = hasBotUsernameMention(text, bot.username);
   const mentionedIds = (isReplyToBot || mentionsBotByUsername) && bot.id !== undefined
     ? [String(bot.id)]
     : [];
@@ -187,8 +199,15 @@ export function createTelegramClient(deps: TelegramClientDeps): {
       // Loop prevention: never dispatch the bot's own messages.
       if (mapped.fromSelf) return;
 
+      // F7 (T2 review): gate on the cheap chatId/isGroupChat fields BEFORE
+      // any network call. Telegram's getFile is a real fetch anyone can
+      // trigger by adding this bot to a group, so a disabled/unconfigured
+      // group chat must never cause a voice download. DMs are never gated
+      // here — isTelegramChatEnabled only tracks configured GROUP chats.
+      const isDisabledGroupChat = mapped.isGroupChat && !isTelegramChatEnabled(mapped.chatId);
+
       let audio: { url: string; contentType: string; buffer?: Buffer } | undefined;
-      if (mapped.voice) {
+      if (mapped.voice && !isDisabledGroupChat) {
         const buffer = await downloadTelegramVoice(deps.token, mapped.voice.fileId);
         audio = {
           // CREDENTIAL RULE: a safe, non-token-bearing placeholder — never
@@ -236,15 +255,28 @@ export function createTelegramClient(deps: TelegramClientDeps): {
         onStart: (info) => {
           botIdentity = { id: info.id, username: info.username };
           logger.info({ botId: info.id, botUsername: info.username }, 'Telegram long polling started');
+          // F4 (T2 review): Telegram DELIBERATELY reports into the shared
+          // health module here — unlike Discord's runtime, which stays
+          // silent by design (see runtime.ts for that separate decision).
+          // Without this, /health/ready was permanently 503 for Telegram
+          // even while long-polling was healthy.
+          markConnected();
         },
       }).catch((err) => {
+        // grammY rethrows terminal auth/session errors (401 unauthorized,
+        // 409 conflict — another poller already running) instead of
+        // retrying internally; that must surface as both a loud log AND a
+        // health-visible disconnect, not just a swallowed background
+        // rejection nobody sees while /health stays green.
         logger.error({ err }, 'Telegram long polling loop exited with an error');
+        markDisconnected();
       });
     },
 
     async stop(): Promise<void> {
       const telegramBot = await getBot();
       await telegramBot.stop();
+      markDisconnected();
     },
   };
 }

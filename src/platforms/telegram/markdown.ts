@@ -26,6 +26,25 @@
  * literally rather than recursively re-parsed for further entities — a
  * deliberate v1 simplification. A delimiter character nested inside another
  * entity renders as literal (escaped) text, not a second nested entity.
+ *
+ * FALSE-PAIRING GUARD (T2 review, F3): a naive "find the next matching
+ * delimiter" scan false-pairs unrelated `*`/`_`/`~` occurrences that were
+ * never meant as formatting — e.g. 'a * b * c' (arithmetic) bolding ' b ',
+ * or 'other_var' pairing across an unrelated 'snake_case' underscore
+ * earlier in the sentence. Two conditions must BOTH hold for a delimiter
+ * pair to be treated as formatting (otherwise every character in the pair
+ * falls through to plain literal escaping):
+ *   1. Whitespace rule (WhatsApp's own rule): the opening delimiter must
+ *      not be followed by whitespace, and the closing delimiter must not be
+ *      preceded by whitespace.
+ *   2. Word-boundary rule: the character immediately before the opening
+ *      delimiter (if any) and the character immediately after the closing
+ *      delimiter (if any) must not be a word character ([A-Za-z0-9_]) —
+ *      this is what stops identifier-style text ('snake_case',
+ *      'some_page_here' inside a URL) from false-pairing across underscores
+ *      that were never intended as a matching pair. Punctuation, other
+ *      delimiter characters, whitespace, and string boundaries all satisfy
+ *      this rule trivially.
  */
 
 const MDV2_ESCAPE_CHARS = new Set([
@@ -49,8 +68,35 @@ function escapeCodeContent(text: string): string {
 // Order matters: code blocks and inline code are matched before bold/italic/
 // strike so a delimiter char inside a code span is never mistaken for
 // formatting. Entity content excludes its own delimiter and newlines (except
-// triple-backtick code blocks, which may span lines).
-const ENTITY_PATTERN = /```([\s\S]*?)```|`([^`\n]+)`|\*([^*\n]+)\*|_([^_\n]+)_|~([^~\n]+)~/g;
+// triple-backtick code blocks, which may span lines). The bold/italic/strike
+// alternatives additionally require: content starts/ends with a non-
+// whitespace char (`\S`), and the char immediately outside each delimiter —
+// via lookaround, so it isn't consumed — is not a word char (see the
+// FALSE-PAIRING GUARD doc comment above).
+const WORD_BOUNDARY_GUARD = '(?<![A-Za-z0-9_])';
+const WORD_BOUNDARY_GUARD_AFTER = '(?![A-Za-z0-9_])';
+/**
+ * Build a bold/italic/strike alternative for delimiter `d`: content's first
+ * and last characters must be neither whitespace NOR the delimiter itself
+ * (`[^\s${d}]`, not the more permissive `\S`, which would let e.g. the
+ * second `*` of `**not bold**` count as a valid single-char content edge).
+ */
+function entityAlternative(delimiter: string): string {
+  const d = `\\${delimiter}`;
+  const edge = `[^\\s${d}]`;
+  const middle = `[^${d}\\n]*`;
+  return `${WORD_BOUNDARY_GUARD}${d}(${edge}(?:${middle}${edge})?)${d}${WORD_BOUNDARY_GUARD_AFTER}`;
+}
+const ENTITY_PATTERN = new RegExp(
+  [
+    '```([\\s\\S]*?)```',
+    '`([^`\\n]+)`',
+    entityAlternative('*'),
+    entityAlternative('_'),
+    entityAlternative('~'),
+  ].join('|'),
+  'g',
+);
 
 /**
  * Translate WhatsApp-style markdown into valid Telegram MarkdownV2, escaping
