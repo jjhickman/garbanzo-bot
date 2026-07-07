@@ -14,6 +14,7 @@ import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound
 import { createWhatsAppAdapter } from './adapter.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
+import { captureForBridge } from '../../bridge/capture-hook.js';
 
 /**
  * WhatsApp platform processor.
@@ -72,6 +73,8 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       const wa = m as WhatsAppInbound;
       await handleOwnerDM(sock, wa.chatId, wa.senderId, text);
     },
+
+    captureForBridge,
   }, {
     ownerId: ownerJid,
     isGroupEnabled,

@@ -122,6 +122,14 @@ const canonicalEnv = {
   MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES: '720',
   MEMORY_AUTO_MAX_FACTS: '300',
   BAND_FEATURES_ENABLED: 'true',
+  INSTANCE_ID: 'discord-band',
+  BRIDGE_ENABLED: 'true',
+  BRIDGE_TRANSPORT: 'amqp',
+  BRIDGE_BROKER_URL: '  amqp://bridge-broker  ',
+  BRIDGE_SUMMARY_INTERVAL_MINUTES: '9',
+  BRIDGE_MAX_TEXT: '800',
+  SHARED_MEMORY_ENABLED: 'true',
+  QDRANT_SHARED_COLLECTION: 'test_shared_memory',
   VECTOR_STORE: 'qdrant',
   QDRANT_URL: 'http://qdrant.local:6333',
   QDRANT_API_KEY: '  qdrant-key  ',
@@ -151,7 +159,7 @@ describe('config module parity', () => {
   });
 
   it('preserves the parsed config key set and representative values', async () => {
-    const { config } = await importConfigWithCanonicalEnv();
+    const { config, instanceId } = await importConfigWithCanonicalEnv();
 
     expect(Object.keys(config).sort()).toMatchInlineSnapshot(`
       [
@@ -172,6 +180,11 @@ describe('config module parity', () => {
         "BEDROCK_REGION",
         "BOT_PHONE_NUMBER",
         "BRAVE_SEARCH_API_KEY",
+        "BRIDGE_BROKER_URL",
+        "BRIDGE_ENABLED",
+        "BRIDGE_MAX_TEXT",
+        "BRIDGE_SUMMARY_INTERVAL_MINUTES",
+        "BRIDGE_TRANSPORT",
         "CLOUD_MAX_TOKENS",
         "CLOUD_REQUEST_TIMEOUT_MS",
         "CONTEXT_SESSION_GAP_MINUTES",
@@ -211,6 +224,7 @@ describe('config module parity', () => {
         "GOOGLE_SEARCH_ENGINE_ID",
         "HEALTH_BIND_HOST",
         "HEALTH_PORT",
+        "INSTANCE_ID",
         "KOFI_URL",
         "LOG_LEVEL",
         "MBTA_API_KEY",
@@ -243,10 +257,12 @@ describe('config module parity', () => {
         "POSTGRES_USER",
         "QDRANT_API_KEY",
         "QDRANT_COLLECTION",
+        "QDRANT_SHARED_COLLECTION",
         "QDRANT_URL",
         "REHEARSAL_REMINDER_LEAD_MINUTES",
         "RETRY_ATTEMPT_TIMEOUT_MS",
         "SEARXNG_BASE_URL",
+        "SHARED_MEMORY_ENABLED",
         "SLACK_BOT_TOKEN",
         "SLACK_BOT_USER_ID",
         "SLACK_CLIENT_ID",
@@ -288,6 +304,17 @@ describe('config module parity', () => {
       providerOrder: config.AI_PROVIDER_ORDER,
       owner: config.OWNER_JID,
       logLevel: config.LOG_LEVEL,
+      bridge: {
+        instanceId,
+        configuredInstanceId: config.INSTANCE_ID,
+        enabled: config.BRIDGE_ENABLED,
+        transport: config.BRIDGE_TRANSPORT,
+        brokerUrl: config.BRIDGE_BROKER_URL,
+        summaryMinutes: config.BRIDGE_SUMMARY_INTERVAL_MINUTES,
+        maxText: config.BRIDGE_MAX_TEXT,
+        sharedMemory: config.SHARED_MEMORY_ENABLED,
+        sharedCollection: config.QDRANT_SHARED_COLLECTION,
+      },
       modelDefaults: {
         openAiReasoningEffort: config.OPENAI_REASONING_EFFORT,
         cloudMaxTokens: config.CLOUD_MAX_TOKENS,
@@ -344,6 +371,17 @@ describe('config module parity', () => {
           "turnstile": true,
           "weeklyRecap": false,
           "whatsappSafety": false,
+        },
+        "bridge": {
+          "brokerUrl": "amqp://bridge-broker",
+          "configuredInstanceId": "discord-band",
+          "enabled": true,
+          "instanceId": "discord-band",
+          "maxText": 800,
+          "sharedCollection": "test_shared_memory",
+          "sharedMemory": true,
+          "summaryMinutes": 9,
+          "transport": "amqp",
         },
         "logLevel": "debug",
         "modelDefaults": {

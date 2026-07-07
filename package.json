@@ -60,6 +60,7 @@
     "@hapi/boom": "^10.0.1",
     "@qdrant/js-client-rest": "^1.18.0",
     "@whiskeysockets/baileys": "7.0.0-rc13",
+    "amqplib": "^2.0.1",
     "baileys-antiban": "4.10.0",
     "better-sqlite3": "^12.6.2",
     "discord.js": "^14.21.0",

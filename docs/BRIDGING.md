@@ -1,0 +1,465 @@
+# Cross-Platform Bridging
+
+Bridging lets two or more Garbanzo instances (Discord, WhatsApp, or a mix)
+share curated memory and relay chat messages between mapped channels/groups.
+Every part of it is off by default. An existing single-instance deployment
+that never touches these flags is unaffected.
+
+Two independent tiers:
+
+- **Tier 1 - shared memory.** The owner explicitly shares a curated fact
+  (`!memory share <id>`) into a dedicated cross-instance vector collection.
+  Nothing is shared automatically; conversation history and session summaries
+  never leave the instance they were created on.
+- **Tier 2 - message bridging.** Chat routes defined in
+  `config/bridge-map.json` relay text between mapped channels/groups, with
+  attribution (`Ana (Discord): ...`), through a durable per-instance outbox
+  and a pluggable transport (HTTP or AMQP).
+
+## Flags summary
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `INSTANCE_ID` | unset (falls back to `MESSAGING_PLATFORM`) | Deployment identity used by bridge routes, shared-fact ids, and metrics |
+| `BRIDGE_ENABLED` | `false` | Master switch for Tier 2 message bridging |
+| `BRIDGE_TRANSPORT` | `http` | `http` or `amqp` |
+| `BRIDGE_BROKER_URL` | unset | Required when `BRIDGE_TRANSPORT=amqp` |
+| `BRIDGE_SUMMARY_INTERVAL_MINUTES` | `15` | How often the WhatsApp digest flusher runs |
+| `BRIDGE_MAX_TEXT` | `1500` | Max characters per relayed/digest message |
+| `SHARED_MEMORY_ENABLED` | `false` | Master switch for Tier 1 shared memory |
+| `QDRANT_SHARED_COLLECTION` | `garbanzo_shared` | Qdrant collection used for shared facts |
+| `QDRANT_COLLECTION` | `garbanzo_memory`, or `garbanzo_memory_<INSTANCE_ID>` when `INSTANCE_ID` is set and this is left unset | Local Qdrant collection for this instance's own facts (see [Local memory isolation](#local-memory-isolation)) |
+
+Full descriptions and defaults: [docs/CONFIGURATION.md](CONFIGURATION.md).
+
+## Local memory isolation
+
+**Every instance needs its own local fact collection.** Bridging only shares
+what the owner explicitly runs `!memory share <id>` on (Tier 1, above) — it
+never shares raw local memory. But if two instances point at the same Qdrant
+deployment and both fall back to the same collection name, every locally
+indexed fact (session memory, auto-extracted facts, everything under plain
+`!memory`) becomes visible to both instances, silently, with no share command
+involved. That defeats isolation even when bridging itself is off.
+
+`QDRANT_COLLECTION` defaults to `garbanzo_memory`. The moment you set
+`INSTANCE_ID` for a deployment and leave `QDRANT_COLLECTION` unset, the
+collection automatically becomes `garbanzo_memory_<INSTANCE_ID>` instead — so
+running two or more instances with distinct `INSTANCE_ID`s against one Qdrant
+server already gives each one an isolated local collection with no extra
+config. A single-instance deployment that never sets `INSTANCE_ID` is
+unaffected and keeps `garbanzo_memory`. An explicit `QDRANT_COLLECTION` always
+wins over the derived name, for the rare case where you want to pin it
+yourself.
+
+The shared collection (`QDRANT_SHARED_COLLECTION`, Tier 1 above) is a
+separate, deliberate exception to this isolation — the only path into it is
+`!memory share`.
+
+## Quick start (HTTP transport, two instances)
+
+This is the simplest setup: two instances (for example a Discord instance
+and a WhatsApp instance) on the same Docker Compose network, bridged over
+plain HTTP with no extra containers.
+
+1. **Set flags in each instance's env file.** `MONITORING_TOKEN` must be the
+   **same value on both instances** — the HTTP transport authenticates
+   bridge deliveries with it, the same token that already gates `/metrics`
+   and `/admin`.
+
+   In `.env` (shared by both instances) or split across `.env.discord` /
+   `.env.whatsapp`:
+
+   ```bash
+   BRIDGE_ENABLED=true
+   MONITORING_TOKEN=some-shared-secret
+   # BRIDGE_TRANSPORT defaults to http, no need to set it
+   ```
+
+   Give each instance its own identity so bridge routes can address it:
+
+   ```bash
+   # in .env.discord
+   INSTANCE_ID=discord-main
+   # in .env.whatsapp
+   INSTANCE_ID=whatsapp-main
+   ```
+
+   If you skip `INSTANCE_ID`, it defaults to `MESSAGING_PLATFORM` (`discord`
+   or `whatsapp`), which is fine when you only ever run one instance per
+   platform.
+
+2. **Edit `config/bridge-map.json`.** Start from
+   `config/bridge-map.example.json` and replace the ids, urls, and chat ids
+   with your own. The committed `config/bridge-map.json` starts empty
+   (`{"instances": [], "routes": []}`), which is intentionally inert: with
+   `BRIDGE_ENABLED=true` and an empty map, the bridge starts but has nothing
+   to relay.
+
+   The schema has two top-level arrays:
+
+   - **`instances`** - one entry per bridged deployment:
+     - `id` - matches that instance's `INSTANCE_ID` (or its `MESSAGING_PLATFORM`
+       if `INSTANCE_ID` is unset).
+     - `platform` - one of `whatsapp`, `discord`, `slack`, `teams`.
+     - `url` (optional) - the base URL the HTTP transport uses to reach that
+       instance, for example `http://discord:3002` or `http://whatsapp:3001`
+       on the compose network. Not used by the AMQP transport.
+   - **`routes`** - one entry per bridged channel/group pair:
+     - `id` - a unique, human-readable route slug.
+     - `endpoints` - exactly two `{instance, chatId}` entries. `instance`
+       must match a declared instance id; `chatId` is the Discord channel id
+       or the WhatsApp group JID on that instance. The two endpoints must
+       differ.
+     - `direction` - `both` (relay each way) or `one-way`. `one-way` requires
+       `from`, set to one of the two endpoint instance ids (the side allowed
+       to send).
+     - `modeToWhatsApp` - `summary` (default) or `verbatim`. Governs how
+       messages arriving *at* a WhatsApp endpoint are delivered.
+     - `modeToDiscord` - `verbatim` (default) or `summary`. Same idea, for a
+       Discord endpoint.
+     - `relayCommands` - `false` by default. When false, messages starting
+       with `!` (bang commands like `!weather`) are not relayed.
+
+   Example, bridging one Discord channel with one WhatsApp group:
+
+   ```json
+   {
+     "instances": [
+       { "id": "discord-main", "platform": "discord", "url": "http://discord:3002" },
+       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:3001" }
+     ],
+     "routes": [
+       {
+         "id": "main-channel",
+         "endpoints": [
+           { "instance": "discord-main", "chatId": "111111111111111111" },
+           { "instance": "whatsapp-main", "chatId": "120363000000000000@g.us" }
+         ],
+         "direction": "both",
+         "modeToWhatsApp": "summary",
+         "modeToDiscord": "verbatim",
+         "relayCommands": false
+       }
+     ]
+   }
+   ```
+
+   `docker-compose.yml` already bind-mounts `./config/bridge-map.json`
+   read-only into both the `discord` and `whatsapp` services, so no compose
+   edit is needed for a two-instance setup; only the file content changes.
+
+3. **Restart both instances:**
+
+   ```bash
+   docker compose restart discord whatsapp
+   ```
+
+4. **Verify:**
+
+   - Health endpoints still return 200 (bridging never changes `/health`):
+
+     ```bash
+     curl http://127.0.0.1:3002/health
+     curl http://127.0.0.1:3001/health
+     ```
+
+   - Logs show the bridge coming up on each instance:
+
+     ```bash
+     docker compose logs -f discord | grep -i bridge
+     # {"instanceId":"discord-main"} Bridge lifecycle started
+     ```
+
+     If the log instead shows `Bridge enabled but bridge map failed to load —
+     bridge inert`, the JSON in `config/bridge-map.json` failed to parse or
+     failed schema validation; the bridge stays off rather than crashing the
+     process.
+
+   - Send a test message in the mapped Discord channel. On the Discord side
+     (verbatim by default), the WhatsApp group receives a relayed message
+     with attribution:
+
+     ```
+     Ana (Discord): hey what time is practice tonight
+     ```
+
+     Going the other way (WhatsApp -> Discord, summary by default), the
+     message is buffered and shows up in the next digest, at most once per
+     `BRIDGE_SUMMARY_INTERVAL_MINUTES`:
+
+     ```
+     WhatsApp — last 15 min:
+     • Sam: 7pm as usual
+     ```
+
+## Broker (AMQP)
+
+The HTTP transport works well for two instances. Reach for the AMQP/RabbitMQ
+transport when either is true:
+
+- **Three or more bridged instances.** HTTP addressing is point-to-point
+  (every instance needs to know every other instance's URL); AMQP routes
+  through one broker via a topic exchange, so adding instances doesn't add
+  point-to-point connections.
+- **Durability across long peer outages.** Under HTTP, an undelivered
+  message keeps retrying from the sender's outbox with growing backoff and
+  eventually dead-letters if the peer stays unreachable too long. Under
+  AMQP, once a message is published (with a publisher confirm) it sits
+  durably on the broker's queue for that instance, regardless of how long
+  the instance is down, and is delivered when it reconnects.
+
+To enable it:
+
+```bash
+# in .env
+COMPOSE_PROFILES=discord,whatsapp,broker
+BRIDGE_BROKER_PASSWORD=some-broker-password
+BRIDGE_TRANSPORT=amqp
+BRIDGE_BROKER_URL=amqp://garbanzo:some-broker-password@rabbitmq:5672
+```
+
+`BRIDGE_BROKER_USER` defaults to `garbanzo` if unset. If
+`BRIDGE_BROKER_PASSWORD` is not set, the `rabbitmq` container refuses to
+start and logs:
+
+```
+Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile
+```
+
+The RabbitMQ management UI is reachable at `http://localhost:15672` (bound
+to localhost only) with the same broker user/password. The AMQP port
+(`5672`) is never published to the host; it is only reachable from other
+containers on the compose network as `rabbitmq:5672`.
+
+## Worked example — three instances
+
+This is the target topology for a group running both a community bot and a
+band bot: an isolated WhatsApp community bot, a second WhatsApp number for
+the band, and a Discord band bot (Remy), with the two band-facing instances
+bridged and the community bot left alone.
+
+### 1. Isolated WhatsApp community bot
+
+The original community deployment. No bridge or shared-memory flags at all —
+isolation needs nothing, since every flag in the [flags summary](#flags-summary)
+defaults off. It keeps its existing `whatsapp` profile, `.env.whatsapp`, and
+`config/groups.json`. `config/bridge-map.json` stays mounted into this
+container like every other service, but since `BRIDGE_ENABLED` is unset it is
+never read. It also never sets `INSTANCE_ID`, so it keeps the plain
+`garbanzo_memory` local collection (see
+[Local memory isolation](#local-memory-isolation)) — its own facts, isolated
+from both band instances below.
+
+### 2. Band WhatsApp bot (second phone number)
+
+A second WhatsApp instance, on its own phone number, running band mode.
+Follow the compose-copy pattern: duplicate the existing `whatsapp` service
+block under a new name, with a fresh `INSTANCE_ID`, its own env file, and
+fresh volumes (a different linked WhatsApp account needs its own Baileys
+auth state and its own database):
+
+```yaml
+  whatsapp-band:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
+    container_name: garbanzo-whatsapp-band
+    profiles: ["whatsapp-band"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+      - path: .env.whatsapp-band
+        required: false
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
+      - MESSAGING_PLATFORM=whatsapp
+      - INSTANCE_ID=whatsapp-band
+      - HEALTH_PORT=3003
+      - HEALTH_BIND_HOST=0.0.0.0
+    ports:
+      - "127.0.0.1:3003:3003"
+    volumes:
+      - baileys_auth_band:/app/baileys_auth
+      - garbanzo_data_band:/app/data
+      - ./config/groups.band.json:/app/config/groups.json:ro
+      - ./config/bridge-map.json:/app/config/bridge-map.json:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+```
+
+Add the two new named volumes alongside the existing ones:
+
+```yaml
+volumes:
+  baileys_auth_band:
+    name: garbanzo-bot-whatsapp-band-auth
+  garbanzo_data_band:
+    name: garbanzo-bot-whatsapp-band-data
+```
+
+Add `whatsapp-band` to `COMPOSE_PROFILES` and create `.env.whatsapp-band`
+with that number's `OWNER_JID`, `BOT_PHONE_NUMBER`, and login settings, plus:
+
+```bash
+# in .env.whatsapp-band
+BRIDGE_ENABLED=true
+INSTANCE_ID=whatsapp-band
+```
+
+`MONITORING_TOKEN` lives in the shared `.env` and must be the same value used
+by `remy` below.
+
+Because `INSTANCE_ID=whatsapp-band` is set and `QDRANT_COLLECTION` is not,
+this instance automatically gets its own local collection,
+`garbanzo_memory_whatsapp-band` — isolated from the community bot's
+`garbanzo_memory` and from `remy`'s collection below, with no extra config.
+
+Because this is a brand-new linked WhatsApp account, the anti-ban warm-up
+ramp starts over from scratch for it: `WHATSAPP_SAFETY_DAY1_LIMIT` (default
+2000) and `WHATSAPP_SAFETY_WARMUP_DAYS` (default 10 days) apply to this
+number exactly as they did to the original community number's launch.
+Nothing about the first number's send history or reputation carries over —
+treat this second number as a fresh account (light usage during warm-up)
+even though the bot software has run in production for a long time.
+
+### 3. Band Discord bot (Remy)
+
+Remy already runs on the existing `discord` compose service/profile with
+`BAND_FEATURES_ENABLED=true` (see [docs/REMY_DEPLOY.md](REMY_DEPLOY.md)). Add
+to `.env.discord`:
+
+```bash
+BRIDGE_ENABLED=true
+INSTANCE_ID=remy
+```
+
+`INSTANCE_ID` is deployment identity, a separate concept from persona naming
+or compose service naming — the compose service stays named `discord`, but
+the bridge and shared-memory system address this deployment as `remy`. The
+same `INSTANCE_ID` also drives local memory isolation: since
+`QDRANT_COLLECTION` is left unset here, this deployment's local facts land in
+`garbanzo_memory_remy`, distinct from both WhatsApp instances.
+
+### The bridge-map pair
+
+Only the two band-facing instances are bridged; the isolated community bot
+is not in the map at all. In `config/bridge-map.json`:
+
+```json
+{
+  "instances": [
+    { "id": "remy", "platform": "discord", "url": "http://discord:3002" },
+    { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:3003" }
+  ],
+  "routes": [
+    {
+      "id": "remy-band-main",
+      "endpoints": [
+        { "instance": "remy", "chatId": "222222222222222222" },
+        { "instance": "whatsapp-band", "chatId": "120363111111111111@g.us" }
+      ],
+      "direction": "both",
+      "modeToWhatsApp": "summary",
+      "modeToDiscord": "verbatim",
+      "relayCommands": false
+    }
+  ]
+}
+```
+
+Replace `222222222222222222` with the real Discord channel id and
+`120363111111111111@g.us` with the real WhatsApp group JID. This file is
+mounted into all three containers; the community instance simply never
+reads it since its bridge is off.
+
+## Rate posture
+
+Relays into WhatsApp go through the same outbound-safety layer as every
+other WhatsApp send (rate caps, warm-up ramp, minimum inter-message delay).
+A busy bridged peer sending one message per relay could otherwise burn
+through those caps fast, so `modeToWhatsApp` defaults to `summary`: instead
+of sending immediately, inbound relays for a route are appended to a buffer,
+and a periodic flusher composes exactly one digest message per route per
+`BRIDGE_SUMMARY_INTERVAL_MINUTES` tick (default 15), no matter how many
+messages arrived in that window.
+
+If a relay is set to `verbatim` toward WhatsApp and the send is held by the
+outbound-safety layer (`WhatsAppOutboundHeldError` — the same "held" signal
+used for normal replies, not a failure), that individual message is folded
+into the route's summary buffer instead of being retried blind, so it still
+goes out in the next digest flush.
+
+The owner's existing `!whatsapp` controls apply to bridge-caused holds the
+same as any other held send:
+
+- `!whatsapp held` — list held jobs
+- `!whatsapp release <id>` — manually release one
+- `!whatsapp discard <id>` — drop one
+
+Bridge code never calls the safety bypass (`sendControlText`); every WhatsApp
+send it makes goes through the normal outbound-safety proxy.
+
+`BRIDGE_MAX_TEXT` (default 1500 characters) caps both digest and verbatim
+relay length. Digests that don't fit drop the oldest buffered lines first,
+replacing them with a `… (+N earlier messages)` marker, and fall back to a
+hard character cut (`...`) only if even the header would otherwise overflow.
+Verbatim relays truncate the message body the same way, keeping the
+attribution prefix intact.
+
+## Shared memory
+
+`!memory share <id>` and `!memory unshare <id>` are owner-only, DM-only
+commands gated by `SHARED_MEMORY_ENABLED` (default `false` — replies with a
+"Shared memory is disabled" message otherwise on both instances involved).
+
+- `share <id>` copies one curated fact, by its local numeric id, into the
+  shared Qdrant collection (`QDRANT_SHARED_COLLECTION`, default
+  `garbanzo_shared`).
+- `unshare <id>` removes it again.
+- Every shared fact's id is namespaced as `<INSTANCE_ID>:<localId>` (falling
+  back to `<MESSAGING_PLATFORM>:<localId>` when `INSTANCE_ID` is unset), so
+  numeric ids from two different instances never collide in the shared
+  collection.
+- A peer instance only sees shared facts if it also has
+  `SHARED_MEMORY_ENABLED=true`. When it does, `!memory` and `!memory search`
+  label shared hits with their origin, for example
+  `(shared from remy) — the venue changed to Parlor`, and they are never
+  remapped to that peer's own local numeric ids.
+- **Privacy invariant:** nothing enters the shared collection except a fact
+  the owner explicitly ran `!memory share` on. Conversation history, session
+  summaries, and auto-extracted facts are never auto-shared. Sharing is
+  retrieval-only on a peer — a peer can read a shared fact but only the
+  origin instance can unshare it.
+
+## Troubleshooting
+
+- **401 on `/bridge/inbound`.** The sending instance's `MONITORING_TOKEN`
+  doesn't match the receiving instance's. The HTTP transport authenticates
+  with a bearer token built from the sender's own `MONITORING_TOKEN`; every
+  bridged instance must share the exact same value.
+- **`{"status": "accepted"}` vs `{"status": "duplicate"}`.** Both are
+  successful responses from `/bridge/inbound`. `accepted` means the envelope
+  was new and delivered or buffered; `duplicate` means the receiver already
+  processed that exact message (idempotency keyed on origin instance, chat,
+  and message id) — this is expected under at-least-once delivery, not an
+  error.
+- **Broker refusal at container start.** If `rabbitmq` exits immediately
+  with `Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile`, set
+  `BRIDGE_BROKER_PASSWORD` in `.env` before including `broker` in
+  `COMPOSE_PROFILES`.
+- **Dead-lettered outbox rows / repeated failures.** Look for `Bridge outbox
+  row dead-lettered` in the logs — a message exceeded its retry attempts (or
+  hit a non-retryable error) and was dropped after logging. `Bridge summary
+  buffer: route failing repeatedly, buffer keeps growing` means a route's
+  digest flush has failed several times in a row and its buffer is backing
+  up; check that the target chat id and instance url in
+  `config/bridge-map.json` are still correct and that the target instance is
+  reachable.

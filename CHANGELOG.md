@@ -6,6 +6,17 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Cross-platform bridging (`BRIDGE_ENABLED`, default off): message relay between mapped Discord channels and WhatsApp groups defined in `config/bridge-map.json`, with a durable per-instance outbox, `http` and `amqp` (RabbitMQ) transports, and a receiver endpoint at `/bridge/inbound` on the health port.
+- Shared community memory across instances (`SHARED_MEMORY_ENABLED`, default off): `!memory share <id>` / `!memory unshare <id>` explicitly copy a curated fact into a dedicated shared Qdrant collection (`QDRANT_SHARED_COLLECTION`), namespaced by instance id.
+- `INSTANCE_ID` config key for deployment identity, used by bridge routes, shared-fact ids, and metrics; defaults to `MESSAGING_PLATFORM` so existing deployments are unaffected.
+- `senderName` attribution plumbed into inbound messages on WhatsApp and Discord, so relayed messages show `Name (Platform): ...`.
+- A bounded cross-platform markdown translator for relayed text (bold/italic/strike/monospace only).
+- Optional `broker` Docker Compose profile (RabbitMQ) for the amqp bridge transport, gated on `BRIDGE_BROKER_PASSWORD`.
+
+See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive and off by default; no action is needed to upgrade an existing deployment.
+
 ## [2.0.0] — 2026-07-06
 
 ### Breaking changes

@@ -2,12 +2,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { load } from 'js-yaml';
 
+import { BridgeMapSchema } from '../src/bridge/bridge-map.js';
+
 type ComposeService = {
+  command?: unknown;
   container_name?: unknown;
   depends_on?: unknown;
+  entrypoint?: unknown;
   env_file?: unknown;
   environment?: unknown;
   extra_hosts?: unknown;
+  healthcheck?: unknown;
+  mem_limit?: unknown;
   ports?: unknown;
   profiles?: unknown;
   volumes?: unknown;
@@ -114,6 +120,7 @@ describe('platform-profile compose contract', () => {
       'grafana',
       'prometheus',
       'qdrant',
+      'rabbitmq',
       'whatsapp',
     ]);
 
@@ -122,6 +129,7 @@ describe('platform-profile compose contract', () => {
     expect(service(compose, 'whatsapp').profiles).toEqual(['whatsapp']);
     expect(service(compose, 'prometheus').profiles).toEqual(['monitoring']);
     expect(service(compose, 'grafana').profiles).toEqual(['monitoring']);
+    expect(service(compose, 'rabbitmq').profiles).toEqual(['broker']);
 
     for (const [name, svc] of Object.entries(compose.services ?? {})) {
       expect(name).not.toBe('remy');
@@ -151,6 +159,7 @@ describe('platform-profile compose contract', () => {
       'garbanzo-bot-grafana',
       'garbanzo-bot-prometheus',
       'garbanzo-bot-qdrant',
+      'garbanzo-bot-rabbitmq',
       'garbanzo-bot-remy-data',
     ]);
   });
@@ -192,6 +201,15 @@ describe('platform-profile compose contract', () => {
     );
   });
 
+  it('ro-mounts the bridge map on both bot services', () => {
+    expect(toStringList(service(compose, 'discord').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
+    expect(toStringList(service(compose, 'whatsapp').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
+  });
+
   it('uses MONITORING_TOKEN for monitoring entrypoint wiring', () => {
     expect(composeText).not.toContain('WHATSAPP_LOGIN_TOKEN');
     expect(envEntries(service(compose, 'prometheus'))).toContain(
@@ -201,6 +219,50 @@ describe('platform-profile compose contract', () => {
     expect(String(service(compose, 'prometheus').command)).toContain('PROM_BEARER_TOKEN');
     expect(String(service(compose, 'grafana').command)).toContain('MONITORING_TOKEN');
   });
+
+  it('wires the broker profile rabbitmq service with a refusal entrypoint and localhost-only management UI', () => {
+    const rabbitmq = service(compose, 'rabbitmq');
+
+    expect(rabbitmq.container_name).toBe('garbanzo-rabbitmq');
+    expect(rabbitmq.mem_limit).toBe('400m');
+    expect(rabbitmq.healthcheck).toBeDefined();
+    expect(String((rabbitmq.healthcheck as { test?: unknown })?.test)).toContain('rabbitmq-diagnostics');
+
+    const ports = toStringList(rabbitmq.ports);
+    expect(ports).toContain('127.0.0.1:15672:15672');
+    expect(ports.some((port) => port.includes('5672:5672'))).toBe(false);
+    expect(composeText).not.toMatch(/^\s*-\s*"?[\d.]*:?5672:5672"?\s*$/m);
+
+    expect(envEntries(rabbitmq)).toEqual(
+      expect.arrayContaining([
+        'RABBITMQ_DEFAULT_USER=${BRIDGE_BROKER_USER:-garbanzo}',
+        'RABBITMQ_DEFAULT_PASS=${BRIDGE_BROKER_PASSWORD:-}',
+      ]),
+    );
+    expect(String(rabbitmq.command)).toContain('BRIDGE_BROKER_PASSWORD');
+    expect(String(rabbitmq.command)).toContain('Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile');
+  });
+
+  it('preserves the six v2 volume names byte-identical', () => {
+    const volumeNames = Object.values(compose.volumes ?? {}).map((volume) => volume.name);
+
+    for (const name of [
+      'garbanzo-bot-auth',
+      'garbanzo-bot-data',
+      'garbanzo-bot-remy-data',
+      'garbanzo-bot-qdrant',
+      'garbanzo-bot-prometheus',
+      'garbanzo-bot-grafana',
+    ]) {
+      expect(volumeNames).toContain(name);
+    }
+  });
+
+  it('validates the committed bridge-map.json against the bridge map schema', () => {
+    const bridgeMap = JSON.parse(readFileSync('config/bridge-map.json', 'utf-8')) as unknown;
+    expect(() => BridgeMapSchema.parse(bridgeMap)).not.toThrow();
+    expect(BridgeMapSchema.parse(bridgeMap)).toEqual({ instances: [], routes: [] });
+  });
 });
 
 describe('layered env example coherence', () => {
@@ -208,6 +270,7 @@ describe('layered env example coherence', () => {
   const discordExample = parseEnvExample('.env.discord.example');
   const whatsappExample = parseEnvExample('.env.whatsapp.example');
   const discordExampleText = readFileSync('.env.discord.example', 'utf-8');
+  const sharedExampleText = readFileSync('.env.example', 'utf-8');
 
   it('keeps shared and instance examples from defining the same keys', () => {
     for (const [instanceName, instanceExample] of [
@@ -237,5 +300,26 @@ describe('layered env example coherence', () => {
 
   it('removes the retired Remy env example', () => {
     expect(existsSync('.env.remy.example')).toBe(false);
+  });
+
+  it('documents bridging (v3) keys in the shared example, commented and off by default', () => {
+    for (const key of [
+      'BRIDGE_ENABLED',
+      'INSTANCE_ID',
+      'BRIDGE_TRANSPORT',
+      'BRIDGE_BROKER_URL',
+      'BRIDGE_BROKER_USER',
+      'BRIDGE_BROKER_PASSWORD',
+      'BRIDGE_SUMMARY_INTERVAL_MINUTES',
+      'BRIDGE_MAX_TEXT',
+      'SHARED_MEMORY_ENABLED',
+      'QDRANT_SHARED_COLLECTION',
+    ]) {
+      expect(sharedExampleText, `${key} missing from .env.example`).toContain(key);
+    }
+
+    // Documented off-by-default: no uncommented BRIDGE_ENABLED=true / SHARED_MEMORY_ENABLED=true line.
+    expect(sharedExampleText).not.toMatch(/^BRIDGE_ENABLED=true/m);
+    expect(sharedExampleText).not.toMatch(/^SHARED_MEMORY_ENABLED=true/m);
   });
 });

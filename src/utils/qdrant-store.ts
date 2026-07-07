@@ -67,8 +67,11 @@ function getVectorSize(info: QdrantCollectionInfo): number | undefined {
   return undefined;
 }
 
-export function createQdrantVectorStore(deps: { client?: QdrantClientLike } = {}): VectorStore {
-  const collection = config.QDRANT_COLLECTION;
+export function createQdrantVectorStore(deps: {
+  client?: QdrantClientLike;
+  collection?: string;
+} = {}): VectorStore {
+  const collection = deps.collection ?? config.QDRANT_COLLECTION;
   let clientPromise: Promise<QdrantClientLike> | null = deps.client ? Promise.resolve(deps.client) : null;
   const client = () => (clientPromise ??= defaultClient());
 

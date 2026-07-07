@@ -93,6 +93,10 @@ cp .env.discord.example .env.discord
 | `MEMORY_AUTO_EXTRACT_MIN_MESSAGES` | No | Per-group messages required between extraction attempts (default: `25`) |
 | `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
 | `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
+| `VECTOR_STORE` | No | Vector backend: `qdrant` (default) or `none` (keyword-only, no embeddings) |
+| `QDRANT_URL` | No | Qdrant server URL (default: `http://qdrant:6333`) |
+| `QDRANT_API_KEY` | No | Qdrant API key, if the server requires one |
+| `QDRANT_COLLECTION` | No | Local Qdrant collection for this instance's own facts. Default is `garbanzo_memory`, unless `INSTANCE_ID` is set and this is left unset, in which case it defaults to `garbanzo_memory_<INSTANCE_ID>` so two instances on the same Qdrant deployment don't silently share facts. An explicit value always wins. See [docs/BRIDGING.md](BRIDGING.md) for the multi-instance isolation rule. |
 | `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `openai` (default) or `deterministic` |
 | `VECTOR_EMBEDDING_MODEL` | No | OpenAI embedding model (default: `text-embedding-3-small`) |
 | `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
@@ -111,6 +115,18 @@ cp .env.discord.example .env.discord
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | WhatsApp only | Owner WhatsApp JID; required only when `MESSAGING_PLATFORM=whatsapp` |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
+| `INSTANCE_ID` | No | Deployment identity for cross-instance bridging; defaults to `MESSAGING_PLATFORM` |
+| `BRIDGE_ENABLED` | No | Master switch for cross-platform message bridging (default: `false`) |
+| `BRIDGE_TRANSPORT` | No | Bridge delivery transport: `http` (default) or `amqp` |
+| `BRIDGE_BROKER_URL` | Bridge (amqp) | AMQP broker URL, for example `amqp://garbanzo:<password>@rabbitmq:5672`; required when `BRIDGE_TRANSPORT=amqp` |
+| `BRIDGE_BROKER_USER` | Bridge (amqp, broker profile) | Compose-only interpolation var — RabbitMQ user for the `broker` profile's `rabbitmq` container (default: `garbanzo`). Not read by the bot process itself; only referenced via `${BRIDGE_BROKER_USER}` in `docker-compose*.yml`. |
+| `BRIDGE_BROKER_PASSWORD` | Bridge (amqp, broker profile) | Compose-only interpolation var — RabbitMQ password for the `broker` profile's `rabbitmq` container; the container refuses to start without it. Not read by the bot process itself; only referenced via `${BRIDGE_BROKER_PASSWORD}` in `docker-compose*.yml`. |
+| `BRIDGE_SUMMARY_INTERVAL_MINUTES` | No | Minutes between WhatsApp-bound bridge digest flushes (default: `15`) |
+| `BRIDGE_MAX_TEXT` | No | Max characters per relayed/digest bridge message (default: `1500`) |
+| `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
+| `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
+
+Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 

@@ -8,6 +8,7 @@ process.env.BAND_FEATURES_ENABLED ??= 'true';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { InboundMessage } from '../src/core/inbound-message.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 
 function createFakeMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -224,6 +225,118 @@ describe('Discord audio attachment plumbing', () => {
           audio: undefined,
         }),
       );
+    });
+  });
+
+  describe('processDiscordEvent senderName normalization', () => {
+    type ProcessInbound = (
+      messenger: PlatformMessenger,
+      inbound: InboundMessage,
+      hooks: unknown,
+      env: unknown,
+    ) => Promise<void>;
+
+    async function setupProcessorCapture() {
+      vi.resetModules();
+
+      const processInboundMessage = vi.fn<ProcessInbound>(async () => undefined);
+      vi.doMock('../src/core/process-inbound-message.js', () => ({
+        processInboundMessage,
+      }));
+
+      vi.doMock('../src/platforms/discord/discord-config.js', () => ({
+        isDiscordChannelEnabled: vi.fn(() => true),
+        discordChannelRequiresMention: vi.fn(() => true),
+        isDiscordFeatureEnabled: vi.fn(() => true),
+        isBandMember: vi.fn(() => false),
+        getDiscordChannelName: vi.fn(() => 'general'),
+        getDiscordIntroductionsChannelId: vi.fn(() => null),
+        getDiscordEventsChannelId: vi.fn(() => null),
+      }));
+
+      const adapter: PlatformMessenger = {
+        platform: 'discord',
+        sendText: vi.fn<PlatformMessenger['sendText']>(async () => undefined),
+        sendPoll: vi.fn<PlatformMessenger['sendPoll']>(async () => undefined),
+        sendDocument: vi.fn<PlatformMessenger['sendDocument']>(async () => ({
+          platform: 'discord',
+          chatId: 'chan-1',
+          id: 'doc-1',
+        })),
+        sendAudio: vi.fn<PlatformMessenger['sendAudio']>(async () => undefined),
+        deleteMessage: vi.fn<PlatformMessenger['deleteMessage']>(async () => undefined),
+      };
+
+      const module = await import('../src/platforms/discord/processor.js');
+      return { adapter, module, processInboundMessage };
+    }
+
+    function eventPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return {
+        id: 'msg-name',
+        channel_id: 'chan-1',
+        guild_id: 'guild-1',
+        content: 'hello',
+        author: { id: 'author-1', bot: false },
+        timestamp: new Date().toISOString(),
+        ...overrides,
+      };
+    }
+
+    it('prefers the Discord member displayName over author names', async () => {
+      const { adapter, module, processInboundMessage } = await setupProcessorCapture();
+
+      await module.processDiscordEvent(adapter, eventPayload({
+        author: {
+          id: 'author-1',
+          bot: false,
+          globalName: 'Global Name',
+          username: 'username',
+        },
+        member: {
+          displayName: 'Guild Name',
+        },
+      }), {
+        ownerId: 'owner-dm-channel',
+        ownerUserId: 'author-1',
+        botUserId: 'bot-user',
+      });
+
+      expect(processInboundMessage.mock.calls[0]?.[1].senderName).toBe('Guild Name');
+    });
+
+    it('falls back from author globalName to username and never emits an empty senderName', async () => {
+      const { adapter, module, processInboundMessage } = await setupProcessorCapture();
+
+      await module.processDiscordEvent(adapter, eventPayload({
+        author: { id: 'author-1', bot: false, globalName: 'Global Name', username: 'username' },
+      }), {
+        ownerId: 'owner-dm-channel',
+        ownerUserId: 'author-1',
+        botUserId: 'bot-user',
+      });
+      expect(processInboundMessage.mock.calls[0]?.[1].senderName).toBe('Global Name');
+
+      processInboundMessage.mockClear();
+      await module.processDiscordEvent(adapter, eventPayload({
+        author: { id: 'author-1', bot: false, globalName: '   ', username: 'username' },
+      }), {
+        ownerId: 'owner-dm-channel',
+        ownerUserId: 'author-1',
+        botUserId: 'bot-user',
+      });
+      expect(processInboundMessage.mock.calls[0]?.[1].senderName).toBe('username');
+
+      processInboundMessage.mockClear();
+      await module.processDiscordEvent(adapter, eventPayload({
+        author: { id: 'author-1', bot: false, globalName: '   ', username: '' },
+        member: { displayName: '   ' },
+      }), {
+        ownerId: 'owner-dm-channel',
+        ownerUserId: 'author-1',
+        botUserId: 'bot-user',
+      });
+      expect(processInboundMessage.mock.calls[0]?.[1].senderName).toBeUndefined();
     });
   });
 });

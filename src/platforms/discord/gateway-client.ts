@@ -30,6 +30,8 @@ interface DiscordMessagePayload {
   author: {
     id: string;
     bot: boolean;
+    globalName?: string;
+    username?: string;
   };
   timestamp: string;
   mentions: Array<{ id: string }>;
@@ -38,6 +40,9 @@ interface DiscordMessagePayload {
     content?: string;
   };
   senderRoleIds: string[];
+  member?: {
+    displayName?: string;
+  };
   attachments: unknown[];
   audio?: { url: string; contentType: string };
 }
@@ -56,6 +61,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function readNonEmptyString(record: Record<string, unknown>, key: string): string | undefined {
+  const trimmed = readString(record, key)?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
 function readBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
@@ -218,12 +228,19 @@ function readAudioAttachment(attachments: unknown[]): { url: string; contentType
 export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
   const record = isRecord(message) ? message : {};
   const author = readRecord(record, 'author') ?? {};
+  const member = readRecord(record, 'member');
   const guildId = readString(record, 'guildId')
     ?? readString(record, 'guild_id')
     ?? readNestedString(record, 'guild', 'id');
   const referencedMessage = readReferencedMessage(record);
   const attachments = readCollectionValues(record.attachments);
   const audio = readAudioAttachment(attachments);
+  const authorGlobalName = readNonEmptyString(author, 'globalName')
+    ?? readNonEmptyString(author, 'global_name');
+  const authorUsername = readNonEmptyString(author, 'username');
+  const memberDisplayName = member
+    ? readNonEmptyString(member, 'displayName') ?? readNonEmptyString(member, 'display_name')
+    : undefined;
 
   return {
     id: readString(record, 'id') ?? '',
@@ -236,11 +253,14 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
     author: {
       id: readString(author, 'id') ?? '',
       bot: readBoolean(author, 'bot') ?? false,
+      ...(authorGlobalName ? { globalName: authorGlobalName } : {}),
+      ...(authorUsername ? { username: authorUsername } : {}),
     },
     timestamp: readTimestamp(record),
     mentions: readMentions(record),
     ...(referencedMessage ? { referenced_message: referencedMessage } : {}),
     senderRoleIds: readMemberRoleIds(record),
+    ...(memberDisplayName ? { member: { displayName: memberDisplayName } } : {}),
     attachments,
     ...(audio ? { audio } : {}),
   };

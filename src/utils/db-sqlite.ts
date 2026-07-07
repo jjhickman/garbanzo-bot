@@ -9,11 +9,14 @@ import { stopMaintenance } from './db-maintenance.js';
 import { logger } from '../middleware/logger.js';
 import { config } from './config.js';
 import { recordSessionSummaryLifecycle } from '../middleware/stats.js';
+import type { BridgeEnvelope } from '../bridge/envelope.js';
 import { summarizeSession, scoreSessionMatch, buildContextualizedEmbeddingInput } from './session-summary.js';
 import { indexSession } from './vector-memory.js';
 import type { DbBackend } from './db-backend.js';
 import {
   mapAvailability,
+  mapBridgeBufferEntry,
+  mapBridgeOutboxEntry,
   mapDailyGroupActivity,
   mapDbMessage,
   mapEventReminder,
@@ -31,6 +34,8 @@ import {
   mapWhatsAppOutboundJob,
   mapWhatsAppSafetyState,
   type AvailabilityRow,
+  type BridgeBufferRow,
+  type BridgeOutboxRow,
   type DailyGroupActivityRow,
   type EventReminderRow,
   type FeedbackRow,
@@ -62,10 +67,14 @@ import type {
   Availability,
   AvailabilityResponse,
   BackfillSession,
+  BridgeBufferEntry,
+  BridgeOutboxCounts,
+  BridgeOutboxEntry,
   DailyGroupActivity,
   DbMessage,
   EventReminder,
   FeedbackEntry,
+  LocalMemoryEntry,
   MemoryEntry,
   ModerationEntry,
   NewEventReminder,
@@ -428,6 +437,102 @@ const upsertWhatsAppSafetyState = db.prepare(
      reasons = excluded.reasons,
      updated_at = excluded.updated_at`,
 );
+
+const BRIDGE_OUTBOX_STALE_CLAIM_MS = 120_000;
+
+function bridgeOutboxSupportsClaimed(): boolean {
+  const row = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bridge_outbox'",
+  ).get() as { sql: string | null } | undefined;
+  return row?.sql?.includes("'claimed'") ?? false;
+}
+
+if (!bridgeOutboxSupportsClaimed()) {
+  db.exec(`
+    CREATE TABLE bridge_outbox_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_json TEXT NOT NULL,
+      target_instance TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','claimed','sent','dead')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL,
+      last_error TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    INSERT INTO bridge_outbox_new
+      (id, envelope_json, target_instance, status, attempts, next_attempt_at, last_error, created_at)
+    SELECT id, envelope_json, target_instance, status, attempts, next_attempt_at, last_error, created_at
+    FROM bridge_outbox;
+
+    DROP TABLE bridge_outbox;
+    ALTER TABLE bridge_outbox_new RENAME TO bridge_outbox;
+
+    CREATE INDEX IF NOT EXISTS idx_bridge_outbox_status_next_attempt
+      ON bridge_outbox (status, next_attempt_at);
+  `);
+}
+
+const insertBridgeOutbox = db.prepare(
+  `INSERT INTO bridge_outbox
+   (envelope_json, target_instance, status, attempts, next_attempt_at, created_at)
+   VALUES (?, ?, 'pending', 0, ?, ?)`,
+);
+const selectBridgeOutboxById = db.prepare(`SELECT * FROM bridge_outbox WHERE id = ?`);
+const claimDueBridgeOutboxRows = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'claimed', next_attempt_at = @now
+   WHERE id IN (
+     SELECT id FROM bridge_outbox
+     WHERE (status = 'pending' AND next_attempt_at <= @now)
+        OR (status = 'claimed' AND next_attempt_at <= @staleBefore)
+     ORDER BY id ASC
+     LIMIT @limit
+   )
+   RETURNING *`,
+);
+const updateBridgeOutboxSent = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'sent', last_error = NULL
+   WHERE id = ? AND status = 'claimed'`,
+);
+const updateBridgeOutboxDead = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'dead', attempts = attempts + 1, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
+);
+const updateBridgeOutboxAttempt = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'pending', attempts = attempts + 1, next_attempt_at = ?, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
+);
+const insertBridgeSeen = db.prepare(
+  `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
+);
+const deleteBridgeSeen = db.prepare(
+  `DELETE FROM bridge_seen WHERE idempotency_key = ?`,
+);
+const insertBridgeBuffer = db.prepare(
+  `INSERT INTO bridge_buffer (route_id, envelope_json, buffered_at) VALUES (?, ?, ?)`,
+);
+const selectBridgeBufferByRoute = db.prepare(
+  // buffered_at first: restored rows get NEW autoincrement ids, so id order
+  // would sort them after messages that arrived mid-flush, inverting the
+  // oldest-dropped truncation guarantee. buffered_at survives restore.
+  `SELECT * FROM bridge_buffer WHERE route_id = ? ORDER BY buffered_at ASC, id ASC`,
+);
+const deleteBridgeBufferByRoute = db.prepare(`DELETE FROM bridge_buffer WHERE route_id = ?`);
+const selectBridgeBufferDepths = db.prepare(
+  `SELECT route_id, COUNT(*) as count FROM bridge_buffer GROUP BY route_id`,
+);
+const selectBridgeOutboxCounts = db.prepare(
+  `SELECT
+     SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
+     SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead
+   FROM bridge_outbox`,
+);
 const selectWhatsAppMetricCounts = db.prepare(
   `SELECT
      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
@@ -775,6 +880,111 @@ export function getWhatsAppSafetyMetrics(hourSince: number, daySince: number): W
   return mapWhatsAppSafetyMetrics(counts, state);
 }
 
+// ── Public API: Bridge Outbox ──────────────────────────────────────
+
+export function enqueueBridgeOutbox(envelope: BridgeEnvelope): BridgeOutboxEntry {
+  const now = Date.now();
+  const result = insertBridgeOutbox.run(
+    JSON.stringify(envelope),
+    envelope.targetInstance,
+    now,
+    now,
+  );
+  return mapBridgeOutboxEntry(selectBridgeOutboxById.get(result.lastInsertRowid) as BridgeOutboxRow);
+}
+
+export function claimDueBridgeOutbox(limit: number): BridgeOutboxEntry[] {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const now = Date.now();
+  return (claimDueBridgeOutboxRows.all({
+    now,
+    staleBefore: now - BRIDGE_OUTBOX_STALE_CLAIM_MS,
+    limit: safeLimit,
+  }) as BridgeOutboxRow[]).map(mapBridgeOutboxEntry);
+}
+
+export function markBridgeOutboxSent(id: number): boolean {
+  return updateBridgeOutboxSent.run(id).changes > 0;
+}
+
+export function markBridgeOutboxDead(id: number, error: string): boolean {
+  return updateBridgeOutboxDead.run(error, id).changes > 0;
+}
+
+export function bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): boolean {
+  return updateBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
+}
+
+export function bridgeSeenInsert(key: string): boolean {
+  return insertBridgeSeen.run(key, Date.now()).changes > 0;
+}
+
+/**
+ * Remove a dedup key inserted by `bridgeSeenInsert`. Used when a delivery
+ * attempt throws AFTER the key was inserted (T6-review required fix): without
+ * this, a thrown delivery error would leave the key seen, so the sender's
+ * retry of the SAME message would be silently dropped as a duplicate instead
+ * of being retried fresh.
+ */
+export function bridgeSeenDelete(key: string): boolean {
+  return deleteBridgeSeen.run(key).changes > 0;
+}
+
+export function bridgeOutboxCounts(): BridgeOutboxCounts {
+  const row = selectBridgeOutboxCounts.get() as { pending: number | null; sent: number | null; dead: number | null };
+  return {
+    pending: toNumber(row.pending ?? 0),
+    sent: toNumber(row.sent ?? 0),
+    dead: toNumber(row.dead ?? 0),
+  };
+}
+
+// ── Public API: Bridge Summary Buffer (Task 7) ─────────────────────
+
+/**
+ * Atomically read and clear all buffered rows for a route (oldest first).
+ * better-sqlite3 executes synchronously, so the select+delete pair below
+ * cannot interleave with a concurrent append on the same process — no
+ * explicit BEGIN/COMMIT is needed for that guarantee, but we still wrap it
+ * in a transaction for clarity and to keep the pattern consistent with the
+ * other multi-statement writes in this file.
+ */
+const takeBridgeBufferTxn = db.transaction((routeId: string): BridgeBufferRow[] => {
+  const rows = selectBridgeBufferByRoute.all(routeId) as BridgeBufferRow[];
+  if (rows.length > 0) deleteBridgeBufferByRoute.run(routeId);
+  return rows;
+});
+
+const restoreBridgeBufferTxn = db.transaction((rows: BridgeBufferEntry[]): void => {
+  for (const row of rows) {
+    insertBridgeBuffer.run(row.routeId, row.envelopeJson, row.bufferedAt);
+  }
+});
+
+/** Append one envelope to a route's buffer. Never sends — the flusher does that. */
+export function appendBridgeBuffer(routeId: string, envelopeJson: string): void {
+  insertBridgeBuffer.run(routeId, envelopeJson, Date.now());
+}
+
+/** Atomically take (read + delete) all buffered rows for a route, oldest first. */
+export function takeBridgeBuffer(routeId: string): BridgeBufferEntry[] {
+  return takeBridgeBufferTxn(routeId).map(mapBridgeBufferEntry);
+}
+
+/** Re-insert previously taken rows, preserving their original order and timestamps. */
+export function restoreBridgeBuffer(rows: BridgeBufferEntry[]): void {
+  if (rows.length === 0) return;
+  restoreBridgeBufferTxn(rows);
+}
+
+/** Current buffer depth (row count) per route id, for routes with at least one buffered row. */
+export function bridgeBufferDepths(): Record<string, number> {
+  const rows = selectBridgeBufferDepths.all() as Array<{ route_id: string; count: number }>;
+  const depths: Record<string, number> = {};
+  for (const row of rows) depths[row.route_id] = toNumber(row.count);
+  return depths;
+}
+
 // ── Public API: Feedback ────────────────────────────────────────────
 
 /** Submit a new feature suggestion or bug report */
@@ -846,14 +1056,14 @@ export function linkFeedbackToGitHubIssue(
 // ── Public API: Memory ──────────────────────────────────────────────
 
 /** Store a new community fact */
-export function addMemory(fact: string, category: string = 'general', source: string = 'owner'): MemoryEntry {
+export function addMemory(fact: string, category: string = 'general', source: string = 'owner'): LocalMemoryEntry {
   const ts = Math.floor(Date.now() / 1000);
   const result = insertMemory.run(fact, category, source, ts);
   return { id: Number(result.lastInsertRowid), fact, category, source, created_at: ts };
 }
 
 /** Get all stored memories */
-export function getAllMemories(): MemoryEntry[] {
+export function getAllMemories(): LocalMemoryEntry[] {
   return (selectAllMemories.all() as MemoryRow[]).map(mapMemoryEntry);
 }
 
@@ -1371,6 +1581,25 @@ export function createSqliteBackend(): DbBackend {
     },
     getWhatsAppSafetyMetrics: async (hourSince: number, daySince: number) =>
       getWhatsAppSafetyMetrics(hourSince, daySince),
+
+    enqueueBridgeOutbox: async (envelope: BridgeEnvelope) => enqueueBridgeOutbox(envelope),
+    claimDueBridgeOutbox: async (limit: number) => claimDueBridgeOutbox(limit),
+    markBridgeOutboxSent: async (id: number) => markBridgeOutboxSent(id),
+    markBridgeOutboxDead: async (id: number, error: string) => markBridgeOutboxDead(id, error),
+    bumpBridgeOutboxAttempt: async (id: number, nextAt: number, error: string) =>
+      bumpBridgeOutboxAttempt(id, nextAt, error),
+    bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
+    bridgeSeenDelete: async (key: string) => bridgeSeenDelete(key),
+    bridgeOutboxCounts: async () => bridgeOutboxCounts(),
+
+    appendBridgeBuffer: async (routeId: string, envelopeJson: string): Promise<void> => {
+      appendBridgeBuffer(routeId, envelopeJson);
+    },
+    takeBridgeBuffer: async (routeId: string) => takeBridgeBuffer(routeId),
+    restoreBridgeBuffer: async (rows: BridgeBufferEntry[]): Promise<void> => {
+      restoreBridgeBuffer(rows);
+    },
+    bridgeBufferDepths: async () => bridgeBufferDepths(),
 
     submitFeedback: async (
       type: 'suggestion' | 'bug',

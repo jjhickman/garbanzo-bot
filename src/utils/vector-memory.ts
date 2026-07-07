@@ -1,6 +1,6 @@
 import { logger } from '../middleware/logger.js';
 import { recordVectorSearch, recordVectorUpsert } from '../middleware/stats.js';
-import { config } from './config.js';
+import { config, instanceId } from './config.js';
 import { embedTextForVectorSearch } from './embedding-provider.js';
 import { createQdrantVectorStore } from './qdrant-store.js';
 import { vectorPointId } from './vector-point-id.js';
@@ -8,6 +8,16 @@ import type { VectorFilter, VectorHit, VectorPayload, VectorStore } from './vect
 
 let store: VectorStore | null | undefined;
 let ensureState: 'pending' | 'ok' | 'failed' = 'pending';
+let sharedStore: VectorStore | null | undefined;
+let sharedEnsureState: 'pending' | 'ok' | 'failed' = 'pending';
+
+export interface SharedFactHit {
+  refId: string;
+  text: string;
+  score: number;
+  originInstance: string;
+  category: string;
+}
 
 export function __setVectorStoreForTests(s: VectorStore | null): void {
   store = s;
@@ -18,6 +28,15 @@ export function getVectorStore(): VectorStore | null {
   if (store !== undefined) return store;
   store = config.VECTOR_STORE === 'qdrant' ? createQdrantVectorStore() : null;
   return store;
+}
+
+export function getSharedVectorStore(): VectorStore | null {
+  if (!config.SHARED_MEMORY_ENABLED) return null;
+  if (sharedStore !== undefined) return sharedStore;
+  sharedStore = config.VECTOR_STORE === 'qdrant'
+    ? createQdrantVectorStore({ collection: config.QDRANT_SHARED_COLLECTION })
+    : null;
+  return sharedStore;
 }
 
 async function ready(): Promise<VectorStore | null> {
@@ -32,6 +51,22 @@ async function ready(): Promise<VectorStore | null> {
   } catch (err) {
     ensureState = 'failed';
     logger.warn({ err }, 'Qdrant ensureCollection failed; vector memory degraded');
+    return null;
+  }
+}
+
+async function readyShared(): Promise<VectorStore | null> {
+  const s = getSharedVectorStore();
+  if (!s || sharedEnsureState === 'failed') return null;
+  if (sharedEnsureState === 'ok') return s;
+
+  try {
+    await s.ensureCollection();
+    sharedEnsureState = 'ok';
+    return s;
+  } catch (err) {
+    sharedEnsureState = 'failed';
+    logger.warn({ err }, 'Shared Qdrant ensureCollection failed; shared memory degraded');
     return null;
   }
 }
@@ -58,22 +93,28 @@ async function embed(text: string): Promise<number[] | null> {
   }
 }
 
-async function upsertOne(payload: VectorPayload, embeddingInput: string): Promise<void> {
-  const s = await ready();
-  if (!s) return;
+async function upsertOne(
+  payload: VectorPayload,
+  embeddingInput: string,
+  readyStore: () => Promise<VectorStore | null> = ready,
+): Promise<boolean> {
+  const s = await readyStore();
+  if (!s) return false;
 
   const vector = await embed(embeddingInput);
   if (!vector) {
     recordVectorUpsert('error');
-    return;
+    return false;
   }
 
   try {
     await s.upsert([{ id: vectorPointId(payload.kind, payload.refId), vector, payload }]);
     recordVectorUpsert('ok');
+    return true;
   } catch (err) {
     recordVectorUpsert('error');
     logger.warn({ err, kind: payload.kind, refId: payload.refId }, 'Vector upsert failed');
+    return false;
   }
 }
 
@@ -140,6 +181,28 @@ export async function indexFact(input: {
   );
 }
 
+export async function indexSharedFact(input: {
+  localId: number | string;
+  text: string;
+  category: string;
+}): Promise<boolean> {
+  if (!config.SHARED_MEMORY_ENABLED) return false;
+
+  return upsertOne(
+    {
+      kind: 'fact',
+      scope: 'global',
+      chatJid: null,
+      refId: `${instanceId}:${input.localId}`,
+      text: input.text,
+      createdAt: Math.floor(Date.now() / 1000),
+      extra: { originInstance: instanceId, category: input.category },
+    },
+    input.text,
+    readyShared,
+  );
+}
+
 export async function deleteFact(refId: string): Promise<void> {
   const s = await ready();
   if (!s) return;
@@ -151,8 +214,29 @@ export async function deleteFact(refId: string): Promise<void> {
   }
 }
 
-async function searchKind(query: string, filter: VectorFilter, limit: number): Promise<VectorHit[]> {
-  const s = await ready();
+export async function deleteSharedFact(localId: number | string): Promise<boolean> {
+  if (!config.SHARED_MEMORY_ENABLED) return false;
+
+  const s = await readyShared();
+  if (!s) return false;
+
+  const refId = `${instanceId}:${localId}`;
+  try {
+    await s.delete({ kind: 'fact', refId });
+    return true;
+  } catch (err) {
+    logger.warn({ err, refId }, 'Shared vector fact delete failed');
+    return false;
+  }
+}
+
+async function searchKind(
+  query: string,
+  filter: VectorFilter,
+  limit: number,
+  readyStore: () => Promise<VectorStore | null> = ready,
+): Promise<VectorHit[]> {
+  const s = await readyStore();
   if (!s || !query.trim()) return [];
 
   const vector = await embed(query);
@@ -190,4 +274,17 @@ export async function searchSessions(
 
 export async function searchFacts(query: string, limit: number): Promise<VectorHit[]> {
   return searchKind(query, { kind: 'fact', scope: 'global' }, limit);
+}
+
+export async function searchSharedFacts(query: string, limit = 4): Promise<SharedFactHit[]> {
+  if (!config.SHARED_MEMORY_ENABLED) return [];
+
+  const hits = await searchKind(query, { kind: 'fact', scope: 'global' }, limit, readyShared);
+  return hits.map((hit) => ({
+    refId: hit.payload.refId,
+    text: hit.payload.text,
+    score: hit.score,
+    originInstance: String(hit.payload.extra?.originInstance ?? 'unknown'),
+    category: String(hit.payload.extra?.category ?? 'general'),
+  }));
 }

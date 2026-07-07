@@ -8,7 +8,7 @@ import type { MessagingPlatform } from '../core/messaging-platform.js';
 import { getGroupPersona, getEnabledGroupJidByName } from '../core/groups-config.js';
 import { formatContext } from '../middleware/context.js';
 import { buildLanguageInstruction } from '../features/language.js';
-import { formatMemoriesForPrompt } from '../utils/db.js';
+import { formatMemoriesForPromptWithShared } from '../utils/db.js';
 import { getSearchProviderName } from '../features/web-search.js';
 import { formatBandKnowledgeForPrompt } from '../features/band-knowledge.js';
 
@@ -133,7 +133,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
   const isIntroGroup = !!introductionsChatId && ctx.groupJid === introductionsChatId;
   const context = await formatContext(ctx.groupJid, userMessage ?? '');
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
-  const memories = await formatMemoriesForPrompt();
+  const memories = await formatMemoriesForPromptWithShared(userMessage);
   const bandKnowledge = await formatBandKnowledgeForPrompt();
   const groupPersona = getGroupPersona(ctx.groupJid);
   const toolInstruction = buildToolInstruction();

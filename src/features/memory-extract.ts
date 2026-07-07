@@ -156,6 +156,7 @@ async function isDuplicateFact(candidate: string): Promise<boolean> {
   for (const token of distinctiveTokens(candidateTokens)) {
     const memories = await searchMemory(token, 10);
     for (const memory of memories) {
+      if (memory.shared) continue;
       matches.set(memory.id, memory);
     }
   }

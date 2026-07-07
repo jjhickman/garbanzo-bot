@@ -12,6 +12,7 @@ import { isNetworkExposedHost, resolveLoginHosts, shouldEnableWhatsAppLogin } fr
 import type { PlatformRuntime } from './platforms/types.js';
 
 let activeRuntime: PlatformRuntime | null = null;
+let activeBridgeStop: (() => Promise<void>) | null = null;
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | void> {
@@ -61,13 +62,33 @@ async function main(): Promise<void> {
     );
   }
 
+  // Construct (but do not yet start) the platform runtime — the bridge
+  // lifecycle needs it to resolve the outbound messenger lazily, and
+  // constructing a runtime has no side effects until start() is called.
+  const runtime = getPlatformRuntime();
+  activeRuntime = runtime;
+
   // Start health check server + memory watchdog for monitoring
-  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, {
+  const healthOptions: Parameters<typeof startHealthServer>[2] = {
     metricsEnabled: config.METRICS_ENABLED,
     adminEnabled: config.ADMIN_PAGE_ENABLED,
     authToken: monitoringToken,
     extraHandler: loginHandler,
-  });
+  };
+  if (config.BRIDGE_ENABLED) {
+    // Dynamic import: deployments that don't enable the bridge (the vast
+    // majority) never load amqplib or the bridge module graph at all.
+    const { startBridge } = await import('./bridge/lifecycle.js');
+    const bridge = await startBridge({
+      getMessenger: () => runtime.getMessenger?.() ?? null,
+    });
+    if (bridge) {
+      healthOptions.bridgeInboundHandler = bridge.handler;
+      activeBridgeStop = bridge.stop;
+      logger.info({ instanceId: config.INSTANCE_ID ?? config.MESSAGING_PLATFORM }, 'Bridge lifecycle started');
+    }
+  }
+  startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, healthOptions);
   startMemoryWatchdog();
 
   if (whatsAppLoginEnabled) {
@@ -111,8 +132,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  const runtime = getPlatformRuntime();
-  activeRuntime = runtime;
   logger.info({ platform: runtime.platform }, 'Starting platform runtime');
   await runtime.start();
   logger.info(`${getPersonaName()} is online and listening`);
@@ -139,6 +158,14 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   clearRetryQueue();
   stopOllamaWarmup();
   stopHealthServer();
+
+  if (activeBridgeStop) {
+    try {
+      await withTimeout(activeBridgeStop(), SHUTDOWN_TIMEOUT_MS, 'bridge.stop');
+    } catch (err) {
+      logger.error({ err, signal }, 'Bridge stop failed during shutdown');
+    }
+  }
 
   if (activeRuntime) {
     try {

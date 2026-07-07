@@ -160,6 +160,34 @@ describe('Discord Gateway client', () => {
     }));
   });
 
+  it('maps Discord display-name fields into the processor payload', async () => {
+    const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
+
+    const payload = mapMessageToPayload(createFakeMessage({
+      author: {
+        id: 'author-1',
+        bot: false,
+        globalName: 'Global Name',
+        username: 'username',
+      },
+      member: {
+        displayName: 'Guild Name',
+      },
+    }));
+
+    expect(payload).toEqual(expect.objectContaining({
+      author: {
+        id: 'author-1',
+        bot: false,
+        globalName: 'Global Name',
+        username: 'username',
+      },
+      member: expect.objectContaining({
+        displayName: 'Guild Name',
+      }),
+    }));
+  });
+
   it('does not forward bot-authored messages', async () => {
     const { fakeClient, gateway, processDiscordEvent } = await setup();
 

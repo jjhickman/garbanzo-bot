@@ -43,13 +43,25 @@ export interface FeedbackEntry {
   timestamp: number;
 }
 
-export interface MemoryEntry {
+export interface LocalMemoryEntry {
   id: number;
   fact: string;
   category: string;
   source: string;
   created_at: number;
+  shared?: false;
 }
+
+export interface SharedMemoryEntry {
+  fact: string;
+  category: string;
+  source: 'shared';
+  created_at: number;
+  shared: true;
+  originInstance: string;
+}
+
+export type MemoryEntry = LocalMemoryEntry | SharedMemoryEntry;
 
 export type SongStatus = 'idea' | 'rough' | 'tight' | 'gig-ready';
 
@@ -244,4 +256,37 @@ export interface WhatsAppSafetyMetrics {
   paused: boolean;
   risk: WhatsAppRiskLevel;
   score: number;
+}
+
+export type BridgeOutboxStatus = 'pending' | 'sent' | 'dead';
+
+export interface BridgeOutboxEntry {
+  id: number;
+  envelopeJson: string;
+  targetInstance: string;
+  status: BridgeOutboxStatus;
+  attempts: number;
+  nextAttemptAt: number;
+  lastError: string | null;
+  createdAt: number;
+}
+
+export interface BridgeOutboxCounts {
+  pending: number;
+  sent: number;
+  dead: number;
+}
+
+/**
+ * A row buffered for the WhatsApp-relay-safe summary flusher (Task 7). Unlike
+ * bridge_outbox (per-message durable delivery queue), bridge_buffer holds
+ * envelopes destined to be batched into ONE digest send per route per flush
+ * interval — the anti-ban guarantee for high-traffic routes bridging into
+ * WhatsApp.
+ */
+export interface BridgeBufferEntry {
+  id: number;
+  routeId: string;
+  envelopeJson: string;
+  bufferedAt: number;
 }

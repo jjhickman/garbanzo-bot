@@ -60,7 +60,7 @@ export function formatMemoriesForPromptEntries(memories: MemoryEntry[]): string 
   const byCategory = new Map<string, string[]>();
   for (const memory of memories) {
     const list = byCategory.get(memory.category) ?? [];
-    list.push(memory.fact);
+    list.push(memory.shared ? `[shared from ${memory.originInstance}] ${memory.fact}` : memory.fact);
     byCategory.set(memory.category, list);
   }
 
