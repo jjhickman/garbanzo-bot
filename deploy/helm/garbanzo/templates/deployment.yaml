@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "garbanzo.fullname" . }}
+  labels:
+    {{- include "garbanzo.labels" . | nindent 4 }}
+spec:
+  # Baileys and Discord Gateway sessions are single-replica by design.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "garbanzo.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "garbanzo.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: garbanzo
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health
+              containerPort: {{ .Values.healthPort }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: MESSAGING_PLATFORM
+              value: {{ include "garbanzo.platform" . | quote }}
+            - name: INSTANCE_ID
+              value: {{ default .Values.platform .Values.instanceId | quote }}
+            - name: HEALTH_PORT
+              value: {{ .Values.healthPort | quote }}
+            - name: HEALTH_BIND_HOST
+              value: "0.0.0.0"
+            {{- if or .Values.qdrant.enabled .Values.qdrant.url }}
+            {{- if not (hasKey .Values.env "QDRANT_URL") }}
+            - name: QDRANT_URL
+              value: {{ include "garbanzo.qdrantUrl" . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- if or .Values.existingSecret .Values.secretEnv }}
+          envFrom:
+            - secretRef:
+                name: {{ include "garbanzo.secretName" . }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if or .Values.persistence.data.enabled .Values.persistence.whatsappAuth.enabled (include "garbanzo.hasConfigFiles" .) }}
+          volumeMounts:
+            {{- if .Values.persistence.data.enabled }}
+            - name: data
+              mountPath: /app/data
+            {{- end }}
+            {{- if .Values.persistence.whatsappAuth.enabled }}
+            - name: whatsapp-auth
+              mountPath: /app/baileys_auth
+            {{- end }}
+            {{- if include "garbanzo.hasConfigFiles" . }}
+            {{- if .Values.configFiles.groupsJson }}
+            - name: config
+              mountPath: /app/config/groups.json
+              subPath: groups.json
+              readOnly: true
+            {{- end }}
+            {{- if .Values.configFiles.discordChannelsJson }}
+            - name: config
+              mountPath: /app/config/discord-channels.json
+              subPath: discord-channels.json
+              readOnly: true
+            {{- end }}
+            {{- if .Values.configFiles.bridgeMapJson }}
+            - name: config
+              mountPath: /app/config/bridge-map.json
+              subPath: bridge-map.json
+              readOnly: true
+            {{- end }}
+            {{- end }}
+          {{- end }}
+      {{- if or .Values.persistence.data.enabled .Values.persistence.whatsappAuth.enabled (include "garbanzo.hasConfigFiles" .) }}
+      volumes:
+        {{- if .Values.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "garbanzo.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.persistence.whatsappAuth.enabled }}
+        - name: whatsapp-auth
+          persistentVolumeClaim:
+            claimName: {{ include "garbanzo.fullname" . }}-whatsapp-auth
+        {{- end }}
+        {{- if include "garbanzo.hasConfigFiles" . }}
+        - name: config
+          configMap:
+            name: {{ include "garbanzo.fullname" . }}-config
+        {{- end }}
+      {{- end }}
