@@ -49,6 +49,18 @@ function helmExists(): boolean {
   return result.status === 0;
 }
 
+function renderDeployment(chartDir: string, args: string[] = []): string {
+  return execFileSync(
+    'helm',
+    ['template', 'garbanzo', chartDir, '--show-only', 'templates/deployment.yaml', ...args],
+    {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: 25_000,
+    },
+  );
+}
+
 describe('garbanzo helm chart', () => {
   const chartDir = 'deploy/helm/garbanzo';
 
@@ -104,5 +116,28 @@ describe('garbanzo helm chart', () => {
       stdio: 'pipe',
       timeout: 25_000,
     });
+  }, 30_000);
+
+  it('does not render QDRANT_URL with default values when helm is installed', () => {
+    if (!helmExists()) return;
+
+    const deployment = renderDeployment(chartDir);
+
+    expect(deployment).not.toMatch(/name:\s+QDRANT_URL/);
+  }, 30_000);
+
+  it('renders QDRANT_URL when qdrant is enabled or an explicit qdrant URL is set', () => {
+    if (!helmExists()) return;
+
+    const bundledQdrantDeployment = renderDeployment(chartDir, ['--set', 'qdrant.enabled=true']);
+    expect(bundledQdrantDeployment).toMatch(/name:\s+QDRANT_URL/);
+    expect(bundledQdrantDeployment).toContain('value: "http://garbanzo-qdrant:6333"');
+
+    const explicitUrlDeployment = renderDeployment(chartDir, [
+      '--set',
+      'qdrant.url=http://external-qdrant:6333',
+    ]);
+    expect(explicitUrlDeployment).toMatch(/name:\s+QDRANT_URL/);
+    expect(explicitUrlDeployment).toContain('value: "http://external-qdrant:6333"');
   }, 30_000);
 });

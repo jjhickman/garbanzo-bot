@@ -4,7 +4,7 @@ import { optionalString } from './shared.js';
 export const vectorSchema = z.object({
   // Vector embedding pipeline
   VECTOR_STORE: z.enum(['qdrant', 'none']).default('qdrant'),
-  QDRANT_URL: z.string().url().default('http://qdrant:6333'),
+  QDRANT_URL: z.string().url().default('http://127.0.0.1:6333'),
   QDRANT_API_KEY: optionalString,
   QDRANT_COLLECTION: z.string().min(1).default('garbanzo_memory'),
   VECTOR_EMBEDDING_PROVIDER: z.enum(['deterministic', 'openai']).default('openai'),

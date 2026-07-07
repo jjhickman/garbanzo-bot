@@ -13,6 +13,7 @@ export const BANNED_STALE_DOC_PATTERNS = [
   /docker-compose\.remy\.yml/,
   /VECTOR_DB_PLAN|VECTOR_MEMORY_IMPLEMENTATION_SPEC|MULTI_PLATFORM\.md|PROMOTION_SNIPPETS/,
   /--profile monitoring up/,
+  /\bdefault\b.*http:\/\/qdrant:6333/i,
 ] as const;
 
 const repoRoot = process.cwd();

@@ -21,7 +21,7 @@ describe('vector store config', () => {
     delete process.env.VECTOR_STORE;
     const config = await loadConfig({});
     expect(config.VECTOR_STORE).toBe('qdrant');
-    expect(config.QDRANT_URL).toBe('http://qdrant:6333');
+    expect(config.QDRANT_URL).toBe('http://127.0.0.1:6333');
     expect(config.QDRANT_COLLECTION).toBe('garbanzo_memory');
     expect(config.VECTOR_EMBEDDING_PROVIDER).toBe('openai');
     expect(config.VECTOR_EMBEDDING_DIMENSIONS).toBe(1536);
