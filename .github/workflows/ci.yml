@@ -135,3 +135,78 @@ jobs:
           VECTOR_EMBEDDING_PROVIDER: deterministic
           VECTOR_EMBEDDING_DIMENSIONS: "256"
         run: npx vitest run tests/vector-memory-integration.test.ts
+
+  smoke-experimental-platforms:
+    name: smoke (experimental platforms)
+    # Non-blocking this release (D5/T7): Windows/macOS support is
+    # "experimental" until this job has run green long enough to flip to
+    # required. Failures here must never hold up the release path.
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        # bash is available on GitHub-hosted windows-latest (via Git for
+        # Windows) and macos-latest, so one script works across the matrix
+        # instead of branching pwsh/bash per OS.
+        shell: bash
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Boot smoke test (HEALTH_ONLY)
+        env:
+          HEALTH_ONLY: "true"
+          MESSAGING_PLATFORM: whatsapp
+          OWNER_JID: test_owner@s.whatsapp.net
+          OPENROUTER_API_KEY: test_key_ci
+          AI_PROVIDER_ORDER: openrouter
+          # No Docker/Qdrant available on these runners; keep boot fully
+          # local (default HEALTH_PORT is 3001, src/utils/config/monitoring.ts).
+          VECTOR_STORE: none
+        run: |
+          set -uo pipefail
+
+          node dist/index.js &
+          pid=$!
+          echo "Started garbanzo (HEALTH_ONLY) pid=$pid"
+
+          health_url="http://127.0.0.1:3001/health"
+          success=0
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null "$health_url"; then
+              echo "Health check succeeded on attempt $i"
+              success=1
+              break
+            fi
+            sleep 1
+          done
+
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+
+          if [ "$success" -ne 1 ]; then
+            echo "::error::/health never returned 200 within the retry budget" >&2
+            exit 1
+          fi
+
+          echo "Boot smoke test passed"
