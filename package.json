@@ -76,7 +76,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.2.3",
+    "@types/node": "^26.1.0",
     "@types/qrcode": "^1.5.5",
     "eslint": "^9.20.0",
     "js-yaml": "^5.2.1",
