@@ -24,6 +24,7 @@ const semanticHit: VectorHit = {
 
 const searchFacts = vi.fn<(query: string, limit: number) => Promise<VectorHit[]>>();
 const keywordSearchMemory = vi.fn<(keyword: string, limit?: number) => Promise<MemoryEntry[]>>();
+let allMemoriesResult: MemoryEntry[] = [];
 
 function createBackend(): DbBackend {
   return {
@@ -132,7 +133,7 @@ function createBackend(): DbBackend {
       source,
       created_at: 0,
     })),
-    getAllMemories: vi.fn(async () => []),
+    getAllMemories: vi.fn(async () => allMemoriesResult),
     deleteMemory: vi.fn(async () => false),
     searchMemory: keywordSearchMemory,
     formatMemoriesForPrompt: vi.fn(async () => ''),
@@ -157,6 +158,7 @@ describe('semantic memory search', () => {
   beforeEach(() => {
     searchFacts.mockReset();
     keywordSearchMemory.mockReset();
+    allMemoriesResult = [];
   });
 
   it('returns semantic fact hits mapped to MemoryEntry when available', async () => {
@@ -177,6 +179,23 @@ describe('semantic memory search', () => {
         created_at: 0,
       },
     ]);
+  });
+
+  it('hydrates source from the relational record so provenance tags stay truthful', async () => {
+    searchFacts.mockResolvedValueOnce([semanticHit]);
+    allMemoriesResult = [{
+      id: 3,
+      fact: 'Trivia night is Wednesdays at Parlor',
+      category: 'venues',
+      source: 'ai-tool',
+      created_at: 0,
+    }];
+
+    const db = await loadDb();
+    const results = await db.searchMemory('board game night', 4);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: 3, source: 'ai-tool' });
   });
 
   it('falls back to keyword search when semantic search returns no hits', async () => {

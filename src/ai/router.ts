@@ -287,6 +287,11 @@ export function classifyComplexity(query: string, ctx: MessageContext): Complexi
     return 'simple';
   }
 
+  // Explicit memory-save requests need the save tool; Ollama has none
+  if (/\b(remember (that|this)|don'?t forget|add (that|this) to (your |the )?memory)\b/i.test(lower)) {
+    return 'complex';
+  }
+
   // Multiple sentences or complex connectors → complex
   if ((trimmed.match(/[.!?]/g)?.length ?? 0) > 2) return 'complex';
   if (/\b(because|however|although|compare|difference|explain|versus|vs)\b/i.test(lower)) return 'complex';

@@ -132,4 +132,13 @@ describe('persona band knowledge prompt injection', () => {
     expect(prompt).toContain('Band songs you know:');
     expect(prompt).toContain('- Sundown (E, 120bpm, gig-ready)');
   });
+
+  it('tells the local model it cannot save memories (no tools on this path)', async () => {
+    dbMocks.listSongs.mockResolvedValueOnce([]);
+
+    const prompt = await buildOllamaPrompt(ctx);
+
+    expect(prompt).toContain('You cannot save memories');
+    expect(prompt).toContain('never claim otherwise');
+  });
 });

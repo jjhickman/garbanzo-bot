@@ -160,13 +160,21 @@ export async function searchMemory(keyword: string, limit = 10): Promise<MemoryE
   const hits = await searchFacts(keyword, limit);
   let localResults: MemoryEntry[];
   if (hits.length > 0) {
-    localResults = hits.map((h) => ({
-      id: Number(h.payload.refId),
-      fact: h.payload.text,
-      category: String(h.payload.extra?.category ?? 'general'),
-      source: 'auto',
-      created_at: h.payload.createdAt,
-    }));
+    // Vector payloads don't carry source; hydrate it from the relational
+    // source of record so provenance tags ((auto)/(ai)) stay truthful.
+    const sourceById = new Map(
+      (await backend.getAllMemories()).map((m) => [m.id, m.source]),
+    );
+    localResults = hits.map((h) => {
+      const id = Number(h.payload.refId);
+      return {
+        id,
+        fact: h.payload.text,
+        category: String(h.payload.extra?.category ?? 'general'),
+        source: sourceById.get(id) ?? 'auto',
+        created_at: h.payload.createdAt,
+      };
+    });
   } else {
     localResults = await backend.searchMemory(keyword, limit);
   }

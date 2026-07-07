@@ -105,7 +105,7 @@ async function extractCommunityFacts(chatId: string, groupName: string, messages
     await addMemory(fact, candidate.category, 'auto');
   }
 
-  await pruneAutoMemoriesToCap();
+  await pruneMachineMemoriesToCap();
 }
 
 function buildExtractionPrompt(groupName: string, messages: DbMessage[]): string {
@@ -148,7 +148,7 @@ function stripJsonFence(response: string): string {
   return fenceMatch?.[1]?.trim() ?? response;
 }
 
-async function isDuplicateFact(candidate: string): Promise<boolean> {
+export async function isDuplicateFact(candidate: string): Promise<boolean> {
   const candidateTokens = normalizedTokenSet(candidate);
   if (candidateTokens.size === 0) return false;
 
@@ -198,15 +198,18 @@ function jaccardOverlap(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-async function pruneAutoMemoriesToCap(): Promise<void> {
-  const autoMemories = (await getAllMemories())
-    .filter((memory) => memory.source === 'auto')
+// Caps machine-written facts (background extraction and model-triggered
+// saves) so neither path can grow the prompt memory block without bound.
+// Owner-added facts are never pruned.
+export async function pruneMachineMemoriesToCap(): Promise<void> {
+  const machineMemories = (await getAllMemories())
+    .filter((memory) => memory.source === 'auto' || memory.source === 'ai-tool')
     .sort((a, b) => a.created_at - b.created_at || a.id - b.id);
 
-  const excess = autoMemories.length - config.MEMORY_AUTO_MAX_FACTS;
+  const excess = machineMemories.length - config.MEMORY_AUTO_MAX_FACTS;
   if (excess <= 0) return;
 
-  for (const memory of autoMemories.slice(0, excess)) {
+  for (const memory of machineMemories.slice(0, excess)) {
     await deleteMemory(memory.id);
   }
 }

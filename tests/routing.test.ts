@@ -197,6 +197,26 @@ describe('AI complexity classifier', async () => {
     })).toBe('complex');
   });
 
+  // ── Memory-save requests (need the save tool; Ollama has none) ──
+
+  it('routes "remember that" requests to complex', () => {
+    expect(classifyComplexity('remember that anna hosts board game night', defaultCtx)).toBe('complex');
+  });
+
+  it('routes "don\'t forget" requests to complex', () => {
+    expect(classifyComplexity("don't forget trivia moved to tuesdays", defaultCtx)).toBe('complex');
+  });
+
+  // ── Memory-save requests (need the save tool; Ollama has none) ──
+
+  it('routes "remember that" requests to complex', () => {
+    expect(classifyComplexity('remember that anna hosts board game night', defaultCtx)).toBe('complex');
+  });
+
+  it('routes "don\'t forget" requests to complex', () => {
+    expect(classifyComplexity("don't forget trivia moved to tuesdays", defaultCtx)).toBe('complex');
+  });
+
   // ── Context-dependent queries ─────────────────────────────────
 
   it('routes "what did I just say" to complex', () => {

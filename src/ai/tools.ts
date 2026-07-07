@@ -38,6 +38,33 @@ function errorMessage(name: string, err: unknown): string {
   return `Tool ${name} failed: ${message}`;
 }
 
+const MEMORY_CATEGORIES = ['events', 'venues', 'members', 'traditions', 'general'] as const;
+type MemoryCategoryLiteral = (typeof MEMORY_CATEGORIES)[number];
+
+const MEMORY_FACT_MIN_LENGTH = 15;
+const MEMORY_FACT_MAX_LENGTH = 140;
+const MEMORY_SAVE_WINDOW_MS = 10 * 60 * 1000;
+const MEMORY_SAVE_WINDOW_LIMIT = 5;
+let memorySaveTimestamps: number[] = [];
+
+function normalizeMemoryCategory(value: unknown): MemoryCategoryLiteral {
+  if (typeof value !== 'string') return 'general';
+  const normalized = value.trim().toLowerCase();
+  return (MEMORY_CATEGORIES as readonly string[]).includes(normalized)
+    ? (normalized as MemoryCategoryLiteral)
+    : 'general';
+}
+
+// Model-triggered saves are a prompt-injection surface (any member, or text
+// arriving via web results or bridge relays, can ask the bot to "remember"
+// something), so attempts are rate-limited per process window.
+function memorySaveRateLimited(now: number): boolean {
+  memorySaveTimestamps = memorySaveTimestamps.filter((ts) => now - ts < MEMORY_SAVE_WINDOW_MS);
+  if (memorySaveTimestamps.length >= MEMORY_SAVE_WINDOW_LIMIT) return true;
+  memorySaveTimestamps.push(now);
+  return false;
+}
+
 const SONG_STATUSES = ['idea', 'rough', 'tight', 'gig-ready'] as const;
 type SongStatusLiteral = (typeof SONG_STATUSES)[number];
 
@@ -165,6 +192,58 @@ const tools: AiTool[] = [
         .join('\n');
     },
   ),
+  {
+    name: 'save_community_memory',
+    description:
+      'Save a durable community fact to persistent memory when someone explicitly asks you to remember something ("remember that...", "don\'t forget..."). Save the fact itself as one concise sentence, not the request. Only for lasting community facts — member interests, traditions, decisions, venues. Never save secrets, contact details, insults, or one-off chatter. If the save is skipped or fails, say so — never claim to have remembered something without a confirmed save.',
+    parameters: {
+      type: 'object',
+      properties: {
+        fact: {
+          type: 'string',
+          description:
+            'The fact to remember, as one concise sentence of 15-140 characters, e.g. "Anna hosts the monthly board-game night".',
+        },
+        category: {
+          type: 'string',
+          description: 'One of: events, venues, members, traditions, general. Defaults to general.',
+        },
+      },
+      required: ['fact'],
+    },
+    execute: async (input) => {
+      const fact = stringInput(input, 'fact');
+      if (!fact) {
+        recordToolCall('save_community_memory', 'error');
+        return 'Tool save_community_memory needs a non-empty fact.';
+      }
+      if (fact.length < MEMORY_FACT_MIN_LENGTH || fact.length > MEMORY_FACT_MAX_LENGTH) {
+        recordToolCall('save_community_memory', 'error');
+        return `Memory not saved: the fact must be ${MEMORY_FACT_MIN_LENGTH}-${MEMORY_FACT_MAX_LENGTH} characters (got ${fact.length}). Rephrase it as one concise sentence.`;
+      }
+      if (memorySaveRateLimited(Date.now())) {
+        recordToolCall('save_community_memory', 'error');
+        return 'Memory not saved: the save limit was reached for now. Suggest trying again later or asking the owner to use !memory add.';
+      }
+      try {
+        const { isDuplicateFact } = await import('../features/memory-extract.js');
+        if (await isDuplicateFact(fact)) {
+          recordToolCall('save_community_memory', 'ok');
+          return 'Not saved: an equivalent fact is already in community memory.';
+        }
+        const { addMemory } = await import('../utils/db.js');
+        const category = normalizeMemoryCategory(input.category);
+        const entry = await addMemory(fact, category, 'ai-tool');
+        const { pruneMachineMemoriesToCap } = await import('../features/memory-extract.js');
+        await pruneMachineMemoriesToCap();
+        recordToolCall('save_community_memory', 'ok');
+        return `Saved to community memory (#${entry.id}, ${category}): ${entry.fact}`;
+      } catch (err) {
+        recordToolCall('save_community_memory', 'error');
+        return truncateToolResult(errorMessage('save_community_memory', err));
+      }
+    },
+  },
   {
     name: 'list_band_songs',
     description:
