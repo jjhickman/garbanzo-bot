@@ -17,17 +17,29 @@ deployments; see the main [README](../README.md) and
   this release: the CI smoke matrix for Windows is non-blocking, and there's
   no automated service install yet (see below).
 
-## Get the code
+## Install
+
+The fastest path needs no git clone:
+
+```bash
+npx garbanzo-bot setup
+```
+
+For a durable install (required for `garbanzo service install`):
+
+```bash
+npm install -g garbanzo-bot
+```
+
+Prefer running from source? Clone and install instead — every step below
+works the same, with `npm run setup` / `npm run build && npm start` in place
+of the `garbanzo` commands:
 
 ```bash
 git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
 npm ci
 ```
-
-> Coming soon: once `garbanzo-bot` is published to npm, this step becomes
-> `npx garbanzo-bot setup` with no git clone required. Until then, the
-> git-clone path above is the supported quickstart.
 
 ## Run the setup wizard
 
@@ -87,12 +99,14 @@ For iterative development instead of a production run, use `npm run dev`
 
 ## Running as a service
 
-`node dist/cli.js service install` writes a systemd user unit on Linux or a
-launchd agent on macOS so the bot survives reboots (`garbanzo service
-install` once the package is published):
+`garbanzo service install` writes a systemd user unit on Linux or a launchd
+agent on macOS so the bot survives reboots. It needs a durable install
+(`npm install -g garbanzo-bot` or a source checkout, where the command is
+`node dist/cli.js service install`) and refuses to point a service at an
+ephemeral npx cache:
 
 ```bash
-node dist/cli.js service install
+garbanzo service install
 ```
 
 It prints the exact commands to enable the generated unit, for example on
@@ -109,14 +123,22 @@ of a per-user one. On macOS, load the generated agent with `launchctl load`.
 
 The generated unit pins the Node binary path in use at install time. If you
 manage Node with a version manager (nvm, asdf, and similar) and switch
-versions later, re-run `node dist/cli.js service install` (or `garbanzo
-service install`) so the unit points at the new path.
+versions later, re-run `garbanzo service install` so the unit points at the
+new path.
 
 Windows doesn't have automated service installation this release; the CLI
-prints Task Scheduler guidance instead. `node dist/cli.js service uninstall`
+prints Task Scheduler guidance instead. `garbanzo service uninstall`
 removes a previously installed unit or agent.
 
 ## Updating
+
+For a global npm install:
+
+```bash
+npm update -g garbanzo-bot
+```
+
+For a source checkout:
 
 ```bash
 git pull
@@ -124,17 +146,16 @@ npm ci
 npm run build
 ```
 
-Then restart however you're running the process: re-run `npm start` in the
-foreground, or restart the service (`systemctl --user restart
-garbanzo.service` on Linux; unload and reload the launchd agent on macOS).
-
-> Coming soon: once `garbanzo-bot` is published to npm, updating an
-> installed copy will be `npm update -g garbanzo-bot`, or `npx
-> garbanzo-bot@latest setup` for a fresh install.
+Either way, restart however you're running the process: re-run `garbanzo
+start` (or `npm start`) in the foreground, or restart the service
+(`systemctl --user restart garbanzo.service` on Linux; unload and reload the
+launchd agent on macOS). `garbanzo doctor` reports your installed version
+against the latest published one.
 
 ## Backups
 
-Back up the `GARBANZO_HOME` directory (the repo checkout, on this path) the
+Back up the `GARBANZO_HOME` directory (`~/.garbanzo` for an npm install,
+the repo checkout when running from source) the
 same way you'd back up the Docker volumes: the SQLite database and its
 snapshots (`data/`), runtime config (`config/*.json`), the env files
 (`.env`, `.env.<platform>`, which hold secrets), and, if you're running
@@ -163,10 +184,10 @@ on your own schedule (cron, a system timer, or similar).
 ## Troubleshooting
 
 ```bash
-node dist/cli.js doctor
+garbanzo doctor
 ```
 
-(`garbanzo doctor` once the package is published or linked globally.) It
+(`node dist/cli.js doctor` from a source checkout.) It
 reports: your Node version against the required range, the resolved
 `GARBANZO_HOME` mode and path, which config files exist, which optional
 binaries are on `PATH` (ffmpeg, yt-dlp, piper), which provider keys are set
