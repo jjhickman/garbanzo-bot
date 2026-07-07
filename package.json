@@ -18,7 +18,8 @@
     "scripts/garbanzo.service",
     "src/utils/postgres-schema.sql",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
