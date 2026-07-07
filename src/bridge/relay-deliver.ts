@@ -3,7 +3,7 @@ import type { PlatformMessenger } from '../core/platform-messenger.js';
 import { WhatsAppOutboundHeldError } from '../platforms/whatsapp/outbound-safety.js';
 import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
-import type { BridgeEnvelope } from './envelope.js';
+import type { BridgeEnvelope, BridgeOrigin } from './envelope.js';
 import { translateFormatting } from './format-translate.js';
 
 const MAX_DISCORD_RETRY_AFTER_MS = 5_000;
@@ -51,11 +51,23 @@ export function createRelayDeliverer({
   };
 }
 
+/**
+ * Build the "<who> (<platform>[ · <chatName>]): " attribution prefix from a
+ * bridge origin. Shared by the delivered relay text (below) and the
+ * ingest-into-context path (lifecycle.ts) so the text stored as conversation
+ * context always matches what the receiving side actually saw — before this
+ * was extracted, the ingest path duplicated a chatName-less version of this
+ * logic and silently dropped the chat name.
+ */
+export function attributionPrefix(origin: BridgeOrigin): string {
+  const label = platformLabel(origin.platform);
+  const who = origin.senderName ?? origin.senderId;
+  const prefixLabel = origin.chatName ? `${label} · ${origin.chatName}` : label;
+  return `${who} (${prefixLabel}): `;
+}
+
 function relayText(envelope: BridgeEnvelope, targetPlatform: MessagingPlatform): string {
-  const label = platformLabel(envelope.origin.platform);
-  const who = envelope.origin.senderName ?? envelope.origin.senderId;
-  const prefixLabel = envelope.origin.chatName ? `${label} · ${envelope.origin.chatName}` : label;
-  const prefix = `${who} (${prefixLabel}): `;
+  const prefix = attributionPrefix(envelope.origin);
   const body = envelope.kind === 'media-placeholder'
     ? envelope.text
     : translateFormatting(envelope.text, envelope.origin.platform, targetPlatform);

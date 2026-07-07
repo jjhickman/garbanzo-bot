@@ -10,6 +10,15 @@ import { createRelayCapture } from '../src/bridge/relay-capture.js';
 import { createMessageRef } from '../src/core/message-ref.js';
 import type { InboundMessage } from '../src/core/inbound-message.js';
 
+vi.mock('../src/middleware/logger.js', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 const MAP: BridgeMap = {
   instances: [
     { id: 'discord-band', platform: 'discord' },
@@ -121,6 +130,14 @@ describe('createRelayCapture', () => {
     expect(enqueue.mock.calls[0]?.[0].origin.chatName).toBe('practice');
   });
 
+  it('stores a trimmed chat display name when the source provides surrounding whitespace', () => {
+    const { relay, enqueue } = capture('discord-band');
+
+    relay.capture(inbound({ chatName: '  practice  ' }));
+
+    expect(enqueue.mock.calls[0]?.[0].origin.chatName).toBe('practice');
+  });
+
   it('is a no-op when no route matches the chat id', () => {
     const { relay, enqueue } = capture('discord-band');
 
@@ -196,7 +213,10 @@ describe('createRelayCapture', () => {
     relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
     await tickMicrotasks();
 
-    expect(fetchMock).toHaveBeenCalledWith('https://cdn.example/a.ogg');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://cdn.example/a.ogg',
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(transcribeAudio).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), 'audio/ogg');
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'message',
@@ -236,6 +256,105 @@ describe('createRelayCapture', () => {
     relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/a.ogg', contentType: 'audio/ogg' } }));
     await tickMicrotasks();
 
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'media-placeholder',
+      text: '[voice note]',
+    }));
+  });
+
+  it('logs a warning with the status (not the full CDN url) when the audio fetch response is not ok', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 404 })));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => 'unused') }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const { logger } = await import('../src/middleware/logger.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({
+      text: null,
+      audio: { url: 'https://cdn.example/a.ogg?ex=deadbeef&sig=topsecret', contentType: 'audio/ogg' },
+    }));
+    await tickMicrotasks();
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'media-placeholder',
+      text: '[voice note]',
+    }));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 404, host: 'cdn.example' }),
+      expect.any(String),
+    );
+    const loggedText = JSON.stringify((logger.warn as ReturnType<typeof vi.fn>).mock.calls);
+    expect(loggedText).not.toContain('topsecret');
+  });
+
+  it('logs a warning with the error (not the full CDN url) when the audio fetch throws', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => {
+      throw new Error('cdn unavailable');
+    }));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => 'unused') }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const { logger } = await import('../src/middleware/logger.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({
+      text: null,
+      audio: { url: 'https://cdn.example/a.ogg?sig=topsecret', contentType: 'audio/ogg' },
+    }));
+    await tickMicrotasks();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'cdn.example', err: expect.any(Error) }),
+      expect.any(String),
+    );
+    const loggedText = JSON.stringify((logger.warn as ReturnType<typeof vi.fn>).mock.calls);
+    expect(loggedText).not.toContain('topsecret');
+  });
+
+  it('falls back to the voice-note placeholder when the CDN reports a Content-Length over the 20MB size cap', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1]), {
+      headers: { 'content-length': String(21 * 1024 * 1024) },
+    }));
+    const transcribeAudio = vi.fn(async () => 'unused');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/big.ogg', contentType: 'audio/ogg' } }));
+    await tickMicrotasks();
+
+    expect(transcribeAudio).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'media-placeholder',
+      text: '[voice note]',
+    }));
+  });
+
+  it('aborts and falls back to the voice-note placeholder when the downloaded body exceeds the 20MB cap with no Content-Length header', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    const oversized = new Uint8Array(21 * 1024 * 1024);
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(oversized));
+    const transcribeAudio = vi.fn(async () => 'unused');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio }));
+    const { createRelayCapture: createRelayCaptureWithVoice } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const relay = createRelayCaptureWithVoice({ instanceId: 'discord-band', bridgeMap: MAP, enqueue });
+
+    relay.capture(inbound({ text: null, audio: { url: 'https://cdn.example/big.ogg', contentType: 'audio/ogg' } }));
+    await tickMicrotasks();
+
+    expect(transcribeAudio).not.toHaveBeenCalled();
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'media-placeholder',
       text: '[voice note]',

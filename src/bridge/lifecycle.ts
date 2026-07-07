@@ -22,7 +22,7 @@ import { loadBridgeMap as loadBridgeMapDefault, type BridgeMap, type BridgeRoute
 import type { BridgeEnvelope } from './envelope.js';
 import { createBridgeOutbox, type BridgeOutboxOps } from './outbox.js';
 import { createRelayCapture } from './relay-capture.js';
-import { createRelayDeliverer, platformLabel } from './relay-deliver.js';
+import { attributionPrefix, createRelayDeliverer } from './relay-deliver.js';
 import { createSummaryBuffer, type BridgeBufferOps } from './summary-buffer.js';
 import { createAmqpBridgeTransport } from './transport-amqp.js';
 import { createHttpBridgeTransport } from './transport-http.js';
@@ -167,12 +167,14 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
       } else {
         const status = await deliverer.deliver(envelope);
         if (status === 'sent' && route?.ingestRelayed) {
-          const who = envelope.origin.senderName ?? envelope.origin.senderId;
-          const label = platformLabel(envelope.origin.platform);
+          // Shared with the delivered relay text (relay-deliver.ts) so the
+          // context stored here always matches what the receiving side saw —
+          // in particular so chatName isn't dropped on one side only.
+          const prefix = attributionPrefix(envelope.origin);
           await recordMessage(
             envelope.targetChatId,
             envelope.origin.senderId,
-            `${who} (${label}): ${envelope.text}`,
+            `${prefix}${envelope.text}`,
           ).catch((err) => {
             logger.error({ err, routeId: envelope.routeId }, 'Bridge: relayed-content context ingest failed');
           });

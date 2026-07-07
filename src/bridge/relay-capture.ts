@@ -24,6 +24,98 @@ interface RelayBody {
   kind: BridgeEnvelope['kind'];
 }
 
+// Mirrors fetchAndTranscribe's bound (src/features/song-ideas.ts): the
+// timeout must cover the WHOLE download (request + body read), not just the
+// initial response, since a hung body read is just as dangerous as a hung
+// connection. Bridge audio additionally comes from arbitrary CDN urls the
+// bot doesn't control (vs. the first-party attachment flow song-ideas
+// serves), so this also caps the response size — via Content-Length when
+// the server sends one, and by aborting the in-flight read once the
+// buffered bytes exceed the cap when it doesn't — so a single oversized or
+// slow-drip clip can't balloon memory or hang the capture path.
+const AUDIO_FETCH_TIMEOUT_MS = 15_000;
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024; // 20MB
+
+// The discord CDN url can carry signed query params — log the host only,
+// never the full url (and never the transcript/text).
+function urlHost(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readBoundedBody(
+  response: Response,
+  controller: AbortController,
+  maxBytes: number,
+): Promise<Buffer | null> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return buffer.byteLength > maxBytes ? null : buffer;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Fetch bridge audio with a bound on both time and size. Returns null on ANY
+ * bound violation or failure (bad status, size cap, network error, timeout);
+ * the caller falls back to the voice-note placeholder — never throws.
+ */
+async function fetchAudioBuffer(url: string): Promise<Buffer | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUDIO_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      logger.warn({ host: urlHost(url), status: response.status }, 'Bridge capture: audio fetch failed');
+      return null;
+    }
+
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_AUDIO_BYTES) {
+      logger.warn({ host: urlHost(url), contentLength }, 'Bridge capture: audio exceeds size cap');
+      return null;
+    }
+
+    const buffer = await readBoundedBody(response, controller, MAX_AUDIO_BYTES);
+    if (!buffer) {
+      logger.warn({ host: urlHost(url) }, 'Bridge capture: audio body exceeded size cap while downloading');
+      return null;
+    }
+    return buffer;
+  } catch (err) {
+    logger.warn({ host: urlHost(url), err }, 'Bridge capture: audio fetch/read failed');
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function cleanChatName(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function otherEndpoint(route: BridgeRoute, instanceId: string): { instance: string; chatId: string } | undefined {
   return route.endpoints.find((endpoint) => endpoint.instance !== instanceId);
 }
@@ -45,18 +137,18 @@ function buildRelayBody(inbound: InboundMessage): RelayBody | null {
 async function buildAudioOnlyRelayBody(inbound: InboundMessage): Promise<RelayBody> {
   if (!process.env.WHISPER_URL || !inbound.audio) return { text: '[voice note]', kind: 'media-placeholder' };
 
-  try {
-    const response = await fetch(inbound.audio.url);
-    if (!response.ok) return { text: '[voice note]', kind: 'media-placeholder' };
+  const audioBuffer = await fetchAudioBuffer(inbound.audio.url);
+  if (!audioBuffer) return { text: '[voice note]', kind: 'media-placeholder' };
 
+  try {
     const { transcribeAudio } = await import('../features/voice.js');
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
     const transcript = await transcribeAudio(audioBuffer, inbound.audio.contentType);
     const cleanTranscript = transcript?.trim();
     if (!cleanTranscript) return { text: '[voice note]', kind: 'media-placeholder' };
 
     return { text: `🎤 ${cleanTranscript}`, kind: 'message' };
-  } catch {
+  } catch (err) {
+    logger.warn({ host: urlHost(inbound.audio.url), err }, 'Bridge capture: audio transcription failed');
     return { text: '[voice note]', kind: 'media-placeholder' };
   }
 }
@@ -76,7 +168,7 @@ function buildEnvelope(params: {
       instance: params.instanceId,
       platform: params.inbound.platform,
       chatId: params.inbound.chatId,
-      chatName: params.inbound.chatName?.trim() ? params.inbound.chatName : undefined,
+      chatName: cleanChatName(params.inbound.chatName),
       messageId: params.messageId,
       senderId: params.inbound.senderId,
       senderName: params.inbound.senderName?.trim() ? params.inbound.senderName : undefined,

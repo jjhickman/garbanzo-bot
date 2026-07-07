@@ -377,6 +377,66 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     await bridge.stop();
   });
 
+  it('includes the origin chat name in ingested context, matching the attribution used in the delivered relay text', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => undefined);
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    const envelope = makeEnvelope({
+      origin: { ...makeEnvelope().origin, chatName: 'practice' },
+    });
+
+    await expect(bridge.handler(envelope)).resolves.toBe('accepted');
+
+    expect(recordMessage).toHaveBeenCalledWith(
+      'chan-1',
+      'sender-1',
+      'Ana (WhatsApp · practice): hello from whatsapp',
+    );
+
+    await bridge.stop();
+  });
+
+  it('resolves accepted and does not delete the dedup key when context ingest (recordMessage) rejects after a successful send', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => undefined);
+    recordMessage.mockRejectedValueOnce(new Error('context store unavailable'));
+    const seen = fakeBridgeSeen();
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: seen.insert,
+      bridgeSeenDelete: seen.del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(seen.del).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
   it('registers the capture hook singleton while running and clears it on stop', async () => {
     config.BRIDGE_ENABLED = true;
 
