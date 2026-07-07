@@ -95,6 +95,16 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledWith('target-chat', 'sender-1 (WhatsApp): hello');
   });
 
+  it('capitalizes the origin platform label for platforms with no dedicated case yet', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+
+    await deliver.deliver(envelope({ origin: { platform: 'telegram' } }));
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (Telegram): hello');
+
+    await deliver.deliver(envelope({ origin: { platform: 'matrix' } }));
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (Matrix): hello');
+  });
+
   it('translates formatting for the target platform', async () => {
     const { deliver, sendText } = deliverer({ platform: 'discord' });
 

@@ -21,7 +21,9 @@ export function platformLabel(platform: MessagingPlatform): string {
   if (platform === 'whatsapp') return 'WhatsApp';
   if (platform === 'discord') return 'Discord';
   if (platform === 'slack') return 'Slack';
-  return 'Teams';
+  // telegram/matrix (and any future platform) have no dedicated runtime yet;
+  // capitalize the enum value rather than hardcoding a stale platform name.
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 export function createRelayDeliverer({

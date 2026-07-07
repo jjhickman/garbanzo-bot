@@ -13,6 +13,9 @@ Today:
 
 Next:
 
-- Teams runtime remains a target adapter.
+- Telegram and Matrix runtimes are the next target adapters (enum groundwork
+  landed first; the Microsoft Teams stub that used to be listed here was
+  deleted — its SDK was archived January 2026 and it never had a working
+  runtime).
 - Each platform normalizes inbound messages to `src/core/inbound-message.ts`.
 - Platform-specific overrides can be layered without changing core routing.

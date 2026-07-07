@@ -36,7 +36,9 @@ const DISCORD_TO_WHATSAPP: readonly MarkerRule[] = [
  * - Discord -> WhatsApp: **bold** -> *bold*, *italic* -> _italic_,
  *   _italic_ stays unchanged, ~~strike~~ -> ~strike~, __underline__ drops
  *   markers because WhatsApp has no underline, code passes through.
- * - Same platform, Slack, Teams, or any unsupported pair returns text unchanged.
+ * - Same platform, Slack, Telegram, Matrix, or any unsupported pair returns
+ *   text unchanged (Telegram/Matrix have no dedicated case yet — their
+ *   formatting rules land with their adapters).
  *
  * Input is tokenized into an ordered array of segments before any formatting rules
  * run: code spans and URLs become 'protected' segments carried through verbatim;

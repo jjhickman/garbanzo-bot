@@ -30,7 +30,7 @@ cp .env.discord.example .env.discord
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `COMPOSE_PROFILES` | Docker | Compose profile list, for example `discord`, `whatsapp`, or `discord,whatsapp,monitoring` |
-| `MESSAGING_PLATFORM` | No | Messaging runtime target (`discord`, `whatsapp`, `slack`, `teams`); defaults to `discord` and is pinned per bot service in `docker-compose.yml` |
+| `MESSAGING_PLATFORM` | No | Messaging runtime target (`discord`, `whatsapp`, `slack`, `telegram`, `matrix`); defaults to `discord` and is pinned per bot service in `docker-compose.yml`. `telegram`/`matrix` pass config validation but have no runtime yet — the platform factory throws a clear "not available in this build yet" error until their adapters ship |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (default: `openai,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-5-20251001`) |

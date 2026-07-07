@@ -47,7 +47,8 @@ describe('translateFormatting', () => {
     expect(translateFormatting('*same* _same_', 'whatsapp', 'whatsapp')).toBe('*same* _same_');
     expect(translateFormatting('*same* _same_', 'discord', 'discord')).toBe('*same* _same_');
     expect(translateFormatting('*slack* _text_', 'slack', 'discord')).toBe('*slack* _text_');
-    expect(translateFormatting('*teams* _text_', 'discord', 'teams')).toBe('*teams* _text_');
+    expect(translateFormatting('*telegram* _text_', 'discord', 'telegram')).toBe('*telegram* _text_');
+    expect(translateFormatting('*matrix* _text_', 'discord', 'matrix')).toBe('*matrix* _text_');
   });
 
   it('does not corrupt user text that collides with the internal placeholder format', () => {

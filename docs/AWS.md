@@ -130,5 +130,5 @@ Garbanzo is intentionally designed to be deployable as:
 
 If you want a "business-grade" AWS posture, the big architectural fork is the transport:
 
-- Slack/Teams can be first-class on AWS using official APIs
+- Slack can be first-class on AWS using official APIs
 - WhatsApp via Baileys remains best-effort community-grade; WhatsApp Business Platform requires a separate adapter and different onboarding

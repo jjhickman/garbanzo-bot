@@ -108,7 +108,9 @@ plain HTTP with no extra containers.
    - **`instances`** - one entry per bridged deployment:
      - `id` - matches that instance's `INSTANCE_ID` (or its `MESSAGING_PLATFORM`
        if `INSTANCE_ID` is unset).
-     - `platform` - one of `whatsapp`, `discord`, `slack`, `teams`.
+     - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`
+       (Telegram and Matrix accept the value at the schema level ahead of
+       their runtimes landing; there is nothing to bridge to until then).
      - `url` (optional) - the base URL the HTTP transport uses to reach that
        instance, for example `http://discord:3002` or `http://whatsapp:3001`
        on the compose network. Not used by the AMQP transport.

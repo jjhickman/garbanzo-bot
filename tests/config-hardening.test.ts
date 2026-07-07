@@ -193,6 +193,30 @@ describe('config hardening', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it.each(['telegram', 'matrix'] as const)(
+    'accepts MESSAGING_PLATFORM=%s at the config layer (no runtime yet — enum groundwork only)',
+    async (platform) => {
+      const { config, instanceId } = await importConfigWithEnv({
+        MESSAGING_PLATFORM: platform,
+      });
+
+      expect(config.MESSAGING_PLATFORM).toBe(platform);
+      expect(instanceId).toBe(platform);
+      expect(exitSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still rejects the removed teams platform value', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'teams',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid environment variables'),
+    );
+  });
+
   describe('QDRANT_COLLECTION smart default (per-instance isolation)', () => {
     it('keeps the plain default when INSTANCE_ID is unset (single-instance upgrade path)', async () => {
       const { config } = await importConfigWithEnv({

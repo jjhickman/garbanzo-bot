@@ -11,6 +11,7 @@ import {
   BridgeMapSchema,
   allRoutesForInstance,
   findOutboundRoute,
+  formatBridgeMapZodError,
   outboundRoutesForInstance,
 } from '../src/bridge/bridge-map.js';
 
@@ -66,6 +67,54 @@ describe('bridge map config', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts telegram and matrix as instance platforms', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      instances: [
+        { id: 'tg', platform: 'telegram' },
+        { id: 'mx', platform: 'matrix' },
+      ],
+      routes: [],
+    });
+
+    expect(parsed.instances.map((instance) => instance.platform)).toEqual(['telegram', 'matrix']);
+  });
+
+  it('rejects a removed platform value (teams) and names the offending instance', () => {
+    const raw = {
+      ...validMap,
+      instances: [
+        { id: 'remy', platform: 'teams', url: 'http://discord:3002' },
+        validMap.instances[1],
+      ],
+    };
+    const result = BridgeMapSchema.safeParse(raw);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('instances entry (id "remy")');
+    expect(message).toContain('Invalid');
+  });
+
+  it('names the entry by index when the offending entry has no usable id', () => {
+    const raw = {
+      ...validMap,
+      instances: [
+        { id: 42, platform: 'teams' },
+        validMap.instances[1],
+      ],
+    };
+    const result = BridgeMapSchema.safeParse(raw);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('instances entry (index 0)');
   });
 
   it('rejects duplicate route ids', () => {

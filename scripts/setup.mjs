@@ -446,10 +446,12 @@ async function main() {
     }
 
     // Discord is the promoted quickstart choice; WhatsApp stays available with
-    // its account-risk caveat. Slack/Teams are scaffold/dead-SDK paths — not
-    // offered on the interactive menu, but still reachable non-interactively
-    // via --platform=slack|teams (resolveMessagingPlatform below), so the
-    // existing Slack dry-run coverage keeps working unchanged.
+    // its account-risk caveat. Slack is a scaffold path — not offered on the
+    // interactive menu, but still reachable non-interactively via
+    // --platform=slack (resolveMessagingPlatform below), so the existing
+    // Slack dry-run coverage keeps working unchanged. Telegram/Matrix have
+    // enum support (MESSAGING_PLATFORM accepts them) but no wizard flow yet —
+    // that lands with their adapters.
     let messagingPlatform = 'discord';
     if (nonInteractive) {
       messagingPlatform = resolveMessagingPlatform(cli, existing);
@@ -1116,11 +1118,6 @@ async function main() {
       output.write(`- Vector memory: ${vectorStoreNote}\n`);
     }
     output.write(`- Files written under: ${OUTPUT_ROOT}\n`);
-
-    if (messagingPlatform === 'teams') {
-      output.write('\n⚠️ Teams runtime support is planned but not implemented yet.\n');
-      output.write('   Current runtime support is WhatsApp, Slack, and Discord.\n');
-    }
 
     if (messagingPlatform === 'slack') {
       output.write(`- Slack demo mode: ${finalEnv.SLACK_DEMO}\n`);

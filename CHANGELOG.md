@@ -6,6 +6,29 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Removed
+
+- The Microsoft Teams platform stub (`src/platforms/teams/`) is deleted, along
+  with every `teams` enum entry (config, `MessagingPlatform`, the bridge
+  envelope mirror, `BridgeMapSchema`) and its wizard `--platform=teams` path.
+  It was never functional — the runtime always threw "not implemented" — and
+  its SDK (`botbuilder-js`) was archived in January 2026. Compatibility note:
+  a `bridge-map.json` naming a `teams` instance now fails schema validation
+  at startup; this is acceptable because no working Teams config could ever
+  have existed. The bridge-map loader's error now names the offending
+  instance/route entry (by id, or by index when the entry has no usable id)
+  so operators can find and fix the bad entry without cross-referencing
+  indices by hand.
+
+### Added
+
+- `telegram` and `matrix` are now accepted `MESSAGING_PLATFORM` values (config
+  enum, `MessagingPlatform` union, bridge envelope mirror, `BridgeMapSchema`)
+  — enum groundwork ahead of the v3.3.0 adapters. No runtime exists yet for
+  either platform; `getPlatformRuntime()` throws a clear
+  `Platform "telegram" is not available in this build yet.`-style error until
+  their runtimes land.
+
 ## [3.2.0] — 2026-07-07
 
 Adoption release: Garbanzo now runs without Docker, from a guided setup to a

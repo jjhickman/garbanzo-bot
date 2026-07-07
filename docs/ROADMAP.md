@@ -130,9 +130,10 @@ Also planned:
   unofficial clients. Unlike WhatsApp's behavior-based anti-ban posture, this
   is a protocol-versioning cliff that can't be managed with rate limits or
   warm-up ramps.
-- **Microsoft Teams** — the bot SDK the existing stub targets
+- **Microsoft Teams** — the bot SDK the deleted stub had targeted
   (`botbuilder-js`) was archived in January 2026. Building this out would
-  mean a full rewrite against Microsoft's replacement SDK.
+  mean a full rewrite against Microsoft's replacement SDK; the non-functional
+  stub was removed from the codebase rather than kept as dead scaffolding.
 - **IRC** — Libera.Chat, the largest IRC network, adopted a May 2026 policy
   restricting autonomous LLM-driven bots, undercutting IRC's appeal as an
   easy low-effort target.
@@ -164,7 +165,7 @@ Done when:
 ## Milestone C: Platform Expansion Quality
 
 - Continue adapter architecture hardening.
-- Improve Slack/Discord/Teams adapter parity where practical.
+- Improve Slack/Discord adapter parity where practical.
 - Keep platform-specific behavior explicit and testable.
 
 Done when:

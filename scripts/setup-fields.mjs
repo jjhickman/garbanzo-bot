@@ -99,7 +99,6 @@ export const PLATFORM_LAYER_EXCEPTION_KEYS = {
   discord: ['DISCORD_CHANNELS_CONFIG_PATH', 'QDRANT_COLLECTION'],
   whatsapp: [],
   slack: [],
-  teams: [],
 };
 
 const FIELD_BY_ENV = new Map(FIELD_TABLE.map((field) => [field.env, field]));
@@ -313,7 +312,7 @@ export function resolveComposeProfiles(platform, monitoringEnabled) {
   return monitoringEnabled ? `${platform},monitoring` : platform;
 }
 
-export const MESSAGING_PLATFORMS = ['discord', 'whatsapp', 'slack', 'teams'];
+export const MESSAGING_PLATFORMS = ['discord', 'whatsapp', 'slack'];
 export const DEFAULT_MESSAGING_PLATFORM = 'discord';
 
 /**
