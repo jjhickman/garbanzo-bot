@@ -167,7 +167,7 @@ function formatMemoryList(memories: MemoryEntry[], header: string): string {
         lines.push(`  (shared from ${e.originInstance}) — ${e.fact}`);
         continue;
       }
-      const sourceTag = e.source === 'auto' ? ' (auto)' : '';
+      const sourceTag = e.source === 'auto' ? ' (auto)' : e.source === 'ai-tool' ? ' (ai)' : '';
       lines.push(`  #${e.id}${sourceTag} — ${e.fact}`);
     }
     lines.push('');

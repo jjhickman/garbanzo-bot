@@ -6,6 +6,10 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `save_community_memory` AI tool: the bot can now save a community fact when someone explicitly asks it to remember something, instead of only searching existing memory. Saves are validated (category and length), deduplicated against existing facts, rate-limited per process window, tagged with an `ai-tool` source visible in `!memory list` as `(ai)`, and never enter the shared cross-instance collection.
+
 ## [3.1.0] — 2026-07-07
 
 ### Added

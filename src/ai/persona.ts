@@ -126,6 +126,9 @@ function buildToolInstruction(): string {
   if (getSearchProviderName() !== null) {
     parts.push('Use web_search when no dedicated tool fits. Live results beat recalled answers.');
   }
+  parts.push(
+    'When someone asks you to remember a community fact, save it with save_community_memory. Never claim to have remembered something unless that tool confirmed the save.',
+  );
   return parts.join(' ');
 }
 

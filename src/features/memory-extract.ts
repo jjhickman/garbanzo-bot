@@ -148,7 +148,7 @@ function stripJsonFence(response: string): string {
   return fenceMatch?.[1]?.trim() ?? response;
 }
 
-async function isDuplicateFact(candidate: string): Promise<boolean> {
+export async function isDuplicateFact(candidate: string): Promise<boolean> {
   const candidateTokens = normalizedTokenSet(candidate);
   if (candidateTokens.size === 0) return false;
 
