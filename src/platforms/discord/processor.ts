@@ -91,6 +91,7 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
   return {
     platform: 'discord',
     chatId: event.channel_id,
+    chatName: getDiscordChannelName(event.channel_id),
     senderId: event.author.id,
     senderName: resolveDiscordSenderName(event),
     messageId: event.id,
@@ -247,6 +248,7 @@ export function normalizeDiscordDemoInbound(message: DiscordDemoMessage): Discor
   return {
     platform: 'discord',
     chatId: message.chatId,
+    chatName: cleanOptionalName(message.groupName),
     senderId: message.senderId,
     messageId,
     fromSelf: false,

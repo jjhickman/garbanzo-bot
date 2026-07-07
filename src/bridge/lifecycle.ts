@@ -1,4 +1,5 @@
 import { logger } from '../middleware/logger.js';
+import { recordMessage } from '../middleware/context.js';
 import { config } from '../utils/config.js';
 import type { InboundMessage } from '../core/inbound-message.js';
 import type { MessagingPlatform } from '../core/messaging-platform.js';
@@ -21,7 +22,7 @@ import { loadBridgeMap as loadBridgeMapDefault, type BridgeMap, type BridgeRoute
 import type { BridgeEnvelope } from './envelope.js';
 import { createBridgeOutbox, type BridgeOutboxOps } from './outbox.js';
 import { createRelayCapture } from './relay-capture.js';
-import { createRelayDeliverer } from './relay-deliver.js';
+import { attributionPrefix, createRelayDeliverer } from './relay-deliver.js';
 import { createSummaryBuffer, type BridgeBufferOps } from './summary-buffer.js';
 import { createAmqpBridgeTransport } from './transport-amqp.js';
 import { createHttpBridgeTransport } from './transport-http.js';
@@ -164,7 +165,20 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
       if (mode === 'summary') {
         await summaryBuffer.bufferEnvelope(envelope);
       } else {
-        await deliverer.deliver(envelope);
+        const status = await deliverer.deliver(envelope);
+        if (status === 'sent' && route?.ingestRelayed) {
+          // Shared with the delivered relay text (relay-deliver.ts) so the
+          // context stored here always matches what the receiving side saw —
+          // in particular so chatName isn't dropped on one side only.
+          const prefix = attributionPrefix(envelope.origin);
+          await recordMessage(
+            envelope.targetChatId,
+            envelope.origin.senderId,
+            `${prefix}${envelope.text}`,
+          ).catch((err) => {
+            logger.error({ err, routeId: envelope.routeId }, 'Bridge: relayed-content context ingest failed');
+          });
+        }
       }
       return 'accepted';
     } catch (err) {

@@ -109,6 +109,16 @@ describe('BridgeEnvelopeSchema', () => {
     expect(parseBridgeEnvelope(validEnvelope)).toEqual(validEnvelope);
   });
 
+  it('accepts optional origin chatName while preserving strict unknown-key rejection', () => {
+    const withChatName = {
+      ...validEnvelope,
+      origin: { ...validEnvelope.origin, chatName: 'General' },
+    };
+
+    expect(BridgeEnvelopeSchema.parse(withChatName)).toEqual(withChatName);
+    expect(parseBridgeEnvelope(withChatName)).toEqual(withChatName);
+  });
+
   it('rejects unsupported versions, missing fields, and empty strings', () => {
     expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, v: 2 }).success).toBe(false);
     expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, routeId: '' }).success).toBe(false);

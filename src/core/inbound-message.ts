@@ -16,6 +16,9 @@ export interface InboundMessage {
   /** Human-readable sender display name, when the platform provides one. */
   senderName?: string;
 
+  /** Human-readable chat/channel display name, when configured. */
+  chatName?: string;
+
   /** Platform message id, when available. */
   messageId?: string;
 

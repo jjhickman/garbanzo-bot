@@ -50,6 +50,27 @@ Priority order:
 - Tier 3 (single-process multi-runtime) and media re-upload (media relays as
   typed placeholders today, e.g. "[voice note]") remain deferred.
 
+### 3.x candidates
+
+- Federated memory sources and multi-RAG: source registry, per-source
+  embedding routing, reranker-based collation, per-group source allowlists,
+  and read-only federation. Vector spaces are incomparable across embedding
+  models, so each source needs its own query embedding before the reranker
+  becomes the collation point.
+- Helm chart distribution artifact: Docker Compose stays the default install
+  path, while Kubernetes homelab operators get a maintained chart.
+- Cross-language bridge translation: reuse the existing language detection
+  path for relayed messages.
+- Voice-note transcription relay: reuse the Whisper path and replace the
+  current "[voice note]" bridge placeholder with transcript text when
+  available.
+- Media re-upload for bridged attachments.
+- Digest headers with chat display names, backed by a new envelope field.
+- Opt-in memory ingestion of bridged content, with clear source attribution
+  and per-route controls.
+- Tier 3 single-process multi-runtime remains deferred until the multi-process
+  model shows a real operational limit.
+
 ## Platform expansion (researched 2026-07-06)
 
 Candidates for the next platform adapter, ranked:

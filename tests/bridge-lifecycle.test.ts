@@ -15,6 +15,14 @@ import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-sa
 import { config } from '../src/utils/config.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
 
+const { recordMessage } = vi.hoisted(() => ({
+  recordMessage: vi.fn(async () => undefined),
+}));
+
+vi.mock('../src/middleware/context.js', () => ({
+  recordMessage,
+}));
+
 const VERBATIM_ROUTE: BridgeMap['routes'][number] = {
   id: 'verbatim-route',
   endpoints: [
@@ -25,6 +33,7 @@ const VERBATIM_ROUTE: BridgeMap['routes'][number] = {
   modeToWhatsApp: 'verbatim',
   modeToDiscord: 'verbatim',
   relayCommands: false,
+  ingestRelayed: false,
 };
 
 const MAP: BridgeMap = {
@@ -131,6 +140,7 @@ beforeEach(() => {
 
 afterEach(() => {
   config.MESSAGING_PLATFORM = ORIGINAL_PLATFORM;
+  recordMessage.mockClear();
 });
 
 describe('startBridge — flags-off inertness', () => {
@@ -266,6 +276,163 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     expect(result).toBe('accepted');
     expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledTimes(1);
     expect(sendText).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
+  it('records relayed text into receiving context after verbatim delivery when the route opts in', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => undefined);
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(recordMessage).toHaveBeenCalledWith(
+      'chan-1',
+      'sender-1',
+      'Ana (WhatsApp): hello from whatsapp',
+    );
+
+    await bridge.stop();
+  });
+
+  it('does not record relayed text when the route ingest flag is off', async () => {
+    config.BRIDGE_ENABLED = true;
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(vi.fn(async () => undefined)),
+      loadBridgeMap: () => MAP,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(recordMessage).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
+  it('does not record relayed text when summary mode buffers the envelope', async () => {
+    config.BRIDGE_ENABLED = true;
+    const summaryMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, modeToDiscord: 'summary', ingestRelayed: true }],
+    };
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(vi.fn(async () => undefined)),
+      loadBridgeMap: () => summaryMap,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(recordMessage).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
+  it('does not record relayed text when verbatim delivery is buffered by WhatsApp safety', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => {
+      throw new WhatsAppOutboundHeldError(3, 'daily limit');
+    });
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(recordMessage).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
+  it('includes the origin chat name in ingested context, matching the attribution used in the delivered relay text', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => undefined);
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: fakeBridgeSeen().insert,
+      bridgeSeenDelete: fakeBridgeSeen().del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    const envelope = makeEnvelope({
+      origin: { ...makeEnvelope().origin, chatName: 'practice' },
+    });
+
+    await expect(bridge.handler(envelope)).resolves.toBe('accepted');
+
+    expect(recordMessage).toHaveBeenCalledWith(
+      'chan-1',
+      'sender-1',
+      'Ana (WhatsApp · practice): hello from whatsapp',
+    );
+
+    await bridge.stop();
+  });
+
+  it('resolves accepted and does not delete the dedup key when context ingest (recordMessage) rejects after a successful send', async () => {
+    config.BRIDGE_ENABLED = true;
+    const ingestMap: BridgeMap = {
+      ...MAP,
+      routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
+    };
+    const sendText = vi.fn(async () => undefined);
+    recordMessage.mockRejectedValueOnce(new Error('context store unavailable'));
+    const seen = fakeBridgeSeen();
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => ingestMap,
+      bridgeSeenInsert: seen.insert,
+      bridgeSeenDelete: seen.del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+
+    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+
+    expect(seen.del).not.toHaveBeenCalled();
 
     await bridge.stop();
   });

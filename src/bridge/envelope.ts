@@ -9,6 +9,7 @@ export const BridgeOriginSchema = z
     instance: z.string().min(1),
     platform: MessagingPlatformSchema,
     chatId: z.string().min(1),
+    chatName: z.string().min(1).optional(),
     messageId: z.string().min(1),
     senderId: z.string().min(1),
     senderName: z.string().min(1).optional(),

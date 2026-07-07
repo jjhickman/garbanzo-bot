@@ -1,0 +1,25 @@
+{{- if include "garbanzo.hasConfigFiles" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "garbanzo.fullname" . }}-config
+  labels:
+    {{- include "garbanzo.labels" . | nindent 4 }}
+data:
+  {{- if .Values.configFiles.groupsJson }}
+  groups.json: |
+{{ .Values.configFiles.groupsJson | nindent 4 }}
+  {{- end }}
+  {{- if .Values.configFiles.discordChannelsJson }}
+  discord-channels.json: |
+{{ .Values.configFiles.discordChannelsJson | nindent 4 }}
+  {{- end }}
+  {{- if .Values.configFiles.bridgeMapJson }}
+  bridge-map.json: |
+{{ .Values.configFiles.bridgeMapJson | nindent 4 }}
+  {{- end }}
+  {{- if .Values.configFiles.ragSourcesJson }}
+  rag-sources.json: |
+{{ .Values.configFiles.ragSourcesJson | nindent 4 }}
+  {{- end }}
+{{- end }}

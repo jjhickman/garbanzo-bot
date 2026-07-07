@@ -1,0 +1,17 @@
+Garbanzo {{ .Chart.AppVersion }} was installed as {{ .Release.Name }}.
+
+Check health:
+  kubectl port-forward svc/{{ include "garbanzo.fullname" . }} 8080:{{ .Values.healthPort }}
+  curl http://127.0.0.1:8080/health
+  curl http://127.0.0.1:8080/health/ready
+
+{{- if eq .Values.platform "whatsapp" }}
+
+WhatsApp uses a single linked-device session. Keep
+persistence.whatsappAuth.enabled=true so /app/baileys_auth survives restarts.
+For first login, port-forward the service and open:
+  http://127.0.0.1:8080/whatsapp/login?token=<WHATSAPP_LOGIN_TOKEN>
+{{- else }}
+
+For WhatsApp installs, enable persistence.whatsappAuth and set healthPort=3001.
+{{- end }}

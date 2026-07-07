@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { aiSchema } from './ai.js';
@@ -8,6 +9,7 @@ import { coreSchema } from './core.js';
 import { discordSchema } from './discord.js';
 import { integrationsSchema } from './integrations.js';
 import { monitoringSchema } from './monitoring.js';
+import { ragSchema } from './rag.js';
 import { applyEnvLayers } from './shared.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
@@ -28,6 +30,7 @@ const envSchema = coreSchema
   .merge(discordSchema)
   .merge(bandSchema)
   .merge(bridgeSchema)
+  .merge(ragSchema)
   .merge(vectorSchema)
   .merge(monitoringSchema)
   .merge(integrationsSchema)
@@ -128,6 +131,10 @@ if (parsed.data.BRIDGE_ENABLED && parsed.data.BRIDGE_TRANSPORT === 'amqp' && !pa
 if (parsed.data.BRIDGE_ENABLED && parsed.data.BRIDGE_TRANSPORT === 'http' && !parsed.data.MONITORING_TOKEN) {
   console.error('❌ bridge http transport authenticates with MONITORING_TOKEN — set it in .env');
   process.exit(1);
+}
+
+if (parsed.data.RAG_FEDERATION_ENABLED && !existsSync(resolve(PROJECT_ROOT, 'config/rag-sources.json'))) {
+  console.warn('⚠️ RAG_FEDERATION_ENABLED=true but config/rag-sources.json is not readable; federation disabled');
 }
 
 if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_DELAY_MS) {

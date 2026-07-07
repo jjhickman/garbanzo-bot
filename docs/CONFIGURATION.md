@@ -109,6 +109,8 @@ cp .env.discord.example .env.discord
 | `GRAFANA_ADMIN_PASSWORD` | Monitoring only | Optional Grafana admin password override; defaults to `MONITORING_TOKEN` when unset |
 | `WHATSAPP_LOGIN_MODE` | No | WhatsApp linking UI: `web` (default, browser page), `terminal` (in-terminal QR), or `both` |
 | `WHATSAPP_LOGIN_TOKEN` | WhatsApp only | Pin the WhatsApp browser-login token instead of generating one per run; it only guards `/whatsapp/login*` |
+| `WHATSAPP_CHAT_SCOPE` | No | WhatsApp inbound scope: `all` (default) ingests every delivered chat; `configured` ingests only enabled groups from `config/groups.json`, while DMs still flow |
+| `WHATSAPP_SET_PROFILE_NAME` | No | Set the WhatsApp account profile name on connect (default: `true`); set `false` on secondary linked-device instances sharing one account |
 | `ADMIN_PAGE_ENABLED` | No | Owner admin page at `/admin` + `/admin.json` on the health port (default: `true`; only served when a token exists) |
 | `EVENT_REMINDERS_ENABLED` | No | Enable Events-group reminder capture and scheduled reminder sends (default: `true`) |
 | `EVENT_REMINDER_LEAD_MINUTES` | No | Minutes before a parsed event start time to post a reminder (default: `120`) |
@@ -127,6 +129,14 @@ cp .env.discord.example .env.discord
 | `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
 
 Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
+
+## RAG federation
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `RAG_FEDERATION_ENABLED` | No | Enable read-only prompt-time search across sources listed in `config/rag-sources.json` (default: `false`) |
+
+Source definitions live in `config/rag-sources.json`; start from `config/rag-sources.example.json`. Each source declares its Qdrant collection, text payload field, embedding provider/model/dimensions, optional chat allowlist, and per-source score/hit limits. See [docs/RAG_FEDERATION.md](RAG_FEDERATION.md).
 
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 

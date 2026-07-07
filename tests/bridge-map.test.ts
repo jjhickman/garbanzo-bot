@@ -43,7 +43,17 @@ describe('bridge map config', () => {
       modeToWhatsApp: 'summary',
       modeToDiscord: 'verbatim',
       relayCommands: false,
+      ingestRelayed: false,
     });
+  });
+
+  it('parses routes that opt in to relayed-content ingestion', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      routes: [{ ...validMap.routes[0], ingestRelayed: true }],
+    });
+
+    expect(parsed.routes[0]?.ingestRelayed).toBe(true);
   });
 
   it('rejects duplicate instance ids', () => {

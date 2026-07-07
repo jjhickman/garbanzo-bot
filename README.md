@@ -261,6 +261,12 @@ Local development build:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
+Kubernetes (Helm):
+
+The Helm chart is a single-instance distribution artifact for operators who
+already run Kubernetes. Compose remains the default deployment path. See
+[deploy/helm/README.md](deploy/helm/README.md).
+
 Cross-platform portable binaries are published on version tags (`v*`) as release assets. Alternative: systemd user service for native Node deployment (`scripts/garbanzo.service`).
 ### Monitoring & Observability
 

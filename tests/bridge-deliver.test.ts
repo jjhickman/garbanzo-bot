@@ -79,6 +79,14 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello relay');
   });
 
+  it('includes origin chat display name in attribution when present', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+
+    await deliver.deliver(envelope({ origin: { chatName: 'General' } }));
+
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp · General): hello');
+  });
+
   it('falls back to sender id when sender name is missing', async () => {
     const { deliver, sendText } = deliverer({ platform: 'discord' });
 

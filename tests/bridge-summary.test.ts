@@ -197,6 +197,39 @@ describe('bridge summary buffer + flusher', () => {
     expect(sendText).toHaveBeenCalledWith('target-chat', expected);
   });
 
+  it('includes the first envelope origin chat display name in the digest header', async () => {
+    const ops = createFakeBridgeBufferOps();
+    const sendText = vi.fn(async () => undefined);
+    const buffer = createSummaryBuffer({
+      sendText,
+      ...singleRouteTargets('route-1', 'target-chat', 'discord'),
+      ops,
+      intervalMinutes: 15,
+      maxText: 1500,
+    });
+
+    await buffer.bufferEnvelope(envelope({
+      origin: { messageId: 'm1', chatName: 'Community' },
+      text: 'first',
+    }));
+    await buffer.bufferEnvelope(envelope({
+      origin: { messageId: 'm2', chatName: 'Other Name' },
+      text: 'second',
+    }));
+
+    buffer.start();
+    await tick(15);
+
+    expect(sendText).toHaveBeenCalledWith(
+      'target-chat',
+      [
+        'WhatsApp Community — last 15 min:',
+        '• Ana: first',
+        '• Ana: second',
+      ].join('\n'),
+    );
+  });
+
   it('translates **bold** -> *bold* for a whatsapp target (reverse direction)', async () => {
     const ops = createFakeBridgeBufferOps();
     const sendText = vi.fn(async () => undefined);

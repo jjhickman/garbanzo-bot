@@ -58,6 +58,7 @@ export interface CoreMessageHooks {
 export interface CoreInboundEnv {
   ownerId: string;
   isGroupEnabled: (chatId: string) => boolean;
+  shouldIngestGroupChat?: (chatId: string) => boolean;
 
   introductionsChatId: string | null;
   eventsChatId: string | null;
@@ -90,6 +91,8 @@ export async function processInboundMessage(
   // Allow messages with visual media through even without text
   const hasMedia = inbound.hasVisualMedia;
   if (!inbound.text && !hasMedia) return;
+
+  if (inbound.isGroupChat && env.shouldIngestGroupChat && !env.shouldIngestGroupChat(inbound.chatId)) return;
 
   // Input sanitization
   const sanitized = sanitizeMessage(inbound.text ?? '');

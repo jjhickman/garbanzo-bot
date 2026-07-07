@@ -41,7 +41,19 @@ vi.mock('../src/platforms/whatsapp/outbound-safety.js', () => ({
 }));
 
 describe('reconnect teardown', () => {
-  afterEach(() => { sockets.length = 0; vi.clearAllMocks(); vi.useRealTimers(); });
+  const originalSetProfileName = process.env.WHATSAPP_SET_PROFILE_NAME;
+
+  afterEach(() => {
+    sockets.length = 0;
+    vi.clearAllMocks();
+    vi.resetModules();
+    vi.useRealTimers();
+    if (originalSetProfileName === undefined) {
+      delete process.env.WHATSAPP_SET_PROFILE_NAME;
+    } else {
+      process.env.WHATSAPP_SET_PROFILE_NAME = originalSetProfileName;
+    }
+  });
 
   it('ends the old socket before scheduling a reconnect', async () => {
     vi.useFakeTimers();
@@ -88,5 +100,16 @@ describe('reconnect teardown', () => {
     (first as never as { __fire: (u: unknown) => void }).__fire({ connection: 'close', lastDisconnect: { error: { output: { statusCode: 440 } } } });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(sockets.length).toBe(1); // stayed down — another session owns the account
+  });
+
+  it('skips account-level profile name updates when disabled', async () => {
+    process.env.WHATSAPP_SET_PROFILE_NAME = 'false';
+    const { startConnection } = await import('../src/platforms/whatsapp/connection.js');
+    await startConnection(() => {});
+    const first = sockets[0];
+
+    (first as never as { __fire: (u: unknown) => void }).__fire({ connection: 'open' });
+
+    expect(first.updateProfileName).not.toHaveBeenCalled();
   });
 });

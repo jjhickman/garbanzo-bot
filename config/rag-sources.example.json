@@ -1,0 +1,34 @@
+{
+  "_comment": "Copy this file to config/rag-sources.json and list read-only Qdrant collections this instance may consult at prompt time.",
+  "_comment_embedding_models": "Vector spaces are model-specific. Each source is queried with its own embedding provider/model/dimensions; do not compare vectors across sources.",
+  "sources": [
+    {
+      "id": "local-runbooks",
+      "label": "Runbooks",
+      "collection": "ops_runbooks",
+      "textField": "text",
+      "embedding": {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "dimensions": 1536
+      },
+      "maxHits": 3,
+      "minScore": 0.35
+    },
+    {
+      "id": "band-archive",
+      "label": "Band archive",
+      "url": "http://qdrant:6333",
+      "collection": "band_archive",
+      "textField": "body",
+      "embedding": {
+        "provider": "deterministic",
+        "dimensions": 1536
+      },
+      "maxHits": 2,
+      "minScore": 0.45,
+      "chats": ["discord-band-channel"],
+      "enabled": true
+    }
+  ]
+}

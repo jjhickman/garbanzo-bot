@@ -1,0 +1,45 @@
+image:
+  repository: ghcr.io/jjhickman/garbanzo
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
+
+platform: discord
+instanceId: ""
+
+# Non-secret environment variables rendered directly into the container.
+env: {}
+
+# Secret environment variables. Use existingSecret to reference a pre-created
+# Secret instead of rendering these values into a Helm-managed Secret.
+secretEnv: {}
+existingSecret: ""
+
+# Discord defaults to 3002. Use 3001 for WhatsApp to match the compose profile.
+healthPort: 3002
+
+persistence:
+  data:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  whatsappAuth:
+    enabled: false
+    size: 100Mi
+
+configFiles:
+  groupsJson: ""
+  discordChannelsJson: ""
+  bridgeMapJson: ""
+  ragSourcesJson: ""
+
+qdrant:
+  enabled: false
+  url: ""
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+    cpu: 1000m
