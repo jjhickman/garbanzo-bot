@@ -150,15 +150,15 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 Compose is the default release path:
 
 ```bash
-APP_VERSION=3.1.0 docker compose pull
-APP_VERSION=3.1.0 docker compose up -d
+APP_VERSION=3.2.0 docker compose pull
+APP_VERSION=3.2.0 docker compose up -d
 ```
 
 Production overlay:
 
 ```bash
-APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.2.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+APP_VERSION=3.2.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Kubernetes operators can install one bot instance per Helm release:
