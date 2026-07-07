@@ -103,9 +103,9 @@ cp config/discord-channels.example.json config/discord-channels.json
 docker compose up -d
 
 # Optional: pull official Docker Hub image directly or pin the compose image
-# docker pull jjhickman/garbanzo:3.0.0
-# APP_VERSION=3.0.0 docker compose pull
-# APP_VERSION=3.0.0 docker compose up -d
+# docker pull jjhickman/garbanzo:3.1.0
+# APP_VERSION=3.1.0 docker compose pull
+# APP_VERSION=3.1.0 docker compose up -d
 
 # 5. Watch logs
 docker compose logs -f discord
@@ -251,8 +251,8 @@ curl http://127.0.0.1:3002/health
 Pinned production pull:
 
 ```bash
-APP_VERSION=3.0.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-APP_VERSION=3.0.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Local development build:

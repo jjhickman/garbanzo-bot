@@ -3,4 +3,4 @@ name: garbanzo
 description: Single-instance Garbanzo community bot deployment
 type: application
 version: 0.1.0
-appVersion: "3.0.0"
+appVersion: "3.1.0"

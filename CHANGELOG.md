@@ -6,6 +6,8 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-07-07
+
 ### Added
 
 - `WHATSAPP_CHAT_SCOPE=configured` lets a WhatsApp linked-device instance ingest only groups enabled in its own `config/groups.json`, while DMs still flow for owner commands.
