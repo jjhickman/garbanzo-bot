@@ -74,7 +74,8 @@ describe('groups config loader', () => {
       expect(meta).toHaveProperty('reason');
       expect(String((meta as { reason?: unknown }).reason)).not.toContain('\n');
       expect(String(message)).toBe('Failed to load groups config; using empty groups config');
-      expect(String(message)).not.toContain('SyntaxError');
+      // The one-line reason names the parse problem without dumping a stack
+      expect(String((meta as { reason?: unknown }).reason)).not.toMatch(/\n|    at /);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

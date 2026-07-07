@@ -38,7 +38,8 @@ services:
       - MESSAGING_PLATFORM=discord
       - HEALTH_PORT=3002
       - HEALTH_BIND_HOST=0.0.0.0
-      - QDRANT_URL=http://qdrant:6333
+      # Operator overrides from root .env win; default targets the compose service
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
     ports:
       - "127.0.0.1:3002:3002"
     volumes:
@@ -76,7 +77,8 @@ services:
       - MESSAGING_PLATFORM=whatsapp
       - HEALTH_PORT=3001
       - HEALTH_BIND_HOST=0.0.0.0
-      - QDRANT_URL=http://qdrant:6333
+      # Operator overrides from root .env win; default targets the compose service
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
     ports:
       - "0.0.0.0:3001:3001"
     volumes:

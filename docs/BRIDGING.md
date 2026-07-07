@@ -296,6 +296,7 @@ new name, with a fresh `INSTANCE_ID`, its own env file, and fresh volumes:
       - INSTANCE_ID=whatsapp-band
       - HEALTH_PORT=3003
       - HEALTH_BIND_HOST=0.0.0.0
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
     ports:
       - "127.0.0.1:3003:3003"
     volumes:

@@ -172,14 +172,16 @@ describe('platform-profile compose contract', () => {
       expect.arrayContaining([
         'MESSAGING_PLATFORM=discord',
         'HEALTH_PORT=3002',
-        'QDRANT_URL=http://qdrant:6333',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
       ]),
     );
     expect(envEntries(whatsapp)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=whatsapp',
         'HEALTH_PORT=3001',
-        'QDRANT_URL=http://qdrant:6333',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
       ]),
     );
 
