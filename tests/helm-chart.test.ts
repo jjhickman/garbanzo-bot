@@ -89,12 +89,14 @@ describe('garbanzo helm chart', () => {
     expect(deployment).toContain('path: /health/ready');
   });
 
+  // CI runners ship helm and a cold first run can exceed vitest's 5s default.
   it('passes helm lint when helm is installed', () => {
     if (!helmExists()) return;
 
     execFileSync('helm', ['lint', chartDir], {
       encoding: 'utf-8',
       stdio: 'pipe',
+      timeout: 25_000,
     });
-  });
+  }, 30_000);
 });
