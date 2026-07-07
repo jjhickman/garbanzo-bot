@@ -82,7 +82,7 @@
     "js-yaml": "^5.2.1",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.55.0",
+    "typescript-eslint": "^8.62.1",
     "vitest": "^4.1.8"
   },
   "overrides": {
