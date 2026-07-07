@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
@@ -8,6 +8,18 @@ function runNodeScript(scriptPath: string, args: string[] = []): string {
   return execFileSync('node', [scriptPath, ...args], {
     encoding: 'utf8',
     cwd: process.cwd(),
+  });
+}
+
+function runNodeScriptWithEnv(
+  scriptPath: string,
+  args: string[],
+  envOverrides: Record<string, string>,
+): string {
+  return execFileSync('node', [scriptPath, ...args], {
+    encoding: 'utf8',
+    cwd: process.cwd(),
+    env: { ...process.env, ...envOverrides },
   });
 }
 
@@ -80,6 +92,119 @@ describe('ops scripts', () => {
     expect(out).toContain('MESSAGING_PLATFORM=slack');
     expect(out).toContain('SLACK_DEMO=true');
     expect(out).toContain('Slack demo mode: true');
+  });
+
+  it('setup prints the WhatsApp account-risk caveat', () => {
+    const out = runNodeScript(setupPath, [
+      '--non-interactive',
+      '--dry-run',
+      '--platform=whatsapp',
+      '--providers=openai',
+      '--openai-key=test_key_setup',
+      '--owner-jid=test_owner@s.whatsapp.net',
+    ]);
+
+    expect(out).toContain('unofficial WhatsApp Web API');
+  });
+
+  it('setup skips npm install and offers `garbanzo start` for a packaged (GARBANZO_CLI=1) run', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home, GARBANZO_CLI: '1' });
+
+      expect(out).toContain('Packaged install detected (GARBANZO_CLI=1)');
+      expect(out).toContain('garbanzo start');
+      expect(out).not.toContain('npm run build && npm start');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup native Discord non-interactive run requires an enabled channel or fails clearly', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      let caught: unknown;
+      try {
+        runNodeScriptWithEnv(setupPath, [
+          '--non-interactive',
+          '--dry-run',
+          '--platform=discord',
+          '--deploy=native',
+          '--discord-bot-token=test_discord_token',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ], { GARBANZO_HOME: home });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeDefined();
+      const stdout = String((caught as { stdout?: string }).stdout ?? '');
+      expect(stdout).toContain('at least one channel');
+      expect(stdout).toContain('--discord-channel-id');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup native Discord non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-client-id=123456789012345678',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--discord-channel-name=general',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.discord');
+      expect(out).toContain('✅ Wrote config/discord-channels.json with 1 enabled channel');
+
+      // Exact file set under GARBANZO_HOME: .env, .env.discord, config/discord-channels.json.
+      // No config/groups.json (Discord doesn't need it), no docs/PERSONA.md (no custom
+      // persona given), no .git/hooks touched (pre-commit install is repo-mode only).
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.discord', 'config']);
+      const configFiles = readdirSync(join(home, 'config')).sort();
+      expect(configFiles).toEqual(['discord-channels.json']);
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).not.toMatch(/^COMPOSE_PROFILES=/m);
+      expect(envContent).toMatch(/^VECTOR_STORE=none$/m);
+
+      const discordEnvContent = readFileSync(join(home, '.env.discord'), 'utf8');
+      expect(discordEnvContent).toContain('DISCORD_BOT_TOKEN=test_discord_token');
+      expect(discordEnvContent).toContain('DISCORD_CLIENT_ID=123456789012345678');
+      expect(discordEnvContent).toContain('DISCORD_OWNER_ID=999999999999999999');
+
+      const channelsConfig = JSON.parse(
+        readFileSync(join(home, 'config', 'discord-channels.json'), 'utf8'),
+      ) as { ownerId?: string; channels: Record<string, { name: string; enabled: boolean }> };
+      expect(channelsConfig.ownerId).toBe('999999999999999999');
+      expect(channelsConfig.channels['111111111111111111']).toEqual({
+        name: 'general',
+        enabled: true,
+        requireMention: true,
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('release-checklist script shows usage with --help', () => {
