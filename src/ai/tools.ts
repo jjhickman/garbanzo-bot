@@ -234,6 +234,8 @@ const tools: AiTool[] = [
         const { addMemory } = await import('../utils/db.js');
         const category = normalizeMemoryCategory(input.category);
         const entry = await addMemory(fact, category, 'ai-tool');
+        const { pruneMachineMemoriesToCap } = await import('../features/memory-extract.js');
+        await pruneMachineMemoriesToCap();
         recordToolCall('save_community_memory', 'ok');
         return `Saved to community memory (#${entry.id}, ${category}): ${entry.fact}`;
       } catch (err) {

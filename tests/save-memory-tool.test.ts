@@ -48,6 +48,7 @@ describe('save_community_memory tool', () => {
     vi.clearAllMocks();
     dbMocks.searchMemory.mockResolvedValue([]);
     dbMocks.addMemory.mockResolvedValue(makeEntry());
+    dbMocks.getAllMemories.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -124,6 +125,27 @@ describe('save_community_memory tool', () => {
     expect(dbMocks.addMemory).not.toHaveBeenCalled();
   });
 
+  it('prunes machine-written facts beyond the cap after a save', async () => {
+    const originalCap = config.MEMORY_AUTO_MAX_FACTS;
+    config.MEMORY_AUTO_MAX_FACTS = 2;
+    try {
+      dbMocks.getAllMemories.mockResolvedValue([
+        makeEntry({ id: 1, source: 'auto', created_at: 100 }),
+        makeEntry({ id: 2, source: 'ai-tool', created_at: 200 }),
+        makeEntry({ id: 3, source: 'owner', created_at: 50 }),
+        makeEntry({ id: 4, source: 'ai-tool', created_at: 300 }),
+      ]);
+
+      await saveTool().execute({ fact: 'The group meets at the Somerville library' });
+
+      // Oldest machine-written fact goes; owner facts are never pruned.
+      expect(dbMocks.deleteMemory).toHaveBeenCalledTimes(1);
+      expect(dbMocks.deleteMemory).toHaveBeenCalledWith(1);
+    } finally {
+      config.MEMORY_AUTO_MAX_FACTS = originalCap;
+    }
+  });
+
   it('reports failure when the database write throws', async () => {
     dbMocks.addMemory.mockRejectedValue(new Error('disk full'));
 
@@ -146,6 +168,7 @@ describe('save_community_memory rate limiting', () => {
     if (!tool) throw new Error('save_community_memory tool not registered');
 
     dbMocks.searchMemory.mockResolvedValue([]);
+    dbMocks.getAllMemories.mockResolvedValue([]);
     dbMocks.addMemory.mockImplementation((fact: string) =>
       Promise.resolve(makeEntry({ fact })),
     );

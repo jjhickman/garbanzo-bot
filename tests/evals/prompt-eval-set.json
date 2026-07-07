@@ -14,6 +14,17 @@
       }
     },
     {
+      "id": "tool-memorysave-01",
+      "category": "tool_routing",
+      "group": "General",
+      "message": "@Garbanzo remember that Dana runs the monthly book swap",
+      "expected": {
+        "tool": "save_community_memory",
+        "behavior": "Calls save_community_memory with the fact and confirms only after the tool reports a successful save.",
+        "mustNot": ["claims it remembered without calling the tool", "saves the request phrasing instead of the fact"]
+      }
+    },
+    {
       "id": "tool-transit-01",
       "category": "tool_routing",
       "group": "General",
