@@ -14,6 +14,8 @@ export const BANNED_STALE_DOC_PATTERNS = [
   /VECTOR_DB_PLAN|VECTOR_MEMORY_IMPLEMENTATION_SPEC|MULTI_PLATFORM\.md|PROMOTION_SNIPPETS/,
   /--profile monitoring up/,
   /\bdefault\b.*http:\/\/qdrant:6333/i,
+  /npx garbanzo\b(?!-bot)/,
+  /Docker (?:and Docker Compose )?(?:is|are) required/i,
 ] as const;
 
 const repoRoot = process.cwd();

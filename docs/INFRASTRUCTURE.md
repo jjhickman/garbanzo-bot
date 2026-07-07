@@ -14,6 +14,9 @@ Garbanzo runs anywhere Docker runs. Common shapes:
 - A VM or cloud instance (see [AWS.md](AWS.md) for one worked cloud path).
 - A Kubernetes cluster using the Helm chart
   ([deploy/helm/README.md](../deploy/helm/README.md)).
+- A single always-on machine running Garbanzo as a plain Node.js process
+  instead of through Docker, for a single-instance setup without the
+  monitoring or bridging-broker stack. See [QUICKSTART.md](QUICKSTART.md).
 
 One host can run several bot instances alongside the shared services. Size
 memory to the sum of your enabled profiles rather than to any single service.

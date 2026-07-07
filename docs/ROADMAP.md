@@ -39,6 +39,22 @@ Priority order:
 
 ## Planned Milestones
 
+### Adoption & No-Docker Quickstart - Delivered (v3.2, pending release)
+
+- A native Node.js quickstart (git clone, `npm run setup`, `npm run build &&
+  npm start`) as a second door alongside Docker Compose, with a
+  wizard-driven Discord walkthrough that collects a bot token, owner ID, and
+  at least one enabled channel. Done.
+- A `garbanzo` CLI (`setup`, `start`, `doctor`, `service install`/
+  `uninstall`) for environment checks and reboot-surviving service installs
+  on Linux (systemd) and macOS (launchd). Done.
+- npm packaging as `garbanzo-bot`, gated on the owner adding an `NPM_TOKEN`
+  secret before the first publish; docs use the git-clone quickstart until
+  publish succeeds, then flip to `npx garbanzo-bot setup`. Pending release.
+- Setup guide: [docs/QUICKSTART.md](QUICKSTART.md).
+- Telegram remains the next platform adapter after this milestone (see
+  Platform expansion below).
+
 ### Platform Bridging - Delivered (v3)
 
 - Tier 1: shared memory across platform instances, explicit and reversible

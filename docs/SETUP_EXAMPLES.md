@@ -142,6 +142,44 @@ curl http://127.0.0.1:3002/health
 curl http://127.0.0.1:3001/health
 ```
 
+## 5. Discord Community Bot (No Docker)
+
+Preview the files first:
+
+```bash
+npm run setup -- --non-interactive --dry-run \
+  --platform=discord \
+  --deploy=native \
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --discord-bot-token=test_discord_bot_token \
+  --discord-client-id=222222222222222222 \
+  --discord-owner-id=111111111111111111 \
+  --discord-channel-id=333333333333333333
+```
+
+Write the files when the preview looks right, then build and start:
+
+```bash
+npm run setup -- --non-interactive \
+  --platform=discord \
+  --deploy=native \
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --discord-bot-token=$DISCORD_BOT_TOKEN \
+  --discord-client-id=$DISCORD_CLIENT_ID \
+  --discord-owner-id=$DISCORD_OWNER_ID \
+  --discord-channel-id=$DISCORD_CHANNEL_ID
+
+npm run build && npm start
+curl http://127.0.0.1:3002/health
+```
+
+The native deploy target skips Docker-only prompts (monitoring,
+`COMPOSE_PROFILES`) and defaults to `VECTOR_STORE=none` (keyword-only
+memory). See [QUICKSTART.md](QUICKSTART.md) for the full no-Docker
+walkthrough, including running as a service.
+
 ## Postgres Migration Dry Run
 
 ```bash

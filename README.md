@@ -44,7 +44,30 @@ Real interactions from communities powered by Garbanzo:
 
 ## Quick Start
 
-Requirements: Docker and Docker Compose for the default path. Node.js 20+ is only needed for the setup wizard and local development.
+Node.js 20+ is required either way. Docker Compose is only needed for the full-stack door below.
+
+### Quick start (no Docker)
+
+```bash
+git clone https://github.com/jjhickman/garbanzo-bot.git
+cd garbanzo-bot
+npm ci
+npm run setup
+```
+
+The wizard collects your AI provider keys, your messaging platform, and (for Discord) walks through the developer portal to gather a bot token, an owner user ID, and at least one channel to enable. When it finishes:
+
+```bash
+npm run build && npm start
+```
+
+Check your environment with `node dist/cli.js doctor` (Node version, config files, provider keys, optional binaries) and install a service that survives reboots with `node dist/cli.js service install` (systemd on Linux, launchd on macOS). Once the `garbanzo-bot` package is published, both become `garbanzo doctor` and `garbanzo service install`.
+
+> Coming soon: once `garbanzo-bot` is published to npm, this door becomes `npx garbanzo-bot setup`, with no git clone required.
+
+This path skips the monitoring stack, the RabbitMQ bridging transport, and container isolation, and defaults to keyword-only memory (`VECTOR_STORE=none`) instead of Qdrant semantic memory. See [docs/QUICKSTART.md](docs/QUICKSTART.md) for the full walkthrough, including updates, backups, running as a service, and enabling Qdrant.
+
+### Full stack (Docker)
 
 ```bash
 git clone https://github.com/jjhickman/garbanzo-bot.git
@@ -78,11 +101,7 @@ In an allowed Discord channel, mention the bot. For example, if the persona is G
 @garbanzo is the train running on time?
 ```
 
-For the guided wizard:
-
-```bash
-npm run setup
-```
+For the guided wizard: `npm run setup`.
 
 Optional WhatsApp instance:
 
@@ -94,6 +113,8 @@ docker compose up -d
 docker compose logs -f whatsapp
 curl http://127.0.0.1:3001/health
 ```
+
+This door adds the full stack this project supports: Prometheus/Grafana monitoring, the RabbitMQ bridging transport for larger topologies, Qdrant semantic memory, and per-container isolation. See [docs/BRIDGING.md](docs/BRIDGING.md) and [docs/MONITORING.md](docs/MONITORING.md).
 
 Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
@@ -192,7 +213,7 @@ Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Project principles: 
 
 ## Docs
 
-Getting started: [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [PERSONA.md](docs/PERSONA.md)
+Getting started: [QUICKSTART.md](docs/QUICKSTART.md), [CONFIGURATION.md](docs/CONFIGURATION.md), [PLATFORMS.md](docs/PLATFORMS.md), [CUSTOMIZATION.md](docs/CUSTOMIZATION.md), [PERSONA.md](docs/PERSONA.md)
 
 Operations: [BRIDGING.md](docs/BRIDGING.md), [RAG_FEDERATION.md](docs/RAG_FEDERATION.md), [MONITORING.md](docs/MONITORING.md), [BACKUPS.md](docs/BACKUPS.md), [SECURITY.md](docs/SECURITY.md), [RELEASES.md](docs/RELEASES.md), [BAND_FEATURES.md](docs/BAND_FEATURES.md), [POSTGRES_MIGRATION_RUNBOOK.md](docs/POSTGRES_MIGRATION_RUNBOOK.md), [ADR-0001-whatsapp-outbound-safety.md](docs/ADR-0001-whatsapp-outbound-safety.md)
 
