@@ -55,7 +55,6 @@ fingerprint changes, stealth connection behavior, or third-party webhooks from
   single live socket per account and disposes per-generation timers/listeners.
 - Account linking moved to a token-gated browser page (`WHATSAPP_LOGIN_MODE`,
   default `web`); QR rotation within one attempt is not a reconnect and is safe.
-  See `docs/IMPROVEMENTS.md` for the full audit status.
 
 ## Deployment Gate
 

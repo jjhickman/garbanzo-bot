@@ -9,9 +9,9 @@ you run multiple instances, and give each release its own `instanceId`.
 ## Discord Example
 
 ```bash
-helm install remy ./deploy/helm/garbanzo \
+helm install band-bot ./deploy/helm/garbanzo \
   --set platform=discord \
-  --set instanceId=remy \
+  --set instanceId=band-bot \
   --set secretEnv.DISCORD_BOT_TOKEN='<discord-token>' \
   --set secretEnv.DISCORD_OWNER_ID='<owner-id>' \
   --set secretEnv.OPENAI_API_KEY='<openai-key>'
@@ -41,7 +41,7 @@ login page printed in `helm status`.
 Install the chart once per instance:
 
 ```bash
-helm install remy ./deploy/helm/garbanzo --set platform=discord,instanceId=remy
+helm install band-bot ./deploy/helm/garbanzo --set platform=discord,instanceId=band-bot
 helm install boston-wa ./deploy/helm/garbanzo --set platform=whatsapp,instanceId=boston-wa,healthPort=3001,persistence.whatsappAuth.enabled=true
 ```
 
@@ -55,9 +55,9 @@ you want Helm to create a Secret. Use `existingSecret` to reference a Secret you
 manage outside Helm:
 
 ```bash
-helm install remy ./deploy/helm/garbanzo \
+helm install band-bot ./deploy/helm/garbanzo \
   --set platform=discord \
-  --set existingSecret=garbanzo-remy-env
+  --set existingSecret=garbanzo-band-bot-env
 ```
 
 Keys in either Secret are loaded through `envFrom`. Non-secret values belong in

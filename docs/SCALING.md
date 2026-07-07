@@ -1,66 +1,73 @@
 # Scaling Garbanzo
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
+Garbanzo now ships a multi-instance model for operators who want separate Discord and WhatsApp processes, multiple deployments of the same platform, or bridged communities. Each process still owns one platform runtime.
 
-Garbanzo is designed first for stable self-hosting and community operations.
+## Shipped Multi-Instance Model
 
-Today, the default architecture is intentionally single-instance:
+The default compose profiles are `discord`, `whatsapp`, `monitoring`, and optional `broker`.
 
-- WhatsApp transport uses Baileys (WhatsApp Web multi-device)
-- Durable state is SQLite (`data/garbanzo.db`)
+Use `INSTANCE_ID` to give each deployment a stable identity. It is used by bridge routes, shared-fact ids, metrics, and the derived local Qdrant collection name. If `INSTANCE_ID` is set and `QDRANT_COLLECTION` is left unset, local facts land in `garbanzo_memory_<INSTANCE_ID>`.
 
-This combination is reliable and easy to run, but it is not "horizontal scale" by default.
+For multiple instances, keep these isolated per instance:
+
+- platform env file and `INSTANCE_ID`
+- Docker service name
+- health port
+- data/auth volumes
+- local Qdrant collection, either derived from `INSTANCE_ID` or set explicitly
+
+Message relays use the bridge subsystem. `config/bridge-map.json` maps selected Discord channels and WhatsApp groups between instances. HTTP transport is the default for two instances on the same compose network. AMQP transport uses the `broker` profile for larger topologies or longer peer outages.
+
+Same-account WhatsApp deployments use WhatsApp linked devices. Create a second compose service with its own auth volume, env file, `INSTANCE_ID`, and port, then link that service as another companion device. Do not share one Baileys auth volume between services.
 
 ## What Scales Today
 
-Prometheus/Grafana-style monitoring can be layered on via `GET /metrics` (optional). This gives you time-series visibility without changing the deployment model.
+- Multiple platform instances on one host through compose profiles and copied services.
+- Cross-instance chat relay through the bridge outbox and HTTP or AMQP transport.
+- Shared memory through explicit `!memory share <id>` into the shared Qdrant collection.
+- Read-only RAG federation from configured Qdrant sources in `config/rag-sources.json`.
+- Vertical scaling on one host by increasing CPU/RAM, moving heavier services off-host, or switching relational state to Postgres.
+- Operational visibility through `/health`, `/health/ready`, `/metrics`, Prometheus, Grafana, and backups.
 
-- Vertical scale (bigger CPU/RAM) on one host
-- Higher availability through operational hygiene:
-  - health endpoints (`/health`, `/health/ready`)
-  - backups + integrity checks
-  - well-scoped features and rate limiting
+## Per-Instance Limits
 
-## What Does Not Scale Today
+One process is still one platform runtime. Do not run active-active replicas of the same Discord bot token or the same Baileys auth state. SQLite remains a single-node database per instance, so concurrent writers should stay inside one process unless you move that deployment to Postgres.
 
-- Active-active replicas on WhatsApp/Baileys
-- Multi-instance writers to SQLite
-
-## AWS Guidance
-
-For AWS, the recommended deployment is EC2 + Docker Compose (see `docs/AWS.md` and `infra/cdk/`).
-
-- Keep state on local EBS
-- Use CloudWatch Logs for visibility
-- Use SSM for access (no inbound ports)
-
-## Path to True Multi-Instance Scale
-
-If you want to support multiple instances reliably, the likely roadmap is:
-
-1) Messaging platforms with official APIs (Slack/Teams/WhatsApp Business Platform)
-2) Move durable state from SQLite to Postgres (RDS)
-3) Introduce queues (SQS) for async workloads where ordering is not critical
-4) Add stateless worker services for expensive/non-interactive workloads
+WhatsApp outbound safety is per instance and remains load-bearing. Bridged messages to WhatsApp still pass through the receiving instance's normal outbound safety path.
 
 ## Database Strategy
 
-SQLite is a deliberate choice for early-stage reliability.
+SQLite is the default for self-hosted deployments. It keeps the single-host path simple and easy to back up.
 
-When Postgres becomes necessary:
+Use Postgres when a deployment needs managed storage, multiple service roles, or cloud operational patterns:
 
-- keep a backend interface in `src/utils/db-*` (sqlite + postgres backends)
-- initialize Postgres schema with `npm run db:postgres:init`
+- initialize schema with `npm run db:postgres:init`
 - migrate state with `npm run db:sqlite:migrate:postgres`
-- verify migrated row counts with `npm run db:sqlite:verify:postgres`
+- verify row counts with `npm run db:sqlite:verify:postgres`
 - validate backend behavior with `npm run test:postgres`
-- follow the migration checklist in `docs/POSTGRES_MIGRATION_RUNBOOK.md`
-- keep sqlite local fallback mode for single-machine/community deployments
+- follow [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md)
 
 Current status:
 
-- backend contract abstraction is in place
-- Postgres schema + migration scripts are available
-- runtime Postgres query backend is implemented and selectable via `DB_DIALECT=postgres`
-- CI runs a dedicated Postgres backend test job (`tests/postgres-backend.test.ts`)
-- CDK includes a Phase 2 ECS+RDS stack for Slack/Discord official runtimes (`infra/cdk/lib/garbanzo-ecs-stack.ts`)
+- backend abstraction is in place
+- Postgres schema and migration scripts are available
+- runtime Postgres backend is selectable with `DB_DIALECT=postgres`
+- CI covers the Postgres backend contract
+
+## Kubernetes Threshold
+
+Docker Compose is still the default install path. Move to k3s or another Kubernetes setup when the operational need is real:
+
+- multiple nodes or separate host pools
+- several Garbanzo services with health-gated rollouts
+- standard secret, volume, ingress, and monitoring workflows
+- a need to manage Qdrant, app pods, and future workers with the same control plane
+
+The Helm chart in `deploy/helm/` supports that path. For one host or a small number of instances, Compose is simpler to debug and recover.
+
+## AWS Guidance
+
+For a simple AWS deployment, EC2 plus Docker Compose remains the practical starting point. Keep state on EBS, use SSM for access, and expose health only to trusted monitors.
+
+For managed cloud runtime work, the CDK stack under `infra/cdk/` targets official platform runtimes and Postgres-backed deployments.

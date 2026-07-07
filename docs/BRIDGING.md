@@ -251,7 +251,7 @@ containers on the compose network as `rabbitmq:5672`.
 This is the target topology for a group running both a community bot and a
 band bot: the original WhatsApp community bot, a second linked companion
 device on the same WhatsApp account for the band-facing groups, and a Discord
-band bot (Remy), with the two band-facing instances bridged and the community
+band bot on Discord, with the two band-facing instances bridged and the community
 bot left alone.
 
 ### 1. Isolated WhatsApp community bot
@@ -347,12 +347,12 @@ fight over one display name. The primary instance can keep the default
 `WHATSAPP_SET_PROFILE_NAME=true`.
 
 `MONITORING_TOKEN` lives in the shared `.env` and must be the same value used
-by `remy` below.
+by `band-discord` below.
 
 Because `INSTANCE_ID=whatsapp-band` is set and `QDRANT_COLLECTION` is not,
 this instance automatically gets its own local collection,
 `garbanzo_memory_whatsapp-band` — isolated from the community bot's
-`garbanzo_memory` and from `remy`'s collection below, with no extra config.
+`garbanzo_memory` and from `band-discord`'s collection below, with no extra config.
 
 The outbound safety budgets are enforced per instance, but WhatsApp still sees
 one account's aggregate behavior. If the shared number is banned or limited,
@@ -368,20 +368,20 @@ at the cost of operating another number. Treat it as a fresh account during
 warm-up: `WHATSAPP_SAFETY_DAY1_LIMIT` and `WHATSAPP_SAFETY_WARMUP_DAYS` apply
 from that number's first day.
 
-### 3. Band Discord bot (Remy)
+### 3. Band Discord bot
 
-Remy already runs on the existing `discord` compose service/profile with
-`BAND_FEATURES_ENABLED=true` (see [docs/REMY_DEPLOY.md](REMY_DEPLOY.md)). Add
+The band Discord bot runs on the existing `discord` compose service/profile with
+`BAND_FEATURES_ENABLED=true` (see [docs/BAND_FEATURES.md](BAND_FEATURES.md)). Add
 to `.env.discord`:
 
 ```bash
 BRIDGE_ENABLED=true
-INSTANCE_ID=remy
+INSTANCE_ID=band-discord
 ```
 
 `INSTANCE_ID` is deployment identity, a separate concept from persona naming
 or compose service naming — the compose service stays named `discord`, but
-the bridge and shared-memory system address this deployment as `remy`. The
+the bridge and shared-memory system address this deployment as `band-discord`. The
 same `INSTANCE_ID` also drives local memory isolation: since
 `QDRANT_COLLECTION` is left unset here, this deployment's local facts land in
 `garbanzo_memory_remy`, distinct from both WhatsApp instances.
@@ -394,14 +394,14 @@ is not in the map at all. In `config/bridge-map.json`:
 ```json
 {
   "instances": [
-    { "id": "remy", "platform": "discord", "url": "http://discord:3002" },
+    { "id": "band-discord", "platform": "discord", "url": "http://discord:3002" },
     { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:3003" }
   ],
   "routes": [
     {
-      "id": "remy-band-main",
+      "id": "band-discord-band-main",
       "endpoints": [
-        { "instance": "remy", "chatId": "222222222222222222" },
+        { "instance": "band-discord", "chatId": "222222222222222222" },
         { "instance": "whatsapp-band", "chatId": "120363111111111111@g.us" }
       ],
       "direction": "both",
@@ -477,7 +477,7 @@ commands gated by `SHARED_MEMORY_ENABLED` (default `false` — replies with a
 - A peer instance only sees shared facts if it also has
   `SHARED_MEMORY_ENABLED=true`. When it does, `!memory` and `!memory search`
   label shared hits with their origin, for example
-  `(shared from remy) — the venue changed to Parlor`, and they are never
+  `(shared from band-discord) — the venue changed to Parlor`, and they are never
   remapped to that peer's own local numeric ids.
 - **Privacy invariant:** nothing enters the shared collection except a fact
   the owner explicitly ran `!memory share` on. Conversation history, session

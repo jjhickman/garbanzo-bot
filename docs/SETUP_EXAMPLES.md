@@ -1,44 +1,49 @@
 # Setup Examples
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
+These examples use the current setup wizard flags from `scripts/setup.mjs` and `scripts/setup-fields.mjs`. The wizard writes layered env files: shared values in `.env`, Discord values in `.env.discord`, and WhatsApp values in `.env.whatsapp`.
 
-This guide provides reproducible setup commands for common Garbanzo use-cases.
+## 1. Discord Community Bot
 
-## 1) Interactive onboarding (recommended for first run)
-
-```bash
-npm run setup
-```
-
-## 2) Preview-only dry run (no file writes)
+Preview the files first:
 
 ```bash
 npm run setup -- --non-interactive --dry-run \
-  --platform=whatsapp \
+  --platform=discord \
   --deploy=docker \
-  --providers=openrouter,openai \
+  --providers=openai,openrouter \
   --provider-order=openai,openrouter \
-  --profile=lightweight \
-  --owner-jid=your_number@s.whatsapp.net
+  --discord-bot-token=test_discord_bot_token \
+  --discord-owner-id=111111111111111111 \
+  --discord-gateway-enabled=true \
+  --profile=full \
+  --monitoring=true
 ```
 
-## 3) Events-heavy community preset
+Write the env files when the preview looks right:
 
 ```bash
 npm run setup -- --non-interactive \
-  --platform=whatsapp \
+  --platform=discord \
   --deploy=docker \
-  --providers=openrouter,anthropic,openai \
-  --provider-order=openrouter,openai,anthropic \
-  --profile=events \
-  --features=weather,transit,events,venues,poll,summary,recommend,feedback \
-  --owner-jid=your_number@s.whatsapp.net \
-  --owner-name="Community Admin" \
-  --group-id=120000000000000000@g.us \
-  --group-name="Community Events"
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --discord-bot-token=$DISCORD_BOT_TOKEN \
+  --discord-owner-id=$DISCORD_OWNER_ID \
+  --discord-gateway-enabled=true \
+  --profile=full \
+  --monitoring=true
 ```
 
-## 4) D&D group preset
+Then edit `config/discord-channels.json` from `config/discord-channels.example.json` and start the service:
+
+```bash
+docker compose up -d
+docker compose logs -f discord
+curl http://127.0.0.1:3002/health
+```
+
+## 2. WhatsApp Community Bot
 
 ```bash
 npm run setup -- --non-interactive \
@@ -46,65 +51,102 @@ npm run setup -- --non-interactive \
   --deploy=docker \
   --providers=openai,openrouter \
   --provider-order=openai,openrouter \
-  --profile=dnd \
-  --features=dnd,roll,character,fun,summary,feedback \
   --owner-jid=your_number@s.whatsapp.net \
+  --whatsapp-login-mode=web \
+  --profile=events \
+  --features=weather,transit,events,venues,poll,summary,recommend,feedback \
   --group-id=120000000000000000@g.us \
-  --group-name="DND Night"
+  --group-name="Community Events" \
+  --bot-name=garbanzo
 ```
 
-## 5) Import custom persona during setup
-
-```bash
-npm run setup -- --non-interactive \
-  --platform=whatsapp \
-  --providers=openrouter,openai \
-  --provider-order=openrouter,openai \
-  --profile=full \
-  --persona-file=./my-persona.md \
-  --owner-jid=your_number@s.whatsapp.net
-```
-
-## 6) Slack demo mode (local dev only)
-
-```bash
-npm run setup -- --non-interactive --dry-run \
-  --platform=slack \
-  --slack-demo=true \
-  --providers=openai \
-  --openai-key=$OPENAI_API_KEY \
-  --owner-jid=your_number@s.whatsapp.net
-```
-
-## 7) After setup
-
-Default deployment (Docker Compose):
+The wizard writes `.env` and `.env.whatsapp` and can write `config/groups.json` from the group flags. Start the WhatsApp service and scan the browser login page or terminal QR flow according to `WHATSAPP_LOGIN_MODE`:
 
 ```bash
 docker compose up -d
-docker compose logs -f garbanzo
+docker compose logs -f whatsapp
 curl http://127.0.0.1:3001/health
 ```
 
-Deploy a specific release image tag (recommended):
+## 3. Discord Band Mode
+
+Band mode runs on the Discord profile with `BAND_FEATURES_ENABLED=true`.
 
 ```bash
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+npm run setup -- --non-interactive \
+  --platform=discord \
+  --deploy=docker \
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --discord-bot-token=$DISCORD_BOT_TOKEN \
+  --discord-owner-id=$DISCORD_OWNER_ID \
+  --discord-gateway-enabled=true \
+  --band-features-enabled=true \
+  --qdrant-collection=remy_memory \
+  --write-discord-channels=true \
+  --profile=full
 ```
 
-## 8) Postgres migration dry-run + verification
+Fill `config/discord-channels.json` with the real channel and role ids before starting:
 
 ```bash
-# 1) Initialize schema in Postgres
+docker compose up -d
+docker compose logs -f discord
+curl http://127.0.0.1:3002/health/ready
+```
+
+## 4. Discord and WhatsApp with Monitoring
+
+Run setup once per platform so each platform env file is generated:
+
+```bash
+npm run setup -- --non-interactive \
+  --platform=discord \
+  --deploy=docker \
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --discord-bot-token=$DISCORD_BOT_TOKEN \
+  --discord-owner-id=$DISCORD_OWNER_ID \
+  --discord-gateway-enabled=true \
+  --monitoring=true
+
+npm run setup -- --non-interactive \
+  --platform=whatsapp \
+  --deploy=docker \
+  --providers=openai,openrouter \
+  --provider-order=openai,openrouter \
+  --owner-jid=your_number@s.whatsapp.net \
+  --whatsapp-login-mode=web \
+  --profile=full
+```
+
+Set both platform profiles in `.env`:
+
+```bash
+COMPOSE_PROFILES=discord,whatsapp,monitoring
+METRICS_ENABLED=true
+MONITORING_TOKEN=replace_with_a_generated_secret
+APP_VERSION=3.1.0
+```
+
+Start and inspect both services:
+
+```bash
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull discord whatsapp
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+docker compose logs -f discord
+docker compose logs -f whatsapp
+
+curl http://127.0.0.1:3002/health
+curl http://127.0.0.1:3001/health
+```
+
+## Postgres Migration Dry Run
+
+```bash
 DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:postgres:init
-
-# 2) Migrate local sqlite data
 DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:sqlite:migrate:postgres
-
-# 3) Verify table row counts match sqlite
 DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run db:sqlite:verify:postgres
-
-# 4) Run backend parity tests against Postgres
 DATABASE_URL=postgres://user:pass@localhost:5432/garbanzo npm run test:postgres
 ```

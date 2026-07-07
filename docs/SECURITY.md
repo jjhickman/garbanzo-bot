@@ -114,6 +114,15 @@ All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is 
 
 **Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically. Backups are currently **unencrypted** local files — suitable for crash recovery but not for off-site storage. Future work: encrypt with `age`/GPG before syncing to NAS (see Phase 7.8 in ROADMAP.md).
 
+## Bridge and Federated Retrieval Surfaces
+
+**Added:** 2026-07-07
+
+- HTTP bridge delivery posts to `/bridge/inbound` and requires a `MONITORING_TOKEN` bearer token. Keep the same token configured on bridged instances and expose the endpoint only to trusted peers.
+- AMQP bridge transport uses the `broker` compose profile. Set strong `BRIDGE_BROKER_PASSWORD` credentials; the RabbitMQ management UI is localhost-bound by default and AMQP is reachable only on the compose network.
+- Shared memory is explicit. Nothing enters the shared Qdrant collection unless the owner runs `!memory share <id>`. Conversation history, session summaries, and auto-extracted facts are not auto-shared.
+- RAG federation is read-only. Sources in `config/rag-sources.json` can be searched at prompt time, but Garbanzo never writes facts, messages, summaries, or embeddings to those federated collections.
+
 ---
 
 ## Automated Secret Scanning
@@ -200,7 +209,7 @@ chmod +x .git/hooks/pre-commit
 - Dry-run (prints recommended config): `npm run host:fail2ban`
 - Apply (installs + writes `/etc/fail2ban/jail.d/garbanzo-sshd.local` + enables service):
   - `npm run host:fail2ban -- --apply`
-  - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 100.64.0.0/10 192.168.50.0/24"`
+  - Optional allowlist: `npm run host:fail2ban -- --apply --ignoreip "127.0.0.1/8 ::1 <vpn-range> <lan-range>"`
 - Requires sudo (script now reports clearly when no interactive TTY is available)
 
 ## Runtime Hardening Updates
@@ -225,7 +234,7 @@ chmod +x .git/hooks/pre-commit
 
 | # | Finding | Fix Applied | Verified |
 |---|---------|-------------|----------|
-| 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH + Tailscale (`100.64.0.0/10`) + LAN (`192.168.50.0/24`) | ✅ 4 rules active |
+| 2 | UFW inactive | `sudo ufw enable` — deny incoming, allow SSH plus your VPN and LAN ranges | ✅ 4 rules active |
 | 3 | Ollama on `0.0.0.0:11434` | Created `/etc/systemd/system/ollama.service.d/override.conf` with `OLLAMA_HOST=127.0.0.1`, restarted | ✅ `127.0.0.1:11434` |
 | 4 | Tailscale Funnel exposing legacy services | `tailscale funnel off` — both `/` and `/docs` routes removed | ✅ No serve config |
 | 5 | Port 18790 on `0.0.0.0` | Stopped + disabled legacy webhooks service via `systemctl --user` | ✅ Port closed |

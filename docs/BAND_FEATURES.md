@@ -1,6 +1,6 @@
-# Remy Deploy
+# Band Features
 
-Remy is band mode running on the Discord profile. The old Remy compose overlay
+The band feature set runs on the Discord profile. The old band compose overlay
 is gone; use the main `docker-compose.yml` profiles and `.env.discord`.
 
 ## Setup
@@ -26,7 +26,7 @@ DISCORD_BOT_TOKEN=...
 DISCORD_OWNER_ID=...
 BAND_FEATURES_ENABLED=true
 # Optional audio transcription for dropped clips:
-# WHISPER_URL=http://192.168.1.10:8090
+# WHISPER_URL=http://<whisper-host>:<port>
 # Optional separate vector collection:
 # QDRANT_COLLECTION=remy_memory
 ```
