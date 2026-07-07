@@ -261,6 +261,7 @@ describe('config module parity', () => {
         "QDRANT_COLLECTION",
         "QDRANT_SHARED_COLLECTION",
         "QDRANT_URL",
+        "RAG_FEDERATION_ENABLED",
         "REHEARSAL_REMINDER_LEAD_MINUTES",
         "RETRY_ATTEMPT_TIMEOUT_MS",
         "SEARXNG_BASE_URL",

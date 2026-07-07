@@ -11,6 +11,7 @@ import { buildLanguageInstruction } from '../features/language.js';
 import { formatMemoriesForPromptWithShared } from '../utils/db.js';
 import { getSearchProviderName } from '../features/web-search.js';
 import { formatBandKnowledgeForPrompt } from '../features/band-knowledge.js';
+import { formatFederatedKnowledgeForPrompt } from '../utils/rag-federation.js';
 
 const DEFAULT_PERSONA_NAME = 'Garbanzo Bean';
 
@@ -134,6 +135,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
   const context = await formatContext(ctx.groupJid, userMessage ?? '');
   const langInstruction = userMessage ? buildLanguageInstruction(userMessage) : '';
   const memories = await formatMemoriesForPromptWithShared(userMessage);
+  const federatedKnowledge = await formatFederatedKnowledgeForPrompt(userMessage, ctx.groupJid);
   const bandKnowledge = await formatBandKnowledgeForPrompt();
   const groupPersona = getGroupPersona(ctx.groupJid);
   const toolInstruction = buildToolInstruction();
@@ -150,6 +152,7 @@ export async function buildSystemPrompt(ctx: MessageContext, userMessage?: strin
       : '',
     context ? `\n${context}` : '',
     memories ? `\n${memories}` : '',
+    federatedKnowledge ? `\n${federatedKnowledge}` : '',
     bandKnowledge ? `\n${bandKnowledge}` : '',
     '',
     buildFormattingInstruction(config.MESSAGING_PLATFORM),

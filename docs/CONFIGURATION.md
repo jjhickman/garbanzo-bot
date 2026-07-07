@@ -130,6 +130,14 @@ cp .env.discord.example .env.discord
 
 Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
 
+## RAG federation
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `RAG_FEDERATION_ENABLED` | No | Enable read-only prompt-time search across sources listed in `config/rag-sources.json` (default: `false`) |
+
+Source definitions live in `config/rag-sources.json`; start from `config/rag-sources.example.json`. Each source declares its Qdrant collection, text payload field, embedding provider/model/dimensions, optional chat allowlist, and per-source score/hit limits. See [docs/RAG_FEDERATION.md](RAG_FEDERATION.md).
+
 Features degrade gracefully when API keys are missing — the bot won't crash, it just skips that feature.
 
 ## Setup Wizard
