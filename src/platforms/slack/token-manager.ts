@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 
 import { logger } from '../../middleware/logger.js';
-import { PROJECT_ROOT } from '../../utils/config.js';
+import { homePath } from '../../utils/paths.js';
 
 export interface SlackTokenProvider {
   getToken(): Promise<string>;
@@ -34,7 +34,7 @@ interface SlackTokenManagerParams {
 
 function normalizeStateFilePath(inputPath: string): string {
   if (inputPath.startsWith('/')) return inputPath;
-  return resolve(PROJECT_ROOT, inputPath);
+  return homePath(inputPath);
 }
 
 function shouldRefresh(expiresAtMs: number | undefined, minBufferMinutes: number): boolean {

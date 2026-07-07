@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT, config } from '../utils/config.js';
+import { config } from '../utils/config.js';
+import { assetPath, homePath } from '../utils/paths.js';
 import { truncate } from '../utils/formatting.js';
 import { INTRO_SYSTEM_ADDENDUM } from '../features/introductions.js';
 import type { MessagingPlatform } from '../core/messaging-platform.js';
@@ -29,9 +29,20 @@ function derivePersonaName(doc: string): string {
   return name || DEFAULT_PERSONA_NAME;
 }
 
+/**
+ * Resolve a persona doc, preferring an operator override under GARBANZO_HOME
+ * over the shipped default. In repo/Docker mode homePath and assetPath
+ * coincide, so this is a no-op there — byte-identical behavior.
+ */
+function resolvePersonaAsset(...segments: string[]): string {
+  const homeCandidate = homePath(...segments);
+  if (existsSync(homeCandidate)) return homeCandidate;
+  return assetPath(...segments);
+}
+
 // Load persona at startup
-const defaultPersonaPath = resolve(PROJECT_ROOT, 'docs', 'PERSONA.md');
-const platformPersonaPath = resolve(PROJECT_ROOT, 'docs', 'personas', `${config.MESSAGING_PLATFORM}.md`);
+const defaultPersonaPath = resolvePersonaAsset('docs', 'PERSONA.md');
+const platformPersonaPath = resolvePersonaAsset('docs', 'personas', `${config.MESSAGING_PLATFORM}.md`);
 
 let personaDoc: string;
 let loadedPersonaFile: string | null = null;

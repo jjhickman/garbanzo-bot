@@ -3,17 +3,16 @@
  */
 
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { logger } from '../../middleware/logger.js';
-import { PROJECT_ROOT } from '../../utils/config.js';
+import { assetPath } from '../../utils/paths.js';
 import type { AbilityName } from './srd-data.js';
 import { ALL_SKILLS, SKILL_ABILITIES } from './srd-data.js';
 import { abilityModifier, formatModifier } from './abilities.js';
 import type { CharacterData } from './class-race-data.js';
 import { CLASS_HIT_DIE } from './class-race-data.js';
 
-const TEMPLATE_PATH = resolve(PROJECT_ROOT, 'templates', '5e-character-sheet.pdf');
+const TEMPLATE_PATH = assetPath('templates', '5e-character-sheet.pdf');
 
 // ── PDF Field Mappings ──────────────────────────────────────────────
 

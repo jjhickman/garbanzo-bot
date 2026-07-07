@@ -34,11 +34,15 @@ async function loadPersonaModule(options: LoadPersonaOptions = {}): Promise<{
   }));
 
   vi.doMock('../src/utils/config.js', () => ({
-    PROJECT_ROOT: '/repo',
     config: {
       MESSAGING_PLATFORM: options.platform ?? 'whatsapp',
       AI_TOOL_CALLING: false,
     },
+  }));
+
+  vi.doMock('../src/utils/paths.js', () => ({
+    homePath: (...segments: string[]) => ['/repo', ...segments].join('/'),
+    assetPath: (...segments: string[]) => ['/repo', ...segments].join('/'),
   }));
 
   vi.doMock('../src/features/introductions.js', () => ({
@@ -85,6 +89,7 @@ describe('getPersonaName', () => {
     vi.doUnmock('fs');
     vi.doUnmock('../src/middleware/logger.js');
     vi.doUnmock('../src/utils/config.js');
+    vi.doUnmock('../src/utils/paths.js');
     vi.doUnmock('../src/features/introductions.js');
     vi.doUnmock('../src/core/groups-config.js');
     vi.doUnmock('../src/middleware/context.js');

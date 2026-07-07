@@ -85,6 +85,9 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 ENV GARBANZO_VERSION=$APP_VERSION
+# Container mode is explicit, not inferred: mutable state (data/, config/,
+# baileys_auth/, .env) resolves under /app, matching the volumes below.
+ENV GARBANZO_HOME=/app
 
 # Volumes for persistent data
 # - data/: SQLite database, backups, voice models

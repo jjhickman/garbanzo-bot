@@ -13,11 +13,10 @@
 
 import { existsSync } from 'node:fs';
 import { readFile, writeFile, chmod } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
-import { PROJECT_ROOT } from '../utils/config.js';
+import { homePath } from '../utils/paths.js';
 import { logger } from '../middleware/logger.js';
 
 export const OPENAI_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
@@ -27,7 +26,7 @@ export const OPENAI_OAUTH_SCOPE = 'openid profile email offline_access';
 /** Refresh when the token is within this window of expiry. */
 export const OPENAI_OAUTH_REFRESH_SKEW_MS = 5 * 60 * 1000;
 
-export const OPENAI_TOKEN_PATH = resolve(PROJECT_ROOT, 'data/openai-oauth.json');
+export const OPENAI_TOKEN_PATH = homePath('data/openai-oauth.json');
 
 const TokenStoreSchema = z.object({
   access_token: z.string().min(1),

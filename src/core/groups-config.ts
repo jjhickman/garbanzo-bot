@@ -1,9 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { z } from 'zod';
 
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { homePath } from '../utils/paths.js';
 
 // ── Zod schema for config/groups.json ───────────────────────────────
 
@@ -48,7 +47,7 @@ function errorReason(err: unknown): string {
   return String(err).replace(/\s+/g, ' ');
 }
 
-const configPath = resolve(PROJECT_ROOT, 'config', 'groups.json');
+const configPath = homePath('config', 'groups.json');
 
 function loadGroupsConfig(): GroupsConfig {
   if (!existsSync(configPath)) {

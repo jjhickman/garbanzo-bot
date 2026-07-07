@@ -61,7 +61,6 @@ describe('buildSystemPrompt memory formatting', () => {
     );
 
     vi.doMock('../src/utils/config.js', () => ({
-      PROJECT_ROOT: '/repo',
       config: {
         MESSAGING_PLATFORM: 'whatsapp',
         AI_TOOL_CALLING: false,

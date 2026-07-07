@@ -18,17 +18,17 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import { existsSync } from 'fs';
 import { logger } from '../middleware/logger.js';
-import { PROJECT_ROOT } from '../utils/config.js';
+import { homePath } from '../utils/paths.js';
 import { detectLanguage } from './language.js';
 
 const execAsync = promisify(exec);
 
 const WHISPER_URL = process.env.WHISPER_URL ?? 'http://127.0.0.1:8090';
 const PIPER_BIN = process.env.PIPER_BIN ?? '/home/linuxbrew/.linuxbrew/bin/piper';
-const VOICES_DIR = resolve(PROJECT_ROOT, 'data', 'voices');
+const VOICES_DIR = homePath('data', 'voices');
 const WHISPER_TIMEOUT_MS = 30_000;
 
 // ── Voice registry ──────────────────────────────────────────────────

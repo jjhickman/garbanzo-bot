@@ -16,14 +16,17 @@ async function loadGroupsConfig(projectRoot: string) {
   vi.resetModules();
   logger.warn.mockClear();
   logger.error.mockClear();
-  vi.doMock('../src/utils/config.js', () => ({ PROJECT_ROOT: projectRoot }));
+  vi.doMock('../src/utils/paths.js', () => ({
+    homePath: (...segments: string[]) => join(projectRoot, ...segments),
+    assetPath: (...segments: string[]) => join(projectRoot, ...segments),
+  }));
   vi.doMock('../src/middleware/logger.js', () => ({ logger }));
   return import('../src/core/groups-config.js');
 }
 
 describe('groups config loader', () => {
   afterEach(() => {
-    vi.doUnmock('../src/utils/config.js');
+    vi.doUnmock('../src/utils/paths.js');
     vi.doUnmock('../src/middleware/logger.js');
   });
 
