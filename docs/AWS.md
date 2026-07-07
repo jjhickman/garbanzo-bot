@@ -11,22 +11,17 @@ Garbanzo's WhatsApp transport is Baileys (WhatsApp Web multi-device). That has t
 
 Garbanzo also uses SQLite for local state by default. For the simplest, most reliable AWS deployment, prefer a single VM with local disk (EBS) rather than a network filesystem.
 
-## Scaling Note (SQLite + Baileys)
+## Scaling Note
 
 See also: `docs/SCALING.md`
 
-Today, Garbanzo is designed as a single-instance deployment:
+Garbanzo runs one platform runtime per process. Multi-instance deployments are supported with separate services, separate volumes, distinct `INSTANCE_ID` values, and bridge routes in `config/bridge-map.json`.
 
-- Baileys session state is not designed for active-active multi-replica operation.
-- SQLite is a single-node database and does not support horizontal scaling the way Postgres does.
+- Do not share one Baileys auth volume across multiple WhatsApp services.
+- SQLite is still a single-node database per instance.
+- Use Postgres for managed multi-service deployments.
 
-On AWS, the practical scaling strategy is vertical (bigger instance) plus good backups.
-
-If you later want true multi-instance scalability, the likely path is:
-
-- add official messaging platform adapters (Slack/Teams/WhatsApp Business Platform)
-- move durable state from SQLite to Postgres (RDS)
-- use queues (SQS) for async work where ordering is not critical
+On AWS, the practical starting point is still vertical scaling on one EC2 host plus good backups.
 
 ## Recommended: EC2 + Docker Compose (Simple + Reliable)
 
@@ -43,7 +38,7 @@ This is the easiest path that keeps SQLite on a local filesystem and preserves t
 Security Group (inbound):
 
 - Recommended: no inbound ports; use SSM Session Manager for access
-- Optional: allow `/health` port (`3001/tcp`) only from a trusted monitor (and only if the instance is reachable)
+- Optional: allow the platform health port only from a trusted monitor (`3002/tcp` for Discord, `3001/tcp` for WhatsApp)
 - Do not expose WhatsApp/Baileys ports publicly (Garbanzo initiates outbound connections)
 
 ### 2) Install Docker
@@ -59,33 +54,37 @@ On the instance:
 git clone https://github.com/jjhickman/garbanzo-bot.git
 cd garbanzo-bot
 cp .env.example .env
-# edit .env and config/groups.json
+# edit .env, the platform env file, and the relevant config file:
+#   config/discord-channels.json for Discord
+#   config/groups.json for WhatsApp
 
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull discord whatsapp
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-docker compose logs -f garbanzo
+docker compose logs -f discord
+# or:
+docker compose logs -f whatsapp
 ```
 
-Scan the QR code from the logs on first run.
+For WhatsApp, scan the QR code from the logs or browser login page on first run.
 
 ### 4) Monitoring
 
 - Use `GET /health` for informational status
 - Use `GET /health/ready` for alerting (503 when disconnected/stale)
 
-Hardened option (recommended): do not open port 3001 at all. Use SSM port forwarding when needed:
+Hardened option (recommended): do not open health ports at all. Use SSM port forwarding when needed:
 
 ```bash
 aws ssm start-session \
   --target i-xxxxxxxxxxxxxxxxx \
   --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["3001"],"localPortNumber":["3001"]}'
+  --parameters '{"portNumber":["3002"],"localPortNumber":["3002"]}'
 
-curl http://127.0.0.1:3001/health
+curl http://127.0.0.1:3002/health
 ```
 
-If you publish port `3001` publicly/within a VPC, restrict it to trusted monitors.
+If you publish platform health ports publicly or inside a VPC, restrict them to trusted monitors.
 
 ## Option: ECS Fargate + RDS (Phase 2 target)
 

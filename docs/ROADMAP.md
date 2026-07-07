@@ -39,7 +39,7 @@ Priority order:
 
 ## Planned Milestones
 
-## Post-v2: Platform Bridging — Delivered (v3)
+### Platform Bridging - Delivered (v3)
 
 - Tier 1: shared memory across platform instances, explicit and reversible
   (`!memory share`/`unshare`), with clear source and scope boundaries. Done.
@@ -50,15 +50,24 @@ Priority order:
 - Tier 3 (single-process multi-runtime) and media re-upload (media relays as
   typed placeholders today, e.g. "[voice note]") remain deferred.
 
+### RAG Federation - Delivered (2026-07-07)
+
+- Read-only source registry in `config/rag-sources.json`, with per-source
+  Qdrant collection, embedding settings, chat allowlists, and hit/score caps.
+  Done.
+- Prompt-time federated source hits stay separate from shared memory and never
+  write to source collections. Done.
+- Setup guide: [docs/RAG_FEDERATION.md](RAG_FEDERATION.md).
+
+### Helm Chart - Delivered (2026-07-07)
+
+- Kubernetes chart for homelab and cluster operators lives in `deploy/helm/`.
+  Done.
+- Docker Compose remains the default install path for most self-hosted
+  deployments.
+
 ### 3.x candidates
 
-- Federated memory sources and multi-RAG: source registry, per-source
-  embedding routing, reranker-based collation, per-group source allowlists,
-  and read-only federation. Vector spaces are incomparable across embedding
-  models, so each source needs its own query embedding before the reranker
-  becomes the collation point.
-- Helm chart distribution artifact: Docker Compose stays the default install
-  path, while Kubernetes homelab operators get a maintained chart.
 - Cross-language bridge translation: reuse the existing language detection
   path for relayed messages.
 - Voice-note transcription relay: reuse the Whisper path and replace the

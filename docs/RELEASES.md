@@ -130,15 +130,15 @@ Notes:
 Set `APP_VERSION` in your `.env` before deploy, then pull and restart:
 
 ```bash
-APP_VERSION=0.2.2 docker compose pull garbanzo
-APP_VERSION=0.2.2 docker compose up -d
+APP_VERSION=3.1.0 docker compose pull discord whatsapp
+APP_VERSION=3.1.0 docker compose up -d
 ```
 
 Recommended (production) — use `docker-compose.prod.yml` to disable local builds:
 
 ```bash
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull discord whatsapp
+APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 `docker-compose.prod.yml` also forces pulls so you don't accidentally run a stale cached image.
@@ -153,17 +153,19 @@ npm run release:deploy:verify -- --version=0.1.9 --rollback-version=0.1.8
 
 If a deploy introduces problems, roll back to the last known-good release tag.
 
-1. Identify the prior healthy version (example: `0.2.1`).
+1. Identify the prior healthy version (example: `3.0.0`).
 2. Redeploy with that version:
 
 ```bash
-APP_VERSION=0.2.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull garbanzo
-APP_VERSION=0.2.1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.0.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull discord whatsapp
+APP_VERSION=3.0.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 3. Verify health and readiness:
 
 ```bash
+curl -fsS http://127.0.0.1:3002/health
+curl -fsS http://127.0.0.1:3002/health/ready
 curl -fsS http://127.0.0.1:3001/health
 curl -fsS http://127.0.0.1:3001/health/ready
 ```

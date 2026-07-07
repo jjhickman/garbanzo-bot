@@ -2,18 +2,22 @@
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 
-Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers (Claude/OpenAI/Gemini/Bedrock/OpenRouter) with optional local Ollama, then applies community workflows and integrations inside group chat.
+Garbanzo is an AI chat operations platform packaged for Docker-first self-hosting. It routes prompts and commands across configurable providers with optional local Ollama, then applies community workflows and integrations inside group chat.
 
 This image is built for operators and small teams that want:
 
-- Multi-provider AI routing with configurable failover order (OpenAI GPT-5 family via the Responses API, Claude, Gemini, Bedrock, OpenRouter) plus optional local Ollama
+- Multi-provider AI routing with configurable failover order across OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, plus optional local Ollama
 - **Native tool calling** — the model invokes weather/transit/venues/news/books/memory integrations mid-reply
 - Session memory with vector retrieval, plus **automatic community-memory extraction** (opt-in)
+- Cross-instance bridging for mapped Discord channels and WhatsApp groups over HTTP or AMQP
+- Multi-instance deployment with `INSTANCE_ID`, isolated volumes, and same-account WhatsApp linked-device patterns
 - Built-in workflow automations (summaries, events + reminders, weekly recaps, moderation signals, recommendations)
 - Built-in integrations (weather, transit, venues, news, books, D&D lookups)
 - Operations: health/readiness endpoints, token-gated `/admin` usage & cost page, Prometheus `/metrics`, and a pre-provisioned Grafana dashboard via the compose `monitoring` profile
 - Verified off-machine backups (systemd timer + restore runbook) and anti-ban outbound safety for WhatsApp
 - Docker-first deployment with persistent auth, SQLite or Postgres state, and a self-hosted Qdrant vector store for semantic recall
+- RAG federation for read-only Qdrant sources at prompt time
+- Helm chart under `deploy/helm/` for Kubernetes operators
 - Band mode (`BAND_FEATURES_ENABLED`): the same image runs as Remy, a Discord assistant for bands, with a song catalog, rehearsal scheduling and reminders, availability tracking, setlists, and song idea capture with audio transcription
 
 ## Quick Start (Docker Compose)
@@ -57,16 +61,20 @@ Grafana, append `,monitoring`, set `METRICS_ENABLED=true`, and set
 
 ## Key Features
 
-- **AI routing:** configurable provider failover order across OpenAI (GPT-5 family via the Responses API with bounded `reasoning_effort`), Claude, Gemini, Bedrock, and OpenRouter with per-provider model overrides
+- **AI routing:** configurable provider failover order across OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter with per-provider model overrides
 - **Tool calling:** opt-in native function calling (`AI_TOOL_CALLING`) so members ask naturally — "is the red line running?" — instead of using bang commands
 - **Community memory:** owner-curated facts plus opt-in automatic extraction (`MEMORY_AUTO_EXTRACT`), injected into the AI prompt and managed with `!memory`
 - **Session memory:** conversations are sessionized by inactivity gap, extractively summarized, and embedded for semantic retrieval — the bot remembers what was discussed across sessions
-- **Vector memory:** session summaries and community facts are embedded (OpenAI `text-embedding-3-small`) into a self-hosted Qdrant store, with automatic keyword fallback when Qdrant is unavailable
+- **Vector memory:** session summaries and community facts are embedded into a self-hosted Qdrant store, with automatic keyword fallback when Qdrant is unavailable
+- **RAG federation:** read-only Qdrant sources from `config/rag-sources.json` can add bounded source hits to prompts
 - **Storage:** SQLite (default) or Postgres for relational state; Qdrant for vectors
 - **Platforms:** Discord (default Gateway runtime with opt-in channels), WhatsApp (Baileys runtime with browser login and anti-ban outbound safety), Slack (support plus demo mode)
+- **Bridging:** mapped chats relay between instances through HTTP or AMQP, with per-route summary or verbatim modes
+- **Multi-instance:** `INSTANCE_ID` separates deployment identity, metrics, shared-fact ids, and local vector collections; same-account WhatsApp deployments use separate linked-device auth volumes
 - **Band mode:** `BAND_FEATURES_ENABLED=true` turns on the Remy band assistant on the Discord profile (`!song`, `!rehearsal`, `!available`, `!setlist`, `!agenda`, `!idea`, `!section`, `!lyrics`)
 - **Integrations:** weather, transit (MBTA), venues, news, books, D&D dice/lookups/character sheets
 - **Operations:** health/readiness endpoints, `/admin` usage & cost page, Prometheus metrics + Grafana dashboard (compose `monitoring` profile), daily digest + weekly recap, verified backups, anti-ban outbound safety, rate limiting, retry queue
+- **Kubernetes:** Helm chart in `deploy/helm/` for operators who run Garbanzo on a cluster
 
 ## Tags
 

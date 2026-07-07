@@ -114,6 +114,15 @@ All data is stored locally in `data/garbanzo.db` (SQLite, WAL mode). No data is 
 
 **Backups:** Automated nightly via `VACUUM INTO` to `data/backups/`, 7-day retention, pruned automatically. Backups are currently **unencrypted** local files — suitable for crash recovery but not for off-site storage. Future work: encrypt with `age`/GPG before syncing to NAS (see Phase 7.8 in ROADMAP.md).
 
+## Bridge and Federated Retrieval Surfaces
+
+**Added:** 2026-07-07
+
+- HTTP bridge delivery posts to `/bridge/inbound` and requires a `MONITORING_TOKEN` bearer token. Keep the same token configured on bridged instances and expose the endpoint only to trusted peers.
+- AMQP bridge transport uses the `broker` compose profile. Set strong `BRIDGE_BROKER_PASSWORD` credentials; the RabbitMQ management UI is localhost-bound by default and AMQP is reachable only on the compose network.
+- Shared memory is explicit. Nothing enters the shared Qdrant collection unless the owner runs `!memory share <id>`. Conversation history, session summaries, and auto-extracted facts are not auto-shared.
+- RAG federation is read-only. Sources in `config/rag-sources.json` can be searched at prompt time, but Garbanzo never writes facts, messages, summaries, or embeddings to those federated collections.
+
 ---
 
 ## Automated Secret Scanning

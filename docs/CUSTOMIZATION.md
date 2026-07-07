@@ -1,27 +1,27 @@
 # Customizing for Your Community
 
-Garbanzo was built for Boston, but the architecture is locale-agnostic. Here's what to customize:
+Garbanzo was built for Boston communities, but the runtime is configurable by persona files, platform config files, and feature env vars.
 
-## 1. Persona (`docs/PERSONA.md`)
-This file defines the bot's personality and is loaded at runtime into every AI prompt. Replace Boston references with your city, update the voice/tone, and adjust the "community knowledge" section.
+## Persona
 
-## 2. Transit (`src/features/transit.ts`)
-Currently uses the MBTA API. To adapt:
-- Replace the API client with your city's transit API
-- Update station/route aliases in the lookup maps
-- Adjust the response formatting
+`docs/PERSONA.md` is the base prompt. `src/ai/persona.ts` derives the display name with `getPersonaName()` from that document, so changing the main heading changes the bot identity used in logs and help text.
 
-## 3. Weather (`src/features/weather.ts`)
-Default location is Boston. Change the `DEFAULT_LOCATION` constant to your city.
+Platform overrides live in `docs/personas/<platform>.md`, such as `docs/personas/discord.md`. Docker operators can bind-mount replacement persona files into those paths instead of rebuilding the image.
 
-## 4. Groups (`config/groups.json`)
-Replace all group JIDs and names with your own. Persona hints are per-group.
+## Discord Channels
 
-## 5. Mention Patterns (`config/groups.json`)
-Update `mentionPatterns` to match your bot's name as it appears in WhatsApp.
+Copy `config/discord-channels.example.json` to `config/discord-channels.json` and fill in real Discord channel, role, and owner ids. Override the path with `DISCORD_CHANNELS_CONFIG_PATH` when needed.
 
-## 6. Icebreakers (`src/features/fun.ts`)
-The curated icebreaker list is Boston-themed. Replace with your city's landmarks, neighborhoods, and culture.
+## WhatsApp Groups
 
-## 7. Memory Facts (`!memory add`)
-After deploying, use `!memory add` to teach the bot about your community's venues, traditions, and members.
+Edit `config/groups.json` for WhatsApp group names, enabled features, mention patterns, owner metadata, and per-group persona hints.
+
+## Locale and Integrations
+
+- Transit uses the MBTA API through `MBTA_API_KEY` and Boston-specific aliases in `src/features/transit-data.ts`.
+- Weather defaults live in the weather feature and can be adapted for another default city.
+- Venue, news, books, and web-search behavior depends on the optional API keys listed in `.env.example`.
+
+## Memory
+
+Teach local community facts with `!memory add`. Share facts across instances only with explicit owner commands such as `!memory share <id>`.
