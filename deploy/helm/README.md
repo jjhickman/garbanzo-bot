@@ -17,7 +17,7 @@ helm install band-bot ./deploy/helm/garbanzo \
   --set secretEnv.OPENAI_API_KEY='<openai-key>'
 ```
 
-Discord uses `healthPort=3002` by default.
+Discord uses the chart default health port, matching `${DISCORD_HEALTH_PORT:-3002}` in Compose.
 
 ## WhatsApp Example
 
@@ -25,7 +25,7 @@ Discord uses `healthPort=3002` by default.
 helm install community-wa ./deploy/helm/garbanzo \
   --set platform=whatsapp \
   --set instanceId=whatsapp-main \
-  --set healthPort=3001 \
+  --set healthPort='${WHATSAPP_HEALTH_PORT:-3001}' \
   --set persistence.whatsappAuth.enabled=true \
   --set secretEnv.OWNER_JID='test_owner@s.whatsapp.net' \
   --set secretEnv.WHATSAPP_LOGIN_TOKEN='<login-token>' \
@@ -42,14 +42,14 @@ login page printed in `helm status`.
 helm install community-tg ./deploy/helm/garbanzo \
   --set platform=telegram \
   --set instanceId=community-tg \
-  --set healthPort=3005 \
+  --set healthPort='${TELEGRAM_HEALTH_PORT:-3005}' \
   --set secretEnv.TELEGRAM_BOT_TOKEN='<botfather-token>' \
   --set secretEnv.TELEGRAM_OWNER_ID='<owner-user-id>' \
   --set secretEnv.OPENAI_API_KEY='<openai-key>'
 ```
 
-The chart default health port remains `3002`; Telegram deployments should pass
-`--set healthPort=3005` to match the compose and Prometheus convention. Set
+The chart default health port matches `${DISCORD_HEALTH_PORT:-3002}`. Telegram deployments should pass
+`--set healthPort='${TELEGRAM_HEALTH_PORT:-3005}'` to match the compose and Prometheus convention. Set
 `configFiles.telegramChatsJson` to mount a chart-managed
 `config/telegram-chats.json`.
 
@@ -59,15 +59,15 @@ The chart default health port remains `3002`; Telegram deployments should pass
 helm install community-mx ./deploy/helm/garbanzo \
   --set platform=matrix \
   --set instanceId=community-mx \
-  --set healthPort=3004 \
+  --set healthPort='${MATRIX_HEALTH_PORT:-3004}' \
   --set secretEnv.MATRIX_ACCESS_TOKEN='<bot-access-token>' \
   --set env.MATRIX_HOMESERVER_URL='https://matrix.example.org' \
   --set env.MATRIX_OWNER_ID='@you:example.org' \
   --set secretEnv.OPENAI_API_KEY='<openai-key>'
 ```
 
-As with Telegram, pass `--set healthPort=3004` explicitly (the chart default
-stays `3002`). Set `configFiles.matrixRoomsJson` to mount a chart-managed
+As with Telegram, pass `--set healthPort='${MATRIX_HEALTH_PORT:-3004}'` explicitly. The chart default
+matches `${DISCORD_HEALTH_PORT:-3002}`. Set `configFiles.matrixRoomsJson` to mount a chart-managed
 `config/matrix-rooms.json`. The sync token lives in the data volume
 (`data/matrix-sync.json`), so the default persistence covers it. Invite the
 bot only into unencrypted rooms; E2EE is not supported.
@@ -78,9 +78,9 @@ Install the chart once per instance:
 
 ```bash
 helm install band-bot ./deploy/helm/garbanzo --set platform=discord,instanceId=band-bot
-helm install boston-wa ./deploy/helm/garbanzo --set platform=whatsapp,instanceId=boston-wa,healthPort=3001,persistence.whatsappAuth.enabled=true
-helm install community-tg ./deploy/helm/garbanzo --set platform=telegram,instanceId=community-tg,healthPort=3005
-helm install community-mx ./deploy/helm/garbanzo --set platform=matrix,instanceId=community-mx,healthPort=3004
+helm install boston-wa ./deploy/helm/garbanzo --set platform=whatsapp,instanceId=boston-wa,healthPort='${WHATSAPP_HEALTH_PORT:-3001}',persistence.whatsappAuth.enabled=true
+helm install community-tg ./deploy/helm/garbanzo --set platform=telegram,instanceId=community-tg,healthPort='${TELEGRAM_HEALTH_PORT:-3005}'
+helm install community-mx ./deploy/helm/garbanzo --set platform=matrix,instanceId=community-mx,healthPort='${MATRIX_HEALTH_PORT:-3004}'
 ```
 
 This follows the `INSTANCE_ID` model used by bridging and shared memory. Keep

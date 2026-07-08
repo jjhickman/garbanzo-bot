@@ -1,7 +1,7 @@
 {
   "name": "garbanzo-bot",
   "version": "3.3.0",
-  "description": "Self-hosted community lore and operations for group chats.",
+  "description": "Multi-platform community lore and operations with cross-platform bridging.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

@@ -38,7 +38,7 @@ This is the easiest path that keeps SQLite on a local filesystem and preserves t
 Security Group (inbound):
 
 - Recommended: no inbound ports; use SSM Session Manager for access
-- Optional: allow the platform health port only from a trusted monitor (`3002/tcp` for Discord, `3001/tcp` for WhatsApp)
+- Optional: allow the platform health port only from a trusted monitor (`${DISCORD_HEALTH_PORT:-3002}/tcp` for Discord, `${WHATSAPP_HEALTH_PORT:-3001}/tcp` for WhatsApp)
 - Do not expose WhatsApp/Baileys ports publicly (Garbanzo initiates outbound connections)
 
 ### 2) Install Docker
@@ -79,9 +79,9 @@ Hardened option (recommended): do not open health ports at all. Use SSM port for
 aws ssm start-session \
   --target i-xxxxxxxxxxxxxxxxx \
   --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["3002"],"localPortNumber":["3002"]}'
+  --parameters "{\"portNumber\":[\"${DISCORD_HEALTH_PORT:-3002}\"],\"localPortNumber\":[\"${DISCORD_HEALTH_PORT:-3002}\"]}"
 
-curl http://127.0.0.1:3002/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
 ```
 
 If you publish platform health ports publicly or inside a VPC, restrict them to trusted monitors.

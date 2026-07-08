@@ -16,6 +16,9 @@ export const BANNED_STALE_DOC_PATTERNS = [
   /\bdefault\b.*http:\/\/qdrant:6333/i,
   /npx garbanzo\b(?!-bot)/,
   /Docker (?:and Docker Compose )?(?:is|are) required/i,
+  /self-hosted/i,
+  /group chats?/i,
+  /uptime kuma|\bKuma\b/i,
   // Regression guard (T3, v3.3.0): Telegram shipped as a fully supported
   // platform — "Telegram (in development)"-style claims (Telegram named as
   // the direct subject of "in development", not merely co-mentioned near a

@@ -1,12 +1,12 @@
 # Monitoring
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
-Three layers, all optional, all runnable on a Pi-class host:
+Three optional monitoring layers can run on a Pi-class host:
 
 | Layer | What it gives you | Cost |
 |---|---|---|
-| `/admin` page | Overview, Memory ("Lore"), Bridges, Health, plus today's AI spend/provider mix/per-group activity | Built in — zero setup |
-| Uptime Kuma | Up/down alerting (push, Telegram, email, …) | One small container |
+| `/admin` page | Overview, Memory ("Lore"), Bridges, Health, plus today's AI spend/provider mix/per-community activity | Built in |
+| HTTP health-check monitor | Up/down alerting through the monitor you already use | External or optional |
 | **Prometheus + Grafana** | Historical graphs of everything below, 30-day retention | Two containers, ~600MB RAM combined |
 
 ## Prometheus + Grafana (the `monitoring` profile)
@@ -37,16 +37,17 @@ at start (via the compose file) and authenticates its scrapes with it —
 no token files to create. If the token isn't set, the container exits with a
 clear error instead of scraping blind.
 
-- **Grafana**: `http://<pi>:3000` — the **Garbanzo — Community Ops** dashboard
-  is pre-provisioned and loads immediately. Anonymous LAN users can *view*;
+- **Grafana**: `http://<host>:${GRAFANA_PORT:-3000}` exposes the
+  **Garbanzo - Community Ops** dashboard, which is pre-provisioned and loads
+  immediately. Anonymous LAN users can *view*;
   editing needs the admin login (`admin` / your `MONITORING_TOKEN`, or
   `GRAFANA_ADMIN_PASSWORD` if you set one). Set a separate
   `GRAFANA_ADMIN_PASSWORD` if others can reach Grafana on your network.
-  Grafana listens on the LAN by design (view from any device); if your LAN is
-  untrusted, restrict port 3000 with an iptables `DOCKER-USER` allowlist or
+  Grafana listens on the LAN by design. If your LAN is untrusted, restrict
+  `${GRAFANA_PORT:-3000}` with an iptables `DOCKER-USER` allowlist or
   bind it to `127.0.0.1` in compose and front it with a reverse proxy.
-- **Prometheus**: `http://127.0.0.1:9090` (localhost-only, for debugging queries).
-- **Scrape targets**: `discord:3002`, `whatsapp:3001`, and `telegram:3005`.
+- **Prometheus**: `http://127.0.0.1:${PROMETHEUS_PORT:-9090}` is localhost-only for debugging queries.
+- **Scrape targets**: `discord:${DISCORD_HEALTH_PORT:-3002}`, `whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`, `telegram:${TELEGRAM_HEALTH_PORT:-3005}`, and `matrix:${MATRIX_HEALTH_PORT:-3004}`.
   If a platform profile is not running, that target is down by design. The
   dashboard filters on bot metrics rather than Prometheus `up`, so not-enabled
   jobs show up as absent/no data instead of red application failures.
@@ -129,24 +130,22 @@ usage/cost tables:
 - **Health** — inline AI provider mix, memory-watchdog RSS vs. thresholds,
   and bridge failure counts, with a link to `/metrics` for full history.
 
-Everything here is read-only in v3.3.0 — no delete/edit/import endpoints
-ship yet. The mutation gate for that (a separate write-only listener plus
-its own token, evaluated against the WhatsApp LAN-exposure threat model) is
-designed in
-`docs/_internal/specs/2026-07-08-admin-write-gate-design.md` ahead of
-v3.4.0.
+Everything here is read-only in v3.3.0. Delete, edit, and import endpoints are
+planned for a later release after the write-gate design is finalized.
 
-## Uptime Kuma (alerting)
+## HTTP Health-Check Monitors
 
-Kuma pages you; Grafana explains why. Recommended monitors:
+Use any HTTP health-check monitor for paging and Grafana for diagnosis.
+Recommended monitors:
 
 | Monitor | URL | Trigger |
 |---|---|---|
-| HTTP | `http://<pi>:3002/health` | non-200 -> Discord health server unhealthy |
-| HTTP | `http://<pi>:3001/health/ready` | non-200 -> WhatsApp disconnected |
-| HTTP | `http://<pi>:3005/health/ready` | non-200 -> Telegram polling disconnected |
-| Keyword | `http://<pi>:3001/health`, keyword `"integrityOk":true` | nightly backup went bad |
-| Keyword | `http://<pi>:3001/health`, keyword `"paused":false` | anti-ban layer paused sends |
+| HTTP | `http://<host>:${DISCORD_HEALTH_PORT:-3002}/health` | non-200 -> Discord health server unhealthy |
+| HTTP | `http://<host>:${WHATSAPP_HEALTH_PORT:-3001}/health/ready` | non-200 -> WhatsApp disconnected |
+| HTTP | `http://<host>:${TELEGRAM_HEALTH_PORT:-3005}/health/ready` | non-200 -> Telegram polling disconnected |
+| HTTP | `http://<host>:${MATRIX_HEALTH_PORT:-3004}/health/ready` | non-200 -> Matrix sync unhealthy |
+| Keyword | `http://<host>:${WHATSAPP_HEALTH_PORT:-3001}/health`, keyword `"integrityOk":true` | nightly backup went bad |
+| Keyword | `http://<host>:${WHATSAPP_HEALTH_PORT:-3001}/health`, keyword `"paused":false` | anti-ban layer paused sends |
 
 `/health/ready` reflects adapter connection state only for adapters that wire
 the shared health state. In this tree that is WhatsApp and Telegram. Discord
@@ -155,7 +154,7 @@ serves `/health`, but it does not currently mark gateway connection state for
 
 ## Grafana alerting (optional)
 
-If you'd rather alert from Grafana than Kuma, the highest-value rules:
+If you alert from Grafana, the highest-value rules are:
 `garbanzo_connection_status{status="connected"} == 0` for 2m,
 `garbanzo_backup_integrity_ok == 0`, `garbanzo_daily_cost_usd > 1`,
 `garbanzo_whatsapp_safety_paused == 1`, and

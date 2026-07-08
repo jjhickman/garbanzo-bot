@@ -164,10 +164,10 @@ APP_VERSION=3.0.0 docker compose -f docker-compose.yml -f docker-compose.prod.ym
 3. Verify health and readiness:
 
 ```bash
-curl -fsS http://127.0.0.1:3002/health
-curl -fsS http://127.0.0.1:3002/health/ready
-curl -fsS http://127.0.0.1:3001/health
-curl -fsS http://127.0.0.1:3001/health/ready
+curl -fsS "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
+curl -fsS "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health/ready"
+curl -fsS "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
+curl -fsS "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health/ready"
 ```
 
 4. Post rollback notes in the active release checklist issue (what failed, rollback version, follow-up PR/issue links).

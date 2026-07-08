@@ -111,8 +111,10 @@ plain HTTP with no extra containers.
      - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`.
        Telegram and Matrix both have runtimes and can be bridged today.
      - `url` (optional) - the base URL the HTTP transport uses to reach that
-       instance, for example `http://discord:3002`, `http://whatsapp:3001`,
-       `http://telegram:3005`, or `http://matrix:3004` on the compose
+       instance, for example `http://discord:${DISCORD_HEALTH_PORT:-3002}`,
+       `http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`,
+       `http://telegram:${TELEGRAM_HEALTH_PORT:-3005}`, or
+       `http://matrix:${MATRIX_HEALTH_PORT:-3004}` on the compose
        network. Not used by the AMQP transport.
    - **`routes`** - one entry per bridged channel/group pair:
      - `id` - a unique, human-readable route slug.
@@ -156,8 +158,8 @@ plain HTTP with no extra containers.
    ```json
    {
      "instances": [
-       { "id": "discord-main", "platform": "discord", "url": "http://discord:3002" },
-       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:3001" }
+       { "id": "discord-main", "platform": "discord", "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}" },
+       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}" }
      ],
      "routes": [
        {
@@ -191,8 +193,8 @@ plain HTTP with no extra containers.
    - Health endpoints still return 200 (bridging never changes `/health`):
 
      ```bash
-     curl http://127.0.0.1:3002/health
-     curl http://127.0.0.1:3001/health
+     curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
+     curl "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
      ```
 
    - Logs show the bridge coming up on each instance:
@@ -251,7 +253,7 @@ To enable it:
 COMPOSE_PROFILES=discord,whatsapp,broker
 BRIDGE_BROKER_PASSWORD=some-broker-password
 BRIDGE_TRANSPORT=amqp
-BRIDGE_BROKER_URL=amqp://garbanzo:some-broker-password@rabbitmq:5672
+BRIDGE_BROKER_URL=amqp://garbanzo:some-broker-password@rabbitmq:<amqp-port>
 ```
 
 `BRIDGE_BROKER_USER` defaults to `garbanzo` if unset. If
@@ -262,10 +264,10 @@ start and logs:
 Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile
 ```
 
-The RabbitMQ management UI is reachable at `http://localhost:15672` (bound
-to localhost only) with the same broker user/password. The AMQP port
-(`5672`) is never published to the host; it is only reachable from other
-containers on the compose network as `rabbitmq:5672`.
+The RabbitMQ management UI is reachable at `http://localhost:${RABBITMQ_MGMT_PORT:-15672}` (bound
+to localhost only) with the same broker user/password. The AMQP listener is
+never published to the host; it is only reachable from other containers on the
+compose network by using the RabbitMQ service name.
 
 ## Worked example — three instances
 
@@ -315,11 +317,11 @@ new name, with a fresh `INSTANCE_ID`, its own env file, and fresh volumes:
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=whatsapp
       - INSTANCE_ID=whatsapp-band
-      - HEALTH_PORT=3003
+      - HEALTH_PORT=${WHATSAPP_BAND_HEALTH_PORT}
       - HEALTH_BIND_HOST=0.0.0.0
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "127.0.0.1:3003:3003"
+      - "127.0.0.1:${WHATSAPP_BAND_HEALTH_PORT}:${WHATSAPP_BAND_HEALTH_PORT}"
     volumes:
       - baileys_auth_band:/app/baileys_auth
       - garbanzo_data_band:/app/data
@@ -416,8 +418,8 @@ is not in the map at all. In `config/bridge-map.json`:
 ```json
 {
   "instances": [
-    { "id": "band-discord", "platform": "discord", "url": "http://discord:3002" },
-    { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:3003" }
+    { "id": "band-discord", "platform": "discord", "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}" },
+    { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:${WHATSAPP_BAND_HEALTH_PORT}" }
   ],
   "routes": [
     {

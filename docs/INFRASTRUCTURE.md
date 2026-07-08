@@ -125,8 +125,7 @@ Recommended monitor settings:
 - One monitor per instance; name them by instance so alerts identify which
   bot dropped.
 
-Any HTTP monitor works (Uptime Kuma, Gatus, healthchecks.io, or your existing
-observability stack). If the monitor runs on another machine, publish the
+Any HTTP health-check monitor works. If the monitor runs on another machine, publish the
 health ports on a network-reachable bind and restrict who can reach them:
 
 ```bash

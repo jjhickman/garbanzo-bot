@@ -1,6 +1,6 @@
 # Garbanzo
 
-Self-hosted community lore and operations for group chats.
+Multi-platform community lore and operations with cross-platform and cross-community bridging.
 
 > Website: https://garbanzobot.com | Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
@@ -11,11 +11,11 @@ Self-hosted community lore and operations for group chats.
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord, WhatsApp, Telegram, and Matrix today.
+Garbanzo brings AI-driven moderation and enrichment to communities where they already operate. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and bridge conversations across communities and messaging platforms, including Discord, WhatsApp, Telegram, and Matrix today.
 
 ## Why Garbanzo
-- Runs anywhere, including self-hosted, with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
-- One core pipeline spans multiple messaging platforms (WhatsApp, Discord, Slack, Telegram, Matrix, and more), with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
+- Runs anywhere with inspectable state: SQLite by default, optional Postgres, operator-controlled Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
+- One core pipeline spans multiple messaging platforms (WhatsApp, Discord, Slack, Telegram, Matrix, and more), with optional bridging for mapped communities across platforms. See [bridging](docs/BRIDGING.md).
 - Multi-provider AI routing covers OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, and *any* OpenAI API-compatible model provider, providing fallback and resiliency. See [configuration](docs/CONFIGURATION.md).
 - WhatsApp support includes browser login and outbound safety designed around the Baileys account-risk model. See the [outbound safety ADR](docs/ADR-0001-whatsapp-outbound-safety.md).
 - The persona model shapes the whole bot: a markdown file defines who your bot is, how it talks, and what it cares about, and every surface follows it, including its name, replies, and prompts. Locale, provider order, integrations, and groups are configuration too. See [customization](docs/CUSTOMIZATION.md).
@@ -23,12 +23,12 @@ Garbanzo brings AI-driven moderation and enrichment to communities where they al
 <a id="features"></a>
 
 ## What It Does
-- **Community lore** - your group's community memory: mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
+- **Community lore** - your community memory: mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
 - **Community workflows** - introductions, welcomes, summaries, event reminders, polls, profiles, recommendations, release notes, feedback, and owner digests. [Architecture](docs/ARCHITECTURE.md), [customization](docs/CUSTOMIZATION.md)
 - **Integrations** - weather, transit, venues, news, books, web search, D&D dice/lookups, character PDFs, speech transcription, and language detection. [Configuration](docs/CONFIGURATION.md)
 - **Band features** - an optional feature set adds songs, rehearsals, availability, setlists, practice agendas, idea capture, audio transcription, sections, and lyrics. [Band deployment](docs/BAND_FEATURES.md)
 - **Moderation and safety** - mention gating, feature allowlists, prompt sanitization, owner alerts, rate limits, retry queues, and WhatsApp outbound controls. [Security](docs/SECURITY.md)
-- **Operations** - health and readiness endpoints, `/admin`, Prometheus metrics, Grafana dashboards, Uptime Kuma checks, backups, release pinning, Compose, Helm, and systemd. [Monitoring](docs/MONITORING.md), [backups](docs/BACKUPS.md)
+- **Operations** - health and readiness endpoints, `/admin`, Prometheus metrics, Grafana dashboards, HTTP health-check monitors, backups, release pinning, Compose, Helm, and systemd. [Monitoring](docs/MONITORING.md), [backups](docs/BACKUPS.md)
 
 ## See It In Action
 
@@ -87,7 +87,7 @@ In `.env.discord`, set `DISCORD_BOT_TOKEN`, `DISCORD_OWNER_ID`, and the channel 
 ```bash
 docker compose up -d
 docker compose logs -f discord
-curl http://127.0.0.1:3002/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
 ```
 
 In an allowed Discord channel, mention the bot. For example, if the persona is Garbanzo:
@@ -107,7 +107,7 @@ cp .env.whatsapp.example .env.whatsapp
 # In .env.whatsapp: set OWNER_JID and WhatsApp options.
 docker compose up -d
 docker compose logs -f whatsapp
-curl http://127.0.0.1:3001/health
+curl "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
 ```
 
 This door adds the full stack this project supports: Prometheus/Grafana monitoring, the RabbitMQ bridging transport for larger topologies, Qdrant semantic memory, and per-container isolation. See [docs/BRIDGING.md](docs/BRIDGING.md) and [docs/MONITORING.md](docs/MONITORING.md).
@@ -123,7 +123,7 @@ Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 - **Telegram** - grammY-based long-polling bot, privacy-mode-off recommended setup, MarkdownV2 formatting, and voice-note transcription.
 - **Matrix** - `matrix-bot-sdk` over `/sync` long polling, room config keyed by room ID with alias resolution at setup, and audio transcription. Encrypted rooms aren't supported; invite the bot into unencrypted rooms only.
 
-Bridging connects channels and groups across platforms into a single conversation while keeping each bot instance independent. Transports scale from a simple two-instance setup to a message broker for larger topologies, and instances can share one account or stay fully isolated. Setup, topology options, and rate-safety details live in [docs/BRIDGING.md](docs/BRIDGING.md).
+Bridging connects mapped communities across platforms into a single conversation while keeping each bot instance independent. Transports scale from a simple two-instance setup to a message broker for larger topologies, and instances can share one account or stay fully isolated. Setup, topology options, and rate-safety details live in [docs/BRIDGING.md](docs/BRIDGING.md).
 
 ## Memory & Knowledge
 - **Conversation context** keeps recent chat available to the model.
@@ -171,10 +171,6 @@ See [deploy/helm/README.md](deploy/helm/README.md). Native Node deployments can 
 ## Monitoring & Backups
 
 `MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and the Grafana admin password fallback. With `COMPOSE_PROFILES=discord,monitoring` or `discord,whatsapp,monitoring`, the dashboard has a `$job` picker for all instances or one service at a time. Monitoring services should watch `/health/ready` on the configured port for each messaging instance.
-
-<p align="center">
-  <img src="docs/assets/screenshots/real/kuma-dashboard.png" width="900" alt="Uptime Kuma dashboard monitoring Garbanzo health endpoints" />
-</p>
 
 Nightly off-machine backup guidance covers credentials, database state, verification, retention, and restore: [docs/BACKUPS.md](docs/BACKUPS.md). Monitoring setup and metrics are in [docs/MONITORING.md](docs/MONITORING.md).
 

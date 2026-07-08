@@ -79,7 +79,7 @@ Priority order:
 
 - Kubernetes chart for homelab and cluster operators lives in `deploy/helm/`.
   Done.
-- Docker Compose remains the default install path for most self-hosted
+- Docker Compose remains the default install path for most multi-platform
   deployments.
 
 ### 3.x candidates
@@ -103,19 +103,19 @@ Candidates for the next platform adapter, ranked at research time:
 1. ~~**Telegram**~~ — shipped in v3.3.0: an official free Bot API and a
    mature TypeScript-native client library (grammY), with no account-ban
    risk (unlike WhatsApp/Baileys). See [docs/PLATFORMS.md](PLATFORMS.md).
-2. ~~**Matrix**~~ — shipped in v3.3.0: best fit for a self-hosted,
+2. ~~**Matrix**~~ — shipped in v3.3.0: best fit for a privacy-minded,
    privacy-minded community audience, backed by a real demand signal (a
    large spike in Matrix interest during a 2026 Discord trust incident).
    Unencrypted rooms only for now. See [docs/PLATFORMS.md](PLATFORMS.md).
 3. **Mattermost** — a clean official bot-account API and a genuinely free
-   self-hosted core (bot accounts don't consume paid seats), with strong
-   audience overlap as another self-hosted OSS chat tool.
+   operator-run core (bot accounts don't consume paid seats), with strong
+   audience overlap as another open-source community chat tool.
 
 Also planned:
 
 - **Slack completion** — finish the existing Slack scaffold into a
   production runtime, as cleanup rather than new priority. The SDK is mature
-  and fits Garbanzo's self-hosted model, but Slack's free-tier message
+  and fits Garbanzo's multi-platform model, but Slack's free-tier message
   history cap makes it a weaker primary home for a memory-carrying bot than
   the top three above.
 - **XMPP (community tier)** — technically shovel-ready (mature client
@@ -138,7 +138,7 @@ Also planned:
   restricting autonomous LLM-driven bots, undercutting IRC's appeal as an
   easy low-effort target.
 - **Social media (X/Twitter, Bluesky)** — mostly a modality mismatch for a
-  group-chat bot. X's group messaging API exists but is approval-gated and
+  community bot. X's group messaging API exists but is approval-gated and
   metered per action. Bluesky's group-chat feature is new enough that
   third-party bot access to it is unconfirmed; worth re-checking later.
 

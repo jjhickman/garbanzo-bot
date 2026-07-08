@@ -59,7 +59,7 @@ cp .env.discord.example .env.discord
 | `FIRECRAWL_API_KEY` | No | Firecrawl search + page extraction — top-priority web_search provider |
 | `BRAVE_SEARCH_API_KEY` | No | Brave Search API — powers the web_search AI tool (default when Firecrawl is not configured) |
 | `GOOGLE_SEARCH_ENGINE_ID` | No | Google Programmable Search engine ID for the web_search AI tool |
-| `SEARXNG_BASE_URL` | No | Self-hosted SearXNG base URL for the web_search AI tool |
+| `SEARXNG_BASE_URL` | No | Operator-run SearXNG base URL for the web_search AI tool |
 | `WEB_SEARCH_PROVIDER` | No | Optional web_search provider override: `firecrawl`, `brave`, `google`, or `searxng` |
 | `SLACK_BOT_TOKEN` | Slack only | Official Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack only | Slack Events API signing secret (Basic Information -> App Credentials) |
@@ -94,7 +94,7 @@ cp .env.discord.example .env.discord
 | `MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES` | No | Minimum minutes between extraction attempts per group (default: `360`) |
 | `MEMORY_AUTO_MAX_FACTS` | No | Max retained auto-extracted facts (default: `200`) |
 | `VECTOR_STORE` | No | Vector backend: `qdrant` (default) or `none` (keyword-only, no embeddings) |
-| `QDRANT_URL` | No | Qdrant server URL (default: `http://127.0.0.1:6333`) |
+| `QDRANT_URL` | No | Qdrant server URL. Compose uses `http://qdrant:${QDRANT_PORT:-6333}` for bot services. |
 | `QDRANT_API_KEY` | No | Qdrant API key, if the server requires one |
 | `QDRANT_COLLECTION` | No | Local Qdrant collection for this instance's own facts. Default is `garbanzo_memory`, unless `INSTANCE_ID` is set and this is left unset, in which case it defaults to `garbanzo_memory_<INSTANCE_ID>` so two instances on the same Qdrant deployment don't silently share facts. An explicit value always wins. See [docs/BRIDGING.md](BRIDGING.md) for the multi-instance isolation rule. |
 | `VECTOR_EMBEDDING_PROVIDER` | No | Embedding provider: `openai` (default) or `deterministic` |
@@ -102,7 +102,7 @@ cp .env.discord.example .env.discord
 | `VECTOR_EMBEDDING_TIMEOUT_MS` | No | Embedding API timeout in ms (default: `12000`) |
 | `VECTOR_EMBEDDING_MAX_CHARS` | No | Max input chars for embedding (default: `4000`) |
 | `OLLAMA_MODEL` | No | Local Ollama model for simple queries (default: `qwen3:8b`; use a 1-3B model on Pi-class hosts) |
-| `HEALTH_PORT` | No | Health endpoint port (default: `3001`) |
+| `HEALTH_PORT` | No | Health endpoint port. Compose sets this from the platform placeholder, such as `${WHATSAPP_HEALTH_PORT:-3001}` for WhatsApp. |
 | `HEALTH_BIND_HOST` | No | Health bind host (`127.0.0.1` default, use `0.0.0.0` for external monitors) |
 | `METRICS_ENABLED` | No | Enable Prometheus `/metrics` scraping on the health server (default: `false`), including expanded community/admin metric families; token auth accepts either `?token=` or `Authorization: Bearer`. |
 | `MONITORING_TOKEN` | Monitoring/admin | Token for `/metrics`, `/admin`, Prometheus scrapes, and Grafana admin password fallback |
@@ -137,7 +137,7 @@ cp .env.discord.example .env.discord
 | `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
 | `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
 
-Docker Compose sets `QDRANT_URL=http://qdrant:6333` explicitly for bot services on the compose network.
+Docker Compose sets `QDRANT_URL=http://qdrant:${QDRANT_PORT:-6333}` explicitly for bot services on the compose network.
 
 Full bridging setup, including the bridge-map schema and a worked multi-instance example: [docs/BRIDGING.md](BRIDGING.md).
 
@@ -162,8 +162,8 @@ values stay in the platform layer.
 
 ## Owner admin page
 
-`http://<host>:3002/admin?token=<MONITORING_TOKEN>` on Discord or
-`http://<host>:3001/admin?token=<MONITORING_TOKEN>` on WhatsApp renders a token-gated,
+`http://<host>:${DISCORD_HEALTH_PORT:-3002}/admin?token=<MONITORING_TOKEN>` on Discord or
+`http://<host>:${WHATSAPP_HEALTH_PORT:-3001}/admin?token=<MONITORING_TOKEN>` on WhatsApp renders a token-gated,
 auto-refreshing snapshot of today's usage: AI spend vs. the $1 alert threshold,
 per-provider calls/tokens/cost, per-group activity (messages, active users, bot
 replies, moderation flags, AI errors), and the WhatsApp outbound-safety
