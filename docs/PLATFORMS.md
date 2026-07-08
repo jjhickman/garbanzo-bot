@@ -224,6 +224,15 @@ Matrix requires Node.js 22+ at runtime (`matrix-bot-sdk` declares
 matters for the no-Docker/`npx` quickstart path — the published Docker image
 already runs a Node version that satisfies it.
 
+`matrix-bot-sdk` is an optional dependency because it pulls a native crypto
+package with no arm64-musl build. The Docker image (any architecture) and an
+npm install on x86-64 or arm64-glibc get a working Matrix adapter. On a
+bare-metal arm64-musl host (for example Alpine on a Raspberry Pi), the npm
+install skips Matrix rather than failing — the other platforms still install,
+and starting Matrix there prints a clear message pointing you at the Docker
+image. Encryption is unsupported everywhere regardless (invite the bot only
+into unencrypted rooms).
+
 Room bindings live in `config/matrix-rooms.json`, keyed by **room ID**, never
 by alias:
 

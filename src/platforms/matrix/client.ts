@@ -100,7 +100,21 @@ async function defaultSdkFactory(): Promise<MatrixSdkFactoryDeps> {
   const importSdk = new Function('specifier', 'return import(specifier)') as (
     specifier: string,
   ) => Promise<unknown>;
-  const sdk = await importSdk('matrix-bot-sdk');
+  let sdk: unknown;
+  try {
+    sdk = await importSdk('matrix-bot-sdk');
+  } catch (err) {
+    // matrix-bot-sdk is an OPTIONAL dependency (see package.json): a
+    // bare-metal npm install on arm64-musl skips it because its native
+    // crypto postinstall has no prebuild there. Fail with an actionable
+    // message instead of a raw module-not-found.
+    throw new Error(
+      'Matrix support is not installed. matrix-bot-sdk is an optional dependency that has no '
+      + 'arm64-musl build; on that platform run Matrix from the Docker image (which ships a '
+      + 'no-native crypto stub), or install Garbanzo on x86-64 or arm64-glibc. '
+      + `Underlying import error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const sdkRecord = sdk as unknown as Record<string, unknown>;
   return {
     MatrixClient: sdkRecord.MatrixClient as MatrixSdkFactoryDeps['MatrixClient'],

@@ -25,7 +25,10 @@ an observability upgrade, a persona gallery, and a read-only operations page.
   and bridging. Unencrypted rooms only — E2EE is not supported this release.
   Requires Node 20 for the project but the Matrix runtime asserts Node 22 at
   start (the SDK's floor). Sync token persists at `data/matrix-sync.json`.
-  Compose service `matrix` on health port 3004.
+  Compose service `matrix` on health port 3004. Installed via Docker (any
+  architecture) or npm on x86-64/arm64-glibc; on bare-metal arm64-musl the
+  npm install skips Matrix and points you at the Docker image (its native
+  crypto dependency has no arm64-musl build).
 - **Persona gallery**: six ready-to-run personas (Riff, Quill, Margie, Bea,
   Patch, Callie) mapped to real feature sets, selectable in the setup wizard
   (`--persona`) and copied into the platform's persona slot.
