@@ -932,6 +932,143 @@ describe('ops scripts', () => {
     }
   });
 
+  it('setup writes docs/personas/discord.md under GARBANZO_HOME when --persona=quill is given (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=quill',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote docs/personas/discord.md');
+      // docs/PERSONA.md must NOT be written — the platform-keyed slot is the
+      // review-mandated destination (a shipped discord.md shadows PERSONA.md).
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.discord', 'config', 'docs']);
+      const personaContent = readFileSync(join(home, 'docs', 'personas', 'discord.md'), 'utf8');
+      expect(personaContent).toContain('Quill');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup writes docs/personas/matrix.md when --persona=bea and --platform=matrix are given (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--deploy=native',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=bea',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote docs/personas/matrix.md');
+      const personaContent = readFileSync(join(home, 'docs', 'personas', 'matrix.md'), 'utf8');
+      expect(personaContent).toContain('Bea');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup backs up an existing platform persona file to .bak when --persona overwrites it (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const args = [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ];
+      runNodeScriptWithEnv(setupPath, [...args, '--persona=quill'], { GARBANZO_HOME: home });
+      const out = runNodeScriptWithEnv(setupPath, [...args, '--persona=margie'], { GARBANZO_HOME: home });
+
+      expect(out).toContain('backed up to docs/personas/discord.md.bak');
+      const backupContent = readFileSync(join(home, 'docs', 'personas', 'discord.md.bak'), 'utf8');
+      expect(backupContent).toContain('Quill');
+      const currentContent = readFileSync(join(home, 'docs', 'personas', 'discord.md'), 'utf8');
+      expect(currentContent).toContain('Margie');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup --persona with an unknown gallery name fails and lists the available names (WS10)', () => {
+    let caught: unknown;
+    try {
+      runNodeScript(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=not-a-real-persona',
+      ]);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeDefined();
+    const stdout = String((caught as { stdout?: string }).stdout ?? '');
+    expect(stdout).toContain('Unknown persona "not-a-real-persona"');
+    expect(stdout).toContain('riff, quill, margie, bea, patch, callie');
+  });
+
+  it('setup --persona=riff on Discord notes the BAND_FEATURES_ENABLED pairing unless already enabled (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const args = [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=riff',
+      ];
+      const withoutBand = runNodeScriptWithEnv(setupPath, args, { GARBANZO_HOME: home });
+      expect(withoutBand).toContain('pairs with the band feature set');
+      expect(withoutBand).toContain('--band-features-enabled=true');
+
+      const withBand = runNodeScriptWithEnv(
+        setupPath,
+        [...args, '--band-features-enabled=true'],
+        { GARBANZO_HOME: home },
+      );
+      expect(withBand).not.toContain('pairs with the band feature set');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup --help documents the --persona gallery picker flag (WS10)', () => {
+    const out = runNodeScript(setupPath, ['--help']);
+    expect(out).toContain('--persona ');
+    expect(out).toContain('riff, quill, margie, bea, patch, callie');
+  });
+
   it('release-checklist script shows usage with --help', () => {
     const out = runNodeScript(releaseChecklistPath, ['--help']);
     expect(out).toContain('Garbanzo release checklist helper');

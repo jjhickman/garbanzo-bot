@@ -175,6 +175,91 @@ const PROVIDER_LABELS = {
   bedrock: 'AWS Bedrock',
 };
 
+// Persona gallery (WS10): six shipped personas alongside the Garbanzo Bean
+// default, each a working demonstration of a real feature set. Files live in
+// docs/personas/gallery/ (a subdirectory — docs/personas/*.md filenames are
+// PLATFORM KEYS the loader resolves by MESSAGING_PLATFORM, so gallery names
+// must not share that namespace). `key` is matched case-insensitively
+// against --persona=<name> and the interactive picker.
+const GALLERY_DIR = resolve(PROJECT_ROOT, 'docs', 'personas', 'gallery');
+const PERSONA_GALLERY = [
+  {
+    key: 'riff',
+    file: 'riff.md',
+    label: 'Riff 🎸',
+    useCase: 'Bands and music projects — songs, rehearsals, setlists, idea capture (needs BAND_FEATURES_ENABLED).',
+    bandFeatures: true,
+  },
+  {
+    key: 'quill',
+    file: 'quill.md',
+    label: 'Quill 🎲',
+    useCase: 'Tabletop groups — memory-as-canon, session recaps, scheduling, the character sheet generator.',
+  },
+  {
+    key: 'margie',
+    file: 'margie.md',
+    label: 'Margie 📚',
+    useCase: 'Book clubs — book lookups, reading schedule, spoiler-aware moderation.',
+  },
+  {
+    key: 'bea',
+    file: 'bea.md',
+    label: 'Bea 🏡',
+    useCase: 'Neighborhood and mutual-aid groups — welcomes, events, weather, practical community memory.',
+  },
+  {
+    key: 'patch',
+    file: 'patch.md',
+    label: 'Patch 🔧',
+    useCase: 'Open-source and maker communities — contributor welcomes, decision memory, weekly recaps, CoC moderation.',
+  },
+  {
+    key: 'callie',
+    file: 'callie.md',
+    label: 'Callie 🎭',
+    useCase: 'Theater, dance, and rehearsal-based groups — rehearsal calls, availability, run order (needs BAND_FEATURES_ENABLED).',
+    bandFeatures: true,
+  },
+];
+
+function findGalleryEntry(name) {
+  const normalized = name.trim().toLowerCase();
+  return PERSONA_GALLERY.find((entry) => entry.key === normalized);
+}
+
+/**
+ * Resolves a --persona=<gallery-name|path> value (or the interactive
+ * picker's "custom path" answer) to { content, sourcePath, galleryEntry }.
+ * Gallery names are matched case-insensitively first; anything else is
+ * treated as a file path (absolute or relative to the project root),
+ * mirroring resolveUserPath()'s existing --persona-file behavior. Throws
+ * with the list of valid gallery names when neither resolves — the wizard's
+ * usual clear-error-over-silent-fallback convention.
+ */
+function resolvePersonaSelection(value) {
+  const trimmed = (value || '').trim();
+  const galleryEntry = trimmed ? findGalleryEntry(trimmed) : undefined;
+  if (galleryEntry) {
+    const filePath = resolve(GALLERY_DIR, galleryEntry.file);
+    return { content: readFileSync(filePath, 'utf-8'), sourcePath: filePath, galleryEntry };
+  }
+
+  const asPath = trimmed ? resolveUserPath(trimmed) : '';
+  if (asPath && existsSync(asPath)) {
+    const content = readFileSync(asPath, 'utf-8');
+    if (!content.trim()) {
+      throw new Error(`Persona file is empty: ${asPath}`);
+    }
+    return { content, sourcePath: asPath, galleryEntry: null };
+  }
+
+  const names = PERSONA_GALLERY.map((entry) => entry.key).join(', ');
+  throw new Error(
+    `Unknown persona "${value}" — not a gallery name (available: ${names}) and not a file that exists.`,
+  );
+}
+
 const ALL_FEATURES = [
   'weather', 'transit', 'news', 'help', 'events', 'dnd', 'roll',
   'books', 'venues', 'poll', 'fun', 'character', 'feedback',
@@ -602,6 +687,7 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --providers=gemini --gemini-key=$GEMINI_API_KEY --gemini-model=gemini-1.5-flash --gemini-pricing-input-per-m=0.15 --gemini-pricing-output-per-m=0.60\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
+    output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --persona=quill --discord-bot-token=$DISCORD_BOT_TOKEN --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=owner/repo --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-client-id=123... --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
@@ -617,6 +703,10 @@ async function main() {
     output.write('  --matrix-room-name      label applied to every room in --matrix-room-id(s) (default: general)\n');
     output.write('  --install-deps          true/false — run `npm install` before writing config (default: true unless GARBANZO_CLI=1)\n');
     output.write('  --vector-store          native deploy target only — VECTOR_STORE value written to .env (default: none)\n');
+    output.write(
+      `  --persona               gallery name (${PERSONA_GALLERY.map((entry) => entry.key).join(', ')}) or a file path — `
+      + 'writes docs/personas/<platform>.md under GARBANZO_HOME (independent of --persona-file, which writes docs/PERSONA.md)\n',
+    );
     process.exit(0);
   }
 
@@ -1221,13 +1311,14 @@ async function main() {
 
     let customPersonaSourcePath = '';
     let customPersonaContent = '';
-    const useCustomPersona = nonInteractive
-      ? !!cli.options['persona-file']
-      : yn(await rl.question('Provide a custom PERSONA.md file now? [y/N]: '), false);
+    // --persona-file: legacy path, non-interactive only, unchanged — replaces
+    // docs/PERSONA.md at the HOME ROOT. Superseded interactively by the
+    // persona gallery picker below, which targets the correct (platform-
+    // keyed) slot; kept working standalone so existing automation and the
+    // pinned H1 test never change behavior.
+    const useCustomPersona = nonInteractive && !!cli.options['persona-file'];
     if (useCustomPersona) {
-      const personaPathInput = nonInteractive
-        ? (cli.options['persona-file'] ?? '')
-        : await rl.question('Path to PERSONA.md (absolute or relative to project): ');
+      const personaPathInput = cli.options['persona-file'] ?? '';
       customPersonaSourcePath = resolveUserPath(personaPathInput);
       if (!customPersonaSourcePath || !existsSync(customPersonaSourcePath)) {
         throw new Error(`Persona file not found: ${personaPathInput || '(empty path)'}`);
@@ -1235,6 +1326,94 @@ async function main() {
       customPersonaContent = readFileSync(customPersonaSourcePath, 'utf-8');
       if (!customPersonaContent.trim()) {
         throw new Error('Persona file is empty');
+      }
+    }
+
+    // Persona gallery picker (WS10). Writes to the PLATFORM-KEYED home slot
+    // (GARBANZO_HOME/docs/personas/<platform>.md), not docs/PERSONA.md — a
+    // shipped docs/personas/<platform>.md (e.g. discord.md) shadows a home
+    // PERSONA.md at load time (src/ai/persona.ts's resolution order), so
+    // writing PERSONA.md here would be silently ignored on every platform
+    // that ships a default file. Independent of --persona-file above: both
+    // can be set in the same run without interfering with each other.
+    let personaSelectionContent = '';
+    let personaSelectionSourcePath = '';
+    let personaSelectionGalleryEntry = null;
+    let personaSelectionRequested = false;
+
+    if (nonInteractive) {
+      const personaOption = (cli.options.persona ?? '').trim();
+      if (personaOption && personaOption.toLowerCase() !== 'default') {
+        const resolved = resolvePersonaSelection(personaOption);
+        personaSelectionContent = resolved.content;
+        personaSelectionSourcePath = resolved.sourcePath;
+        personaSelectionGalleryEntry = resolved.galleryEntry;
+        personaSelectionRequested = true;
+      }
+    } else {
+      const pickerLabels = [
+        'Default (Garbanzo Bean)',
+        ...PERSONA_GALLERY.map((entry) => `${entry.label} — ${entry.useCase}`),
+        'Custom persona file path',
+      ];
+      const pickerIndex = await promptChoice(rl, 'Persona:', pickerLabels, 0);
+      if (pickerIndex >= 1 && pickerIndex <= PERSONA_GALLERY.length) {
+        const entry = PERSONA_GALLERY[pickerIndex - 1];
+        const filePath = resolve(GALLERY_DIR, entry.file);
+        personaSelectionContent = readFileSync(filePath, 'utf-8');
+        personaSelectionSourcePath = filePath;
+        personaSelectionGalleryEntry = entry;
+        personaSelectionRequested = true;
+      } else if (pickerIndex === pickerLabels.length - 1) {
+        const personaPathInput = await rl.question('Path to persona file (absolute or relative to project): ');
+        const resolvedPath = resolveUserPath(personaPathInput);
+        if (!resolvedPath || !existsSync(resolvedPath)) {
+          throw new Error(`Persona file not found: ${personaPathInput || '(empty path)'}`);
+        }
+        const content = readFileSync(resolvedPath, 'utf-8');
+        if (!content.trim()) {
+          throw new Error('Persona file is empty');
+        }
+        personaSelectionContent = content;
+        personaSelectionSourcePath = resolvedPath;
+        personaSelectionRequested = true;
+      }
+    }
+
+    // Riff and Callie are BAND_FEATURES_ENABLED demonstrations — offer (or
+    // note) turning the flag on unless it's already set. The flag is only
+    // wired into a compose/env slot for Discord today (band-member checks
+    // read Discord roles), so the auto-enable action is Discord-only; other
+    // platforms get the pairing note without an unprompted env write.
+    if (personaSelectionGalleryEntry?.bandFeatures) {
+      const bandFeaturesAlreadyEnabled = messagingPlatform === 'discord'
+        ? bandDeployment
+        : parseBoolean(existing.BAND_FEATURES_ENABLED, false);
+      if (!bandFeaturesAlreadyEnabled) {
+        if (messagingPlatform !== 'discord') {
+          output.write(
+            `\nℹ️ ${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+            '!setlist, !idea), which is wired for the Discord platform today — set BAND_FEATURES_ENABLED=true ' +
+            'if/when you deploy this persona there.\n',
+          );
+        } else if (nonInteractive) {
+          output.write(
+            `\nℹ️ ${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+            '!setlist, !idea) — pass --band-features-enabled=true to turn it on.\n',
+          );
+        } else {
+          const enableBand = yn(
+            await rl.question(
+              `\n${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+              '!setlist, !idea). Enable BAND_FEATURES_ENABLED now? [Y/n]: ',
+            ),
+            true,
+          );
+          if (enableBand) {
+            discordEnv.BAND_FEATURES_ENABLED = 'true';
+            output.write('✅ BAND_FEATURES_ENABLED set to true\n');
+          }
+        }
       }
     }
 
@@ -1431,6 +1610,28 @@ async function main() {
       }
     }
 
+    if (personaSelectionRequested) {
+      const galleryTargetPath = resolve(OUTPUT_ROOT, 'docs', 'personas', `${messagingPlatform}.md`);
+      const galleryTargetLabel = `docs/personas/${messagingPlatform}.md`;
+      if (dryRun) {
+        output.write(`🧪 Dry-run: would write ${galleryTargetLabel} from ${personaSelectionSourcePath}\n`);
+      } else {
+        // Same H1 rationale as the docs/PERSONA.md write above — a fresh
+        // GARBANZO_HOME has no docs/personas/ dir yet.
+        mkdirSync(dirname(galleryTargetPath), { recursive: true });
+        if (existsSync(galleryTargetPath)) {
+          copyFileSync(galleryTargetPath, `${galleryTargetPath}.bak`);
+          output.write(`🗂️ Existing ${galleryTargetLabel} backed up to ${galleryTargetLabel}.bak\n`);
+        }
+        writeFileSync(
+          galleryTargetPath,
+          personaSelectionContent.endsWith('\n') ? personaSelectionContent : `${personaSelectionContent}\n`,
+          'utf-8',
+        );
+        output.write(`✅ Wrote ${galleryTargetLabel} from ${personaSelectionSourcePath}\n`);
+      }
+    }
+
     const shouldWriteGroups = messagingPlatform === 'whatsapp'
       ? (nonInteractive
           ? parseBoolean(cli.options['write-groups'], true)
@@ -1595,6 +1796,11 @@ async function main() {
     output.write(`- Feature profile: ${selectedProfile.label}\n`);
     output.write(`- Enabled features: ${selectedFeatures.join(', ')}\n`);
     output.write(`- Persona source: ${customPersonaContent ? customPersonaSourcePath : 'existing docs/PERSONA.md'}\n`);
+    output.write(
+      `- Persona gallery selection: ${personaSelectionRequested
+        ? `${personaSelectionGalleryEntry ? personaSelectionGalleryEntry.label : personaSelectionSourcePath} -> docs/personas/${messagingPlatform}.md`
+        : 'default (Garbanzo Bean, no file written)'}\n`,
+    );
     output.write(`- Deploy target: ${deployTarget === 'docker' ? 'docker compose' : 'native node'}\n`);
     output.write(`- Write mode: ${dryRun ? 'preview only' : 'write files'}\n`);
     if (deployTarget === 'native') {
