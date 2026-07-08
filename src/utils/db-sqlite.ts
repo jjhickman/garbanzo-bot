@@ -507,6 +507,11 @@ const updateBridgeOutboxAttempt = db.prepare(
    SET status = 'pending', attempts = attempts + 1, next_attempt_at = ?, last_error = ?
    WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
+const deferBridgeOutboxAttempt = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'pending', next_attempt_at = ?, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
+);
 const insertBridgeSeen = db.prepare(
   `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
 );
@@ -526,12 +531,31 @@ const deleteBridgeBufferByRoute = db.prepare(`DELETE FROM bridge_buffer WHERE ro
 const selectBridgeBufferDepths = db.prepare(
   `SELECT route_id, COUNT(*) as count FROM bridge_buffer GROUP BY route_id`,
 );
-const selectBridgeOutboxCounts = db.prepare(
+// bridgeOutboxCounts() is called once per /metrics scrape (pushBridgeOutboxGauges
+// in middleware/health.ts) via outbox.ts's depth(), so it runs on every scrape
+// interval for the lifetime of the process. It used to be one query that
+// unconditionally summed every row in bridge_outbox regardless of status —
+// an O(table) full scan every scrape, growing without bound as 'sent' rows
+// (delivered, terminal, never purged) accumulate over the deployment's
+// lifetime, even though only `pending` and `oldestPendingCreatedAt` are ever
+// read from the result (health.ts never reads `.sent`/`.dead` today).
+// idx_bridge_outbox_status_next_attempt (status, next_attempt_at) lets each
+// of these three queries do an indexed lookup scoped to its own status
+// value instead — `pending` in particular becomes O(pending+claimed rows),
+// which is what should stay small in a healthy system and is the number
+// that actually drives alerting.
+const selectBridgeOutboxPending = db.prepare(
   `SELECT
-     SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
-     SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead
-   FROM bridge_outbox`,
+     COUNT(*) AS pending,
+     MIN(created_at) AS oldestPendingCreatedAt
+   FROM bridge_outbox
+   WHERE status IN ('pending', 'claimed')`,
+);
+const selectBridgeOutboxSentCount = db.prepare(
+  `SELECT COUNT(*) AS sent FROM bridge_outbox WHERE status = 'sent'`,
+);
+const selectBridgeOutboxDeadCount = db.prepare(
+  `SELECT COUNT(*) AS dead FROM bridge_outbox WHERE status = 'dead'`,
 );
 const selectWhatsAppMetricCounts = db.prepare(
   `SELECT
@@ -915,6 +939,10 @@ export function bumpBridgeOutboxAttempt(id: number, nextAt: number, error: strin
   return updateBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
 }
 
+export function deferBridgeOutbox(id: number, nextAt: number, error: string): boolean {
+  return deferBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
+}
+
 export function bridgeSeenInsert(key: string): boolean {
   return insertBridgeSeen.run(key, Date.now()).changes > 0;
 }
@@ -931,11 +959,17 @@ export function bridgeSeenDelete(key: string): boolean {
 }
 
 export function bridgeOutboxCounts(): BridgeOutboxCounts {
-  const row = selectBridgeOutboxCounts.get() as { pending: number | null; sent: number | null; dead: number | null };
+  const pendingRow = selectBridgeOutboxPending.get() as {
+    pending: number | null;
+    oldestPendingCreatedAt: number | null;
+  };
+  const sentRow = selectBridgeOutboxSentCount.get() as { sent: number | null };
+  const deadRow = selectBridgeOutboxDeadCount.get() as { dead: number | null };
   return {
-    pending: toNumber(row.pending ?? 0),
-    sent: toNumber(row.sent ?? 0),
-    dead: toNumber(row.dead ?? 0),
+    pending: toNumber(pendingRow.pending ?? 0),
+    sent: toNumber(sentRow.sent ?? 0),
+    dead: toNumber(deadRow.dead ?? 0),
+    oldestPendingCreatedAt: pendingRow.oldestPendingCreatedAt === null ? null : toNumber(pendingRow.oldestPendingCreatedAt),
   };
 }
 
@@ -1588,6 +1622,8 @@ export function createSqliteBackend(): DbBackend {
     markBridgeOutboxDead: async (id: number, error: string) => markBridgeOutboxDead(id, error),
     bumpBridgeOutboxAttempt: async (id: number, nextAt: number, error: string) =>
       bumpBridgeOutboxAttempt(id, nextAt, error),
+    deferBridgeOutbox: async (id: number, nextAt: number, error: string) =>
+      deferBridgeOutbox(id, nextAt, error),
     bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
     bridgeSeenDelete: async (key: string) => bridgeSeenDelete(key),
     bridgeOutboxCounts: async () => bridgeOutboxCounts(),

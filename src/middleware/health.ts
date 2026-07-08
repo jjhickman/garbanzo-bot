@@ -2,7 +2,7 @@
  * Health check HTTP endpoint + connection state tracker.
  *
  * Exposes a tiny HTTP server on localhost that returns JSON with:
- * - WhatsApp connection status (connected/disconnected/connecting)
+ * - Platform connection status (connected/disconnected/connecting)
  * - Uptime in seconds
  * - Last message received timestamp
  * - Memory usage
@@ -17,6 +17,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { logger } from './logger.js';
 import { buildAdminSnapshot, renderAdminHtml } from './admin-page.js';
 import {
+  bridgeBufferDepths,
+  bridgeOutboxCounts,
   getAllMemories,
   getWhatsAppSafetyMetrics,
   listUpcomingEventReminders,
@@ -27,6 +29,7 @@ import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
 import { getGroupName } from '../core/groups-config.js';
 import { getVectorStore } from '../utils/vector-memory.js';
 import { parseBridgeEnvelope, type BridgeEnvelope } from '../bridge/envelope.js';
+import { BridgeDeliveryDeferredError } from '../bridge/transport.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -48,7 +51,7 @@ const state: ConnectionState = {
   startedAt: Date.now(),
 };
 
-/** Call when WhatsApp connection opens */
+/** Call when a platform connection opens */
 export function markConnected(): void {
   // Count reconnects when we have previously been connected in this process.
   if (state.connectedAt !== null) {
@@ -64,7 +67,7 @@ export function markConnected(): void {
   state.lastMessageAt = null;
 }
 
-/** Call when WhatsApp connection closes */
+/** Call when a platform connection closes */
 export function markDisconnected(): void {
   state.status = 'disconnected';
 }
@@ -269,6 +272,15 @@ async function handleBridgeInbound(
     }
     writeJson(res, 202, { status: 'accepted' });
   } catch (err) {
+    if (err instanceof BridgeDeliveryDeferredError) {
+      logger.info(
+        { routeId: envelope.routeId, retryAtMs: err.retryAtMs },
+        'Bridge inbound delivery deferred',
+      );
+      writeJson(res, 429, { error: 'delivery deferred', retryAtMs: err.retryAtMs });
+      return;
+    }
+
     logger.warn({ err, routeId: envelope.routeId }, 'Bridge inbound handler failed');
     writeJson(res, 503, { error: 'delivery failed' });
   }
@@ -328,6 +340,14 @@ function pushGroupCounterMap(
   }
 }
 
+function pushBridgeRouteCounterMap(
+  lines: string[],
+  name: string,
+  counters: ReadonlyMap<string, number>,
+): void {
+  pushCounterMap(lines, name, 'route', counters);
+}
+
 function pushLifetimeCounters(lines: string[]): void {
   const lifetime = getLifetimeCounters();
 
@@ -373,6 +393,56 @@ function pushLifetimeCounters(lines: string[]): void {
   lines.push('# HELP garbanzo_event_reminders_sent_total Total event reminders successfully sent for this process lifetime.');
   lines.push('# TYPE garbanzo_event_reminders_sent_total counter');
   lines.push(`garbanzo_event_reminders_sent_total ${lifetime.eventRemindersSentTotal}`);
+
+  lines.push('# HELP garbanzo_markdown_v2_fallbacks_total Total Telegram MarkdownV2 parse fallback sends by platform for this process lifetime.');
+  lines.push('# TYPE garbanzo_markdown_v2_fallbacks_total counter');
+  pushCounterMap(lines, 'garbanzo_markdown_v2_fallbacks_total', 'platform', lifetime.markdownV2FallbacksByPlatform);
+
+  lines.push('# HELP garbanzo_bridge_sent_total Total bridge outbox envelopes successfully delivered to peer instances by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_sent_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_sent_total', lifetime.bridgeSentByRoute);
+
+  lines.push('# HELP garbanzo_bridge_failed_total Total bridge outbox delivery failures by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_failed_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_failed_total', lifetime.bridgeFailedByRoute);
+
+  lines.push('# HELP garbanzo_bridge_dead_lettered_total Total bridge outbox envelopes dead-lettered by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_dead_lettered_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_dead_lettered_total', lifetime.bridgeDeadLetteredByRoute);
+
+  lines.push('# HELP garbanzo_bridge_summary_flushes_total Total successful bridge summary-buffer flush sends by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_summary_flushes_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_summary_flushes_total', lifetime.bridgeSummaryFlushesByRoute);
+
+  lines.push('# HELP garbanzo_bridge_seen_dedup_hits_total Total bridge_seen duplicate idempotency-key hits by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_seen_dedup_hits_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_seen_dedup_hits_total', lifetime.bridgeSeenDedupHitsByRoute);
+
+  lines.push('# HELP garbanzo_bridge_held_by_outbound_safety_total Total bridge relay sends held by WhatsApp outbound safety by route for this process lifetime.');
+  lines.push('# TYPE garbanzo_bridge_held_by_outbound_safety_total counter');
+  pushBridgeRouteCounterMap(lines, 'garbanzo_bridge_held_by_outbound_safety_total', lifetime.bridgeHeldByOutboundSafetyByRoute);
+
+  lines.push('# HELP garbanzo_bridge_delivery_latency_seconds_min Minimum bridge platform-delivery latency over the in-process rolling window by route.');
+  lines.push('# TYPE garbanzo_bridge_delivery_latency_seconds_min gauge');
+  for (const [route, latency] of Array.from(lifetime.bridgeDeliveryLatencyByRoute).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_bridge_delivery_latency_seconds_min{route="${escapePrometheusLabelValue(route)}"} ${latency.minSeconds}`);
+  }
+
+  lines.push('# HELP garbanzo_bridge_delivery_latency_seconds_avg Average bridge platform-delivery latency over the in-process rolling window by route.');
+  lines.push('# TYPE garbanzo_bridge_delivery_latency_seconds_avg gauge');
+  for (const [route, latency] of Array.from(lifetime.bridgeDeliveryLatencyByRoute).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_bridge_delivery_latency_seconds_avg{route="${escapePrometheusLabelValue(route)}"} ${latency.avgSeconds}`);
+  }
+
+  lines.push('# HELP garbanzo_bridge_delivery_latency_seconds_max Maximum bridge platform-delivery latency over the in-process rolling window by route.');
+  lines.push('# TYPE garbanzo_bridge_delivery_latency_seconds_max gauge');
+  for (const [route, latency] of Array.from(lifetime.bridgeDeliveryLatencyByRoute).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_bridge_delivery_latency_seconds_max{route="${escapePrometheusLabelValue(route)}"} ${latency.maxSeconds}`);
+  }
+
+  lines.push('# HELP garbanzo_memory_save_rejections_total Total save_community_memory rejections by reason for this process lifetime.');
+  lines.push('# TYPE garbanzo_memory_save_rejections_total counter');
+  pushCounterMap(lines, 'garbanzo_memory_save_rejections_total', 'reason', lifetime.memorySaveRejectionsByReason);
 }
 
 function pushDailyGauges(lines: string[]): void {
@@ -398,6 +468,20 @@ function pushDailyGauges(lines: string[]): void {
   lines.push('# TYPE garbanzo_daily_active_users gauge');
   for (const [groupJid, group] of Array.from(stats.groups).sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`garbanzo_daily_active_users{group="${groupLabelValue(groupJid)}"} ${group.activeUsers.size}`);
+  }
+
+  const latencyByProvider = new Map<string, { totalMs: number; count: number }>();
+  for (const entry of stats.costs) {
+    const currentProvider = latencyByProvider.get(entry.model) ?? { totalMs: 0, count: 0 };
+    currentProvider.totalMs += Math.max(0, entry.latencyMs);
+    currentProvider.count += 1;
+    latencyByProvider.set(entry.model, currentProvider);
+  }
+
+  lines.push('# HELP garbanzo_ai_latency_ms_avg Current local-day average AI response latency by provider in milliseconds.');
+  lines.push('# TYPE garbanzo_ai_latency_ms_avg gauge');
+  for (const [provider, latency] of Array.from(latencyByProvider).sort(([a], [b]) => a.localeCompare(b))) {
+    lines.push(`garbanzo_ai_latency_ms_avg{provider="${escapePrometheusLabelValue(provider)}"} ${latency.totalMs / latency.count}`);
   }
 }
 
@@ -428,6 +512,39 @@ async function pushEventReminderPendingGauge(lines: string[]): Promise<void> {
   }
 }
 
+async function pushBridgeOutboxGauges(lines: string[], now: number): Promise<void> {
+  try {
+    const counts = await bridgeOutboxCounts();
+    const oldestPendingAgeSeconds = counts.oldestPendingCreatedAt === null
+      ? 0
+      : Math.max(0, Math.floor((now - counts.oldestPendingCreatedAt) / 1000));
+
+    lines.push('# HELP garbanzo_bridge_outbox_depth Number of bridge outbox rows pending or claimed at scrape time.');
+    lines.push('# TYPE garbanzo_bridge_outbox_depth gauge');
+    lines.push(`garbanzo_bridge_outbox_depth ${counts.pending}`);
+
+    lines.push('# HELP garbanzo_bridge_outbox_oldest_pending_age_seconds Age of the oldest pending or claimed bridge outbox row at scrape time; 0 when none are pending.');
+    lines.push('# TYPE garbanzo_bridge_outbox_oldest_pending_age_seconds gauge');
+    lines.push(`garbanzo_bridge_outbox_oldest_pending_age_seconds ${oldestPendingAgeSeconds}`);
+  } catch (err) {
+    logger.warn({ err }, 'Skipping bridge outbox Prometheus gauges');
+  }
+}
+
+async function pushBridgeSummaryBufferGauges(lines: string[]): Promise<void> {
+  try {
+    const depths = await bridgeBufferDepths();
+
+    lines.push('# HELP garbanzo_bridge_summary_buffer_size Number of envelopes currently buffered for bridge summary flush by route.');
+    lines.push('# TYPE garbanzo_bridge_summary_buffer_size gauge');
+    for (const [route, depth] of Object.entries(depths).sort(([a], [b]) => a.localeCompare(b))) {
+      lines.push(`garbanzo_bridge_summary_buffer_size{route="${escapePrometheusLabelValue(route)}"} ${depth}`);
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Skipping bridge summary buffer Prometheus gauges');
+  }
+}
+
 /**
  * Start the local HTTP health endpoint (`/health`) with lightweight abuse protection.
  */
@@ -455,7 +572,7 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   lines.push('# TYPE garbanzo_up_time_seconds gauge');
   lines.push(`garbanzo_up_time_seconds ${uptimeSeconds}`);
 
-  lines.push('# HELP garbanzo_connection_status WhatsApp connection status as one-hot gauges.');
+  lines.push('# HELP garbanzo_connection_status Platform connection status as one-hot gauges.');
   lines.push('# TYPE garbanzo_connection_status gauge');
   lines.push(`garbanzo_connection_status{status="connected"} ${statusConnected}`);
   lines.push(`garbanzo_connection_status{status="connecting"} ${statusConnecting}`);
@@ -513,6 +630,8 @@ async function renderPrometheusMetrics(now: number): Promise<string> {
   pushDailyGauges(lines);
   await pushMemoryFactGauge(lines);
   await pushEventReminderPendingGauge(lines);
+  await pushBridgeOutboxGauges(lines, now);
+  await pushBridgeSummaryBufferGauges(lines);
 
   return lines.join('\n') + '\n';
 }
@@ -614,7 +733,14 @@ async function handleRequest(
       return;
     }
 
-    const snapshot = buildAdminSnapshot();
+    const rssMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const snapshot = await buildAdminSnapshot({
+      connectionStatus: state.status,
+      uptimeSeconds: Math.floor((now - state.startedAt) / 1000),
+      lastMessageAgoSeconds: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
+      stale: isConnectionStale(),
+      memoryWatchdog: { rssMB, warnMB: MEMORY_WARN_MB, restartMB: MEMORY_RESTART_MB },
+    });
     const whatsappSafety = await getWhatsAppSafetyMetrics(
       Math.floor((now - 60 * 60 * 1000) / 1000),
       Math.floor((now - 24 * 60 * 60 * 1000) / 1000),

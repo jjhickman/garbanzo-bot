@@ -275,6 +275,7 @@ export interface BridgeOutboxCounts {
   pending: number;
   sent: number;
   dead: number;
+  oldestPendingCreatedAt: number | null;
 }
 
 /**

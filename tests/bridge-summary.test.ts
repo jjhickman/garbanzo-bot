@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessagingPlatform } from '../src/core/messaging-platform.js';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createSummaryBuffer, type BridgeBufferOps } from '../src/bridge/summary-buffer.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import type { BridgeBufferEntry } from '../src/utils/db-types.js';
 
@@ -334,10 +335,14 @@ describe('bridge summary buffer + flusher', () => {
 
     expect(sendText).toHaveBeenCalledTimes(1);
     await expect(buffer.depths()).resolves.toEqual({ 'route-1': 2 });
+    expect(getLifetimeCounters().bridgeHeldByOutboundSafetyByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
 
     await tick(10);
 
     expect(sendText).toHaveBeenCalledTimes(2);
+    const counters = getLifetimeCounters();
+    expect(counters.bridgeSummaryFlushesByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
+    expect(counters.bridgeDeliveryLatencyByRoute.get('route-1')?.maxSeconds).toBeGreaterThanOrEqual(0);
     expect(sendText.mock.calls[0]).toEqual(sendText.mock.calls[1]);
     await expect(buffer.depths()).resolves.toEqual({});
   });

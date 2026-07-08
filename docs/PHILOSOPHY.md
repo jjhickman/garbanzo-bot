@@ -30,12 +30,12 @@ Garbanzo is built as an AI operations layer, not just a transport wrapper.
 - **Compared to single-provider bots:** Garbanzo supports provider orchestration across OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, plus any local OpenAI API-compatible provider.
 - **Compared to generic chat assistants:** Garbanzo is tuned for real group operations (events, summaries, moderation, memory, owner controls).
 
-Bridging is built for operators who already have communities split across places. Separate instances keep their own platform runtime, env file, volumes, and local memory, while `config/bridge-map.json` relays only the channels and groups the operator maps.
+Bridging is built for operators who already have communities split across places. Separate instances keep their own platform runtime, env file, volumes, and local memory, while `config/bridge-map.json` relays only the communities the operator maps.
 
-The privacy posture stays self-hosted and explicit. SQLite remains the source of record, Qdrant stores vectors under operator control, shared memory requires an owner command, and federated RAG sources are read-only.
+The privacy posture stays operator-controlled and explicit. SQLite remains the source of record, Qdrant stores vectors under operator control, shared memory requires an owner command, and federated RAG sources are read-only.
 
 ## Who This Is For
 
-- Operators who need AI-assisted coordination in busy group chats
+- Operators who need AI-assisted coordination in busy communities
 - Small teams that want reliable AI automations without managed-platform lock-in
 - Builders who need an extensible AI bot runtime with real operational guardrails

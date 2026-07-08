@@ -41,6 +41,14 @@ export interface CostEntry {
 
 type AiProvider = CostEntry['model'];
 type ToolCallOutcome = 'ok' | 'error';
+export type BridgeMetricRoute = string;
+export type MemorySaveRejectionReason = 'rate-limit' | 'dedup';
+
+export interface BridgeDeliveryLatencySnapshot {
+  minSeconds: number;
+  avgSeconds: number;
+  maxSeconds: number;
+}
 
 export interface DailyStats {
   /** ISO date string (YYYY-MM-DD) for this stats period */
@@ -75,6 +83,15 @@ export interface LifetimeCounters {
   rateLimitedTotal: number;
   toolCalls: ReadonlyMap<string, Readonly<Record<ToolCallOutcome, number>>>;
   eventRemindersSentTotal: number;
+  markdownV2FallbacksByPlatform: ReadonlyMap<string, number>;
+  bridgeSentByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeFailedByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeDeadLetteredByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeSummaryFlushesByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeSeenDedupHitsByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeHeldByOutboundSafetyByRoute: ReadonlyMap<BridgeMetricRoute, number>;
+  bridgeDeliveryLatencyByRoute: ReadonlyMap<BridgeMetricRoute, BridgeDeliveryLatencySnapshot>;
+  memorySaveRejectionsByReason: ReadonlyMap<MemorySaveRejectionReason, number>;
 }
 
 let current: StatsSnapshot = freshStats();
@@ -90,7 +107,18 @@ const lifetime = {
   rateLimitedTotal: 0,
   toolCalls: new Map<string, Record<ToolCallOutcome, number>>(),
   eventRemindersSentTotal: 0,
+  markdownV2FallbacksByPlatform: new Map<string, number>(),
+  bridgeSentByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeFailedByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeDeadLetteredByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeSummaryFlushesByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeSeenDedupHitsByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeHeldByOutboundSafetyByRoute: new Map<BridgeMetricRoute, number>(),
+  bridgeDeliveryLatencyMsByRoute: new Map<BridgeMetricRoute, number[]>(),
+  memorySaveRejectionsByReason: new Map<MemorySaveRejectionReason, number>(),
 };
+
+const BRIDGE_LATENCY_WINDOW_SIZE = 100;
 
 function freshStats(): StatsSnapshot {
   return {
@@ -223,6 +251,72 @@ export function recordToolCall(tool: string, outcome: ToolCallOutcome): void {
 /** Record a successfully sent event reminder. */
 export function recordEventReminderSent(): void {
   lifetime.eventRemindersSentTotal++;
+}
+
+/**
+ * Record a MarkdownV2-parse fallback (mirrors `recordToolCall`'s
+ * increment-a-lifetime-map idiom). Currently only Telegram's adapter can
+ * trigger this — our WhatsApp-style-markdown-to-MarkdownV2 translator missed
+ * an edge case, Telegram's `sendMessage` 400'd, and the adapter retried once
+ * as plain text (see `src/platforms/telegram/adapter.ts`). Counting this
+ * makes translator gaps visible instead of only showing up as a WARN log
+ * line nobody is watching.
+ */
+export function recordMarkdownV2Fallback(platform: string): void {
+  incrementCounter(lifetime.markdownV2FallbacksByPlatform, platform);
+}
+
+export function recordBridgeSent(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeSentByRoute, route);
+}
+
+export function recordBridgeFailed(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeFailedByRoute, route);
+}
+
+export function recordBridgeDeadLettered(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeDeadLetteredByRoute, route);
+}
+
+export function recordBridgeSummaryFlush(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeSummaryFlushesByRoute, route);
+}
+
+export function recordBridgeSeenDedupHit(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeSeenDedupHitsByRoute, route);
+}
+
+export function recordBridgeHeldByOutboundSafety(route: BridgeMetricRoute): void {
+  incrementCounter(lifetime.bridgeHeldByOutboundSafetyByRoute, route);
+}
+
+export function recordBridgeDeliveryLatency(route: BridgeMetricRoute, latencyMs: number): void {
+  const samples = lifetime.bridgeDeliveryLatencyMsByRoute.get(route) ?? [];
+  samples.push(Math.max(0, latencyMs));
+  if (samples.length > BRIDGE_LATENCY_WINDOW_SIZE) {
+    samples.splice(0, samples.length - BRIDGE_LATENCY_WINDOW_SIZE);
+  }
+  lifetime.bridgeDeliveryLatencyMsByRoute.set(route, samples);
+}
+
+export function recordMemorySaveRejection(reason: MemorySaveRejectionReason): void {
+  incrementCounter(lifetime.memorySaveRejectionsByReason, reason);
+}
+
+function bridgeLatencySnapshots(): Map<BridgeMetricRoute, BridgeDeliveryLatencySnapshot> {
+  const snapshots = new Map<BridgeMetricRoute, BridgeDeliveryLatencySnapshot>();
+  for (const [route, samples] of lifetime.bridgeDeliveryLatencyMsByRoute) {
+    if (samples.length === 0) continue;
+    const minMs = Math.min(...samples);
+    const maxMs = Math.max(...samples);
+    const avgMs = samples.reduce((sum, sample) => sum + sample, 0) / samples.length;
+    snapshots.set(route, {
+      minSeconds: minMs / 1000,
+      avgSeconds: avgMs / 1000,
+      maxSeconds: maxMs / 1000,
+    });
+  }
+  return snapshots;
 }
 
 export function recordSessionSummaryLifecycle(
@@ -423,6 +517,15 @@ export function getLifetimeCounters(): LifetimeCounters {
       Array.from(lifetime.toolCalls, ([tool, counts]) => [tool, { ...counts }]),
     ),
     eventRemindersSentTotal: lifetime.eventRemindersSentTotal,
+    markdownV2FallbacksByPlatform: new Map(lifetime.markdownV2FallbacksByPlatform),
+    bridgeSentByRoute: new Map(lifetime.bridgeSentByRoute),
+    bridgeFailedByRoute: new Map(lifetime.bridgeFailedByRoute),
+    bridgeDeadLetteredByRoute: new Map(lifetime.bridgeDeadLetteredByRoute),
+    bridgeSummaryFlushesByRoute: new Map(lifetime.bridgeSummaryFlushesByRoute),
+    bridgeSeenDedupHitsByRoute: new Map(lifetime.bridgeSeenDedupHitsByRoute),
+    bridgeHeldByOutboundSafetyByRoute: new Map(lifetime.bridgeHeldByOutboundSafetyByRoute),
+    bridgeDeliveryLatencyByRoute: bridgeLatencySnapshots(),
+    memorySaveRejectionsByReason: new Map(lifetime.memorySaveRejectionsByReason),
   };
 }
 

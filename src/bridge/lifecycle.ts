@@ -1,5 +1,6 @@
 import { logger } from '../middleware/logger.js';
 import { recordMessage } from '../middleware/context.js';
+import { recordBridgeSeenDedupHit } from '../middleware/stats.js';
 import { config } from '../utils/config.js';
 import type { InboundMessage } from '../core/inbound-message.js';
 import type { MessagingPlatform } from '../core/messaging-platform.js';
@@ -12,6 +13,7 @@ import {
   bridgeSeenInsert as bridgeSeenInsertDefault,
   bumpBridgeOutboxAttempt,
   claimDueBridgeOutbox,
+  deferBridgeOutbox,
   enqueueBridgeOutbox,
   markBridgeOutboxDead,
   markBridgeOutboxSent,
@@ -56,8 +58,23 @@ export function getCaptureForBridge(): ((inbound: InboundMessage) => void) | nul
   return activeCapture;
 }
 
+/**
+ * Resolve delivery mode per DESTINATION platform explicitly, rather than a
+ * binary whatsapp-else-discord check (fixed per review — the old else branch
+ * silently handed Telegram destinations Discord's per-route modeToDiscord
+ * setting, which was never meant to configure Telegram). WhatsApp gets the
+ * bridge-map-configurable modeToWhatsApp because the summary buffer exists
+ * to fold messages behind WhatsApp's outbound-safety backpressure
+ * (WhatsAppOutboundHeldError) — no other platform's messenger throws that.
+ * Discord keeps its own configurable modeToDiscord. Telegram (and any future
+ * platform with no dedicated bridge-map field) always relays directly:
+ * there is nothing to buffer against, and Telegram's own 429 handling is
+ * internalized in the adapter's send path (see relay-deliver.ts).
+ */
 function modeForPlatform(route: BridgeRoute, platform: MessagingPlatform): 'summary' | 'verbatim' {
-  return platform === 'whatsapp' ? route.modeToWhatsApp : route.modeToDiscord;
+  if (platform === 'whatsapp') return route.modeToWhatsApp;
+  if (platform === 'discord') return route.modeToDiscord;
+  return 'verbatim';
 }
 
 /**
@@ -92,6 +109,7 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
     markBridgeOutboxSent,
     markBridgeOutboxDead,
     bumpBridgeOutboxAttempt,
+    deferBridgeOutbox,
     bridgeOutboxCounts,
   };
   const bufferOps: BridgeBufferOps = deps.bufferOps ?? {
@@ -111,11 +129,20 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
   // The messenger only exists once the platform runtime has connected, and it
   // is re-created across WhatsApp reconnects, so the bridge holds a lazy
   // accessor rather than a snapshot taken at assembly time.
-  const lazyMessenger: Pick<PlatformMessenger, 'sendText'> = {
+  const lazyMessenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'> = {
     async sendText(chatId: string, text: string): Promise<void> {
       const messenger = deps.getMessenger();
       if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
       await messenger.sendText(chatId, text);
+    },
+    async sendTextForBridge(chatId: string, text: string): Promise<void> {
+      const messenger = deps.getMessenger();
+      if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
+      if (messenger.sendTextForBridge) {
+        await messenger.sendTextForBridge(chatId, text);
+      } else {
+        await messenger.sendText(chatId, text);
+      }
     },
   };
 
@@ -157,7 +184,10 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
   // of silently dropped as a duplicate.
   const handler: BridgeInboundHandler = async (envelope) => {
     const fresh = await bridgeSeenInsert(envelope.idempotencyKey);
-    if (!fresh) return 'duplicate';
+    if (!fresh) {
+      recordBridgeSeenDedupHit(envelope.routeId);
+      return 'duplicate';
+    }
 
     try {
       const route = routeById(envelope.routeId);

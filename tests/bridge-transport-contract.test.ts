@@ -2,12 +2,15 @@ process.env.MESSAGING_PLATFORM ??= 'whatsapp';
 process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
-process.env.MONITORING_TOKEN ??= 'bridge-test-token';
+// Hard assignment, not ??=: dotenv's config-import injection can populate an
+// EMPTY MONITORING_TOKEN from a developer's real .env into this worker's
+// process.env before this file runs, and '' survives ??=.
+process.env.MONITORING_TOKEN = 'bridge-test-token';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createHttpBridgeTransport } from '../src/bridge/transport-http.js';
-import { TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
+import { BridgeDeliveryDeferredError, TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
 
 type FetchCall = {
   input: string | URL | Request;
@@ -86,6 +89,18 @@ export function runTransportContract(makeTransport: () => BridgeTransport): void
 
     await expect(makeTransport().deliver(envelope('server-1'), 'http://discord.local'))
       .rejects.toMatchObject({ retryable: true });
+  });
+
+  it('turns bridge delivery deferral responses into deferred delivery errors', async () => {
+    installFetch(async () => new Response(
+      JSON.stringify({ error: 'delivery deferred', retryAtMs: 1_800_000_003_000 }),
+      { status: 429, headers: { 'content-type': 'application/json' } },
+    ));
+
+    await expect(makeTransport().deliver(envelope('deferred-1'), 'http://telegram.local'))
+      .rejects.toBeInstanceOf(BridgeDeliveryDeferredError);
+    await expect(makeTransport().deliver(envelope('deferred-1'), 'http://telegram.local'))
+      .rejects.toMatchObject({ retryAtMs: 1_800_000_003_000 });
   });
 
   it('treats timeout as retryable', async () => {

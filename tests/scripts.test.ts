@@ -444,6 +444,7 @@ describe('ops scripts', () => {
       mkdirSync(configDir, { recursive: true });
       const originalConfig = {
         ownerId: '888888888888888888',
+        operatorNote: 'keep this top-level setting',
         channels: {
           '333333333333333333': { name: 'general', enabled: true, requireMention: true },
         },
@@ -472,7 +473,7 @@ describe('ops scripts', () => {
 
       const channelsConfig = JSON.parse(
         readFileSync(join(configDir, 'discord-channels.json'), 'utf8'),
-      ) as { ownerId?: string; channels: Record<string, { name: string; enabled: boolean }> };
+      ) as { ownerId?: string; operatorNote?: string; channels: Record<string, { name: string; enabled: boolean }> };
       // Original entry preserved...
       expect(channelsConfig.channels['333333333333333333']).toEqual({
         name: 'general',
@@ -487,6 +488,157 @@ describe('ops scripts', () => {
       });
       // Pre-existing ownerId in the file is preserved over the run's --discord-owner-id.
       expect(channelsConfig.ownerId).toBe('888888888888888888');
+      expect(channelsConfig.operatorNote).toBe('keep this top-level setting');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup rerun preserves unrelated operator keys in existing env files', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      writeFileSync(
+        join(home, '.env'),
+        [
+          '# existing operator note',
+          'MESSAGING_PLATFORM=whatsapp',
+          'OPENAI_MODEL=old-model',
+          'OPERATOR_ONLY=keep-me',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      writeFileSync(
+        join(home, '.env.whatsapp'),
+        [
+          '# platform operator note',
+          'OWNER_JID=old_owner@s.whatsapp.net',
+          'WHATSAPP_EXTRA=keep-platform',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=whatsapp',
+        '--write-groups=false',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--openai-model=gpt-updated',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toContain('# existing operator note');
+      expect(envContent).toMatch(/^OPERATOR_ONLY=keep-me$/m);
+      expect(envContent).toMatch(/^OPENAI_MODEL=gpt-updated$/m);
+
+      const whatsappEnvContent = readFileSync(join(home, '.env.whatsapp'), 'utf8');
+      expect(whatsappEnvContent).toContain('# platform operator note');
+      expect(whatsappEnvContent).toMatch(/^WHATSAPP_EXTRA=keep-platform$/m);
+      expect(whatsappEnvContent).toMatch(/^OWNER_JID=test_owner@s\.whatsapp\.net$/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup dry-run env preview includes preserved operator keys from the merged output', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      writeFileSync(
+        join(home, '.env'),
+        [
+          'MESSAGING_PLATFORM=whatsapp',
+          'OPERATOR_ONLY=keep-me',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=whatsapp',
+        '--write-groups=false',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('--- .env (preview) ---');
+      expect(out).toContain('OPERATOR_ONLY=keep-me');
+      expect(readFileSync(join(home, '.env'), 'utf8')).toContain('OPERATOR_ONLY=keep-me');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup rerun merges config/groups.json and preserves unrelated groups and admin settings', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const configDir = join(home, 'config');
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(
+        join(configDir, 'groups.json'),
+        JSON.stringify({
+          groups: {
+            '999000000000000000@g.us': {
+              name: 'Unrelated',
+              enabled: true,
+              requireMention: false,
+              persona: 'Keep me',
+              enabledFeatures: ['help'],
+            },
+          },
+          mentionPatterns: ['@oldbot'],
+          admins: {
+            owner: { name: 'Old Owner', jid: 'old_owner@s.whatsapp.net' },
+            moderators: ['moderator@s.whatsapp.net'],
+          },
+          operatorNote: 'keep this groups setting',
+        }),
+        'utf8',
+      );
+
+      runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=whatsapp',
+        '--group-id=120000000000000000@g.us',
+        '--group-name=General',
+        '--bot-name=garbanzo',
+        '--owner-name=Owner',
+        '--write-groups=true',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      const groupsConfig = JSON.parse(
+        readFileSync(join(configDir, 'groups.json'), 'utf8'),
+      ) as {
+        groups: Record<string, unknown>;
+        admins: { moderators: string[] };
+        mentionPatterns: string[];
+        operatorNote?: string;
+      };
+      expect(groupsConfig.groups['999000000000000000@g.us']).toEqual({
+        name: 'Unrelated',
+        enabled: true,
+        requireMention: false,
+        persona: 'Keep me',
+        enabledFeatures: ['help'],
+      });
+      expect(groupsConfig.groups['120000000000000000@g.us']).toEqual({
+        name: 'General',
+        enabled: true,
+        requireMention: true,
+        persona: 'Friendly community assistant. Help with logistics, planning, and conversation.',
+        enabledFeatures: ['weather', 'transit', 'news', 'events', 'dnd', 'roll', 'books', 'venues', 'poll', 'fun', 'character', 'feedback', 'profile', 'summary', 'recommend', 'voice'],
+      });
+      expect(groupsConfig.admins.moderators).toEqual(['moderator@s.whatsapp.net']);
+      expect(groupsConfig.mentionPatterns).toEqual(['@garbanzo', '@Garbanzo', '@bot']);
+      expect(groupsConfig.operatorNote).toBe('keep this groups setting');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -528,6 +680,12 @@ describe('ops scripts', () => {
     expect(out).toContain('--discord-channel-name');
     expect(out).toContain('--vector-store');
     expect(out).toContain('--install-deps');
+  });
+
+  it('setup --help documents --telegram-chat-ids and --telegram-chat-name', () => {
+    const out = runNodeScript(setupPath, ['--help']);
+    expect(out).toContain('--telegram-chat-ids');
+    expect(out).toContain('--telegram-chat-name');
   });
 
   it('setup native Discord non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
@@ -579,6 +737,492 @@ describe('ops scripts', () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it('setup native Telegram non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=telegram',
+        '--deploy=native',
+        '--telegram-bot-token=test_telegram_token',
+        '--telegram-owner-id=123456789',
+        '--telegram-chat-id=-1001234567890',
+        '--telegram-chat-name=general',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.telegram');
+      expect(out).toContain('✅ Wrote config/telegram-chats.json with 1 enabled chat');
+
+      // Exact file set under GARBANZO_HOME: .env, .env.telegram, config/telegram-chats.json.
+      // No config/groups.json (Telegram doesn't need it), no docs/PERSONA.md (no custom
+      // persona given), no .git/hooks touched (pre-commit install is repo-mode only).
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.telegram', 'config']);
+      const configFiles = readdirSync(join(home, 'config')).sort();
+      expect(configFiles).toEqual(['telegram-chats.json']);
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).not.toMatch(/^COMPOSE_PROFILES=/m);
+      expect(envContent).toMatch(/^VECTOR_STORE=none$/m);
+
+      const telegramEnvContent = readFileSync(join(home, '.env.telegram'), 'utf8');
+      expect(telegramEnvContent).toContain('TELEGRAM_BOT_TOKEN=test_telegram_token');
+      expect(telegramEnvContent).toContain('TELEGRAM_OWNER_ID=123456789');
+      expect(telegramEnvContent).toContain('TELEGRAM_CHAT_SCOPE=configured');
+
+      const chatsConfig = JSON.parse(
+        readFileSync(join(home, 'config', 'telegram-chats.json'), 'utf8'),
+      ) as { ownerId?: string; chats: Record<string, { name: string; enabled: boolean }> };
+      expect(chatsConfig.ownerId).toBe('123456789');
+      expect(chatsConfig.chats['-1001234567890']).toEqual({
+        name: 'general',
+        enabled: true,
+        requireMention: true,
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Docker Telegram non-interactive run pins COMPOSE_PROFILES=telegram and writes the platform-keyed env file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=telegram',
+        '--telegram-bot-token=test_telegram_token',
+        '--telegram-owner-id=123456789',
+        '--telegram-chat-id=-1001234567890',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.telegram');
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toMatch(/^COMPOSE_PROFILES=telegram$/m);
+      expect(envContent).not.toMatch(/^VECTOR_STORE=/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Telegram non-interactive run accepts valid chat id shapes', () => {
+    const validIds = [
+      '123456789',
+      '-123456789',
+      '-1001234567890',
+    ];
+
+    for (const chatId of validIds) {
+      const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+      try {
+        const out = runNodeScriptWithEnv(setupPath, [
+          '--non-interactive',
+          '--dry-run',
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          `--telegram-chat-id=${chatId}`,
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ], { GARBANZO_HOME: home });
+
+        expect(out).toContain(chatId);
+        expect(out).toContain('config/telegram-chats.json');
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('setup Telegram non-interactive run rejects invalid chat id shapes with the value named', () => {
+    const invalidIds = [
+      '0',
+      '-100',
+      '123456789012345678901234567890',
+      'not-a-chat-id',
+      '012345',
+    ];
+
+    for (const chatId of invalidIds) {
+      const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+      try {
+        let caught: unknown;
+        try {
+          runNodeScriptWithEnv(setupPath, [
+            '--non-interactive',
+            '--dry-run',
+            '--platform=telegram',
+            '--telegram-bot-token=test_telegram_token',
+            '--telegram-owner-id=123456789',
+            `--telegram-chat-id=${chatId}`,
+            '--providers=openai',
+            '--openai-key=test_key_setup',
+          ], { GARBANZO_HOME: home });
+        } catch (err) {
+          caught = err;
+        }
+
+        expect(caught).toBeDefined();
+        const stdout = String((caught as { stdout?: string }).stdout ?? '');
+        expect(stdout).toContain(`"${chatId}"`);
+        expect(stdout).toMatch(/doesn't look like a Telegram chat ID/);
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('setup Telegram non-interactive run requires a bot token, owner ID, and enabled chat or fails clearly', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+
+    function expectSetupFailure(args: string[], expected: RegExp): void {
+      let caught: unknown;
+      try {
+        runNodeScriptWithEnv(setupPath, ['--non-interactive', '--dry-run', ...args], { GARBANZO_HOME: home });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeDefined();
+      const stdout = String((caught as { stdout?: string }).stdout ?? '');
+      expect(stdout).toMatch(expected);
+    }
+
+    try {
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-owner-id=123456789',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires a bot token/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires an owner user ID/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires at least one chat to enable/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=not-numeric',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /doesn't look like a Telegram user id/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          '--telegram-chat-id=not-a-chat-id',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /doesn't look like a Telegram chat ID/,
+      );
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup native Matrix non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--deploy=native',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--matrix-room-name=general',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.matrix');
+      expect(out).toContain('✅ Wrote config/matrix-rooms.json with 1 enabled room');
+
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.matrix', 'config']);
+      const configFiles = readdirSync(join(home, 'config')).sort();
+      expect(configFiles).toEqual(['matrix-rooms.json']);
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).not.toMatch(/^COMPOSE_PROFILES=/m);
+      expect(envContent).toMatch(/^VECTOR_STORE=none$/m);
+
+      const matrixEnvContent = readFileSync(join(home, '.env.matrix'), 'utf8');
+      expect(matrixEnvContent).toContain('MATRIX_HOMESERVER_URL=https://matrix.example.org');
+      expect(matrixEnvContent).toContain('MATRIX_ACCESS_TOKEN=test_matrix_token');
+      expect(matrixEnvContent).toContain('MATRIX_OWNER_ID=@owner:example.org');
+      expect(matrixEnvContent).toContain('MATRIX_CHAT_SCOPE=configured');
+
+      const roomsConfig = JSON.parse(
+        readFileSync(join(home, 'config', 'matrix-rooms.json'), 'utf8'),
+      ) as { ownerId?: string; rooms: Record<string, { name: string; enabled: boolean }> };
+      expect(roomsConfig.ownerId).toBe('@owner:example.org');
+      expect(roomsConfig.rooms['!abcdefgh:example.org']).toEqual({
+        name: 'general',
+        enabled: true,
+        requireMention: true,
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Docker Matrix non-interactive run pins COMPOSE_PROFILES=matrix', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env.matrix');
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toMatch(/^COMPOSE_PROFILES=matrix$/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Matrix non-interactive run fails clearly on missing or malformed inputs', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+
+    function expectSetupFailure(args: string[], expected: RegExp): void {
+      let caught: unknown;
+      try {
+        runNodeScriptWithEnv(setupPath, ['--non-interactive', '--dry-run', ...args], { GARBANZO_HOME: home });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeDefined();
+      const stdout = String((caught as { stdout?: string }).stdout ?? '');
+      expect(stdout).toMatch(expected);
+    }
+
+    const base = [
+      '--platform=matrix',
+      '--providers=openai',
+      '--openai-key=test_key_setup',
+    ];
+
+    try {
+      expectSetupFailure(
+        [...base, '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires a homeserver URL/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=matrix.example.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /--matrix-homeserver-url .* doesn't look like a homeserver URL/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires a bot access token/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires an owner user id/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=not-an-mxid', '--matrix-room-id=!r:x.org'],
+        /doesn't look like a Matrix user id/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org'],
+        /Matrix quickstart requires at least one room to enable/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=not-a-room'],
+        /neither a room id nor an alias/,
+      );
+      // Aliases need a live homeserver; dry-run must refuse rather than fetch.
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=#alias:x.org'],
+        /Dry-run cannot resolve the alias/,
+      );
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup writes docs/personas/discord.md under GARBANZO_HOME when --persona=quill is given (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=quill',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote docs/personas/discord.md');
+      // docs/PERSONA.md must NOT be written — the platform-keyed slot is the
+      // review-mandated destination (a shipped discord.md shadows PERSONA.md).
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.discord', 'config', 'docs']);
+      const personaContent = readFileSync(join(home, 'docs', 'personas', 'discord.md'), 'utf8');
+      expect(personaContent).toContain('Quill');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup writes docs/personas/matrix.md when --persona=bea and --platform=matrix are given (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--deploy=native',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=bea',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote docs/personas/matrix.md');
+      const personaContent = readFileSync(join(home, 'docs', 'personas', 'matrix.md'), 'utf8');
+      expect(personaContent).toContain('Bea');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup backs up an existing platform persona file to .bak when --persona overwrites it (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const args = [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ];
+      runNodeScriptWithEnv(setupPath, [...args, '--persona=quill'], { GARBANZO_HOME: home });
+      const out = runNodeScriptWithEnv(setupPath, [...args, '--persona=margie'], { GARBANZO_HOME: home });
+
+      expect(out).toContain('backed up to docs/personas/discord.md.bak');
+      const backupContent = readFileSync(join(home, 'docs', 'personas', 'discord.md.bak'), 'utf8');
+      expect(backupContent).toContain('Quill');
+      const currentContent = readFileSync(join(home, 'docs', 'personas', 'discord.md'), 'utf8');
+      expect(currentContent).toContain('Margie');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup --persona with an unknown gallery name fails and lists the available names (WS10)', () => {
+    let caught: unknown;
+    try {
+      runNodeScript(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=not-a-real-persona',
+      ]);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeDefined();
+    const stdout = String((caught as { stdout?: string }).stdout ?? '');
+    expect(stdout).toContain('Unknown persona "not-a-real-persona"');
+    expect(stdout).toContain('riff, quill, margie, bea, patch, callie');
+  });
+
+  it('setup --persona=riff on Discord notes the BAND_FEATURES_ENABLED pairing unless already enabled (WS10)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const args = [
+        '--non-interactive',
+        '--platform=discord',
+        '--deploy=native',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--persona=riff',
+      ];
+      const withoutBand = runNodeScriptWithEnv(setupPath, args, { GARBANZO_HOME: home });
+      expect(withoutBand).toContain('pairs with the band feature set');
+      expect(withoutBand).toContain('--band-features-enabled=true');
+
+      const withBand = runNodeScriptWithEnv(
+        setupPath,
+        [...args, '--band-features-enabled=true'],
+        { GARBANZO_HOME: home },
+      );
+      expect(withBand).not.toContain('pairs with the band feature set');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup --help documents the --persona gallery picker flag (WS10)', () => {
+    const out = runNodeScript(setupPath, ['--help']);
+    expect(out).toContain('--persona ');
+    expect(out).toContain('riff, quill, margie, bea, patch, callie');
   });
 
   it('release-checklist script shows usage with --help', () => {

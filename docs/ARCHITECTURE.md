@@ -1,12 +1,12 @@
 # Garbanzo Architecture
 > Website: https://garbanzobot.com  |  Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
-Garbanzo is a Discord-first, multi-platform community bot. One process runs one platform runtime, selected by `MESSAGING_PLATFORM`, while the shared core handles message normalization, safety, routing, AI calls, memory, and observability.
+Garbanzo is a multi-platform AI community operations bot with cross-platform and cross-community bridging. One process runs one platform runtime, selected by `MESSAGING_PLATFORM`, while the shared core handles message normalization, safety, routing, AI calls, memory, and observability.
 
 ## Runtime Shape
 
 - **Entry and lifecycle:** startup, config validation, health server, maintenance jobs, bridge lifecycle, and platform runtime selection.
-- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp and Discord are fully supported. Slack, Telegram, and Matrix are in development.
+- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp, Discord, Telegram, and Matrix are fully supported. Slack is an experimental scaffold.
 - **Core pipeline:** platform-neutral inbound processing, group command routing, owner DM routing, response generation, and outbound messenger contracts.
 - **AI layer:** provider failover through `AI_PROVIDER_ORDER`, optional local OpenAI API-compatible AI provider for simple queries, shared tool definitions, and provider-specific request builders.
 - **Persistence:** SQLite is the default source of record. Postgres support exists behind the database backend layer for managed deployments.
@@ -35,11 +35,15 @@ The bridge capture hook runs after sanitization and moderation and before group 
 
 ## Platform Adapters
 
-Discord uses the official Gateway through the Discord runtime. Channel and role settings live in `config/discord-channels.json`, with `DISCORD_CHANNELS_CONFIG_PATH` available for overrides. The default Docker service is `discord`, and its health server listens on port `3002`.
+Discord uses the official Gateway through the Discord runtime. Channel and role settings live in `config/discord-channels.json`, with `DISCORD_CHANNELS_CONFIG_PATH` available for overrides. The default Docker service is `discord`, and its health server uses `${DISCORD_HEALTH_PORT:-3002}` in Compose.
 
-WhatsApp uses Baileys with persistent auth state, browser or terminal login, and outbound anti-ban controls. Group bindings live in `config/groups.json`. The default Docker service is `whatsapp`, and its health server listens on port `3001`.
+WhatsApp uses Baileys with persistent auth state, browser or terminal login, and outbound anti-ban controls. WhatsApp group bindings live in `config/groups.json`. The default Docker service is `whatsapp`, and its health server uses `${WHATSAPP_HEALTH_PORT:-3001}` in Compose.
 
-Both services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, and `.env.whatsapp` for WhatsApp instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `monitoring`, and optional `broker`.
+Telegram uses grammY over long polling with no inbound webhook config needed. Chat bindings live in `config/telegram-chats.json`, with `TELEGRAM_CHATS_CONFIG_PATH` available for overrides. The default Docker service is `telegram`, and its health server uses `${TELEGRAM_HEALTH_PORT:-3005}` in Compose. See [docs/PLATFORMS.md](PLATFORMS.md) for the BotFather setup walkthrough and the privacy-mode recommendation.
+
+Matrix uses `matrix-bot-sdk` over `/sync` long polling, with the sync token persisted to `data/matrix-sync.json` so a restart resumes instead of running a fresh initial sync. Room bindings live in `config/matrix-rooms.json`, keyed by room ID, with `MATRIX_ROOMS_CONFIG_PATH` available for overrides. The default Docker service is `matrix`, and its health server uses `${MATRIX_HEALTH_PORT:-3004}` in Compose. Encrypted rooms are not supported. See [docs/PLATFORMS.md](PLATFORMS.md) for the bot-account setup walkthrough and the unencrypted-room requirement.
+
+All four services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, `.env.whatsapp` for WhatsApp instance settings, `.env.telegram` for Telegram instance settings, and `.env.matrix` for Matrix instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `telegram`, `matrix`, `monitoring`, and optional `broker`.
 
 ## Bridge Subsystem
 
@@ -95,7 +99,7 @@ The health server exposes:
 - `GET /metrics` when metrics are enabled and authenticated.
 - `/admin` behind the same monitoring token.
 
-Docker defaults are platform-specific: Discord binds `127.0.0.1:3002:3002`, while WhatsApp binds `0.0.0.0:3001:3001`. `MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and HTTP bridge inbound delivery.
+Docker defaults are platform-specific: Discord binds `${DISCORD_HEALTH_PORT:-3002}` to localhost, while WhatsApp binds `${WHATSAPP_HEALTH_PORT:-3001}` to all interfaces for browser login. `MONITORING_TOKEN` gates `/metrics`, `/admin`, Prometheus scrapes, and HTTP bridge inbound delivery.
 
 ## Deployment Shapes
 
@@ -108,4 +112,4 @@ The default deployment is Docker Compose with profiles:
 
 Single-host deployments use SQLite and named Docker volumes. Multi-instance deployments set distinct `INSTANCE_ID` values, use separate platform env files and volumes, and bridge selected chats through HTTP or AMQP. Same-account WhatsApp companion deployments are modeled as separate compose services with separate linked-device auth state.
 
-For Kubernetes operators, `deploy/helm/` contains the Helm chart. Docker Compose remains the default install path for self-hosted community deployments.
+For Kubernetes operators, `deploy/helm/` contains the Helm chart. Docker Compose remains the default install path for multi-platform community deployments.

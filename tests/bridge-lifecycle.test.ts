@@ -11,6 +11,7 @@ import type { BridgeOutboxOps } from '../src/bridge/outbox.js';
 import type { BridgeBufferOps } from '../src/bridge/summary-buffer.js';
 import type { BridgeTransport } from '../src/bridge/transport.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import { config } from '../src/utils/config.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
@@ -94,7 +95,13 @@ function fakeOutboxOps(): BridgeOutboxOps {
     markBridgeOutboxSent: vi.fn(async () => true),
     markBridgeOutboxDead: vi.fn(async () => true),
     bumpBridgeOutboxAttempt: vi.fn(async () => true),
-    bridgeOutboxCounts: vi.fn(async () => ({ pending: 0, sent: 0, dead: 0 })),
+    deferBridgeOutbox: vi.fn(async () => true),
+    bridgeOutboxCounts: vi.fn(async () => ({
+      pending: 0,
+      sent: 0,
+      dead: 0,
+      oldestPendingCreatedAt: null,
+    })),
   };
 }
 
@@ -247,6 +254,7 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     const secondResult = await bridge.handler(envelope);
     expect(secondResult).toBe('duplicate');
     expect(sendText).toHaveBeenCalledTimes(1);
+    expect(getLifetimeCounters().bridgeSeenDedupHitsByRoute.get('verbatim-route')).toBeGreaterThanOrEqual(1);
 
     await bridge.stop();
   });
@@ -276,6 +284,39 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     expect(result).toBe('accepted');
     expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledTimes(1);
     expect(sendText).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
+  it('always relays directly for a Telegram destination, ignoring the route modeToDiscord field (fixes the binary whatsapp-else-discord mode check)', async () => {
+    config.BRIDGE_ENABLED = true;
+    config.MESSAGING_PLATFORM = 'telegram';
+    const summaryMap: BridgeMap = {
+      ...MAP,
+      // modeToDiscord: 'summary' must be irrelevant to a Telegram destination
+      // — the old else-branch bug read this field for any non-whatsapp
+      // platform, including Telegram.
+      routes: [{ ...VERBATIM_ROUTE, modeToDiscord: 'summary' }],
+    };
+    const sendText = vi.fn(async () => undefined);
+    const seen = fakeBridgeSeen();
+    const bufferOps = fakeBufferOps();
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => summaryMap,
+      bridgeSeenInsert: seen.insert,
+      bridgeSeenDelete: seen.del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps,
+      transport: fakeTransport(),
+    }));
+
+    const result = await bridge.handler(makeEnvelope());
+
+    expect(result).toBe('accepted');
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(bufferOps.appendBridgeBuffer).not.toHaveBeenCalled();
 
     await bridge.stop();
   });

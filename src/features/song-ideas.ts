@@ -41,7 +41,12 @@ const FETCH_TIMEOUT_MS = 30_000;
 
 export interface IdeaCommandContext {
   senderId: string;
-  audio?: { url: string; contentType: string };
+  // `buffer` is Telegram-only (F1, T2 review): Telegram's `url` is a safe,
+  // non-fetchable placeholder (`telegram-file:<id>`, never the token-bearing
+  // real file URL — see telegram-voice.ts), so `fetchAndTranscribe(url)`
+  // alone can never work for Telegram voice. When `buffer` is present, it's
+  // the already-downloaded audio and takes priority over fetching `url`.
+  audio?: { url: string; contentType: string; buffer?: Buffer };
 }
 
 export async function handleIdeaCommand(args: string, ctx: IdeaCommandContext): Promise<string> {
@@ -140,7 +145,11 @@ async function handleCapture(rest: string, ctx: IdeaCommandContext): Promise<str
 
   let transcript: string | null | undefined;
   if (hasAudio && ctx.audio) {
-    transcript = await fetchAndTranscribe(ctx.audio.url, ctx.audio.contentType);
+    // Prefer an already-downloaded buffer (Telegram) over fetching `url`
+    // (Discord CDN url) — F1, T2 review.
+    transcript = ctx.audio.buffer
+      ? await transcribeAudio(ctx.audio.buffer, ctx.audio.contentType)
+      : await fetchAndTranscribe(ctx.audio.url, ctx.audio.contentType);
   }
 
   const idea = await addSongIdea({

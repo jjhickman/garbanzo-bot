@@ -5,13 +5,13 @@
       "_comment": "Discord Remy instance; url is used by the HTTP transport in a later bridge task.",
       "id": "remy",
       "platform": "discord",
-      "url": "http://discord:3002"
+      "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}"
     },
     {
       "_comment": "WhatsApp Garbanzo instance; url is used by the HTTP transport in a later bridge task.",
       "id": "garbanzo",
       "platform": "whatsapp",
-      "url": "http://whatsapp:3001"
+      "url": "http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}"
     }
   ],
   "routes": [

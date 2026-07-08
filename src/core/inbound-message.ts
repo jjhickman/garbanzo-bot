@@ -58,10 +58,32 @@ export interface InboundMessage {
 
   /**
    * An audio attachment on the message, where the platform surfaces it
-   * (Discord); undefined otherwise.
+   * (Discord, Telegram); undefined otherwise.
+   *
+   * `buffer` is Telegram-only: Telegram file URLs embed the bot token
+   * (`api.telegram.org/file/bot<TOKEN>/...`), so the Telegram adapter never
+   * puts that URL here — `url` is a safe, non-fetchable placeholder
+   * (`telegram-file:<file_id>`) and `buffer` carries the already-downloaded
+   * bytes for consumers that need the audio content. See
+   * `src/platforms/telegram/telegram-voice.ts`.
    */
-  audio?: { url: string; contentType: string };
+  audio?: { url: string; contentType: string; buffer?: Buffer };
+
+  /**
+   * True when `text` is a processor-synthesized placeholder (a voice note
+   * whose transcription failed became VOICE_NOTE_PLACEHOLDER). The message
+   * still flows through moderation, recording, and bridge capture, but
+   * reply dispatch skips it — keyed on this flag, never on text equality,
+   * so a user who literally types "[voice note]" is unaffected.
+   */
+  synthesizedPlaceholder?: boolean;
 
   /** Platform-specific raw message for advanced operations. */
   raw: MessageRef;
 }
+
+/**
+ * Shared placeholder for audio content that could not be transcribed.
+ * Bridge relay capture uses the same literal for media placeholders.
+ */
+export const VOICE_NOTE_PLACEHOLDER = '[voice note]';

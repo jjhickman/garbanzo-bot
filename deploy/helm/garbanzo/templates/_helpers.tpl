@@ -43,8 +43,8 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 Validate supported platform values.
 */}}
 {{- define "garbanzo.platform" -}}
-{{- if not (or (eq .Values.platform "discord") (eq .Values.platform "whatsapp")) -}}
-{{- fail "platform must be one of: discord, whatsapp" -}}
+{{- if not (or (eq .Values.platform "discord") (eq .Values.platform "whatsapp") (eq .Values.platform "telegram") (eq .Values.platform "matrix")) -}}
+{{- fail "platform must be one of: discord, whatsapp, telegram, matrix" -}}
 {{- end -}}
 {{- .Values.platform -}}
 {{- end -}}
@@ -64,7 +64,7 @@ Secret name for envFrom.
 True when chart-managed config files should be rendered.
 */}}
 {{- define "garbanzo.hasConfigFiles" -}}
-{{- if or .Values.configFiles.groupsJson .Values.configFiles.discordChannelsJson .Values.configFiles.bridgeMapJson .Values.configFiles.ragSourcesJson -}}
+{{- if or .Values.configFiles.groupsJson .Values.configFiles.discordChannelsJson .Values.configFiles.telegramChatsJson .Values.configFiles.bridgeMapJson .Values.configFiles.ragSourcesJson -}}
 true
 {{- end -}}
 {{- end -}}
@@ -76,6 +76,6 @@ Qdrant URL used by the bot when the bundled qdrant deployment is enabled.
 {{- if .Values.qdrant.url -}}
 {{- .Values.qdrant.url -}}
 {{- else -}}
-{{- printf "http://%s-qdrant:6333" (include "garbanzo.fullname" .) -}}
+{{- printf "http://%s-qdrant:%v" (include "garbanzo.fullname" .) .Values.qdrant.port -}}
 {{- end -}}
 {{- end -}}

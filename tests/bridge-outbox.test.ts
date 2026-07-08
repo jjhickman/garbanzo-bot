@@ -7,13 +7,15 @@ process.env.DATABASE_URL ??= 'postgres://test:test@localhost:5432/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createBridgeOutbox, getBridgeOutboxStats } from '../src/bridge/outbox.js';
-import { TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
+import { BridgeDeliveryDeferredError, TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
 import {
   appendBridgeBuffer,
   bridgeOutboxCounts,
   bridgeSeenInsert,
   claimDueBridgeOutbox,
+  deferBridgeOutbox,
   enqueueBridgeOutbox,
   bumpBridgeOutboxAttempt,
   markBridgeOutboxDead,
@@ -64,7 +66,8 @@ type BridgeOutboxOpsLike = {
   markBridgeOutboxSent(id: number): Promise<boolean>;
   markBridgeOutboxDead(id: number, error: string): Promise<boolean>;
   bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
-  bridgeOutboxCounts(): Promise<{ pending: number; sent: number; dead: number }>;
+  deferBridgeOutbox(id: number, nextAt: number, error: string): Promise<boolean>;
+  bridgeOutboxCounts(): Promise<{ pending: number; sent: number; dead: number; oldestPendingCreatedAt: number | null }>;
 };
 
 type BridgeOutboxOptionsWithOps = Parameters<typeof createBridgeOutbox>[0] & {
@@ -77,6 +80,7 @@ const sqliteOps: BridgeOutboxOpsLike = {
   markBridgeOutboxSent: async (id) => markBridgeOutboxSent(id),
   markBridgeOutboxDead: async (id, error) => markBridgeOutboxDead(id, error),
   bumpBridgeOutboxAttempt: async (id, nextAt, error) => bumpBridgeOutboxAttempt(id, nextAt, error),
+  deferBridgeOutbox: async (id, nextAt, error) => deferBridgeOutbox(id, nextAt, error),
   bridgeOutboxCounts: async () => bridgeOutboxCounts(),
 };
 
@@ -167,8 +171,9 @@ describe('bridge durable outbox', () => {
 
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'whatsapp-main:source-chat:success-1' }), 'http://discord.local');
-    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 1, dead: 0 });
+    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 1, dead: 0, oldestPendingCreatedAt: null });
     expect(getBridgeOutboxStats().delivered).toBeGreaterThanOrEqual(1);
+    expect(getLifetimeCounters().bridgeSentByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
   });
 
   it('backs off retryable failures with growing next_attempt_at values', async () => {
@@ -206,6 +211,59 @@ describe('bridge durable outbox', () => {
     expect(thirdDue[0]?.attempts).toBe(2);
   });
 
+  it('defers bridge pacing rows without incrementing attempts or blocking later rows', async () => {
+    const deferred = await enqueueBridgeOutbox({
+      ...envelope('defer-1'),
+      routeId: 'route-telegram',
+      targetChatId: 'telegram-chat-a',
+    });
+    const later = await enqueueBridgeOutbox({
+      ...envelope('success-2'),
+      routeId: 'route-discord',
+      targetChatId: 'discord-chat-b',
+    });
+    const deliver = vi.fn<BridgeTransport['deliver']>(async (env) => {
+      if (env.idempotencyKey.endsWith('defer-1')) {
+        throw new BridgeDeliveryDeferredError(BASE_TIME + 3_000, 'Telegram pacing deferred until 1800000003000');
+      }
+    });
+    const outbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://target.local',
+      ops: sqliteOps,
+    }));
+
+    outbox.start();
+    await runOnePump();
+    await outbox.stop();
+
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(getOutboxRow(deferred.id)).toMatchObject({
+      status: 'pending',
+      attempts: 0,
+      nextAttemptAt: BASE_TIME + 3_000,
+      lastError: 'Telegram pacing deferred until 1800000003000',
+    });
+    expect(getOutboxRow(later.id)).toMatchObject({ status: 'sent', attempts: 0 });
+    expect(getLifetimeCounters().bridgeFailedByRoute.get('route-telegram') ?? 0).toBe(0);
+
+    vi.setSystemTime(BASE_TIME + 2_999);
+    expect(claimDueBridgeOutbox(10)).toHaveLength(0);
+
+    vi.setSystemTime(BASE_TIME + 3_000);
+    deliver.mockResolvedValue(undefined);
+    const retryOutbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://target.local',
+      ops: sqliteOps,
+    }));
+    retryOutbox.start();
+    await runOnePump();
+    await retryOutbox.stop();
+
+    expect(getOutboxRow(deferred.id)).toMatchObject({ status: 'sent', attempts: 0 });
+  });
+
   it('dead-letters non-retryable failures immediately', async () => {
     const outbox = createBridgeOutbox(withOps({
       transport: fakeTransport(async () => {
@@ -223,8 +281,11 @@ describe('bridge durable outbox', () => {
     const deadRow = getOutboxRow(row.id);
     expect(deadRow.attempts).toBe(1);
     expect(deadRow.lastError).toBe('bad request');
-    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 0, dead: 1 });
+    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 0, dead: 1, oldestPendingCreatedAt: null });
     expect(getBridgeOutboxStats().dead).toBeGreaterThanOrEqual(1);
+    const counters = getLifetimeCounters();
+    expect(counters.bridgeFailedByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
+    expect(counters.bridgeDeadLetteredByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
   });
 
   it('dead-letters retryable rows after 8 failed attempts', async () => {
@@ -279,7 +340,7 @@ describe('bridge durable outbox', () => {
     await second.stop();
 
     expect(deliver).toHaveBeenCalledTimes(1);
-    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 1, dead: 0 });
+    expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 1, dead: 0, oldestPendingCreatedAt: null });
   });
 
   it('reports pending depth', async () => {
@@ -317,12 +378,49 @@ describe('bridge durable outbox', () => {
     db.prepare('UPDATE bridge_outbox SET status = ?, next_attempt_at = ? WHERE id = ?')
       .run('claimed', BASE_TIME - 121_000, row.id);
 
-    expect(bridgeOutboxCounts()).toEqual({ pending: 1, sent: 0, dead: 0 });
+    expect(bridgeOutboxCounts()).toEqual({
+      pending: 1,
+      sent: 0,
+      dead: 0,
+      oldestPendingCreatedAt: row.createdAt,
+    });
     const reclaimed = await claimDueBridgeOutbox(10);
 
     expect(reclaimed).toHaveLength(1);
     expect(reclaimed[0]?.id).toBe(row.id);
     expect(String(reclaimed[0]?.status)).toBe('claimed');
+  });
+
+  it('counts pending/sent/dead independently when the table holds a mix of all three (F4 review debt)', async () => {
+    const pendingRow = await enqueueBridgeOutbox(envelope('mix-pending'));
+    const sentRow = await enqueueBridgeOutbox(envelope('mix-sent'));
+    const deadRow = await enqueueBridgeOutbox(envelope('mix-dead'));
+    await claimDueBridgeOutbox(10);
+    await markBridgeOutboxSent(sentRow.id);
+    await markBridgeOutboxDead(deadRow.id, 'boom');
+
+    expect(bridgeOutboxCounts()).toEqual({
+      pending: 1,
+      sent: 1,
+      dead: 1,
+      oldestPendingCreatedAt: pendingRow.createdAt,
+    });
+  });
+
+  it('resolves the pending/oldest-age query with an indexed scan, not a full table scan (F4: /metrics scrape must be O(pending))', () => {
+    // selectBridgeOutboxPending used to be one query aggregating every row in
+    // the table with no WHERE clause — a full scan on every /metrics
+    // scrape. Asserting the query plan here catches a regression back to
+    // that shape without needing to synthesize a large table.
+    const plan = db.prepare(
+      `EXPLAIN QUERY PLAN
+       SELECT COUNT(*) AS pending, MIN(created_at) AS oldestPendingCreatedAt
+       FROM bridge_outbox
+       WHERE status IN ('pending', 'claimed')`,
+    ).all() as Array<{ detail: string }>;
+
+    const usesFullTableScan = plan.some((step) => /SCAN bridge_outbox\b/.test(step.detail) && !/USING INDEX/.test(step.detail));
+    expect(usesFullTableScan).toBe(false);
   });
 
   it('returns whether a bridge idempotency key was newly inserted', async () => {
@@ -351,7 +449,13 @@ describe('bridge durable outbox', () => {
       markBridgeOutboxSent: vi.fn(async () => true),
       markBridgeOutboxDead: vi.fn(async () => true),
       bumpBridgeOutboxAttempt: vi.fn(async () => true),
-      bridgeOutboxCounts: vi.fn(async () => ({ pending: rows.length, sent: 0, dead: 0 })),
+      deferBridgeOutbox: vi.fn(async () => true),
+      bridgeOutboxCounts: vi.fn(async () => ({
+        pending: rows.length,
+        sent: 0,
+        dead: 0,
+        oldestPendingCreatedAt: rows[0]?.createdAt ?? null,
+      })),
     };
     const deliver = vi.fn<BridgeTransport['deliver']>(async () => undefined);
     const outbox = createBridgeOutbox(withOps({
@@ -396,7 +500,13 @@ describe('bridge durable outbox', () => {
       }),
       markBridgeOutboxDead: vi.fn(async () => true),
       bumpBridgeOutboxAttempt: vi.fn(async () => true),
-      bridgeOutboxCounts: vi.fn(async () => ({ pending: row.status === 'sent' ? 0 : 1, sent: row.status === 'sent' ? 1 : 0, dead: 0 })),
+      deferBridgeOutbox: vi.fn(async () => true),
+      bridgeOutboxCounts: vi.fn(async () => ({
+        pending: row.status === 'sent' ? 0 : 1,
+        sent: row.status === 'sent' ? 1 : 0,
+        dead: 0,
+        oldestPendingCreatedAt: row.status === 'sent' ? null : row.createdAt,
+      })),
     };
     const bridgeSeenInsertFake = vi.fn(async () => {
       if (seen) return false;
@@ -421,7 +531,12 @@ describe('bridge durable outbox', () => {
     await expect(bridgeSeenInsertFake.mock.results[0]?.value).resolves.toBe(true);
     await expect(bridgeSeenInsertFake.mock.results[1]?.value).resolves.toBe(false);
     expect(fakeOps.markBridgeOutboxDead).not.toHaveBeenCalled();
-    await expect(fakeOps.bridgeOutboxCounts()).resolves.toEqual({ pending: 0, sent: 1, dead: 0 });
+    await expect(fakeOps.bridgeOutboxCounts()).resolves.toEqual({
+      pending: 0,
+      sent: 1,
+      dead: 0,
+      oldestPendingCreatedAt: null,
+    });
   });
 
   it('throws for postgres bridge outbox counts until postgres outbox support exists', async () => {

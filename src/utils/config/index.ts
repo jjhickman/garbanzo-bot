@@ -7,8 +7,10 @@ import { coreSchema } from './core.js';
 import { discordSchema } from './discord.js';
 import { integrationsSchema } from './integrations.js';
 import { monitoringSchema } from './monitoring.js';
+import { matrixSchema } from './matrix.js';
 import { ragSchema } from './rag.js';
 import { applyEnvLayers } from './shared.js';
+import { telegramSchema } from './telegram.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
 import { GARBANZO_HOME_DIR, PACKAGE_ROOT, homePath } from '../paths.js';
@@ -26,6 +28,8 @@ const envSchema = coreSchema
   .merge(aiSchema)
   .merge(whatsappSchema)
   .merge(discordSchema)
+  .merge(telegramSchema)
+  .merge(matrixSchema)
   .merge(bandSchema)
   .merge(bridgeSchema)
   .merge(ragSchema)
@@ -39,6 +43,77 @@ const envSchema = coreSchema
         path: ['OWNER_JID'],
         message: 'OWNER_JID is required when MESSAGING_PLATFORM=whatsapp — set it in .env.whatsapp',
       });
+    }
+
+    if (env.MESSAGING_PLATFORM === 'telegram') {
+      if (!env.TELEGRAM_BOT_TOKEN) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TELEGRAM_BOT_TOKEN'],
+          message: 'TELEGRAM_BOT_TOKEN is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+        });
+      }
+      if (!env.TELEGRAM_OWNER_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TELEGRAM_OWNER_ID'],
+          message: 'TELEGRAM_OWNER_ID is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+        });
+      }
+    }
+
+    if (env.MESSAGING_PLATFORM === 'matrix') {
+      if (!env.MATRIX_HOMESERVER_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MATRIX_HOMESERVER_URL'],
+          message: 'MATRIX_HOMESERVER_URL is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+        });
+      }
+      if (!env.MATRIX_ACCESS_TOKEN) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MATRIX_ACCESS_TOKEN'],
+          message: 'MATRIX_ACCESS_TOKEN is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+        });
+      }
+      if (!env.MATRIX_OWNER_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MATRIX_OWNER_ID'],
+          message: 'MATRIX_OWNER_ID is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+        });
+      }
+    }
+
+    // Validated regardless of platform — a non-numeric value is never
+    // useful (Telegram user ids are always digits), so catch it at boot
+    // even if it was set on the "wrong" platform's env layer.
+    if (env.TELEGRAM_OWNER_ID && !/^\d+$/.test(env.TELEGRAM_OWNER_ID)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TELEGRAM_OWNER_ID'],
+        message: 'TELEGRAM_OWNER_ID must be numeric (a Telegram user id)',
+      });
+    }
+
+    if (env.MATRIX_OWNER_ID && !/^@[^:]+:.+$/.test(env.MATRIX_OWNER_ID)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MATRIX_OWNER_ID'],
+        message: 'MATRIX_OWNER_ID must be a Matrix user id like @user:server',
+      });
+    }
+
+    if (env.MATRIX_HOMESERVER_URL) {
+      const parsedUrl = z.string().url().safeParse(env.MATRIX_HOMESERVER_URL);
+      if (!parsedUrl.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MATRIX_HOMESERVER_URL'],
+          message: 'MATRIX_HOMESERVER_URL must be a valid URL',
+        });
+      }
     }
   });
 

@@ -976,6 +976,10 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       throw new Error('Bridge outbox is not implemented for postgres backend yet');
     },
 
+    async deferBridgeOutbox(_id: number, _nextAt: number, _error: string): Promise<boolean> {
+      throw new Error('Bridge outbox is not implemented for postgres backend yet');
+    },
+
     async bridgeSeenInsert(_key: string): Promise<boolean> {
       throw new Error('Bridge deduplication is not implemented for postgres backend yet');
     },

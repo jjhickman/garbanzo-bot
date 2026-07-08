@@ -11,7 +11,7 @@ export interface PlatformRuntime {
    * the bridge lifecycle (`src/bridge/lifecycle.ts`) to deliver relays.
    * Returns null before connect and (for WhatsApp) between reconnects; the
    * bridge reads this lazily at send time rather than snapshotting it.
-   * Runtimes that do not support bridging (Slack/Teams scaffolds) may omit
+   * Runtimes that do not support bridging (the Slack scaffold) may omit
    * this method entirely.
    */
   getMessenger?(): PlatformMessenger | null;

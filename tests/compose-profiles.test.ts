@@ -118,15 +118,19 @@ describe('platform-profile compose contract', () => {
     expect(Object.keys(compose.services ?? {}).sort()).toEqual([
       'discord',
       'grafana',
+      'matrix',
       'prometheus',
       'qdrant',
       'rabbitmq',
+      'telegram',
       'whatsapp',
     ]);
 
-    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp']);
+    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp', 'telegram', 'matrix']);
     expect(service(compose, 'discord').profiles).toEqual(['discord']);
     expect(service(compose, 'whatsapp').profiles).toEqual(['whatsapp']);
+    expect(service(compose, 'telegram').profiles).toEqual(['telegram']);
+    expect(service(compose, 'matrix').profiles).toEqual(['matrix']);
     expect(service(compose, 'prometheus').profiles).toEqual(['monitoring']);
     expect(service(compose, 'grafana').profiles).toEqual(['monitoring']);
     expect(service(compose, 'rabbitmq').profiles).toEqual(['broker']);
@@ -148,6 +152,14 @@ describe('platform-profile compose contract', () => {
       { path: '.env', required: true },
       { path: '.env.whatsapp', required: false },
     ]);
+    expect(envFileEntries(service(compose, 'telegram'))).toEqual([
+      { path: '.env', required: true },
+      { path: '.env.telegram', required: false },
+    ]);
+    expect(envFileEntries(service(compose, 'matrix'))).toEqual([
+      { path: '.env', required: true },
+      { path: '.env.matrix', required: false },
+    ]);
   });
 
   it('preserves all named Docker volumes byte-for-byte', () => {
@@ -157,42 +169,79 @@ describe('platform-profile compose contract', () => {
       'garbanzo-bot-auth',
       'garbanzo-bot-data',
       'garbanzo-bot-grafana',
+      'garbanzo-bot-matrix-data',
       'garbanzo-bot-prometheus',
       'garbanzo-bot-qdrant',
       'garbanzo-bot-rabbitmq',
       'garbanzo-bot-remy-data',
+      'garbanzo-bot-telegram-data',
     ]);
   });
 
-  it('pins platform identity, health ports, public ports, qdrant dependency, and host gateway', () => {
+  it('pins platform identity, env-driven health ports, qdrant dependency, and host gateway', () => {
+    const qdrant = service(compose, 'qdrant');
     const discord = service(compose, 'discord');
     const whatsapp = service(compose, 'whatsapp');
+    const telegram = service(compose, 'telegram');
+
+    expect(envEntries(qdrant)).toContain('QDRANT__SERVICE__HTTP_PORT=${QDRANT_PORT:-6333}');
+    expect(String((qdrant.healthcheck as { test?: unknown })?.test)).toContain(
+      '$${QDRANT__SERVICE__HTTP_PORT:-6333}',
+    );
 
     expect(envEntries(discord)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=discord',
-        'HEALTH_PORT=3002',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
     expect(envEntries(whatsapp)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=whatsapp',
-        'HEALTH_PORT=3001',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
+      ]),
+    );
+    expect(envEntries(telegram)).toEqual(
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=telegram',
+        'HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
 
-    expect(toStringList(discord.ports)).toContain('127.0.0.1:3002:3002');
-    expect(toStringList(whatsapp.ports)).toContain('0.0.0.0:3001:3001');
+    const matrix = service(compose, 'matrix');
+    expect(envEntries(matrix)).toEqual(
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=matrix',
+        'HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
+      ]),
+    );
+
+    expect(toStringList(discord.ports)).toContain(
+      '127.0.0.1:${DISCORD_HEALTH_PORT:-3002}:${DISCORD_HEALTH_PORT:-3002}',
+    );
+    expect(toStringList(whatsapp.ports)).toContain(
+      '0.0.0.0:${WHATSAPP_HEALTH_PORT:-3001}:${WHATSAPP_HEALTH_PORT:-3001}',
+    );
+    expect(toStringList(telegram.ports)).toContain(
+      '127.0.0.1:${TELEGRAM_HEALTH_PORT:-3005}:${TELEGRAM_HEALTH_PORT:-3005}',
+    );
+    expect(toStringList(matrix.ports)).toContain(
+      '127.0.0.1:${MATRIX_HEALTH_PORT:-3004}:${MATRIX_HEALTH_PORT:-3004}',
+    );
 
     expect(dependsOnEntries(discord)).toContain('qdrant');
     expect(dependsOnEntries(whatsapp)).toContain('qdrant');
+    expect(dependsOnEntries(telegram)).toContain('qdrant');
+    expect(dependsOnEntries(matrix)).toContain('qdrant');
 
     expect(toStringList(discord.extra_hosts)).toContain('host.docker.internal:host-gateway');
     expect(toStringList(whatsapp.extra_hosts)).toContain('host.docker.internal:host-gateway');
+    expect(toStringList(telegram.extra_hosts)).toContain('host.docker.internal:host-gateway');
+    expect(toStringList(matrix.extra_hosts)).toContain('host.docker.internal:host-gateway');
   });
 
   it('keeps platform-specific persisted data mounts', () => {
@@ -209,25 +258,60 @@ describe('platform-profile compose contract', () => {
         './config/groups.json:/app/config/groups.json:ro',
       ]),
     );
+    expect(toStringList(service(compose, 'telegram').volumes)).toEqual(
+      expect.arrayContaining([
+        'telegram_data:/app/data',
+        './config/telegram-chats.json:/app/config/telegram-chats.json:ro',
+      ]),
+    );
+    expect(toStringList(service(compose, 'matrix').volumes)).toEqual(
+      expect.arrayContaining([
+        'matrix_data:/app/data',
+        './config/matrix-rooms.json:/app/config/matrix-rooms.json:ro',
+      ]),
+    );
   });
 
-  it('ro-mounts the bridge map on both bot services', () => {
+  it('ro-mounts the bridge map on all bot services', () => {
     expect(toStringList(service(compose, 'discord').volumes)).toContain(
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
     expect(toStringList(service(compose, 'whatsapp').volumes)).toContain(
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
+    expect(toStringList(service(compose, 'telegram').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
+    expect(toStringList(service(compose, 'matrix').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
   });
 
   it('uses MONITORING_TOKEN for monitoring entrypoint wiring', () => {
     expect(composeText).not.toContain('WHATSAPP_LOGIN_TOKEN');
-    expect(envEntries(service(compose, 'prometheus'))).toContain(
-      'PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}',
+    const prometheus = service(compose, 'prometheus');
+
+    expect(envEntries(prometheus)).toEqual(
+      expect.arrayContaining([
+        'PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}',
+        'DISCORD_HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}',
+        'WHATSAPP_HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}',
+        'TELEGRAM_HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}',
+        'MATRIX_HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}',
+        'PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}',
+      ]),
     );
     expect(envEntries(service(compose, 'grafana'))).toContain('MONITORING_TOKEN=${MONITORING_TOKEN:-}');
-    expect(String(service(compose, 'prometheus').command)).toContain('PROM_BEARER_TOKEN');
+    expect(String(prometheus.command)).toContain('PROM_BEARER_TOKEN');
+    expect(String(prometheus.command)).toContain('/prometheus/prometheus.yml');
+    expect(String(prometheus.command)).toContain('DISCORD_HEALTH_PORT');
     expect(String(service(compose, 'grafana').command)).toContain('MONITORING_TOKEN');
+    expect(toStringList(prometheus.ports)).toContain(
+      '127.0.0.1:${PROMETHEUS_PORT:-9090}:${PROMETHEUS_PORT:-9090}',
+    );
+    expect(toStringList(service(compose, 'grafana').ports)).toContain(
+      '0.0.0.0:${GRAFANA_PORT:-3000}:${GRAFANA_PORT:-3000}',
+    );
   });
 
   it('wires the broker profile rabbitmq service with a refusal entrypoint and localhost-only management UI', () => {
@@ -239,7 +323,7 @@ describe('platform-profile compose contract', () => {
     expect(String((rabbitmq.healthcheck as { test?: unknown })?.test)).toContain('rabbitmq-diagnostics');
 
     const ports = toStringList(rabbitmq.ports);
-    expect(ports).toContain('127.0.0.1:15672:15672');
+    expect(ports).toContain('127.0.0.1:${RABBITMQ_MGMT_PORT:-15672}:${RABBITMQ_MGMT_PORT:-15672}');
     expect(ports.some((port) => port.includes('5672:5672'))).toBe(false);
     expect(composeText).not.toMatch(/^\s*-\s*"?[\d.]*:?5672:5672"?\s*$/m);
 
@@ -247,9 +331,11 @@ describe('platform-profile compose contract', () => {
       expect.arrayContaining([
         'RABBITMQ_DEFAULT_USER=${BRIDGE_BROKER_USER:-garbanzo}',
         'RABBITMQ_DEFAULT_PASS=${BRIDGE_BROKER_PASSWORD:-}',
+        'RABBITMQ_MGMT_PORT=${RABBITMQ_MGMT_PORT:-15672}',
       ]),
     );
     expect(String(rabbitmq.command)).toContain('BRIDGE_BROKER_PASSWORD');
+    expect(String(rabbitmq.command)).toContain('management.tcp.port');
     expect(String(rabbitmq.command)).toContain('Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile');
   });
 
@@ -279,6 +365,8 @@ describe('layered env example coherence', () => {
   const sharedExample = parseEnvExample('.env.example');
   const discordExample = parseEnvExample('.env.discord.example');
   const whatsappExample = parseEnvExample('.env.whatsapp.example');
+  const telegramExample = parseEnvExample('.env.telegram.example');
+  const matrixExample = parseEnvExample('.env.matrix.example');
   const discordExampleText = readFileSync('.env.discord.example', 'utf-8');
   const sharedExampleText = readFileSync('.env.example', 'utf-8');
 
@@ -286,6 +374,8 @@ describe('layered env example coherence', () => {
     for (const [instanceName, instanceExample] of [
       ['discord', discordExample],
       ['whatsapp', whatsappExample],
+      ['telegram', telegramExample],
+      ['matrix', matrixExample],
     ] as const) {
       const duplicatedKeys = [...instanceExample.keys()].filter((key) => sharedExample.has(key));
 
@@ -306,6 +396,21 @@ describe('layered env example coherence', () => {
     expect(whatsappExample.has('OWNER_JID')).toBe(true);
     expect(sharedExample.has('OWNER_JID')).toBe(false);
     expect(discordExample.has('OWNER_JID')).toBe(false);
+  });
+
+  it('keeps Telegram credentials scoped to the Telegram example', () => {
+    expect(telegramExample.has('TELEGRAM_BOT_TOKEN')).toBe(true);
+    expect(telegramExample.has('TELEGRAM_OWNER_ID')).toBe(true);
+    expect(telegramExample.get('TELEGRAM_CHAT_SCOPE')).toBe('configured');
+    expect(sharedExample.has('TELEGRAM_BOT_TOKEN')).toBe(false);
+  });
+
+  it('keeps Matrix credentials scoped to the Matrix example', () => {
+    expect(matrixExample.has('MATRIX_HOMESERVER_URL')).toBe(true);
+    expect(matrixExample.has('MATRIX_ACCESS_TOKEN')).toBe(true);
+    expect(matrixExample.has('MATRIX_OWNER_ID')).toBe(true);
+    expect(matrixExample.get('MATRIX_CHAT_SCOPE')).toBe('configured');
+    expect(sharedExample.has('MATRIX_ACCESS_TOKEN')).toBe(false);
   });
 
   it('removes the retired Remy env example', () => {

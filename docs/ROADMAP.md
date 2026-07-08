@@ -52,8 +52,8 @@ Priority order:
   secret before the first publish; docs use the git-clone quickstart until
   publish succeeds, then flip to `npx garbanzo-bot setup`. Pending release.
 - Setup guide: [docs/QUICKSTART.md](QUICKSTART.md).
-- Telegram remains the next platform adapter after this milestone (see
-  Platform expansion below).
+- Telegram shipped as a fully supported platform adapter (v3.3.0); Matrix is
+  next (see Platform expansion below).
 
 ### Platform Bridging - Delivered (v3)
 
@@ -79,7 +79,7 @@ Priority order:
 
 - Kubernetes chart for homelab and cluster operators lives in `deploy/helm/`.
   Done.
-- Docker Compose remains the default install path for most self-hosted
+- Docker Compose remains the default install path for most multi-platform
   deployments.
 
 ### 3.x candidates
@@ -98,24 +98,24 @@ Priority order:
 
 ## Platform expansion (researched 2026-07-06)
 
-Candidates for the next platform adapter, ranked:
+Candidates for the next platform adapter, ranked at research time:
 
-1. **Telegram** — lowest engineering risk of any candidate: an official free
-   Bot API and a mature TypeScript-native client library, with no account-ban
-   risk (unlike WhatsApp/Baileys).
-2. **Matrix** — best fit for a self-hosted, privacy-minded community
-   audience, backed by a real demand signal (a large spike in Matrix interest
-   during a 2026 Discord trust incident), with a healthy TypeScript-native
-   bot SDK.
+1. ~~**Telegram**~~ — shipped in v3.3.0: an official free Bot API and a
+   mature TypeScript-native client library (grammY), with no account-ban
+   risk (unlike WhatsApp/Baileys). See [docs/PLATFORMS.md](PLATFORMS.md).
+2. ~~**Matrix**~~ — shipped in v3.3.0: best fit for a privacy-minded,
+   privacy-minded community audience, backed by a real demand signal (a
+   large spike in Matrix interest during a 2026 Discord trust incident).
+   Unencrypted rooms only for now. See [docs/PLATFORMS.md](PLATFORMS.md).
 3. **Mattermost** — a clean official bot-account API and a genuinely free
-   self-hosted core (bot accounts don't consume paid seats), with strong
-   audience overlap as another self-hosted OSS chat tool.
+   operator-run core (bot accounts don't consume paid seats), with strong
+   audience overlap as another open-source community chat tool.
 
 Also planned:
 
 - **Slack completion** — finish the existing Slack scaffold into a
   production runtime, as cleanup rather than new priority. The SDK is mature
-  and fits Garbanzo's self-hosted model, but Slack's free-tier message
+  and fits Garbanzo's multi-platform model, but Slack's free-tier message
   history cap makes it a weaker primary home for a memory-carrying bot than
   the top three above.
 - **XMPP (community tier)** — technically shovel-ready (mature client
@@ -130,14 +130,15 @@ Also planned:
   unofficial clients. Unlike WhatsApp's behavior-based anti-ban posture, this
   is a protocol-versioning cliff that can't be managed with rate limits or
   warm-up ramps.
-- **Microsoft Teams** — the bot SDK the existing stub targets
+- **Microsoft Teams** — the bot SDK the deleted stub had targeted
   (`botbuilder-js`) was archived in January 2026. Building this out would
-  mean a full rewrite against Microsoft's replacement SDK.
+  mean a full rewrite against Microsoft's replacement SDK; the non-functional
+  stub was removed from the codebase rather than kept as dead scaffolding.
 - **IRC** — Libera.Chat, the largest IRC network, adopted a May 2026 policy
   restricting autonomous LLM-driven bots, undercutting IRC's appeal as an
   easy low-effort target.
 - **Social media (X/Twitter, Bluesky)** — mostly a modality mismatch for a
-  group-chat bot. X's group messaging API exists but is approval-gated and
+  community bot. X's group messaging API exists but is approval-gated and
   metered per action. Bluesky's group-chat feature is new enough that
   third-party bot access to it is unconfirmed; worth re-checking later.
 
@@ -164,7 +165,7 @@ Done when:
 ## Milestone C: Platform Expansion Quality
 
 - Continue adapter architecture hardening.
-- Improve Slack/Discord/Teams adapter parity where practical.
+- Improve Slack/Discord adapter parity where practical.
 - Keep platform-specific behavior explicit and testable.
 
 Done when:

@@ -19,6 +19,7 @@ class FakeChannel {
   nacked: Array<{ msg: unknown; requeue: boolean }> = [];
   closed = false;
   confirmBehavior: 'ok' | 'error' = 'ok';
+  returnOnPublish = false;
   handlers = new Map<string, OnHandler[]>();
 
   on(event: string, handler: OnHandler): this {
@@ -53,10 +54,19 @@ class FakeChannel {
     exchange: string,
     routingKey: string,
     content: Buffer,
-    options: unknown,
+    options: { correlationId?: string } & Record<string, unknown>,
     callback?: (err: unknown, ok: unknown) => void,
   ): boolean {
     this.published.push({ exchange, routingKey, content, options });
+    if (this.returnOnPublish) {
+      for (const handler of this.handlers.get('return') ?? []) {
+        handler({
+          fields: { exchange, routingKey },
+          properties: { correlationId: options.correlationId },
+          content,
+        });
+      }
+    }
     if (this.confirmBehavior === 'ok') callback?.(null, {});
     else callback?.(new Error('publish nacked'), undefined);
     return true;
@@ -168,7 +178,24 @@ describe('createAmqpBridgeTransport', () => {
     expect(lastConnection.channel.published).toHaveLength(1);
     const [publishCall] = lastConnection.channel.published;
     expect(publishCall?.routingKey).toBe('whatsapp-band');
-    expect(publishCall?.options).toMatchObject({ persistent: true });
+    expect(publishCall?.options).toMatchObject({ persistent: true, mandatory: true });
+
+    await transport.stop();
+  });
+
+  it('rejects delivery as retryable when RabbitMQ returns an unroutable mandatory publish', async () => {
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { TransportDeliveryError } = await import('../src/bridge/transport.js');
+    lastConnection.channel.returnOnPublish = true;
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    await expect(transport.deliver(makeEnvelope({ targetInstance: 'not-yet-declared' }), null)).rejects.toMatchObject({
+      name: 'TransportDeliveryError',
+      retryable: true,
+    });
+    await expect(transport.deliver(makeEnvelope({ targetInstance: 'not-yet-declared' }), null)).rejects.toBeInstanceOf(
+      TransportDeliveryError,
+    );
 
     await transport.stop();
   });
@@ -262,6 +289,181 @@ describe('createAmqpBridgeTransport', () => {
     expect(lastConnection.channel.acked).toHaveLength(0);
 
     await transport.stop();
+  });
+
+  it('holds a deferred delivery unacked and retries after the deferral window, delivering without loss', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { BridgeDeliveryDeferredError } = await import('../src/bridge/transport.js');
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    let attempt = 0;
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new BridgeDeliveryDeferredError(Date.now() + 3_000);
+      return 'accepted';
+    });
+    await transport.startInbound(handler);
+
+    const msg = fakeConsumeMessage(makeEnvelope(), false);
+    lastConnection.channel.consumeHandler?.(msg);
+
+    // First attempt defers — must be held (neither acked nor nacked), not
+    // dropped or requeued. advanceTimersByTimeAsync(0) flushes the pending
+    // microtask chain (parse -> await handler() -> throw -> schedule) without
+    // advancing the fake clock, so retryAtMs - Date.now() stays exactly 3000.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(lastConnection.channel.acked).toHaveLength(0);
+    expect(lastConnection.channel.nacked).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(handler).toHaveBeenCalledTimes(2);
+
+    expect(lastConnection.channel.acked).toContain(msg);
+    expect(lastConnection.channel.nacked).toHaveLength(0);
+
+    await transport.stop();
+  });
+
+  it('never drops a deferred delivery even when the message has already been redelivered once', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { BridgeDeliveryDeferredError } = await import('../src/bridge/transport.js');
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    let attempt = 0;
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new BridgeDeliveryDeferredError(Date.now() + 3_000);
+      return 'accepted';
+    });
+    await transport.startInbound(handler);
+
+    // redelivered = true: exactly the shape that, before this fix, fell
+    // straight into the "failed again after redelivery — drop" branch on
+    // the very first deferral.
+    const msg = fakeConsumeMessage(makeEnvelope(), true);
+    lastConnection.channel.consumeHandler?.(msg);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(lastConnection.channel.nacked).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(handler).toHaveBeenCalledTimes(2);
+
+    expect(lastConnection.channel.acked).toContain(msg);
+    expect(lastConnection.channel.nacked).toHaveLength(0);
+
+    await transport.stop();
+  });
+
+  it('keeps rescheduling through multiple consecutive deferrals until delivery succeeds', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { BridgeDeliveryDeferredError } = await import('../src/bridge/transport.js');
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    let attempt = 0;
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      attempt += 1;
+      if (attempt < 3) throw new BridgeDeliveryDeferredError(Date.now() + 1_000);
+      return 'accepted';
+    });
+    await transport.startInbound(handler);
+
+    const msg = fakeConsumeMessage(makeEnvelope(), false);
+    lastConnection.channel.consumeHandler?.(msg);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(handler).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(handler).toHaveBeenCalledTimes(3);
+
+    expect(lastConnection.channel.acked).toContain(msg);
+    expect(lastConnection.channel.nacked).toHaveLength(0);
+
+    await transport.stop();
+  });
+
+  it('caps the deferred retry wait at 60s even when retryAtMs is much further out', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { BridgeDeliveryDeferredError } = await import('../src/bridge/transport.js');
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    let attempt = 0;
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new BridgeDeliveryDeferredError(Date.now() + 5 * 60_000);
+      return 'accepted';
+    });
+    await transport.startInbound(handler);
+
+    const msg = fakeConsumeMessage(makeEnvelope(), false);
+    lastConnection.channel.consumeHandler?.(msg);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(handler).toHaveBeenCalledTimes(2);
+
+    await transport.stop();
+  });
+
+  it('ordinary (non-deferral) failures still follow requeue-then-drop, unaffected by the deferral path', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      throw new Error('genuine failure');
+    });
+    await transport.startInbound(handler);
+
+    const firstAttempt = fakeConsumeMessage(makeEnvelope(), false);
+    lastConnection.channel.consumeHandler?.(firstAttempt);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lastConnection.channel.nacked).toHaveLength(1);
+    expect(lastConnection.channel.nacked[0]).toMatchObject({ msg: firstAttempt, requeue: true });
+
+    const redeliveredAttempt = fakeConsumeMessage(makeEnvelope(), true);
+    lastConnection.channel.consumeHandler?.(redeliveredAttempt);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lastConnection.channel.nacked).toHaveLength(2);
+    expect(lastConnection.channel.nacked[1]).toMatchObject({ msg: redeliveredAttempt, requeue: false });
+
+    await transport.stop();
+  });
+
+  it('stop() cancels a pending deferred retry timer instead of leaving it to fire later', async () => {
+    vi.useFakeTimers();
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { BridgeDeliveryDeferredError } = await import('../src/bridge/transport.js');
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => {
+      throw new BridgeDeliveryDeferredError(Date.now() + 5_000);
+    });
+    await transport.startInbound(handler);
+
+    const msg = fakeConsumeMessage(makeEnvelope(), false);
+    lastConnection.channel.consumeHandler?.(msg);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    await transport.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 
   it('schedules a reconnect with 5s->10s backoff on connection close', async () => {

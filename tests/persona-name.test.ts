@@ -5,7 +5,7 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-type MessagingPlatform = 'whatsapp' | 'discord' | 'slack' | 'teams';
+type MessagingPlatform = 'whatsapp' | 'discord' | 'slack' | 'telegram' | 'matrix';
 
 interface LoadPersonaOptions {
   doc?: string;

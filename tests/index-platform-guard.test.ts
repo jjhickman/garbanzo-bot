@@ -158,7 +158,8 @@ describe('shouldEnableWhatsAppLogin', () => {
     ['discord', 'web', false, false],
     ['discord', 'both', false, false],
     ['slack', 'web', false, false],
-    ['teams', 'web', false, false],
+    ['telegram', 'web', false, false],
+    ['matrix', 'web', false, false],
   ] satisfies Array<[MessagingPlatform, WhatsAppLoginMode, boolean, boolean]>)(
     'platform=%s loginMode=%s healthOnlyMode=%s -> %s',
     (platform, loginMode, healthOnlyMode, expected) => {

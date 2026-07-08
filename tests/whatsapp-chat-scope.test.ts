@@ -175,7 +175,14 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
     vi.restoreAllMocks();
   });
 
-  function mockProcessorDeps(chatScope: 'all' | 'configured') {
+  function mockProcessorDeps(
+    chatScope: 'all' | 'configured',
+    voice: {
+      isVoice?: boolean;
+      audioBuffer?: Buffer | null;
+      transcript?: string | null;
+    } = {},
+  ) {
     const processInboundMessage = vi.fn(async () => undefined);
     const isGroupEnabled = vi.fn((chatId: string) => chatId === 'configured@g.us');
 
@@ -192,10 +199,12 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
     }));
     vi.doMock('../src/middleware/health.js', () => ({ markMessageReceived: vi.fn() }));
     vi.doMock('../src/platforms/whatsapp/media.js', () => ({
-      isVoiceMessage: vi.fn(() => false),
-      downloadVoiceAudio: vi.fn(async () => null),
+      isVoiceMessage: vi.fn(() => voice.isVoice ?? false),
+      downloadVoiceAudio: vi.fn(async () => voice.audioBuffer ?? null),
     }));
-    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => null) }));
+    vi.doMock('../src/features/voice.js', () => ({
+      transcribeAudio: vi.fn(async () => voice.transcript ?? null),
+    }));
     vi.doMock('../src/features/introductions.js', () => ({ handleIntroduction: vi.fn(async () => null) }));
     vi.doMock('../src/features/events.js', () => ({ handleEventPassive: vi.fn(async () => null) }));
     vi.doMock('../src/core/groups-config.js', () => ({
@@ -240,5 +249,59 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
 
     const env = processInboundMessage.mock.calls[0]?.[3] as { shouldIngestGroupChat?: (chatId: string) => boolean } | undefined;
     expect(env?.shouldIngestGroupChat).toBeUndefined();
+  });
+
+  // WS3: voice messages must never be silently dropped. The processor used
+  // to `return` on download/transcription failure, so nothing downstream —
+  // moderation, recording, bridge capture — ever saw the message.
+  function inboundArg(processInboundMessage: ReturnType<typeof vi.fn>) {
+    return processInboundMessage.mock.calls[0]?.[1] as
+      | { text: string; synthesizedPlaceholder?: boolean }
+      | undefined;
+  }
+
+  it('continues with a flagged placeholder when the voice download fails', async () => {
+    const { processInboundMessage } = mockProcessorDeps('all', { isVoice: true, audioBuffer: null });
+    const { processWhatsAppRawMessage } = await import('../src/platforms/whatsapp/processor.js');
+
+    await processWhatsAppRawMessage({ user: { id: 'bot@s.whatsapp.net' } } as never, {} as never);
+
+    expect(processInboundMessage).toHaveBeenCalledTimes(1);
+    expect(inboundArg(processInboundMessage)).toMatchObject({
+      text: '[voice note]',
+      synthesizedPlaceholder: true,
+    });
+  });
+
+  it('continues with a flagged placeholder when transcription returns null', async () => {
+    const { processInboundMessage } = mockProcessorDeps('all', {
+      isVoice: true,
+      audioBuffer: Buffer.from([1]),
+      transcript: null,
+    });
+    const { processWhatsAppRawMessage } = await import('../src/platforms/whatsapp/processor.js');
+
+    await processWhatsAppRawMessage({ user: { id: 'bot@s.whatsapp.net' } } as never, {} as never);
+
+    expect(processInboundMessage).toHaveBeenCalledTimes(1);
+    expect(inboundArg(processInboundMessage)).toMatchObject({
+      text: '[voice note]',
+      synthesizedPlaceholder: true,
+    });
+  });
+
+  it('uses the transcript with no placeholder flag when transcription succeeds', async () => {
+    const { processInboundMessage } = mockProcessorDeps('all', {
+      isVoice: true,
+      audioBuffer: Buffer.from([1]),
+      transcript: 'hello from voice',
+    });
+    const { processWhatsAppRawMessage } = await import('../src/platforms/whatsapp/processor.js');
+
+    await processWhatsAppRawMessage({ user: { id: 'bot@s.whatsapp.net' } } as never, {} as never);
+
+    const inbound = inboundArg(processInboundMessage);
+    expect(inbound?.text).toBe('hello from voice');
+    expect(inbound?.synthesizedPlaceholder).toBeUndefined();
   });
 });

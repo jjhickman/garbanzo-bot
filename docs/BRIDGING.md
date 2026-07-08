@@ -108,10 +108,16 @@ plain HTTP with no extra containers.
    - **`instances`** - one entry per bridged deployment:
      - `id` - matches that instance's `INSTANCE_ID` (or its `MESSAGING_PLATFORM`
        if `INSTANCE_ID` is unset).
-     - `platform` - one of `whatsapp`, `discord`, `slack`, `teams`.
+     - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`.
+       Telegram and Matrix both have runtimes and can be bridged today.
      - `url` (optional) - the base URL the HTTP transport uses to reach that
-       instance, for example `http://discord:3002` or `http://whatsapp:3001`
-       on the compose network. Not used by the AMQP transport.
+       instance, for example `http://discord:${DISCORD_HEALTH_PORT:-3002}`,
+       `http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`,
+       `http://telegram:${TELEGRAM_HEALTH_PORT:-3005}`, or
+       `http://matrix:${MATRIX_HEALTH_PORT:-3004}` on the compose
+       network. The bridge loader expands `${VAR}` and `${VAR:-default}`
+       placeholders before validating the JSON. Not used by the AMQP
+       transport.
    - **`routes`** - one entry per bridged channel/group pair:
      - `id` - a unique, human-readable route slug.
      - `endpoints` - exactly two `{instance, chatId}` entries. `instance`
@@ -124,7 +130,22 @@ plain HTTP with no extra containers.
      - `modeToWhatsApp` - `summary` (default) or `verbatim`. Governs how
        messages arriving *at* a WhatsApp endpoint are delivered.
      - `modeToDiscord` - `verbatim` (default) or `summary`. Same idea, for a
-       Discord endpoint.
+       Discord endpoint. There is no `modeToTelegram` field: Telegram
+       endpoints always relay directly (verbatim) — the summary buffer exists
+       to fold messages behind WhatsApp's outbound-safety backpressure, which
+       Telegram's official Bot API has no equivalent of. Instead, sends to a
+       Telegram destination chat are proactively paced at least 3 seconds
+       apart (per destination chat) so a burst of relays from a busy source
+       can't systematically trip Telegram's per-chat rate limit; the
+       Telegram adapter also retries a single 429 using the server's own
+       `retry_after` on top of that spacing. There is likewise no
+       `modeToMatrix` field: Matrix endpoints always relay directly
+       (verbatim). Matrix bridge deliveries have no fixed pacing, unlike
+       Telegram's proactive spacing — homeserver rate limits
+       (`M_LIMIT_EXCEEDED`) are operator-configurable rather than a fixed
+       vendor ceiling, so the Matrix adapter retries inline only for a short
+       wait and defers anything longer through the same durable outbox used
+       for held WhatsApp sends.
      - `relayCommands` - `false` by default. When false, messages starting
        with `!` (bang commands like `!weather`) are not relayed.
      - `ingestRelayed` - `false` by default. When true, successfully delivered
@@ -139,8 +160,8 @@ plain HTTP with no extra containers.
    ```json
    {
      "instances": [
-       { "id": "discord-main", "platform": "discord", "url": "http://discord:3002" },
-       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:3001" }
+       { "id": "discord-main", "platform": "discord", "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}" },
+       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}" }
      ],
      "routes": [
        {
@@ -174,8 +195,8 @@ plain HTTP with no extra containers.
    - Health endpoints still return 200 (bridging never changes `/health`):
 
      ```bash
-     curl http://127.0.0.1:3002/health
-     curl http://127.0.0.1:3001/health
+     curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
+     curl "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
      ```
 
    - Logs show the bridge coming up on each instance:
@@ -219,9 +240,13 @@ transport when either is true:
 - **Durability across long peer outages.** Under HTTP, an undelivered
   message keeps retrying from the sender's outbox with growing backoff and
   eventually dead-letters if the peer stays unreachable too long. Under
-  AMQP, once a message is published (with a publisher confirm) it sits
-  durably on the broker's queue for that instance, regardless of how long
-  the instance is down, and is delivered when it reconnects.
+  AMQP, once a message is published with `mandatory: true`, routed to the
+  target instance queue, and confirmed by the broker, it sits durably on that
+  queue regardless of how long the instance is down, and is delivered when it
+  reconnects. If the target queue/binding does not exist yet, RabbitMQ
+  returns the mandatory publish; Garbanzo treats that as a retryable transport
+  failure so the sender's outbox keeps the row and retries instead of
+  accepting silent loss.
 
 To enable it:
 
@@ -230,7 +255,7 @@ To enable it:
 COMPOSE_PROFILES=discord,whatsapp,broker
 BRIDGE_BROKER_PASSWORD=some-broker-password
 BRIDGE_TRANSPORT=amqp
-BRIDGE_BROKER_URL=amqp://garbanzo:some-broker-password@rabbitmq:5672
+BRIDGE_BROKER_URL=amqp://garbanzo:some-broker-password@rabbitmq:<amqp-port>
 ```
 
 `BRIDGE_BROKER_USER` defaults to `garbanzo` if unset. If
@@ -241,10 +266,10 @@ start and logs:
 Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile
 ```
 
-The RabbitMQ management UI is reachable at `http://localhost:15672` (bound
-to localhost only) with the same broker user/password. The AMQP port
-(`5672`) is never published to the host; it is only reachable from other
-containers on the compose network as `rabbitmq:5672`.
+The RabbitMQ management UI is reachable at `http://localhost:${RABBITMQ_MGMT_PORT:-15672}` (bound
+to localhost only) with the same broker user/password. The AMQP listener is
+never published to the host; it is only reachable from other containers on the
+compose network by using the RabbitMQ service name.
 
 ## Worked example — three instances
 
@@ -294,11 +319,11 @@ new name, with a fresh `INSTANCE_ID`, its own env file, and fresh volumes:
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=whatsapp
       - INSTANCE_ID=whatsapp-band
-      - HEALTH_PORT=3003
+      - HEALTH_PORT=${WHATSAPP_BAND_HEALTH_PORT}
       - HEALTH_BIND_HOST=0.0.0.0
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "127.0.0.1:3003:3003"
+      - "127.0.0.1:${WHATSAPP_BAND_HEALTH_PORT}:${WHATSAPP_BAND_HEALTH_PORT}"
     volumes:
       - baileys_auth_band:/app/baileys_auth
       - garbanzo_data_band:/app/data
@@ -395,8 +420,8 @@ is not in the map at all. In `config/bridge-map.json`:
 ```json
 {
   "instances": [
-    { "id": "band-discord", "platform": "discord", "url": "http://discord:3002" },
-    { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:3003" }
+    { "id": "band-discord", "platform": "discord", "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}" },
+    { "id": "whatsapp-band", "platform": "whatsapp", "url": "http://whatsapp-band:${WHATSAPP_BAND_HEALTH_PORT}" }
   ],
   "routes": [
     {
@@ -462,6 +487,9 @@ provide a fetchable URL on `InboundMessage` because Baileys media requires
 for now. Cross-platform WhatsApp media download is a roadmap item.
 
 ## Shared memory
+
+Each community keeps its own lore. An instance shares selected lore with
+another community only when the owner permits it.
 
 `!memory share <id>` and `!memory unshare <id>` are owner-only, DM-only
 commands gated by `SHARED_MEMORY_ENABLED` (default `false` — replies with a

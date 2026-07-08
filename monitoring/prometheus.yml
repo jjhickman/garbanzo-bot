@@ -1,23 +1,25 @@
-# Prometheus config for the garbanzo monitoring profile.
+# Prometheus config template for the garbanzo monitoring profile.
 # The scrape token is written automatically at container start from the
-# MONITORING_TOKEN in your .env (see the prometheus service entrypoint
-# in docker-compose.yml) — no manual setup needed. The token must be PINNED
-# in .env; /metrics also still accepts ?token= for manual curls.
+# MONITORING_TOKEN in your .env. The prometheus service entrypoint in
+# docker-compose.yml also renders the ${...} port placeholders below to
+# /prometheus/prometheus.yml before starting Prometheus.
 
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
 
 scrape_configs:
-  # Prometheus scrapes both platform instances. If one profile is not running,
-  # that instance intentionally appears as a down target.
+  # Prometheus scrapes every platform instance. If a profile is not running,
+  # that instance intentionally appears as a down target (this is expected
+  # for operators who don't run every platform, e.g. telegram is
+  # permanently down for a discord-only or whatsapp-only deployment).
   - job_name: discord
     metrics_path: /metrics
     authorization:
       type: Bearer
       credentials_file: /prometheus/token
     static_configs:
-      - targets: ["discord:3002"]
+      - targets: ["discord:${DISCORD_HEALTH_PORT:-3002}"]
 
   - job_name: whatsapp
     metrics_path: /metrics
@@ -25,8 +27,24 @@ scrape_configs:
       type: Bearer
       credentials_file: /prometheus/token
     static_configs:
-      - targets: ["whatsapp:3001"]
+      - targets: ["whatsapp:${WHATSAPP_HEALTH_PORT:-3001}"]
+
+  - job_name: telegram
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /prometheus/token
+    static_configs:
+      - targets: ["telegram:${TELEGRAM_HEALTH_PORT:-3005}"]
+
+  - job_name: matrix
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /prometheus/token
+    static_configs:
+      - targets: ["matrix:${MATRIX_HEALTH_PORT:-3004}"]
 
   - job_name: prometheus
     static_configs:
-      - targets: ["localhost:9090"]
+      - targets: ["localhost:${PROMETHEUS_PORT:-9090}"]

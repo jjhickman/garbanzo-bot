@@ -3,7 +3,8 @@
 
 A single-instance install that runs as a plain Node.js process instead of
 through Docker Compose. Good for a semi-technical operator who wants a
-working bot fast and doesn't need the full monitoring/bridging stack. Docker
+working bot fast, complete with its own community lore (the group's shared
+memory), and doesn't need the full monitoring/bridging stack. Docker
 Compose is still the recommended path for multi-instance or production
 deployments; see the main [README](../README.md) and
 [docs/INFRASTRUCTURE.md](INFRASTRUCTURE.md) for that door.

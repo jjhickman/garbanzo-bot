@@ -4,6 +4,9 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const dockerfilePath = resolve(process.cwd(), 'Dockerfile');
+const packageJsonPath = resolve(process.cwd(), 'package.json');
+const packageLockPath = resolve(process.cwd(), 'package-lock.json');
+const matrixCryptoStubPackagePath = resolve(process.cwd(), 'stubs/matrix-sdk-crypto-nodejs/package.json');
 
 describe('Docker runtime assets', () => {
   it('includes postgres schema SQL in runtime image', () => {
@@ -16,5 +19,34 @@ describe('Docker runtime assets', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf-8');
     expect(dockerfile).toContain('docs/personas/');
     expect(dockerfile).toContain('./docs/personas/');
+  });
+
+  it('keeps Matrix native crypto off the Docker npm install path', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf-8');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+      dependencies?: Record<string, string>;
+      overrides?: Record<string, string>;
+    };
+    const packageLock = JSON.parse(readFileSync(packageLockPath, 'utf-8')) as {
+      packages?: Record<string, { resolved?: string; hasInstallScript?: boolean }>;
+    };
+    const stubPackage = JSON.parse(readFileSync(matrixCryptoStubPackagePath, 'utf-8')) as {
+      name?: string;
+      scripts?: Record<string, string>;
+    };
+
+    expect(dockerfile).toContain('COPY stubs/ ./stubs/');
+    expect(packageJson.dependencies?.['@matrix-org/matrix-sdk-crypto-nodejs']).toBe(
+      'file:stubs/matrix-sdk-crypto-nodejs',
+    );
+    expect(packageJson.overrides?.['@matrix-org/matrix-sdk-crypto-nodejs']).toBe(
+      '$@matrix-org/matrix-sdk-crypto-nodejs',
+    );
+    expect(stubPackage.name).toBe('@matrix-org/matrix-sdk-crypto-nodejs');
+    expect(stubPackage.scripts?.postinstall).toBeUndefined();
+    expect(packageLock.packages?.['node_modules/@matrix-org/matrix-sdk-crypto-nodejs']).toMatchObject({
+      resolved: 'stubs/matrix-sdk-crypto-nodejs',
+    });
+    expect(packageLock.packages?.['node_modules/@matrix-org/matrix-sdk-crypto-nodejs']?.hasInstallScript).toBeUndefined();
   });
 });

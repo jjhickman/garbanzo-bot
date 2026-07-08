@@ -114,6 +114,7 @@ export const claimDueBridgeOutbox = backend.claimDueBridgeOutbox;
 export const markBridgeOutboxSent = backend.markBridgeOutboxSent;
 export const markBridgeOutboxDead = backend.markBridgeOutboxDead;
 export const bumpBridgeOutboxAttempt = backend.bumpBridgeOutboxAttempt;
+export const deferBridgeOutbox = backend.deferBridgeOutbox;
 export const bridgeSeenInsert = backend.bridgeSeenInsert;
 export const bridgeSeenDelete = backend.bridgeSeenDelete;
 export const bridgeOutboxCounts = backend.bridgeOutboxCounts;

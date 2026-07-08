@@ -13,6 +13,7 @@ import { isReplyToBot, isAcknowledgment } from './reactions.js';
 import { normalizeWhatsAppInboundMessage, type WhatsAppInbound } from './inbound.js';
 import { createWhatsAppAdapter } from './adapter.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
+import { VOICE_NOTE_PLACEHOLDER } from '../../core/inbound-message.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
 
@@ -30,19 +31,27 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
   if (!inbound) return;
   getWhatsAppOutboundSafety(sock)?.onIncomingMessage(inbound.chatId, inbound.text ?? undefined);
 
-  // Voice message transcription
+  // Voice message transcription. Failure never drops the message (it used
+  // to): the placeholder flows through moderation, recording, and bridge
+  // capture, and the synthesizedPlaceholder flag stops reply dispatch in
+  // the core pipeline (WS3 semantics, matching the Telegram processor).
   if (isVoiceMessage(msg)) {
     const audioBuffer = await downloadVoiceAudio(msg);
-    if (!audioBuffer) return;
-
-    const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
-    if (!transcript) {
-      logger.debug('Voice message transcription failed — skipping');
-      return;
+    if (!audioBuffer) {
+      logger.debug('Voice message download failed — continuing with placeholder');
+      inbound.text = VOICE_NOTE_PLACEHOLDER;
+      inbound.synthesizedPlaceholder = true;
+    } else {
+      const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
+      if (!transcript) {
+        logger.debug('Voice message transcription failed — continuing with placeholder');
+        inbound.text = VOICE_NOTE_PLACEHOLDER;
+        inbound.synthesizedPlaceholder = true;
+      } else {
+        logger.info({ transcriptLen: transcript.length }, 'Voice message transcribed');
+        inbound.text = transcript;
+      }
     }
-
-    logger.info({ transcriptLen: transcript.length }, 'Voice message transcribed');
-    inbound.text = transcript;
   }
 
   const adapter = createWhatsAppAdapter(sock);

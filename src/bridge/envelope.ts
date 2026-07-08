@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Mirrors MessagingPlatform (src/core/messaging-platform.ts). Defined locally rather
 // than imported so the wire schema stays independent of internal config plumbing.
-export const MessagingPlatformSchema = z.enum(['whatsapp', 'discord', 'slack', 'teams']);
+export const MessagingPlatformSchema = z.enum(['whatsapp', 'discord', 'slack', 'telegram', 'matrix']);
 
 export const BridgeOriginSchema = z
   .object({

@@ -38,7 +38,7 @@ WhatsApp outbound safety is per instance and remains load-bearing. Bridged messa
 
 ## Database Strategy
 
-SQLite is the default for self-hosted deployments. It keeps the single-host path simple and easy to back up.
+SQLite is the default for multi-platform deployments. It keeps the single-host path simple and easy to back up.
 
 Use Postgres when a deployment needs managed storage, multiple service roles, or cloud operational patterns:
 

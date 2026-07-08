@@ -1,1 +1,1 @@
-export type MessagingPlatform = 'whatsapp' | 'discord' | 'slack' | 'teams';
+export type MessagingPlatform = 'whatsapp' | 'discord' | 'slack' | 'telegram' | 'matrix';

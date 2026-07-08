@@ -159,7 +159,7 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.registries.outputs.dockerhub_image }}
-          short-description: Self-hosted AI community bot - LLM routing, tool calling, memory, and built-in observability.
+          short-description: Multi-platform community lore and operations with cross-platform and cross-community bridging.
           readme-filepath: ./docs/DOCKERHUB_OVERVIEW.md
 
   scan-image:

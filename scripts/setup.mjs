@@ -10,6 +10,8 @@ import { execSync } from 'node:child_process';
 import {
   DISCORD_FIELDS,
   WHATSAPP_FIELDS,
+  TELEGRAM_FIELDS,
+  MATRIX_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
@@ -19,6 +21,7 @@ import {
   resolveComposeProfiles,
   buildPlatformEnvLines,
   buildSharedEnvLines,
+  mergeEnvFileContent,
   redactEnvContent,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
@@ -47,8 +50,12 @@ const OUTPUT_ROOT = GARBANZO_HOME_ENV ? resolve(GARBANZO_HOME_ENV) : PROJECT_ROO
 const ENV_PATH = resolve(OUTPUT_ROOT, '.env');
 const ENV_DISCORD_PATH = resolve(OUTPUT_ROOT, '.env.discord');
 const ENV_WHATSAPP_PATH = resolve(OUTPUT_ROOT, '.env.whatsapp');
+const ENV_TELEGRAM_PATH = resolve(OUTPUT_ROOT, '.env.telegram');
+const ENV_MATRIX_PATH = resolve(OUTPUT_ROOT, '.env.matrix');
 const GROUPS_PATH = resolve(OUTPUT_ROOT, 'config', 'groups.json');
 const DISCORD_CHANNELS_PATH = resolve(OUTPUT_ROOT, 'config', 'discord-channels.json');
+const TELEGRAM_CHATS_PATH = resolve(OUTPUT_ROOT, 'config', 'telegram-chats.json');
+const MATRIX_ROOMS_PATH = resolve(OUTPUT_ROOT, 'config', 'matrix-rooms.json');
 const PERSONA_PATH = resolve(OUTPUT_ROOT, 'docs', 'PERSONA.md');
 
 // Discord walkthrough copy is cross-checked against what the runtime actually
@@ -87,6 +94,36 @@ function isSnowflake(value) {
 }
 const SNOWFLAKE_HINT = 'a Discord snowflake ID is 17-20 digits, numbers only — enable Developer '
   + 'Mode (User Settings -> Advanced), then right-click the channel/user/application and choose "Copy ID"';
+
+// Telegram chat/user ids are plain (not snowflake-shaped) integers. Accept
+// positive ids, legacy negative group ids, and -100-prefixed supergroup/channel
+// ids, but reject zero, incomplete -100, leading-zero forms, and values far
+// beyond Telegram's current id sizes.
+const TELEGRAM_CHAT_ID_RE = /^-?[1-9]\d*$/;
+function isTelegramChatId(value) {
+  const normalized = String(value ?? '').trim();
+  if (!TELEGRAM_CHAT_ID_RE.test(normalized)) return false;
+  if (normalized === '-100') return false;
+  return normalized.replace(/^-/, '').length <= 16;
+}
+const TELEGRAM_CHAT_ID_HINT = 'a Telegram chat ID is numeric — groups are negative, and supergroups/'
+  + 'channels are negative with a -100 prefix (e.g. -1001234567890); do not use 0, leading zeros, '
+  + 'bare -100, or ids longer than 16 digits; add the bot to the chat, send a '
+  + 'message, then read the id off @userinfobot (forward the message to it) or the getUpdates response '
+  + '(https://api.telegram.org/bot<token>/getUpdates)';
+const TELEGRAM_USER_ID_HINT = 'a Telegram user id is numeric digits only — get it from @userinfobot';
+
+// Matrix identifiers: user ids are @localpart:server, room ids are
+// !opaque:server, and room ALIASES are #alias:server. The rooms config is
+// keyed by room ID only — aliases are resolved to ids at wizard time via the
+// homeserver's directory API, because aliases can be repointed while ids are
+// permanent.
+const MATRIX_USER_ID_RE = /^@[^:\s]+:[^\s]+$/;
+const MATRIX_ROOM_ID_RE = /^![^:\s]+:[^\s]+$/;
+const MATRIX_ROOM_ALIAS_RE = /^#[^:\s]+:[^\s]+$/;
+const MATRIX_OWNER_ID_HINT = 'a Matrix user id (shaped like @you:example.org)';
+const MATRIX_ROOM_HINT = 'a Matrix room id looks like !abc123:example.org (Element: Room Settings -> Advanced -> '
+  + 'Internal room ID); a published alias like #community:example.org also works and is resolved to the id';
 
 let DEFAULT_APP_VERSION = '0.1.0';
 try {
@@ -138,6 +175,91 @@ const PROVIDER_LABELS = {
   gemini: 'Google Gemini',
   bedrock: 'AWS Bedrock',
 };
+
+// Persona gallery (WS10): six shipped personas alongside the Garbanzo Bean
+// default, each a working demonstration of a real feature set. Files live in
+// docs/personas/gallery/ (a subdirectory — docs/personas/*.md filenames are
+// PLATFORM KEYS the loader resolves by MESSAGING_PLATFORM, so gallery names
+// must not share that namespace). `key` is matched case-insensitively
+// against --persona=<name> and the interactive picker.
+const GALLERY_DIR = resolve(PROJECT_ROOT, 'docs', 'personas', 'gallery');
+const PERSONA_GALLERY = [
+  {
+    key: 'riff',
+    file: 'riff.md',
+    label: 'Riff 🎸',
+    useCase: 'Bands and music projects — songs, rehearsals, setlists, idea capture (needs BAND_FEATURES_ENABLED).',
+    bandFeatures: true,
+  },
+  {
+    key: 'quill',
+    file: 'quill.md',
+    label: 'Quill 🎲',
+    useCase: 'Tabletop groups — memory-as-canon, session recaps, scheduling, the character sheet generator.',
+  },
+  {
+    key: 'margie',
+    file: 'margie.md',
+    label: 'Margie 📚',
+    useCase: 'Book clubs — book lookups, reading schedule, spoiler-aware moderation.',
+  },
+  {
+    key: 'bea',
+    file: 'bea.md',
+    label: 'Bea 🏡',
+    useCase: 'Neighborhood and mutual-aid groups — welcomes, events, weather, practical community memory.',
+  },
+  {
+    key: 'patch',
+    file: 'patch.md',
+    label: 'Patch 🔧',
+    useCase: 'Open-source and maker communities — contributor welcomes, decision memory, weekly recaps, CoC moderation.',
+  },
+  {
+    key: 'callie',
+    file: 'callie.md',
+    label: 'Callie 🎭',
+    useCase: 'Theater, dance, and rehearsal-based groups — rehearsal calls, availability, run order (needs BAND_FEATURES_ENABLED).',
+    bandFeatures: true,
+  },
+];
+
+function findGalleryEntry(name) {
+  const normalized = name.trim().toLowerCase();
+  return PERSONA_GALLERY.find((entry) => entry.key === normalized);
+}
+
+/**
+ * Resolves a --persona=<gallery-name|path> value (or the interactive
+ * picker's "custom path" answer) to { content, sourcePath, galleryEntry }.
+ * Gallery names are matched case-insensitively first; anything else is
+ * treated as a file path (absolute or relative to the project root),
+ * mirroring resolveUserPath()'s existing --persona-file behavior. Throws
+ * with the list of valid gallery names when neither resolves — the wizard's
+ * usual clear-error-over-silent-fallback convention.
+ */
+function resolvePersonaSelection(value) {
+  const trimmed = (value || '').trim();
+  const galleryEntry = trimmed ? findGalleryEntry(trimmed) : undefined;
+  if (galleryEntry) {
+    const filePath = resolve(GALLERY_DIR, galleryEntry.file);
+    return { content: readFileSync(filePath, 'utf-8'), sourcePath: filePath, galleryEntry };
+  }
+
+  const asPath = trimmed ? resolveUserPath(trimmed) : '';
+  if (asPath && existsSync(asPath)) {
+    const content = readFileSync(asPath, 'utf-8');
+    if (!content.trim()) {
+      throw new Error(`Persona file is empty: ${asPath}`);
+    }
+    return { content, sourcePath: asPath, galleryEntry: null };
+  }
+
+  const names = PERSONA_GALLERY.map((entry) => entry.key).join(', ');
+  throw new Error(
+    `Unknown persona "${value}" — not a gallery name (available: ${names}) and not a file that exists.`,
+  );
+}
 
 const ALL_FEATURES = [
   'weather', 'transit', 'news', 'help', 'events', 'dnd', 'roll',
@@ -202,6 +324,15 @@ function parseBoolean(value, fallback) {
   if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+function asRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function mergeEnvTargetContent(path, generatedContent) {
+  if (!existsSync(path)) return generatedContent;
+  return mergeEnvFileContent(readFileSync(path, 'utf-8'), generatedContent);
 }
 
 function sanitizeFeatureList(features) {
@@ -346,7 +477,216 @@ async function resolveDiscordChannels({ nonInteractive, cli, rl }) {
     changed = true;
   }
 
-  return { channelsMap, changed, ownerId: existingConfig?.ownerId };
+  return { channelsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
+}
+
+// Collects one { id, name } chat entry interactively, re-prompting on
+// empty/invalid input until a valid Telegram chat id is given. Mirrors
+// promptChannelEntry() for Discord.
+async function promptTelegramChatEntry(rl) {
+  let chatId = '';
+  while (!chatId) {
+    const answer = (await rl.question('   Chat ID to enable: ')).trim();
+    if (!answer) {
+      output.write('   ⚠️ A chat ID is required — the quickstart cannot finish with zero enabled chats.\n');
+      continue;
+    }
+    if (!isTelegramChatId(answer)) {
+      output.write(`   ⚠️ "${answer}" doesn't look like a Telegram chat ID — ${TELEGRAM_CHAT_ID_HINT}.\n`);
+      continue;
+    }
+    chatId = answer;
+  }
+  const chatName = (await rl.question('   Chat name/label [general]: ')).trim() || 'general';
+  return { id: chatId, name: chatName };
+}
+
+// Resolves the full set of enabled Telegram chats for this run, mirroring
+// resolveDiscordChannels() exactly (same merge/gate/re-prompt contract, one
+// enabled chat required to finish the quickstart) against
+// config/telegram-chats.json's { ownerId, chats } shape instead of
+// discord-channels.json's { ownerId, channels }.
+async function resolveTelegramChats({ nonInteractive, cli, rl }) {
+  let existingConfig = null;
+  if (existsSync(TELEGRAM_CHATS_PATH)) {
+    try {
+      existingConfig = JSON.parse(readFileSync(TELEGRAM_CHATS_PATH, 'utf-8'));
+    } catch (err) {
+      throw new Error(`config/telegram-chats.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const chatsMap = { ...(existingConfig?.chats ?? {}) };
+  let changed = false;
+
+  const explicitIds = parseCsv(cli.options['telegram-chat-id'] ?? cli.options['telegram-chat-ids'] ?? '');
+  const invalidIds = explicitIds.filter((id) => !isTelegramChatId(id));
+  if (invalidIds.length > 0) {
+    throw new Error(
+      `--telegram-chat-id(s) contains a value that doesn't look like a Telegram chat ID (${TELEGRAM_CHAT_ID_HINT}): `
+      + invalidIds.map((id) => `"${id}"`).join(', '),
+    );
+  }
+  if (explicitIds.length > 0) {
+    // Object keys naturally dedupe repeated ids from --telegram-chat-ids.
+    const explicitName = (cli.options['telegram-chat-name'] || 'general').trim() || 'general';
+    for (const id of explicitIds) {
+      chatsMap[id] = { name: explicitName, enabled: true, requireMention: true };
+    }
+    changed = true;
+  }
+
+  const countEnabled = () => Object.values(chatsMap).filter((entry) => entry && entry.enabled).length;
+
+  if (countEnabled() === 0) {
+    if (nonInteractive) {
+      throw new Error(
+        'Telegram quickstart requires at least one chat to enable — the bot ignores every ' +
+        'chat until one is enabled. Pass --telegram-chat-id=<chat id> (add the bot to the chat, send a ' +
+        "message, then read the id off @userinfobot or the bot's getUpdates response) or run interactively.",
+      );
+    }
+    if (existingConfig) {
+      output.write('\n⚠️ config/telegram-chats.json exists but has zero enabled chats — the quickstart cannot finish like that.\n');
+    }
+    output.write('\n4) At least one chat to enable: add the bot to the group, send a message, then read\n');
+    output.write('   the chat id off @userinfobot (forward the group message to it) or from\n');
+    output.write('   https://api.telegram.org/bot<token>/getUpdates ("chat":{"id":...}). Group ids are\n');
+    output.write('   negative; supergroup/channel ids are negative with a -100 prefix. The bot ignores\n');
+    output.write('   every chat until one is enabled here — add more later by editing\n');
+    output.write('   config/telegram-chats.json (schema: config/telegram-chats.example.json).\n');
+    const entry = await promptTelegramChatEntry(rl);
+    chatsMap[entry.id] = { name: entry.name, enabled: true, requireMention: true };
+    changed = true;
+  }
+
+  return { chatsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
+}
+
+// Resolves a #alias:server to its permanent !room:server id via the
+// homeserver's public directory endpoint. Requires a reachable homeserver;
+// dry-runs and offline tests should pass room ids directly.
+async function resolveMatrixRoomAlias(homeserverUrl, alias) {
+  const base = homeserverUrl.replace(/\/+$/, '');
+  const url = `${base}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`;
+  let response;
+  try {
+    // Bound the wait — a header-stalling host would otherwise hang the
+    // wizard for undici's default (~300s) before the plain fetch failure
+    // ever surfaces.
+    response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const causeCode = err instanceof Error && err.cause && typeof err.cause === 'object' && 'code' in err.cause
+      ? ` (${String(err.cause.code)})`
+      : '';
+    throw new Error(`Could not reach ${base} to resolve ${alias}: ${message}${causeCode}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Homeserver could not resolve ${alias} (HTTP ${response.status}) — is the alias published?`);
+  }
+  const body = await response.json();
+  const roomId = typeof body?.room_id === 'string' ? body.room_id : '';
+  if (!MATRIX_ROOM_ID_RE.test(roomId)) {
+    throw new Error(`Homeserver returned an unexpected id for ${alias}: "${roomId}"`);
+  }
+  return roomId;
+}
+
+// Collects one { id, name } room entry interactively, resolving aliases and
+// re-prompting on invalid input. Mirrors promptTelegramChatEntry().
+async function promptMatrixRoomEntry(rl, homeserverUrl, { dryRun }) {
+  for (;;) {
+    const answer = (await rl.question('   Room ID (or #alias) to enable: ')).trim();
+    if (!answer) {
+      output.write('   ⚠️ A room is required — the quickstart cannot finish with zero enabled rooms.\n');
+      continue;
+    }
+    let roomId = answer;
+    if (MATRIX_ROOM_ALIAS_RE.test(answer)) {
+      if (dryRun) {
+        output.write('   ⚠️ Dry-run cannot resolve aliases (needs the homeserver) — enter the room ID directly.\n');
+        continue;
+      }
+      try {
+        roomId = await resolveMatrixRoomAlias(homeserverUrl, answer);
+        output.write(`   ↳ ${answer} resolved to ${roomId}\n`);
+      } catch (err) {
+        output.write(`   ⚠️ ${err instanceof Error ? err.message : String(err)}\n`);
+        continue;
+      }
+    } else if (!MATRIX_ROOM_ID_RE.test(answer)) {
+      output.write(`   ⚠️ "${answer}" doesn't look like a Matrix room — ${MATRIX_ROOM_HINT}.\n`);
+      continue;
+    }
+    const roomName = (await rl.question('   Room name/label [general]: ')).trim() || 'general';
+    return { id: roomId, name: roomName };
+  }
+}
+
+// Resolves the full set of enabled Matrix rooms for this run, mirroring
+// resolveTelegramChats() (merge/gate/re-prompt contract, one enabled room
+// required) against config/matrix-rooms.json's { ownerId, rooms } shape.
+async function resolveMatrixRooms({ nonInteractive, cli, rl, homeserverUrl, dryRun }) {
+  let existingConfig = null;
+  if (existsSync(MATRIX_ROOMS_PATH)) {
+    try {
+      existingConfig = JSON.parse(readFileSync(MATRIX_ROOMS_PATH, 'utf-8'));
+    } catch (err) {
+      throw new Error(`config/matrix-rooms.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const roomsMap = { ...(existingConfig?.rooms ?? {}) };
+  let changed = false;
+
+  const explicitEntries = parseCsv(cli.options['matrix-room-id'] ?? cli.options['matrix-room-ids'] ?? '');
+  const invalidEntries = explicitEntries.filter(
+    (entry) => !MATRIX_ROOM_ID_RE.test(entry) && !MATRIX_ROOM_ALIAS_RE.test(entry),
+  );
+  if (invalidEntries.length > 0) {
+    throw new Error(
+      `--matrix-room-id(s) contains a value that is neither a room id nor an alias (${MATRIX_ROOM_HINT}): `
+      + invalidEntries.map((entry) => `"${entry}"`).join(', '),
+    );
+  }
+  if (explicitEntries.length > 0) {
+    const explicitName = (cli.options['matrix-room-name'] || 'general').trim() || 'general';
+    for (const entry of explicitEntries) {
+      let roomId = entry;
+      if (MATRIX_ROOM_ALIAS_RE.test(entry)) {
+        if (dryRun) {
+          throw new Error(`Dry-run cannot resolve the alias ${entry} (needs the homeserver) — pass the room ID directly.`);
+        }
+        roomId = await resolveMatrixRoomAlias(homeserverUrl, entry);
+        output.write(`↳ ${entry} resolved to ${roomId}\n`);
+      }
+      roomsMap[roomId] = { name: explicitName, enabled: true, requireMention: true };
+    }
+    changed = true;
+  }
+
+  const countEnabled = () => Object.values(roomsMap).filter((entry) => entry && entry.enabled).length;
+
+  if (countEnabled() === 0) {
+    if (nonInteractive) {
+      throw new Error(
+        'Matrix quickstart requires at least one room to enable — the bot ignores every room ' +
+        'until one is enabled. Pass --matrix-room-id=<!room:server or #alias:server> or run interactively.',
+      );
+    }
+    if (existingConfig) {
+      output.write('\n⚠️ config/matrix-rooms.json exists but has zero enabled rooms — the quickstart cannot finish like that.\n');
+    }
+    output.write('\n4) At least one room to enable. Invite the bot to the room first (UNENCRYPTED\n');
+    output.write('   rooms only — E2EE is not supported), then paste the room id (Element: Room\n');
+    output.write('   Settings -> Advanced -> Internal room ID) or a published #alias:server.\n');
+    output.write('   Add more later by editing config/matrix-rooms.json (schema:\n');
+    output.write('   config/matrix-rooms.example.json).\n');
+    const entry = await promptMatrixRoomEntry(rl, homeserverUrl, { dryRun });
+    roomsMap[entry.id] = { name: entry.name, enabled: true, requireMention: true };
+    changed = true;
+  }
+
+  return { roomsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
 }
 
 async function main() {
@@ -364,15 +704,26 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --providers=gemini --gemini-key=$GEMINI_API_KEY --gemini-model=gemini-1.5-flash --gemini-pricing-input-per-m=0.15 --gemini-pricing-output-per-m=0.60\n');
     output.write('  npm run setup -- --non-interactive --profile=events --features=weather,transit,events,venues,poll --group-id=120...@g.us --group-name="Events"\n');
     output.write('  npm run setup -- --non-interactive --persona-file=./my-persona.md --owner-jid=your_number@s.whatsapp.net\n');
+    output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --persona=quill --discord-bot-token=$DISCORD_BOT_TOKEN --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('  npm run setup -- --non-interactive --app-version=0.2.0 --github-issues-repo=owner/repo --github-issues-token=$GITHUB_ISSUES_TOKEN\n');
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-client-id=123... --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-owner-id=456... --discord-channel-ids=789...,790... --discord-channel-name=general --install-deps=false --vector-store=none --providers=openai --openai-key=$OPENAI_API_KEY\n');
+    output.write('  npm run setup -- --non-interactive --platform=telegram --telegram-bot-token=$TELEGRAM_BOT_TOKEN --telegram-owner-id=123456789 --telegram-chat-id=-1001234567890 --providers=openai --openai-key=$OPENAI_API_KEY\n');
+    output.write("  npm run setup -- --non-interactive --platform=matrix --matrix-homeserver-url=https://matrix.example.org --matrix-access-token=$MATRIX_ACCESS_TOKEN --matrix-owner-id=@you:example.org --matrix-room-id='!abc:example.org' --providers=openai --openai-key=$OPENAI_API_KEY\n");
     output.write('\nOther non-interactive flags:\n');
     output.write('  --discord-channel-ids   comma-separated Discord channel IDs to enable (alias for --discord-channel-id)\n');
     output.write('  --discord-channel-name  label applied to every channel in --discord-channel-id(s) (default: general)\n');
+    output.write('  --telegram-chat-ids     comma-separated Telegram chat IDs to enable (alias for --telegram-chat-id)\n');
+    output.write('  --telegram-chat-name    label applied to every chat in --telegram-chat-id(s) (default: general)\n');
+    output.write('  --matrix-room-ids       comma-separated Matrix room ids/aliases to enable (alias for --matrix-room-id)\n');
+    output.write('  --matrix-room-name      label applied to every room in --matrix-room-id(s) (default: general)\n');
     output.write('  --install-deps          true/false — run `npm install` before writing config (default: true unless GARBANZO_CLI=1)\n');
     output.write('  --vector-store          native deploy target only — VECTOR_STORE value written to .env (default: none)\n');
+    output.write(
+      `  --persona               gallery name (${PERSONA_GALLERY.map((entry) => entry.key).join(', ')}) or a file path — `
+      + 'writes docs/personas/<platform>.md under GARBANZO_HOME (independent of --persona-file, which writes docs/PERSONA.md)\n',
+    );
     process.exit(0);
   }
 
@@ -405,13 +756,24 @@ async function main() {
   // (which covers both the success and the caught-error paths, the latter
   // already reported by main().catch), so this handler only fires for a
   // close we didn't ask for.
+  //
+  // Only armed in interactive mode: a non-interactive run never legitimately
+  // reads stdin, but it does hit other early `await`s (e.g. the Matrix alias
+  // fetch in resolveMatrixRoomAlias) that yield the event loop just like a
+  // pending question() would. Node treats a closed/absent stdin in
+  // non-interactive contexts (CI runners, cron, containers without a TTY) as
+  // an incidental 'close' on the readline interface, not user abandonment —
+  // arming this handler there killed those runs before they ever touched
+  // stdin.
   let intentionalClose = false;
-  rl.on('close', () => {
-    if (!intentionalClose) {
-      process.stderr.write('Setup aborted before completion\n');
-      process.exit(1);
-    }
-  });
+  if (!nonInteractive) {
+    rl.on('close', () => {
+      if (!intentionalClose) {
+        process.stderr.write('Setup aborted before completion\n');
+        process.exit(1);
+      }
+    });
+  }
 
   const rootExisting = parseEnvFile(ENV_PATH);
   let existing = rootExisting;
@@ -446,10 +808,13 @@ async function main() {
     }
 
     // Discord is the promoted quickstart choice; WhatsApp stays available with
-    // its account-risk caveat. Slack/Teams are scaffold/dead-SDK paths — not
-    // offered on the interactive menu, but still reachable non-interactively
-    // via --platform=slack|teams (resolveMessagingPlatform below), so the
-    // existing Slack dry-run coverage keeps working unchanged.
+    // its account-risk caveat; Telegram (grammY, long polling) has its own
+    // BotFather walkthrough below. Slack is a scaffold path — not offered on
+    // the interactive menu, but still reachable non-interactively via
+    // --platform=slack (resolveMessagingPlatform below), so the existing
+    // Slack dry-run coverage keeps working unchanged. Matrix (matrix-bot-sdk,
+    // /sync long polling, unencrypted rooms only) has its own walkthrough
+    // below.
     let messagingPlatform = 'discord';
     if (nonInteractive) {
       messagingPlatform = resolveMessagingPlatform(cli, existing);
@@ -460,17 +825,35 @@ async function main() {
         [
           'Discord (recommended — official Gateway API, native quickstart)',
           'WhatsApp (unofficial API — account-risk caveat applies)',
+          'Telegram (official Bot API, long polling — grammY)',
+          'Matrix (self-hosted homeservers — unencrypted rooms only)',
         ],
-        existing.MESSAGING_PLATFORM === 'whatsapp' ? 1 : 0,
+        existing.MESSAGING_PLATFORM === 'whatsapp'
+          ? 1
+          : existing.MESSAGING_PLATFORM === 'telegram'
+            ? 2
+            : existing.MESSAGING_PLATFORM === 'matrix'
+              ? 3
+              : 0,
       );
-      messagingPlatform = platformIndex === 1 ? 'whatsapp' : 'discord';
+      messagingPlatform = platformIndex === 1
+        ? 'whatsapp'
+        : platformIndex === 2
+          ? 'telegram'
+          : platformIndex === 3
+            ? 'matrix'
+            : 'discord';
     }
 
     const platformEnvPath = messagingPlatform === 'discord'
       ? ENV_DISCORD_PATH
       : messagingPlatform === 'whatsapp'
         ? ENV_WHATSAPP_PATH
-        : null;
+        : messagingPlatform === 'telegram'
+          ? ENV_TELEGRAM_PATH
+          : messagingPlatform === 'matrix'
+            ? ENV_MATRIX_PATH
+            : null;
     existing = mergeExistingEnvForPlatform(
       rootExisting,
       platformEnvPath ? parseEnvFile(platformEnvPath) : {},
@@ -497,6 +880,8 @@ async function main() {
 
     const discordEnv = {};
     const whatsappEnv = {};
+    const telegramEnv = {};
+    const matrixEnv = {};
     let bandDeployment = false;
     let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
     let discordClientId = '';
@@ -505,6 +890,7 @@ async function main() {
     let discordChannelsMap = {};
     let discordChannelsChanged = false;
     let existingChannelsOwnerId;
+    let existingDiscordChannelsConfig = null;
     if (messagingPlatform === 'discord') {
       if (nonInteractive) {
         discordClientId = (cli.options['discord-client-id'] ?? existing.DISCORD_CLIENT_ID ?? '').trim();
@@ -575,6 +961,7 @@ async function main() {
         channelsMap: discordChannelsMap,
         changed: discordChannelsChanged,
         ownerId: existingChannelsOwnerId,
+        existingConfig: existingDiscordChannelsConfig,
       } = await resolveDiscordChannels({ nonInteractive, cli, rl }));
 
       if (nonInteractive) {
@@ -593,6 +980,150 @@ async function main() {
       qdrantCollection = nonInteractive
         ? (cli.options['qdrant-collection'] ?? qdrantDefault)
         : ((await rl.question(`QDRANT_COLLECTION [${qdrantDefault}]: `)).trim() || qdrantDefault);
+    }
+
+    // Populated below by resolveTelegramChats() once token/owner ID are
+    // resolved; { chatsMap, changed, ownerId }.
+    let telegramChatsMap = {};
+    let telegramChatsChanged = false;
+    let existingTelegramChatsOwnerId;
+    let existingTelegramChatsConfig = null;
+    if (messagingPlatform === 'telegram') {
+      if (nonInteractive) {
+        for (const field of TELEGRAM_FIELDS) {
+          telegramEnv[field.env] = await resolveText(field.env);
+        }
+        if (!telegramEnv.TELEGRAM_BOT_TOKEN) {
+          throw new Error(
+            'Telegram quickstart requires a bot token — pass --telegram-bot-token=<token> ' +
+            '(message @BotFather, run /newbot) or run interactively.',
+          );
+        }
+        if (!telegramEnv.TELEGRAM_OWNER_ID) {
+          throw new Error(
+            'Telegram quickstart requires an owner user ID — pass --telegram-owner-id=<id> ' +
+            '(message @userinfobot) or run interactively.',
+          );
+        }
+        if (!/^\d+$/.test(telegramEnv.TELEGRAM_OWNER_ID)) {
+          throw new Error(`--telegram-owner-id "${telegramEnv.TELEGRAM_OWNER_ID}" doesn't look like ${TELEGRAM_USER_ID_HINT}.`);
+        }
+      } else {
+        // BotFather walkthrough: create bot -> copy token -> disable privacy
+        // mode (the recommended setup, explained inline) -> owner user id ->
+        // chat(s) to enable (below, via resolveTelegramChats).
+        output.write('\n📮 Telegram quickstart — BotFather walkthrough\n');
+        output.write('   https://t.me/BotFather\n');
+
+        output.write('\n1) Message @BotFather and run /newbot; follow its prompts to create the bot,\n');
+        output.write('   then copy the token it gives you.\n');
+        telegramEnv.TELEGRAM_BOT_TOKEN = await promptRequiredField(rl, getField('TELEGRAM_BOT_TOKEN'), existing);
+
+        output.write('\n2) Message @BotFather again, run /setprivacy, choose this bot, then choose\n');
+        output.write('   Disable. Telegram never delivers plain-text messages (including @mentions)\n');
+        output.write('   to a privacy-ON bot, so this is the recommended setup — the bot still only\n');
+        output.write('   RESPONDS on @mentions/replies/!commands via requireMention (config/telegram-chats.json),\n');
+        output.write('   same as Discord\'s MessageContent + requireMention. This is a manual BotFather\n');
+        output.write('   step; the wizard cannot toggle it for you.\n');
+
+        output.write('\n3) Owner user id: message @userinfobot from your own account — it replies with\n');
+        output.write('   your numeric Telegram user id.\n');
+        telegramEnv.TELEGRAM_OWNER_ID = await promptRequiredField(rl, getField('TELEGRAM_OWNER_ID'), existing, {
+          validate: (value) => /^\d+$/.test(value),
+          invalidHint: TELEGRAM_USER_ID_HINT,
+        });
+
+        output.write('\nOptional Telegram settings:\n');
+        telegramEnv.TELEGRAM_CHAT_SCOPE = await resolveText('TELEGRAM_CHAT_SCOPE');
+      }
+
+      ({
+        chatsMap: telegramChatsMap,
+        changed: telegramChatsChanged,
+        ownerId: existingTelegramChatsOwnerId,
+        existingConfig: existingTelegramChatsConfig,
+      } = await resolveTelegramChats({ nonInteractive, cli, rl }));
+    }
+
+    // Populated below by resolveMatrixRooms(); { roomsMap, changed, ownerId }.
+    let matrixRoomsMap = {};
+    let matrixRoomsChanged = false;
+    let existingMatrixRoomsOwnerId;
+    let existingMatrixRoomsConfig = null;
+    if (messagingPlatform === 'matrix') {
+      if (nonInteractive) {
+        for (const field of MATRIX_FIELDS) {
+          matrixEnv[field.env] = await resolveText(field.env);
+        }
+        if (!matrixEnv.MATRIX_HOMESERVER_URL) {
+          throw new Error(
+            'Matrix quickstart requires a homeserver URL — pass --matrix-homeserver-url=https://matrix.example.org or run interactively.',
+          );
+        }
+        if (!/^https?:\/\//.test(matrixEnv.MATRIX_HOMESERVER_URL)) {
+          throw new Error(
+            `--matrix-homeserver-url "${matrixEnv.MATRIX_HOMESERVER_URL}" doesn't look like a homeserver URL — ` +
+            'it must start with https:// (or http:// on a trusted LAN), e.g. https://matrix.example.org.',
+          );
+        }
+        if (!matrixEnv.MATRIX_ACCESS_TOKEN) {
+          throw new Error(
+            'Matrix quickstart requires a bot access token — create a bot account on your homeserver and pass --matrix-access-token=<token> or run interactively.',
+          );
+        }
+        if (!matrixEnv.MATRIX_OWNER_ID) {
+          throw new Error(
+            'Matrix quickstart requires an owner user id — pass --matrix-owner-id=@you:example.org or run interactively.',
+          );
+        }
+        if (!MATRIX_USER_ID_RE.test(matrixEnv.MATRIX_OWNER_ID)) {
+          throw new Error(`--matrix-owner-id "${matrixEnv.MATRIX_OWNER_ID}" doesn't look like ${MATRIX_OWNER_ID_HINT}.`);
+        }
+      } else {
+        // Homeserver walkthrough: bot account -> access token -> owner mxid
+        // -> room(s) to enable (below, via resolveMatrixRooms).
+        output.write('\n🏠 Matrix quickstart — homeserver walkthrough\n');
+
+        output.write('\n1) Homeserver URL: the base URL of the homeserver the BOT account lives on,\n');
+        output.write('   e.g. https://matrix.example.org (self-hosted) or https://matrix.org.\n');
+        matrixEnv.MATRIX_HOMESERVER_URL = await promptRequiredField(rl, getField('MATRIX_HOMESERVER_URL'), existing, {
+          validate: (value) => /^https?:\/\//.test(value),
+          invalidHint: 'a homeserver URL starts with https:// (or http:// on a trusted LAN)',
+        });
+
+        output.write('\n2) Create a dedicated bot account on that homeserver (register a normal user,\n');
+        output.write("   e.g. @garbanzo-bot:example.org), then get its access token — simplest path:\n");
+        output.write('   log the bot account into Element once, then Settings -> Help & About ->\n');
+        output.write('   Advanced -> Access Token. (Or POST /_matrix/client/v3/login with the\n');
+        output.write("   bot's password.) Treat the token like a password.\n");
+        matrixEnv.MATRIX_ACCESS_TOKEN = await promptRequiredField(rl, getField('MATRIX_ACCESS_TOKEN'), existing);
+
+        output.write('\n3) Owner user id: YOUR Matrix id (not the bot\'s), e.g. @you:example.org —\n');
+        output.write('   owner escalations arrive as DMs to this account.\n');
+        matrixEnv.MATRIX_OWNER_ID = await promptRequiredField(rl, getField('MATRIX_OWNER_ID'), existing, {
+          validate: (value) => MATRIX_USER_ID_RE.test(value),
+          invalidHint: MATRIX_OWNER_ID_HINT,
+        });
+
+        output.write('\nOptional Matrix settings:\n');
+        matrixEnv.MATRIX_CHAT_SCOPE = await resolveText('MATRIX_CHAT_SCOPE');
+
+        output.write('\n⚠️ Encrypted rooms are NOT supported (E2EE is deferred) — invite the bot\n');
+        output.write('   only into unencrypted rooms, or it will sit blind in them.\n');
+      }
+
+      ({
+        roomsMap: matrixRoomsMap,
+        changed: matrixRoomsChanged,
+        ownerId: existingMatrixRoomsOwnerId,
+        existingConfig: existingMatrixRoomsConfig,
+      } = await resolveMatrixRooms({
+        nonInteractive,
+        cli,
+        rl,
+        homeserverUrl: matrixEnv.MATRIX_HOMESERVER_URL || existing.MATRIX_HOMESERVER_URL || '',
+        dryRun,
+      }));
     }
 
     let deployTarget = 'docker';
@@ -820,13 +1351,14 @@ async function main() {
 
     let customPersonaSourcePath = '';
     let customPersonaContent = '';
-    const useCustomPersona = nonInteractive
-      ? !!cli.options['persona-file']
-      : yn(await rl.question('Provide a custom PERSONA.md file now? [y/N]: '), false);
+    // --persona-file: legacy path, non-interactive only, unchanged — replaces
+    // docs/PERSONA.md at the HOME ROOT. Superseded interactively by the
+    // persona gallery picker below, which targets the correct (platform-
+    // keyed) slot; kept working standalone so existing automation and the
+    // pinned H1 test never change behavior.
+    const useCustomPersona = nonInteractive && !!cli.options['persona-file'];
     if (useCustomPersona) {
-      const personaPathInput = nonInteractive
-        ? (cli.options['persona-file'] ?? '')
-        : await rl.question('Path to PERSONA.md (absolute or relative to project): ');
+      const personaPathInput = cli.options['persona-file'] ?? '';
       customPersonaSourcePath = resolveUserPath(personaPathInput);
       if (!customPersonaSourcePath || !existsSync(customPersonaSourcePath)) {
         throw new Error(`Persona file not found: ${personaPathInput || '(empty path)'}`);
@@ -834,6 +1366,94 @@ async function main() {
       customPersonaContent = readFileSync(customPersonaSourcePath, 'utf-8');
       if (!customPersonaContent.trim()) {
         throw new Error('Persona file is empty');
+      }
+    }
+
+    // Persona gallery picker (WS10). Writes to the PLATFORM-KEYED home slot
+    // (GARBANZO_HOME/docs/personas/<platform>.md), not docs/PERSONA.md — a
+    // shipped docs/personas/<platform>.md (e.g. discord.md) shadows a home
+    // PERSONA.md at load time (src/ai/persona.ts's resolution order), so
+    // writing PERSONA.md here would be silently ignored on every platform
+    // that ships a default file. Independent of --persona-file above: both
+    // can be set in the same run without interfering with each other.
+    let personaSelectionContent = '';
+    let personaSelectionSourcePath = '';
+    let personaSelectionGalleryEntry = null;
+    let personaSelectionRequested = false;
+
+    if (nonInteractive) {
+      const personaOption = (cli.options.persona ?? '').trim();
+      if (personaOption && personaOption.toLowerCase() !== 'default') {
+        const resolved = resolvePersonaSelection(personaOption);
+        personaSelectionContent = resolved.content;
+        personaSelectionSourcePath = resolved.sourcePath;
+        personaSelectionGalleryEntry = resolved.galleryEntry;
+        personaSelectionRequested = true;
+      }
+    } else {
+      const pickerLabels = [
+        'Default (Garbanzo Bean)',
+        ...PERSONA_GALLERY.map((entry) => `${entry.label} — ${entry.useCase}`),
+        'Custom persona file path',
+      ];
+      const pickerIndex = await promptChoice(rl, 'Persona:', pickerLabels, 0);
+      if (pickerIndex >= 1 && pickerIndex <= PERSONA_GALLERY.length) {
+        const entry = PERSONA_GALLERY[pickerIndex - 1];
+        const filePath = resolve(GALLERY_DIR, entry.file);
+        personaSelectionContent = readFileSync(filePath, 'utf-8');
+        personaSelectionSourcePath = filePath;
+        personaSelectionGalleryEntry = entry;
+        personaSelectionRequested = true;
+      } else if (pickerIndex === pickerLabels.length - 1) {
+        const personaPathInput = await rl.question('Path to persona file (absolute or relative to project): ');
+        const resolvedPath = resolveUserPath(personaPathInput);
+        if (!resolvedPath || !existsSync(resolvedPath)) {
+          throw new Error(`Persona file not found: ${personaPathInput || '(empty path)'}`);
+        }
+        const content = readFileSync(resolvedPath, 'utf-8');
+        if (!content.trim()) {
+          throw new Error('Persona file is empty');
+        }
+        personaSelectionContent = content;
+        personaSelectionSourcePath = resolvedPath;
+        personaSelectionRequested = true;
+      }
+    }
+
+    // Riff and Callie are BAND_FEATURES_ENABLED demonstrations — offer (or
+    // note) turning the flag on unless it's already set. The flag is only
+    // wired into a compose/env slot for Discord today (band-member checks
+    // read Discord roles), so the auto-enable action is Discord-only; other
+    // platforms get the pairing note without an unprompted env write.
+    if (personaSelectionGalleryEntry?.bandFeatures) {
+      const bandFeaturesAlreadyEnabled = messagingPlatform === 'discord'
+        ? bandDeployment
+        : parseBoolean(existing.BAND_FEATURES_ENABLED, false);
+      if (!bandFeaturesAlreadyEnabled) {
+        if (messagingPlatform !== 'discord') {
+          output.write(
+            `\nℹ️ ${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+            '!setlist, !idea), which is wired for the Discord platform today — set BAND_FEATURES_ENABLED=true ' +
+            'if/when you deploy this persona there.\n',
+          );
+        } else if (nonInteractive) {
+          output.write(
+            `\nℹ️ ${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+            '!setlist, !idea) — pass --band-features-enabled=true to turn it on.\n',
+          );
+        } else {
+          const enableBand = yn(
+            await rl.question(
+              `\n${personaSelectionGalleryEntry.label} pairs with the band feature set (!song, !rehearsal, ` +
+              '!setlist, !idea). Enable BAND_FEATURES_ENABLED now? [Y/n]: ',
+            ),
+            true,
+          );
+          if (enableBand) {
+            discordEnv.BAND_FEATURES_ENABLED = 'true';
+            output.write('✅ BAND_FEATURES_ENABLED set to true\n');
+          }
+        }
       }
     }
 
@@ -913,6 +1533,15 @@ async function main() {
       QDRANT_COLLECTION: String(qdrantCollection || existing.QDRANT_COLLECTION || 'garbanzo_memory').trim(),
       OWNER_JID: (whatsappEnv.OWNER_JID || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
       WHATSAPP_LOGIN_MODE: (whatsappEnv.WHATSAPP_LOGIN_MODE || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
+      TELEGRAM_BOT_TOKEN: (telegramEnv.TELEGRAM_BOT_TOKEN || existing.TELEGRAM_BOT_TOKEN || '').trim(),
+      TELEGRAM_OWNER_ID: (telegramEnv.TELEGRAM_OWNER_ID || existing.TELEGRAM_OWNER_ID || '').trim(),
+      TELEGRAM_CHAT_SCOPE: (telegramEnv.TELEGRAM_CHAT_SCOPE || existing.TELEGRAM_CHAT_SCOPE || 'configured').trim(),
+      TELEGRAM_CHATS_CONFIG_PATH: (existing.TELEGRAM_CHATS_CONFIG_PATH || 'config/telegram-chats.json').trim(),
+      MATRIX_HOMESERVER_URL: (matrixEnv.MATRIX_HOMESERVER_URL || existing.MATRIX_HOMESERVER_URL || '').trim(),
+      MATRIX_ACCESS_TOKEN: (matrixEnv.MATRIX_ACCESS_TOKEN || existing.MATRIX_ACCESS_TOKEN || '').trim(),
+      MATRIX_OWNER_ID: (matrixEnv.MATRIX_OWNER_ID || existing.MATRIX_OWNER_ID || '').trim(),
+      MATRIX_CHAT_SCOPE: (matrixEnv.MATRIX_CHAT_SCOPE || existing.MATRIX_CHAT_SCOPE || 'configured').trim(),
+      MATRIX_ROOMS_CONFIG_PATH: (existing.MATRIX_ROOMS_CONFIG_PATH || 'config/matrix-rooms.json').trim(),
     };
 
     // Layered emission (modular-config v2): `.env` carries only the shared
@@ -943,7 +1572,7 @@ async function main() {
       output.write(`\nℹ️ ${vectorStoreNote}\n`);
     }
 
-    const envTargets = [{ path: ENV_PATH, content: sharedEnvContent, label: '.env' }];
+    const envTargets = [{ path: ENV_PATH, content: mergeEnvTargetContent(ENV_PATH, sharedEnvContent), label: '.env' }];
     if (messagingPlatform === 'discord') {
       let discordEnvContent = buildPlatformEnvLines('discord', finalEnv).join('\n');
       if (discordClientId) {
@@ -956,14 +1585,26 @@ async function main() {
       }
       envTargets.push({
         path: ENV_DISCORD_PATH,
-        content: discordEnvContent,
+        content: mergeEnvTargetContent(ENV_DISCORD_PATH, discordEnvContent),
         label: '.env.discord',
       });
     } else if (messagingPlatform === 'whatsapp') {
       envTargets.push({
         path: ENV_WHATSAPP_PATH,
-        content: buildPlatformEnvLines('whatsapp', finalEnv).join('\n'),
+        content: mergeEnvTargetContent(ENV_WHATSAPP_PATH, buildPlatformEnvLines('whatsapp', finalEnv).join('\n')),
         label: '.env.whatsapp',
+      });
+    } else if (messagingPlatform === 'telegram') {
+      envTargets.push({
+        path: ENV_TELEGRAM_PATH,
+        content: mergeEnvTargetContent(ENV_TELEGRAM_PATH, buildPlatformEnvLines('telegram', finalEnv).join('\n')),
+        label: '.env.telegram',
+      });
+    } else if (messagingPlatform === 'matrix') {
+      envTargets.push({
+        path: ENV_MATRIX_PATH,
+        content: mergeEnvTargetContent(ENV_MATRIX_PATH, buildPlatformEnvLines('matrix', finalEnv).join('\n')),
+        label: '.env.matrix',
       });
     }
 
@@ -1009,6 +1650,28 @@ async function main() {
       }
     }
 
+    if (personaSelectionRequested) {
+      const galleryTargetPath = resolve(OUTPUT_ROOT, 'docs', 'personas', `${messagingPlatform}.md`);
+      const galleryTargetLabel = `docs/personas/${messagingPlatform}.md`;
+      if (dryRun) {
+        output.write(`🧪 Dry-run: would write ${galleryTargetLabel} from ${personaSelectionSourcePath}\n`);
+      } else {
+        // Same H1 rationale as the docs/PERSONA.md write above — a fresh
+        // GARBANZO_HOME has no docs/personas/ dir yet.
+        mkdirSync(dirname(galleryTargetPath), { recursive: true });
+        if (existsSync(galleryTargetPath)) {
+          copyFileSync(galleryTargetPath, `${galleryTargetPath}.bak`);
+          output.write(`🗂️ Existing ${galleryTargetLabel} backed up to ${galleryTargetLabel}.bak\n`);
+        }
+        writeFileSync(
+          galleryTargetPath,
+          personaSelectionContent.endsWith('\n') ? personaSelectionContent : `${personaSelectionContent}\n`,
+          'utf-8',
+        );
+        output.write(`✅ Wrote ${galleryTargetLabel} from ${personaSelectionSourcePath}\n`);
+      }
+    }
+
     const shouldWriteGroups = messagingPlatform === 'whatsapp'
       ? (nonInteractive
           ? parseBoolean(cli.options['write-groups'], true)
@@ -1016,8 +1679,20 @@ async function main() {
       : false;
 
     if (shouldWriteGroups) {
+      let existingGroupsConfig = null;
+      if (existsSync(GROUPS_PATH)) {
+        try {
+          existingGroupsConfig = JSON.parse(readFileSync(GROUPS_PATH, 'utf-8'));
+        } catch (err) {
+          throw new Error(`config/groups.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      const existingGroupsRecord = asRecord(existingGroupsConfig);
+      const existingAdminsRecord = asRecord(existingGroupsRecord.admins);
       const groupsConfig = {
+        ...existingGroupsRecord,
         groups: {
+          ...asRecord(existingGroupsRecord.groups),
           [groupId]: {
             name: groupName,
             enabled: true,
@@ -1028,11 +1703,12 @@ async function main() {
         },
         mentionPatterns: [`@${botName}`, `@${botName.charAt(0).toUpperCase()}${botName.slice(1)}`, '@bot'],
         admins: {
+          ...existingAdminsRecord,
           owner: {
             name: ownerName,
             jid: finalEnv.OWNER_JID,
           },
-          moderators: [],
+          moderators: Array.isArray(existingAdminsRecord.moderators) ? existingAdminsRecord.moderators : [],
         },
       };
 
@@ -1062,6 +1738,7 @@ async function main() {
       } else {
         const resolvedOwnerId = existingChannelsOwnerId || finalEnv.DISCORD_OWNER_ID;
         const channelsConfig = {
+          ...asRecord(existingDiscordChannelsConfig),
           ...(resolvedOwnerId ? { ownerId: resolvedOwnerId } : {}),
           channels: discordChannelsMap,
         };
@@ -1082,6 +1759,71 @@ async function main() {
           output.write(`✅ Wrote config/discord-channels.json with ${count} enabled channel${count === 1 ? '' : 's'}\n`);
         }
         output.write('ℹ️ Add more channels later by editing config/discord-channels.json (schema: config/discord-channels.example.json).\n');
+      }
+    }
+
+    // Same contract as the Discord channels block above, for
+    // config/telegram-chats.json (resolveTelegramChats() already enforces at
+    // least one enabled chat).
+    if (messagingPlatform === 'telegram') {
+      if (!telegramChatsChanged) {
+        output.write('ℹ️ Using existing config/telegram-chats.json; leaving it unchanged.\n');
+      } else {
+        const resolvedTelegramOwnerId = existingTelegramChatsOwnerId || finalEnv.TELEGRAM_OWNER_ID;
+        const telegramChatsConfig = {
+          ...asRecord(existingTelegramChatsConfig),
+          ...(resolvedTelegramOwnerId ? { ownerId: resolvedTelegramOwnerId } : {}),
+          chats: telegramChatsMap,
+        };
+
+        if (dryRun) {
+          output.write('🧪 Dry-run: would write config/telegram-chats.json with these contents:\n');
+          output.write('--- config/telegram-chats.json (preview) ---\n');
+          output.write(`${JSON.stringify(telegramChatsConfig, null, 2)}\n`);
+          output.write('--- end telegram-chats.json preview ---\n');
+        } else {
+          mkdirSync(resolve(OUTPUT_ROOT, 'config'), { recursive: true });
+          if (existsSync(TELEGRAM_CHATS_PATH)) {
+            copyFileSync(TELEGRAM_CHATS_PATH, `${TELEGRAM_CHATS_PATH}.bak`);
+            output.write('🗂️ Existing config/telegram-chats.json backed up to config/telegram-chats.json.bak\n');
+          }
+          writeFileSync(TELEGRAM_CHATS_PATH, `${JSON.stringify(telegramChatsConfig, null, 2)}\n`, 'utf-8');
+          const count = Object.values(telegramChatsMap).filter((entry) => entry && entry.enabled).length;
+          output.write(`✅ Wrote config/telegram-chats.json with ${count} enabled chat${count === 1 ? '' : 's'}\n`);
+        }
+        output.write('ℹ️ Add more chats later by editing config/telegram-chats.json (schema: config/telegram-chats.example.json).\n');
+      }
+    }
+
+    // Same contract for config/matrix-rooms.json (resolveMatrixRooms()
+    // already enforced at least one enabled room, resolving aliases to ids).
+    if (messagingPlatform === 'matrix') {
+      if (!matrixRoomsChanged) {
+        output.write('ℹ️ Using existing config/matrix-rooms.json; leaving it unchanged.\n');
+      } else {
+        const resolvedMatrixOwnerId = existingMatrixRoomsOwnerId || finalEnv.MATRIX_OWNER_ID;
+        const matrixRoomsConfig = {
+          ...asRecord(existingMatrixRoomsConfig),
+          ...(resolvedMatrixOwnerId ? { ownerId: resolvedMatrixOwnerId } : {}),
+          rooms: matrixRoomsMap,
+        };
+
+        if (dryRun) {
+          output.write('🧪 Dry-run: would write config/matrix-rooms.json with these contents:\n');
+          output.write('--- config/matrix-rooms.json (preview) ---\n');
+          output.write(`${JSON.stringify(matrixRoomsConfig, null, 2)}\n`);
+          output.write('--- end matrix-rooms.json preview ---\n');
+        } else {
+          mkdirSync(resolve(OUTPUT_ROOT, 'config'), { recursive: true });
+          if (existsSync(MATRIX_ROOMS_PATH)) {
+            copyFileSync(MATRIX_ROOMS_PATH, `${MATRIX_ROOMS_PATH}.bak`);
+            output.write('🗂️ Existing config/matrix-rooms.json backed up to config/matrix-rooms.json.bak\n');
+          }
+          writeFileSync(MATRIX_ROOMS_PATH, `${JSON.stringify(matrixRoomsConfig, null, 2)}\n`, 'utf-8');
+          const count = Object.values(matrixRoomsMap).filter((entry) => entry && entry.enabled).length;
+          output.write(`✅ Wrote config/matrix-rooms.json with ${count} enabled room${count === 1 ? '' : 's'}\n`);
+        }
+        output.write('ℹ️ Add more rooms later by editing config/matrix-rooms.json (schema: config/matrix-rooms.example.json).\n');
       }
     }
 
@@ -1110,17 +1852,17 @@ async function main() {
     output.write(`- Feature profile: ${selectedProfile.label}\n`);
     output.write(`- Enabled features: ${selectedFeatures.join(', ')}\n`);
     output.write(`- Persona source: ${customPersonaContent ? customPersonaSourcePath : 'existing docs/PERSONA.md'}\n`);
+    output.write(
+      `- Persona gallery selection: ${personaSelectionRequested
+        ? `${personaSelectionGalleryEntry ? personaSelectionGalleryEntry.label : personaSelectionSourcePath} -> docs/personas/${messagingPlatform}.md`
+        : 'default (Garbanzo Bean, no file written)'}\n`,
+    );
     output.write(`- Deploy target: ${deployTarget === 'docker' ? 'docker compose' : 'native node'}\n`);
     output.write(`- Write mode: ${dryRun ? 'preview only' : 'write files'}\n`);
     if (deployTarget === 'native') {
       output.write(`- Vector memory: ${vectorStoreNote}\n`);
     }
     output.write(`- Files written under: ${OUTPUT_ROOT}\n`);
-
-    if (messagingPlatform === 'teams') {
-      output.write('\n⚠️ Teams runtime support is planned but not implemented yet.\n');
-      output.write('   Current runtime support is WhatsApp, Slack, and Discord.\n');
-    }
 
     if (messagingPlatform === 'slack') {
       output.write(`- Slack demo mode: ${finalEnv.SLACK_DEMO}\n`);
@@ -1140,6 +1882,21 @@ async function main() {
       if (discordClientId) {
         output.write(`- Invite URL: ${buildDiscordInviteUrl(discordClientId)}\n`);
       }
+    }
+
+    if (messagingPlatform === 'telegram') {
+      output.write(`- Telegram chat scope: ${finalEnv.TELEGRAM_CHAT_SCOPE}\n`);
+      const enabledChatIds = Object.keys(telegramChatsMap).filter((id) => telegramChatsMap[id]?.enabled);
+      output.write(`- Enabled chats: ${telegramChatsChanged ? enabledChatIds.join(', ') : '(existing config/telegram-chats.json unchanged)'}\n`);
+      output.write('- Privacy mode: disable it via @BotFather -> /setprivacy -> Disable (manual step, see walkthrough above)\n');
+    }
+
+    if (messagingPlatform === 'matrix') {
+      output.write(`- Matrix chat scope: ${finalEnv.MATRIX_CHAT_SCOPE}\n`);
+      const enabledRoomIds = Object.keys(matrixRoomsMap).filter((id) => matrixRoomsMap[id]?.enabled);
+      output.write(`- Enabled rooms: ${matrixRoomsChanged ? enabledRoomIds.join(', ') : '(existing config/matrix-rooms.json unchanged)'}\n`);
+      output.write('- Encrypted rooms are unsupported (E2EE deferred) — invite the bot only into unencrypted rooms\n');
+      output.write('- Sync token persists in data/matrix-sync.json (inside the data volume/GARBANZO_HOME)\n');
     }
 
     if (deployTarget === 'docker') {

@@ -5,12 +5,14 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
 import { readFileSync } from 'node:fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BridgeMapSchema,
   allRoutesForInstance,
+  expandBridgeMapEnvPlaceholders,
   findOutboundRoute,
+  formatBridgeMapZodError,
   outboundRoutesForInstance,
 } from '../src/bridge/bridge-map.js';
 
@@ -36,6 +38,12 @@ describe('bridge map config', () => {
     vi.restoreAllMocks();
   });
 
+  afterEach(() => {
+    delete process.env.TEST_BRIDGE_PORT;
+    delete process.env.TEST_BRIDGE_DEFAULT_PORT;
+    delete process.env.TEST_BRIDGE_REQUIRED_PORT;
+  });
+
   it('parses a valid map and applies risk-posture defaults', () => {
     const parsed = BridgeMapSchema.parse(validMap);
 
@@ -45,6 +53,53 @@ describe('bridge map config', () => {
       relayCommands: false,
       ingestRelayed: false,
     });
+  });
+
+  it('keeps literal URLs unchanged for existing bridge maps', () => {
+    const expanded = expandBridgeMapEnvPlaceholders(validMap);
+
+    expect(BridgeMapSchema.parse(expanded).instances.map((instance) => instance.url)).toEqual([
+      'http://discord:3002',
+      'http://whatsapp:3001',
+    ]);
+  });
+
+  it('expands bridge map ${VAR} placeholders from process.env before schema parsing', () => {
+    process.env.TEST_BRIDGE_PORT = '3911';
+    const expanded = expandBridgeMapEnvPlaceholders({
+      ...validMap,
+      instances: [{ id: 'remy', platform: 'discord', url: 'http://discord:${TEST_BRIDGE_PORT}' }],
+      routes: [],
+    });
+
+    expect(BridgeMapSchema.parse(expanded).instances[0]?.url).toBe('http://discord:3911');
+  });
+
+  it('expands bridge map ${VAR:-default} placeholders from defaults and env overrides', () => {
+    const defaultExpanded = expandBridgeMapEnvPlaceholders({
+      ...validMap,
+      instances: [{ id: 'remy', platform: 'discord', url: 'http://discord:${TEST_BRIDGE_DEFAULT_PORT:-3002}' }],
+      routes: [],
+    });
+
+    expect(BridgeMapSchema.parse(defaultExpanded).instances[0]?.url).toBe('http://discord:3002');
+
+    process.env.TEST_BRIDGE_DEFAULT_PORT = '4911';
+    const envExpanded = expandBridgeMapEnvPlaceholders({
+      ...validMap,
+      instances: [{ id: 'remy', platform: 'discord', url: 'http://discord:${TEST_BRIDGE_DEFAULT_PORT:-3002}' }],
+      routes: [],
+    });
+
+    expect(BridgeMapSchema.parse(envExpanded).instances[0]?.url).toBe('http://discord:4911');
+  });
+
+  it('fails clearly when a bridge map placeholder has no env value or default', () => {
+    expect(() => expandBridgeMapEnvPlaceholders({
+      ...validMap,
+      instances: [{ id: 'remy', platform: 'discord', url: 'http://discord:${TEST_BRIDGE_REQUIRED_PORT}' }],
+      routes: [],
+    })).toThrow('Missing environment variable TEST_BRIDGE_REQUIRED_PORT');
   });
 
   it('parses routes that opt in to relayed-content ingestion', () => {
@@ -66,6 +121,54 @@ describe('bridge map config', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts telegram and matrix as instance platforms', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      instances: [
+        { id: 'tg', platform: 'telegram' },
+        { id: 'mx', platform: 'matrix' },
+      ],
+      routes: [],
+    });
+
+    expect(parsed.instances.map((instance) => instance.platform)).toEqual(['telegram', 'matrix']);
+  });
+
+  it('rejects a removed platform value (teams) and names the offending instance', () => {
+    const raw = {
+      ...validMap,
+      instances: [
+        { id: 'remy', platform: 'teams', url: 'http://discord:3002' },
+        validMap.instances[1],
+      ],
+    };
+    const result = BridgeMapSchema.safeParse(raw);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('instances entry (id "remy")');
+    expect(message).toContain('Invalid');
+  });
+
+  it('names the entry by index when the offending entry has no usable id', () => {
+    const raw = {
+      ...validMap,
+      instances: [
+        { id: 42, platform: 'teams' },
+        validMap.instances[1],
+      ],
+    };
+    const result = BridgeMapSchema.safeParse(raw);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('instances entry (index 0)');
   });
 
   it('rejects duplicate route ids', () => {
@@ -200,9 +303,31 @@ describe('bridge map config', () => {
     expect(loadBridgeMap()).toBeNull();
   });
 
+  it('loads bridge map files with env placeholders before schema validation', async () => {
+    process.env.TEST_BRIDGE_PORT = '4922';
+    vi.resetModules();
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return {
+        ...actual,
+        existsSync: vi.fn(() => true),
+        readFileSync: vi.fn(() => JSON.stringify({
+          ...validMap,
+          instances: [
+            { id: 'remy', platform: 'discord', url: 'http://discord:${TEST_BRIDGE_PORT}' },
+            validMap.instances[1],
+          ],
+        })),
+      };
+    });
+
+    const { loadBridgeMap } = await import('../src/bridge/bridge-map.js');
+    expect(loadBridgeMap()?.instances[0]?.url).toBe('http://discord:4922');
+  });
+
   it('keeps the example file valid against the schema', () => {
     const example = JSON.parse(readFileSync('config/bridge-map.example.json', 'utf8')) as unknown;
 
-    expect(() => BridgeMapSchema.parse(example)).not.toThrow();
+    expect(() => BridgeMapSchema.parse(expandBridgeMapEnvPlaceholders(example))).not.toThrow();
   });
 });

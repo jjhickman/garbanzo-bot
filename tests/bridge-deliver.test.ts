@@ -4,6 +4,8 @@ import type { MessagingPlatform } from '../src/core/messaging-platform.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createRelayDeliverer } from '../src/bridge/relay-deliver.js';
+import { BridgeDeliveryDeferredError } from '../src/bridge/transport.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import { config } from '../src/utils/config.js';
 
@@ -39,29 +41,37 @@ function envelope(overrides: Partial<BridgeEnvelope> = {}): BridgeEnvelope {
   };
 }
 
+type SendTextForBridge = NonNullable<PlatformMessenger['sendTextForBridge']>;
+
 function deliverer(
   options: {
     platform?: MessagingPlatform;
     sendText?: SendText;
+    sendTextForBridge?: SendTextForBridge;
     bufferEnvelope?: (env: BridgeEnvelope) => Promise<void>;
   } = {},
 ): {
   deliver: ReturnType<typeof createRelayDeliverer>;
   sendText: ReturnType<typeof vi.fn<SendText>>;
+  sendTextForBridge: ReturnType<typeof vi.fn<SendTextForBridge>> | undefined;
   bufferEnvelope: ReturnType<typeof vi.fn<(env: BridgeEnvelope) => Promise<void>>>;
 } {
   const sendText = vi.fn<SendText>(options.sendText ?? (async () => undefined));
+  const sendTextForBridge = options.sendTextForBridge
+    ? vi.fn<SendTextForBridge>(options.sendTextForBridge)
+    : undefined;
   const bufferEnvelope = vi.fn<(env: BridgeEnvelope) => Promise<void>>(
     options.bufferEnvelope ?? (async () => undefined),
   );
 
   return {
     deliver: createRelayDeliverer({
-      messenger: { sendText },
+      messenger: sendTextForBridge ? { sendText, sendTextForBridge } : { sendText },
       platform: options.platform ?? 'discord',
       bufferEnvelope,
     }),
     sendText,
+    sendTextForBridge,
     bufferEnvelope,
   };
 }
@@ -77,6 +87,7 @@ describe('createRelayDeliverer', () => {
     await expect(deliver.deliver(envelope({ text: 'hello relay' }))).resolves.toBe('sent');
 
     expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello relay');
+    expect(getLifetimeCounters().bridgeDeliveryLatencyByRoute.get('route-1')?.maxSeconds).toBeGreaterThanOrEqual(0);
   });
 
   it('includes origin chat display name in attribution when present', async () => {
@@ -93,6 +104,16 @@ describe('createRelayDeliverer', () => {
     await deliver.deliver(envelope({ origin: { senderName: undefined } }));
 
     expect(sendText).toHaveBeenCalledWith('target-chat', 'sender-1 (WhatsApp): hello');
+  });
+
+  it('capitalizes the origin platform label for platforms with no dedicated case yet', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+
+    await deliver.deliver(envelope({ origin: { platform: 'telegram' } }));
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (Telegram): hello');
+
+    await deliver.deliver(envelope({ origin: { platform: 'matrix' } }));
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (Matrix): hello');
   });
 
   it('translates formatting for the target platform', async () => {
@@ -148,6 +169,7 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(bufferEnvelope).toHaveBeenCalledTimes(1);
     expect(bufferEnvelope).toHaveBeenCalledWith(env);
+    expect(getLifetimeCounters().bridgeHeldByOutboundSafetyByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
   });
 
   it('rethrows non-held errors without buffering', async () => {
@@ -206,6 +228,109 @@ describe('createRelayDeliverer', () => {
     await expect(deliver.deliver(envelope())).rejects.toBe(failure);
 
     expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends immediately to a Telegram destination when no prior send to that chat is recorded', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('defers a fast follow-up to the same Telegram destination chat instead of sleeping', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_003_000,
+    });
+    expect(sendText).toHaveBeenCalledTimes(1);
+    await expect(deliver.deliver(envelope())).rejects.toBeInstanceOf(BridgeDeliveryDeferredError);
+  });
+
+  it('does not pace sends to different Telegram destination chats', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    await deliver.deliver(envelope({ targetChatId: 'chat-a' }));
+    await deliver.deliver(envelope({ targetChatId: 'chat-b' }));
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not pace non-Telegram destinations', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+
+    await deliver.deliver(envelope());
+    await deliver.deliver(envelope());
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('records the Telegram pacing clock even when the send fails, so a fast retry loop cannot bypass spacing', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    const failure = new Error('telegram boom');
+    const sendText = vi.fn<SendText>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(undefined);
+    const { deliver } = deliverer({ platform: 'telegram', sendText });
+
+    const first = expect(deliver.deliver(envelope())).rejects.toBe(failure);
+    await vi.runAllTimersAsync();
+    await first;
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_003_000,
+    });
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(1_800_000_003_000);
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the messenger sendTextForBridge (bridge-specific budget) for a Matrix destination, not plain sendText', async () => {
+    const { deliver, sendText, sendTextForBridge } = deliverer({
+      platform: 'matrix',
+      sendTextForBridge: async () => undefined,
+    });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendTextForBridge).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello');
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('falls back to plain sendText for a Matrix destination when the messenger has no sendTextForBridge', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'matrix' });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello');
+  });
+
+  it('converts a MatrixRateLimitError from sendTextForBridge into a BridgeDeliveryDeferredError for the outbox to reschedule', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    const { MatrixRateLimitError } = await import('../src/platforms/matrix/adapter.js');
+    const { deliver, sendTextForBridge } = deliverer({
+      platform: 'matrix',
+      sendTextForBridge: async () => {
+        throw new MatrixRateLimitError('sendMessage', 45_000);
+      },
+    });
+
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_045_000,
+    });
+    await expect(deliver.deliver(envelope())).rejects.toBeInstanceOf(BridgeDeliveryDeferredError);
+    expect(sendTextForBridge).toHaveBeenCalledTimes(2);
   });
 
   it('does not import or call the WhatsApp control-send bypass', () => {

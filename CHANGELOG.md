@@ -6,6 +6,63 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [3.3.0] — 2026-07-08
+
+Platform expansion: Telegram and Matrix join Discord and WhatsApp, alongside
+an observability upgrade, a persona gallery, and a read-only operations page.
+
+### Added
+
+- **Telegram adapter** (grammY, long polling): full command set, voice-note
+  transcription through the shared Whisper path, and cross-platform bridging.
+  Recommended setup disables BotFather privacy mode so the bot sees group
+  messages and applies `requireMention` itself (Telegram withholds plain
+  messages from privacy-on bots); `TELEGRAM_CHAT_SCOPE` defaults to
+  `configured` because anyone can add the bot to any group. Compose service
+  `telegram` uses `${TELEGRAM_HEALTH_PORT:-3005}`. See
+  [docs/PLATFORMS.md](docs/PLATFORMS.md).
+- **Matrix adapter** (matrix-bot-sdk, `/sync` long polling): message send and
+  receive with `org.matrix.custom.html` formatting, reply and audio handling,
+  and bridging. Unencrypted rooms only — E2EE is not supported this release.
+  Requires Node 20 for the project but the Matrix runtime asserts Node 22 at
+  start (the SDK's floor). Sync token persists at `data/matrix-sync.json`.
+  Compose service `matrix` uses `${MATRIX_HEALTH_PORT:-3004}`. Installed via
+  Docker (any architecture) or npm on x86-64/arm64-glibc; on bare-metal arm64-musl the
+  npm install skips Matrix and points you at the Docker image (its native
+  crypto dependency has no arm64-musl build).
+- **Persona gallery**: six ready-to-run personas (Riff, Quill, Margie, Bea,
+  Patch, Callie) mapped to real feature sets, selectable in the setup wizard
+  (`--persona`) and copied into the platform's persona slot.
+- **Community operations page**: the token-gated `/admin` surface gains
+  read-only Overview, Memory (your community's lore), Bridges, and Health
+  sections, with machine-readable parity on `/admin.json`.
+- **Observability**: bridge metrics (outbox depth and age, per-route
+  delivery outcomes, dedup hits, relay latency, backpressure holds), memory
+  metrics by source, and a per-instance Grafana dashboard templated on the
+  scrape `job`/`instance` labels.
+
+### Changed
+
+- "Community lore" is the memory term across public copy (README, website,
+  quickstart); commands, config keys, and reference docs are unchanged.
+- Bridge delivery to Telegram paces per destination chat, and to Telegram
+  and Matrix defers through the outbox on rate limits (including over the
+  AMQP transport) instead of dropping or blocking.
+
+### Fixed
+
+- WhatsApp (and Telegram and Matrix) voice messages are no longer silently
+  dropped when transcription is unavailable: they flow through moderation,
+  recording, and bridging as a `[voice note]` placeholder, and the bot never
+  replies to a placeholder it synthesized itself.
+
+### Removed
+
+- The Microsoft Teams platform stub is deleted (its `botbuilder-js` SDK was
+  archived in January 2026 and the runtime never functioned). A
+  `bridge-map.json` or env file naming `teams` now fails at startup with a
+  clear message identifying the offending entry.
+
 ## [3.2.0] — 2026-07-07
 
 Adoption release: Garbanzo now runs without Docker, from a guided setup to a
@@ -105,14 +162,16 @@ See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive
 
 - Discord is the default platform path in docs, setup, and config examples.
 - Band mode runs on the Discord compose profile with `.env.discord` and `BAND_FEATURES_ENABLED=true`.
-- Prometheus scrapes both platform jobs: `discord:3002` and `whatsapp:3001`.
+- Prometheus scrapes both platform jobs:
+  `discord:${DISCORD_HEALTH_PORT:-3002}` and
+  `whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`.
 
 ## [1.1.0] — 2026-07-04
 
 ### Added
 
 - Discord runs a real Gateway connection (discord.js), so the bot observes and responds to channel messages, welcomes members, runs scheduled digests and recaps, and escalates to the owner by DM. Configure per-channel behavior and band roles in `config/discord-channels.json`.
-- Self-hosted Qdrant vector memory for semantic recall of community facts. `VECTOR_STORE=qdrant` by default and falls back to keyword search when Qdrant is unavailable; `VECTOR_STORE=none` keeps keyword-only.
+- Qdrant vector memory (run it yourself) for semantic recall of community facts. `VECTOR_STORE=qdrant` by default and falls back to keyword search when Qdrant is unavailable; `VECTOR_STORE=none` keeps keyword-only.
 - Remy band-assistant features, all gated behind `BAND_FEATURES_ENABLED` (default off, so the WhatsApp community bot is unaffected):
   - Song catalog (`!song`) with key, tempo, and status.
   - Practice tools: rehearsals with reminders (`!rehearsal`), availability (`!available`), setlists (`!setlist`), and a practice agenda (`!agenda`).
@@ -156,7 +215,7 @@ See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive
 
 - Community/admin Prometheus metric families for lifetime activity, daily group gauges, memory facts, pending/sent event reminders, rate-limit rejections, tool-call outcomes, and AI cost/request/error totals.
 - Bearer auth support for `/metrics` and `/admin`, alongside the existing query-token flow.
-- Self-hosted Prometheus + Grafana monitoring stack.
+- Prometheus + Grafana monitoring stack (run it yourself).
 
 ## [1.0.2] — 2026-07-02
 

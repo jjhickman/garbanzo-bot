@@ -26,7 +26,7 @@ const BridgeRouteSchema = z.object({
 export const BridgeMapSchema = z.object({
   instances: z.array(z.object({
     id: z.string().min(1),
-    platform: z.enum(['whatsapp', 'discord', 'slack', 'teams']),
+    platform: z.enum(['whatsapp', 'discord', 'slack', 'telegram', 'matrix']),
     url: z.string().url().optional(),
   })),
   routes: z.array(BridgeRouteSchema),
@@ -96,6 +96,65 @@ export type BridgeRoute = BridgeMap['routes'][number];
 
 let loadedBridgeMap: BridgeMap | null | undefined;
 
+function expandEnvPlaceholder(match: string, name: string, defaultValue: string | undefined): string {
+  const envValue = process.env[name];
+  if (envValue !== undefined && envValue !== '') return envValue;
+  if (defaultValue !== undefined) return defaultValue;
+  throw new Error(`Missing environment variable ${name} for bridge map placeholder ${match}`);
+}
+
+export function expandBridgeMapEnvPlaceholders(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.replace(
+      /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g,
+      expandEnvPlaceholder,
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => expandBridgeMapEnvPlaceholders(entry));
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, expandBridgeMapEnvPlaceholders(entry)]),
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Build a human-readable description of a single zod issue against the
+ * bridge map, naming the offending instance/route entry by its declared id
+ * when available (falling back to its array index) rather than just the
+ * raw zod path — so an operator staring at a startup log can tell which
+ * entry in bridge-map.json to fix without cross-referencing indices by hand.
+ */
+function describeBridgeMapIssue(issue: z.ZodIssue, raw: unknown): string {
+  const [section, entryIndex, ...rest] = issue.path;
+  const isEntryPath = (section === 'instances' || section === 'routes') && typeof entryIndex === 'number';
+
+  if (!isEntryPath) {
+    return `${issue.path.join('.') || '<root>'}: ${issue.message}`;
+  }
+
+  const collection = (raw as Record<string, unknown> | null | undefined)?.[section as string];
+  const entry = Array.isArray(collection) ? (collection[entryIndex] as Record<string, unknown> | undefined) : undefined;
+  const entryLabel = typeof entry?.id === 'string' && entry.id.length > 0
+    ? `id "${entry.id}"`
+    : `index ${entryIndex}`;
+  const field = rest.length > 0 ? ` field ${rest.join('.')}` : '';
+
+  return `${section} entry (${entryLabel})${field}: ${issue.message}`;
+}
+
+/** Exported for tests asserting the bridge-map loader names the offending entry. */
+export function formatBridgeMapZodError(error: z.ZodError, raw: unknown): string {
+  const details = error.issues.map((issue) => describeBridgeMapIssue(issue, raw)).join('; ');
+  return `Invalid bridge map config: ${details}`;
+}
+
 export function loadBridgeMap(): BridgeMap | null {
   if (loadedBridgeMap !== undefined) return loadedBridgeMap;
 
@@ -105,12 +164,19 @@ export function loadBridgeMap(): BridgeMap | null {
     return loadedBridgeMap;
   }
 
+  let raw: unknown;
   try {
-    const raw = JSON.parse(readFileSync(BRIDGE_MAP_PATH, 'utf8')) as unknown;
+    raw = JSON.parse(readFileSync(BRIDGE_MAP_PATH, 'utf8')) as unknown;
+    raw = expandBridgeMapEnvPlaceholders(raw);
     loadedBridgeMap = BridgeMapSchema.parse(raw);
     return loadedBridgeMap;
   } catch (err) {
-    logger.warn({ err, path: BRIDGE_MAP_PATH }, 'Failed to load bridge map config; bridge routes disabled');
+    if (err instanceof z.ZodError) {
+      const message = formatBridgeMapZodError(err, raw);
+      logger.warn({ issues: err.issues, path: BRIDGE_MAP_PATH }, message);
+    } else {
+      logger.warn({ err, path: BRIDGE_MAP_PATH }, 'Failed to load bridge map config; bridge routes disabled');
+    }
     loadedBridgeMap = null;
     return loadedBridgeMap;
   }

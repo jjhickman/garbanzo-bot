@@ -65,7 +65,9 @@ async function main(): Promise<void> {
   // Construct (but do not yet start) the platform runtime — the bridge
   // lifecycle needs it to resolve the outbound messenger lazily, and
   // constructing a runtime has no side effects until start() is called.
-  const runtime = getPlatformRuntime();
+  // HEALTH_ONLY mode constructs no runtime at all, so every enum-valid
+  // platform can smoke-boot even before its runtime exists in this build.
+  const runtime = healthOnlyMode ? null : getPlatformRuntime();
   activeRuntime = runtime;
 
   // Start health check server + memory watchdog for monitoring
@@ -80,7 +82,7 @@ async function main(): Promise<void> {
     // majority) never load amqplib or the bridge module graph at all.
     const { startBridge } = await import('./bridge/lifecycle.js');
     const bridge = await startBridge({
-      getMessenger: () => runtime.getMessenger?.() ?? null,
+      getMessenger: () => runtime?.getMessenger?.() ?? null,
     });
     if (bridge) {
       healthOptions.bridgeInboundHandler = bridge.handler;
@@ -127,8 +129,8 @@ async function main(): Promise<void> {
   // Schedule daily database maintenance (prune old messages + VACUUM at 4 AM)
   scheduleMaintenance();
 
-  if (healthOnlyMode) {
-    logger.warn('HEALTH_ONLY=true enabled — skipping WhatsApp connection for smoke test mode');
+  if (healthOnlyMode || !runtime) {
+    logger.warn('HEALTH_ONLY=true enabled — skipping platform connection for smoke test mode');
     return;
   }
 

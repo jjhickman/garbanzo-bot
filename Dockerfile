@@ -11,8 +11,12 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copy dependency files first (layer caching — these change less often than source)
+# Copy dependency files first (layer caching — these change less often than source).
+# The Matrix native crypto dependency is overridden to a local no-native stub
+# because E2EE is intentionally unsupported and linux/arm64-musl has no
+# upstream prebuild.
 COPY package.json package-lock.json ./
+COPY stubs/ ./stubs/
 
 # Reproducible install with all dependencies (need devDeps for tsc)
 RUN npm ci

@@ -24,6 +24,18 @@ is what gets everything off the machine's primary storage.
 - `data/voices/` (Piper TTS models) is **excluded** by default — the models
   are re-downloadable. Set `INCLUDE_VOICES=1` to include them.
 
+**Other platform instances.** This backup story is scoped to the default
+single WhatsApp instance's volumes (`garbanzo-bot-auth` + `garbanzo-bot-data`,
+matching `AUTH_VOLUME`/`DATA_VOLUME`'s defaults). Discord, Telegram, and
+Matrix instances each write to their own separate data volume
+(`garbanzo-bot-remy-data`, `garbanzo-bot-telegram-data`,
+`garbanzo-bot-matrix-data`) that this script does not archive by default.
+For Matrix specifically, that volume also carries the sync token at
+`data/matrix-sync.json`; losing it is harmless — the bot just runs a fresh
+initial sync on next start — but can be slow to catch back up on a busy
+account. Back up additional instance volumes separately until multi-instance
+backup coverage lands.
+
 ## Setup (once, on the host)
 
 ```bash

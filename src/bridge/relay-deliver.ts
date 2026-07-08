@@ -1,16 +1,30 @@
 import type { MessagingPlatform } from '../core/messaging-platform.js';
 import type { PlatformMessenger } from '../core/platform-messenger.js';
+import { recordBridgeDeliveryLatency, recordBridgeHeldByOutboundSafety } from '../middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../platforms/whatsapp/outbound-safety.js';
 import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import type { BridgeEnvelope, BridgeOrigin } from './envelope.js';
 import { translateFormatting } from './format-translate.js';
+import { BridgeDeliveryDeferredError } from './transport.js';
 
 const MAX_DISCORD_RETRY_AFTER_MS = 5_000;
 const SECONDS_TO_MS = 1_000;
 
+// Telegram enforces roughly 20 messages/minute per group (undocumented but
+// widely observed limit) on top of its per-chat 429 responses. The adapter's
+// send path already retries a 429 once using the server's own retry_after
+// (src/platforms/telegram/adapter.ts) — that is REACTIVE and per-call, so it
+// protects a single send but does nothing to stop a burst of bridge relays
+// (a busy WhatsApp/Discord source relaying many messages in quick
+// succession) from systematically tripping 429s against a Telegram
+// destination chat. This is a conservative PROACTIVE minimum spacing
+// between sends to the SAME destination chat, applied only when this
+// instance's platform is Telegram — other platforms are unaffected.
+const TELEGRAM_MIN_SEND_INTERVAL_MS = 3_000;
+
 type RelayDelivererOptions = {
-  messenger: Pick<PlatformMessenger, 'sendText'>;
+  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'>;
   platform: MessagingPlatform;
   bufferEnvelope: (envelope: BridgeEnvelope) => Promise<void>;
 };
@@ -21,7 +35,9 @@ export function platformLabel(platform: MessagingPlatform): string {
   if (platform === 'whatsapp') return 'WhatsApp';
   if (platform === 'discord') return 'Discord';
   if (platform === 'slack') return 'Slack';
-  return 'Teams';
+  // telegram/matrix (and any future platform) have no dedicated runtime yet;
+  // capitalize the enum value rather than hardcoding a stale platform name.
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 export function createRelayDeliverer({
@@ -29,19 +45,35 @@ export function createRelayDeliverer({
   platform,
   bufferEnvelope,
 }: RelayDelivererOptions): { deliver(envelope: BridgeEnvelope): Promise<RelayDeliveryStatus> } {
+  // Per-destination-chat "last sent at" clock, scoped to this deliverer
+  // instance (one per running bridge). Only consulted when platform ===
+  // 'telegram' (see sendTelegramWithPacing).
+  const lastSentAtByChat = new Map<string, number>();
+
   return {
     async deliver(envelope: BridgeEnvelope): Promise<RelayDeliveryStatus> {
       const text = relayText(envelope, platform);
+      const startedAt = Date.now();
 
       try {
         if (platform === 'discord') {
           await sendDiscordWithRateGuard(messenger, envelope.targetChatId, text);
+        } else if (platform === 'telegram') {
+          await sendTelegramWithPacing(messenger, envelope.targetChatId, text, lastSentAtByChat);
+        } else if (platform === 'matrix') {
+          // No proactive pacing for Matrix: homeserver limits are
+          // operator-configurable, so the adapter's inline short-wait retry
+          // plus this deferral (long retry_after → outbox reschedule without
+          // an attempt) replace a fixed pacing interval.
+          await sendMatrixWithDeferral(messenger, envelope.targetChatId, text);
         } else {
           await messenger.sendText(envelope.targetChatId, text);
         }
+        recordBridgeDeliveryLatency(envelope.routeId, Date.now() - startedAt);
         return 'sent';
       } catch (err) {
         if (err instanceof WhatsAppOutboundHeldError) {
+          recordBridgeHeldByOutboundSafety(envelope.routeId);
           await bufferEnvelope(envelope);
           return 'buffered';
         }
@@ -98,6 +130,79 @@ async function sendDiscordWithRateGuard(
     if (!isDiscordRateLimitError(err)) throw err;
     await sleep(parseDiscordRetryAfterMs(err));
     await messenger.sendText(chatId, text);
+  }
+}
+
+/**
+ * Enforce a minimum gap since the last send to this destination chat by
+ * deferring the source outbox row instead of sleeping inside the receiver's
+ * delivery request. The outbox claims rows in id order and handles them
+ * serially; returning a deadline lets later rows for other routes/chats drain
+ * while preserving same-chat order at the claimed-row boundary. This is
+ * process-local pacing, so a receiver restart can forget the last-send clock;
+ * Telegram's adapter-level 429 retry remains the reactive backstop.
+ */
+/**
+ * Matrix delivery: convert the adapter's rate-limit signal into the outbox's
+ * deferral machinery. Bridge deliveries call the messenger's
+ * `sendTextForBridge` (a short, throw-fast inline budget — see
+ * PlatformMessenger.sendTextForBridge and matrix/adapter.ts's
+ * BRIDGE_INLINE_RETRY_MAX_MS) rather than plain `sendText`, which now uses
+ * the much longer direct-send budget: sleeping through a long retry_after
+ * inside a bridge delivery would block the serial outbox drain and outlive
+ * the HTTP transport's timeout. Falls back to `sendText` if the messenger
+ * doesn't implement the bridge-specific method (defensive; matrix's adapter
+ * always does).
+ */
+async function sendMatrixWithDeferral(
+  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'>,
+  chatId: string,
+  text: string,
+): Promise<void> {
+  const { MatrixRateLimitError } = await import('../platforms/matrix/adapter.js');
+  try {
+    if (messenger.sendTextForBridge) {
+      await messenger.sendTextForBridge(chatId, text);
+    } else {
+      await messenger.sendText(chatId, text);
+    }
+  } catch (err) {
+    if (err instanceof MatrixRateLimitError) {
+      const retryAtMs = Date.now() + err.retryAfterMs;
+      throw new BridgeDeliveryDeferredError(
+        retryAtMs,
+        `Matrix rate limit deferred until ${retryAtMs}`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+}
+
+async function sendTelegramWithPacing(
+  messenger: Pick<PlatformMessenger, 'sendText'>,
+  chatId: string,
+  text: string,
+  lastSentAtByChat: Map<string, number>,
+): Promise<void> {
+  const lastSentAt = lastSentAtByChat.get(chatId);
+  if (lastSentAt !== undefined) {
+    const retryAtMs = lastSentAt + TELEGRAM_MIN_SEND_INTERVAL_MS;
+    if (Date.now() < retryAtMs) {
+      throw new BridgeDeliveryDeferredError(
+        retryAtMs,
+        `Telegram pacing deferred until ${retryAtMs}`,
+      );
+    }
+  }
+
+  try {
+    await messenger.sendText(chatId, text);
+  } finally {
+    // Recorded even on failure: a failed send still consumed a moment at
+    // the chat, and NOT recording it would let a fast retry loop bypass the
+    // spacing entirely on repeated errors.
+    lastSentAtByChat.set(chatId, Date.now());
   }
 }
 

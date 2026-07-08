@@ -60,7 +60,7 @@ page on the health server instead of the terminal. On startup the logs print a U
 like:
 
 ```
-http://127.0.0.1:3001/whatsapp/login?token=<token>
+http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/whatsapp/login?token=<token>
 ```
 
 Open it (over an SSH tunnel or on the host) and either:
@@ -83,11 +83,11 @@ The page shows "Linked ✓" once connected.
 
 - *SSH tunnel (recommended, keeps the default localhost bind):*
   ```bash
-  ssh -L 3001:127.0.0.1:3001 pi@garbanzo-host
-  # then open http://127.0.0.1:3001/whatsapp/login?token=<token> on your laptop
+  ssh -L ${WHATSAPP_HEALTH_PORT:-3001}:127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001} pi@garbanzo-host
+  # then open http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/whatsapp/login?token=<token> on your laptop
   ```
 - *Direct network exposure:* set `HEALTH_BIND_HOST=0.0.0.0`. On startup the logs
-  then print connectable `http://<LAN-IP>:3001/whatsapp/login` URLs using the
+  then print connectable `http://<LAN-IP>:${WHATSAPP_HEALTH_PORT:-3001}/whatsapp/login` URLs using the
   machine's actual LAN address. This exposes the linking page to your whole network,
   guarded only by the login token over plaintext HTTP, so only do it on a trusted
   LAN. The bot logs a warning when
@@ -104,6 +104,195 @@ docker compose up -d
 docker compose logs -f whatsapp
 ```
 
+## Telegram Support
+
+Telegram runs on [grammY](https://grammy.dev/) over long polling. No inbound
+webhook config is needed, which fits multi-platform deployments. Setup uses the official
+BotFather:
+
+1. Message [@BotFather](https://t.me/BotFather) and run `/newbot`; follow its
+   prompts to create the bot, then copy the token it gives you.
+2. Message @BotFather again, run `/setprivacy`, choose the bot, then choose
+   **Disable**. This is the recommended setup: Telegram bots default to
+   "privacy mode," which withholds plain-text messages (including
+   `@mentions`) from the bot entirely. Disabling it lets the bot see every
+   message in a group so it can apply `requireMention` itself, the same
+   shape as Discord's Message Content intent plus `requireMention`. Privacy
+   mode stays a valid, degraded, replies-and-commands-only fallback for
+   operators who don't want to touch this setting.
+3. Message [@userinfobot](https://t.me/userinfobot) from your own account to
+   get your numeric Telegram user id (`TELEGRAM_OWNER_ID`).
+4. Add the bot to a group, send a message, then read the chat id off
+   @userinfobot (forward the group message to it) or from
+   `https://api.telegram.org/bot<token>/getUpdates` (`"chat":{"id":...}`).
+   Group ids are negative; supergroup/channel ids are negative with a `-100`
+   prefix (e.g. `-1001234567890`).
+
+For Docker Compose:
+
+```bash
+cp .env.example .env
+cp .env.telegram.example .env.telegram
+cp config/telegram-chats.example.json config/telegram-chats.json
+# In .env: COMPOSE_PROFILES=telegram
+# In .env.telegram: set TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID, and chat ids.
+docker compose up -d
+docker compose logs -f telegram
+```
+
+For native development:
+
+```bash
+# .env
+MESSAGING_PLATFORM=telegram
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_OWNER_ID=...
+
+npm run dev
+```
+
+Chat allowlists live in `config/telegram-chats.json`, following the same
+`{ name, enabled, requireMention, enabledFeatures }` shape as
+`config/discord-channels.json`.
+
+`TELEGRAM_CHAT_SCOPE` controls which chats the bot ingests, and its default
+differs deliberately from WhatsApp's: it defaults to `configured` (only
+chats enabled in `config/telegram-chats.json`). This differs from WhatsApp's
+default of `all`: a WhatsApp number only joins groups the operator explicitly links; anyone can add a Telegram
+bot to any group via its `@username`, so ingesting every group by default
+would be unsafe. DMs are never gated by this setting.
+
+The Docker service is `telegram`, and its health server uses
+`${TELEGRAM_HEALTH_PORT:-3005}` in Compose. The other platform placeholders are
+`${WHATSAPP_HEALTH_PORT:-3001}` for WhatsApp,
+`${DISCORD_HEALTH_PORT:-3002}` for Discord, and
+`${MATRIX_HEALTH_PORT:-3004}` for Matrix.
+
+Voice notes are transcribed through the same Whisper/`WHISPER_URL` path used
+by the other platforms. There is no separate transcription config.
+
+The model is instructed to write the same WhatsApp-style markdown
+(`*bold*`, `_italic_`, `~strike~`) used across every other platform prompt;
+the Telegram adapter translates that into Telegram's MarkdownV2 at send
+time, so persona and prompt authors never need Telegram-specific syntax.
+
+## Matrix Support
+
+Matrix runs on [`matrix-bot-sdk`](https://github.com/turt2live/matrix-bot-sdk)
+against your homeserver's `/sync` long-polling endpoint. No inbound webhook
+config is needed, the same shape as Telegram's long polling. Setup uses a bot
+account on your homeserver rather than a central bot directory:
+
+1. Register a normal user account for the bot on your homeserver (operator-run
+   Synapse/Dendrite/Conduit, or `matrix.org`).
+2. Get that account's access token: log into it with Element, then go to
+   Settings -> Help & About -> Advanced -> Access Token. (Scripting an
+   `m.login.password` exchange against `/_matrix/client/v3/login` works too,
+   if you'd rather not paste a password into a client.)
+3. Note your own Matrix user id (not the bot's) for `MATRIX_OWNER_ID`, e.g.
+   `@you:example.org`.
+4. Get the room id for each room the bot should join. In Element: Room
+   Settings -> Advanced -> Internal room ID (looks like
+   `!abcdefghijklmno:example.org`). You can also give the setup wizard a
+   published alias (`#general:example.org`) and it resolves the alias to a
+   room id for you at setup time.
+
+For Docker Compose:
+
+```bash
+cp .env.example .env
+cp .env.matrix.example .env.matrix
+cp config/matrix-rooms.example.json config/matrix-rooms.json
+# In .env: COMPOSE_PROFILES=matrix
+# In .env.matrix: set MATRIX_HOMESERVER_URL, MATRIX_ACCESS_TOKEN, MATRIX_OWNER_ID, and room ids.
+docker compose up -d
+docker compose logs -f matrix
+```
+
+For native development:
+
+```bash
+# .env
+MESSAGING_PLATFORM=matrix
+MATRIX_HOMESERVER_URL=https://matrix.example.org
+MATRIX_ACCESS_TOKEN=...
+MATRIX_OWNER_ID=@you:example.org
+
+npm run dev
+```
+
+Matrix requires Node.js 22+ at runtime (`matrix-bot-sdk` declares
+`engines.node >=22`), above the project's general Node 20+ floor. This only
+matters for the no-Docker/`npx` quickstart path — the published Docker image
+already runs a Node version that satisfies it.
+
+`matrix-bot-sdk` is an optional dependency because it pulls a native crypto
+package with no arm64-musl build. The Docker image (any architecture) and an
+npm install on x86-64 or arm64-glibc get a working Matrix adapter. On a
+bare-metal arm64-musl host (for example Alpine on a Raspberry Pi), the npm
+install skips Matrix rather than failing. The other platforms still install,
+and starting Matrix there prints a clear message pointing you at the Docker
+image. Encryption is unsupported everywhere regardless (invite the bot only
+into unencrypted rooms).
+
+Room bindings live in `config/matrix-rooms.json`, keyed by **room ID**, never
+by alias:
+
+```json
+{
+  "ownerId": "@owner:example.org",
+  "rooms": {
+    "!abcdefghijklmno:example.org": {
+      "alias": "#general:example.org",
+      "name": "general",
+      "enabled": true,
+      "requireMention": true
+    }
+  }
+}
+```
+
+Aliases can be deleted or repointed to a different room by any room admin at
+any time, so they are not a stable identifier. The setup wizard resolves an
+alias to its room id once, at setup time, and writes the room id as the
+config key. `alias` stays in the file purely as a human-readable label.
+
+`MATRIX_CHAT_SCOPE` controls which rooms the bot ingests, and defaults to
+`configured` (only rooms enabled in `config/matrix-rooms.json`), the same
+default and the same rationale as Telegram: anyone who knows the bot's Matrix
+user id can invite it to a room, so ingesting every room it's invited to by
+default would be unsafe. DMs are never gated by this setting.
+
+The Docker service is `matrix`, and its health server uses
+`${MATRIX_HEALTH_PORT:-3004}` in Compose. The other platform placeholders are
+`${WHATSAPP_HEALTH_PORT:-3001}` for WhatsApp,
+`${DISCORD_HEALTH_PORT:-3002}` for Discord, and
+`${TELEGRAM_HEALTH_PORT:-3005}` for Telegram.
+
+**End-to-end encryption is not supported.** Element defaults new private
+rooms to encrypted, but Garbanzo's Matrix client has no E2EE support: the
+native crypto module it would need has no prebuilt binary for
+`linux-arm64-musl`, the architecture the project's own production image
+targets. Invite the bot only into unencrypted rooms. If the bot is invited
+into an encrypted room, it joins but cannot see anything. It logs a warning
+and sits blind rather than crashing or silently failing.
+
+The sync token that lets the bot resume from where it left off after a
+restart, instead of re-fetching full room state, is persisted at
+`data/matrix-sync.json` inside the data volume (or `GARBANZO_HOME` on a
+native install). Deleting it is harmless. The bot just runs a fresh initial
+sync on next start, but that sync can be slow on an account joined to many
+active rooms.
+
+Audio messages are transcribed through the same Whisper/`WHISPER_URL` path
+used by the other platforms. There is no separate transcription config.
+
+The model is instructed to write the same WhatsApp-style markdown
+(`*bold*`, `_italic_`, `~strike~`) used across every other platform prompt;
+the Matrix adapter alone translates that into Matrix's HTML
+`formatted_body`, so persona and prompt authors never need Matrix-specific
+syntax.
+
 ## Slack Support
 
 For official Slack runtime:
@@ -117,7 +306,7 @@ SLACK_CLIENT_ID=...
 SLACK_CLIENT_SECRET=...
 SLACK_REFRESH_TOKEN=...
 SLACK_EVENTS_BIND_HOST=0.0.0.0
-SLACK_EVENTS_PORT=3002
+SLACK_EVENTS_PORT=${DISCORD_HEALTH_PORT:-3002}
 
 npm run dev
 ```
@@ -132,7 +321,7 @@ SLACK_DEMO=true
 npm run dev
 
 # In another terminal
-curl -s -X POST http://127.0.0.1:3002/demo/chat \
+curl -s -X POST "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/demo/chat" \
   -H 'content-type: application/json' \
   -d '{"platform":"slack","text":"@garbanzo !help"}'
 ```

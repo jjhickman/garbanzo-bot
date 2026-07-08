@@ -193,6 +193,123 @@ describe('config hardening', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it('requires Matrix env when MESSAGING_PLATFORM=matrix', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: undefined,
+      MATRIX_ACCESS_TOKEN: undefined,
+      MATRIX_OWNER_ID: undefined,
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_HOMESERVER_URL is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_ACCESS_TOKEN is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_OWNER_ID is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+  });
+
+  it('validates Matrix homeserver URL and owner MXID shape', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: 'not-a-url',
+      MATRIX_ACCESS_TOKEN: 'test_matrix_token',
+      MATRIX_OWNER_ID: 'not-a-mxid',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MATRIX_HOMESERVER_URL must be a valid URL'),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MATRIX_OWNER_ID must be a Matrix user id like @user:server'),
+    );
+  });
+
+  it('accepts MESSAGING_PLATFORM=matrix when required Matrix env is present', async () => {
+    const { config, instanceId } = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: 'https://matrix.example.org',
+      MATRIX_ACCESS_TOKEN: 'test_matrix_token',
+      MATRIX_OWNER_ID: '@owner:example.org',
+    });
+
+    expect(config.MESSAGING_PLATFORM).toBe('matrix');
+    expect(config.MATRIX_HOMESERVER_URL).toBe('https://matrix.example.org');
+    expect(config.MATRIX_ACCESS_TOKEN).toBe('test_matrix_token');
+    expect(config.MATRIX_OWNER_ID).toBe('@owner:example.org');
+    expect(instanceId).toBe('matrix');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('requires TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID when MESSAGING_PLATFORM=telegram', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: undefined,
+      TELEGRAM_OWNER_ID: undefined,
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'TELEGRAM_BOT_TOKEN is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'TELEGRAM_OWNER_ID is required when MESSAGING_PLATFORM=telegram — set it in .env.telegram',
+      ),
+    );
+  });
+
+  it('rejects a non-numeric TELEGRAM_OWNER_ID', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: 'test_bot_token',
+      TELEGRAM_OWNER_ID: 'not-a-number',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TELEGRAM_OWNER_ID must be numeric'),
+    );
+  });
+
+  it('accepts telegram config when TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID are present', async () => {
+    const { config, instanceId } = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'telegram',
+      TELEGRAM_BOT_TOKEN: 'test_bot_token',
+      TELEGRAM_OWNER_ID: '123456789',
+    });
+
+    expect(config.MESSAGING_PLATFORM).toBe('telegram');
+    expect(config.TELEGRAM_BOT_TOKEN).toBe('test_bot_token');
+    expect(config.TELEGRAM_OWNER_ID).toBe('123456789');
+    expect(instanceId).toBe('telegram');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('still rejects the removed teams platform value', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'teams',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid environment variables'),
+    );
+  });
+
   describe('QDRANT_COLLECTION smart default (per-instance isolation)', () => {
     it('keeps the plain default when INSTANCE_ID is unset (single-instance upgrade path)', async () => {
       const { config } = await importConfigWithEnv({

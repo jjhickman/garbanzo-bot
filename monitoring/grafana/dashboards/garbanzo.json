@@ -6,7 +6,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-24h",
@@ -24,6 +24,24 @@
         "query": "label_values(job)",
         "multi": true,
         "includeAll": true,
+        "refresh": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "garbanzo-prom"
+        },
+        "query": "label_values(garbanzo_up_time_seconds{job=~\"$job\"}, instance)",
+        "multi": true,
+        "includeAll": true,
+        "refresh": 1,
         "current": {
           "selected": true,
           "text": "All",
@@ -36,7 +54,7 @@
     {
       "id": 1,
       "type": "row",
-      "title": "Community Activity",
+      "title": "Platform Connection",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -47,451 +65,13 @@
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "Messages per hour by group",
-      "gridPos": {
-        "x": 0,
-        "y": 1,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (group) (increase(garbanzo_messages_total{job=~\"$job\"}[1h]))",
-          "refId": "A",
-          "legendFormat": "{{group}}"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Bot replies per hour by group",
-      "gridPos": {
-        "x": 12,
-        "y": 1,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (group) (increase(garbanzo_bot_responses_total{job=~\"$job\"}[1h]))",
-          "refId": "A",
-          "legendFormat": "{{group}}"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Active users today by group",
-      "gridPos": {
-        "x": 0,
-        "y": 9,
-        "w": 12,
-        "h": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_daily_active_users{job=~\"$job\"}",
-          "refId": "A",
-          "legendFormat": "{{group}}"
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Owner DMs & rate-limited requests (per hour)",
-      "gridPos": {
-        "x": 12,
-        "y": 9,
-        "w": 12,
-        "h": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "increase(garbanzo_owner_dms_total{job=~\"$job\"}[1h])",
-          "refId": "A",
-          "legendFormat": "owner DMs"
-        },
-        {
-          "expr": "increase(garbanzo_rate_limited_total{job=~\"$job\"}[1h])",
-          "refId": "B",
-          "legendFormat": "rate-limited"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "type": "row",
-      "title": "AI Usage & Cost",
-      "gridPos": {
-        "x": 0,
-        "y": 16,
-        "w": 24,
-        "h": 1
-      },
-      "collapsed": false
-    },
-    {
-      "id": 7,
-      "type": "stat",
-      "title": "AI spend today",
-      "gridPos": {
-        "x": 0,
-        "y": 17,
-        "w": 4,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.5
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_daily_cost_usd{job=~\"$job\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Cost per day by provider",
-      "gridPos": {
-        "x": 4,
-        "y": 17,
-        "w": 10,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (provider) (increase(garbanzo_ai_cost_usd_total{job=~\"$job\"}[24h]))",
-          "refId": "A",
-          "legendFormat": "{{provider}}"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "AI requests per hour by provider",
-      "gridPos": {
-        "x": 14,
-        "y": 17,
-        "w": 10,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (provider) (increase(garbanzo_ai_requests_total{job=~\"$job\"}[1h]))",
-          "refId": "A",
-          "legendFormat": "{{provider}}"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Tool calls per hour (what members actually use)",
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 12,
-        "h": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (tool) (increase(garbanzo_tool_calls_total{job=~\"$job\", outcome=\"ok\"}[1h]))",
-          "refId": "A",
-          "legendFormat": "{{tool}}"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "AI errors & failed tool calls (per hour)",
-      "gridPos": {
-        "x": 12,
-        "y": 23,
-        "w": 12,
-        "h": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum (increase(garbanzo_ai_errors_total{job=~\"$job\"}[1h]))",
-          "refId": "A",
-          "legendFormat": "AI errors"
-        },
-        {
-          "expr": "sum (increase(garbanzo_tool_calls_total{job=~\"$job\", outcome=\"error\"}[1h]))",
-          "refId": "B",
-          "legendFormat": "tool failures"
-        }
-      ]
-    },
-    {
-      "id": 12,
-      "type": "row",
-      "title": "WhatsApp Health",
-      "gridPos": {
-        "x": 0,
-        "y": 30,
-        "w": 24,
-        "h": 1
-      },
-      "collapsed": false
-    },
-    {
-      "id": 13,
       "type": "stat",
       "title": "Connected",
       "gridPos": {
         "x": 0,
-        "y": 31,
-        "w": 4,
-        "h": 5
+        "y": 1,
+        "w": 6,
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -513,47 +93,40 @@
               }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN"
-                },
-                "1": {
-                  "text": "UP"
-                }
-              }
-            }
-          ]
+          "noValue": "No data"
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
-        }
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
       },
       "targets": [
         {
-          "expr": "garbanzo_connection_status{job=~\"$job\", status=\"connected\"}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "garbanzo_connection_status{job=~\"$job\",instance=~\"$instance\",status=\"connected\"}",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ]
     },
     {
-      "id": 14,
-      "type": "stat",
+      "id": 3,
+      "type": "timeseries",
       "title": "Last message age",
       "gridPos": {
-        "x": 4,
-        "y": 31,
-        "w": 4,
-        "h": 5
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -562,51 +135,41 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 3600
-              },
-              {
-                "color": "red",
-                "value": 14400
-              }
-            ]
-          }
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
       "targets": [
         {
-          "expr": "garbanzo_last_message_ago_seconds{job=~\"$job\"}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "garbanzo_last_message_ago_seconds{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ]
     },
     {
-      "id": 15,
+      "id": 4,
       "type": "stat",
       "title": "Stale connection",
       "gridPos": {
-        "x": 8,
-        "y": 31,
-        "w": 4,
-        "h": 5
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -628,47 +191,456 @@
               }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "OK"
-                },
-                "1": {
-                  "text": "STALE"
-                }
-              }
-            }
-          ]
+          "noValue": "No data"
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
-          ]
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_connection_stale{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Reconnects per 6h",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
       "targets": [
         {
-          "expr": "garbanzo_connection_stale{job=~\"$job\"}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "increase(garbanzo_reconnect_count{job=~\"$job\",instance=~\"$instance\"}[6h])",
+          "legendFormat": "{{job}} {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Message Flow",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Messages per hour by group",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, group) (increase(garbanzo_messages_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{group}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Bot replies per hour by group",
+      "gridPos": {
+        "x": 8,
+        "y": 9,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, group) (increase(garbanzo_bot_responses_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{group}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Active users today by group",
+      "gridPos": {
+        "x": 16,
+        "y": 9,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_daily_active_users{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{group}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Owner DMs and rate limits",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(garbanzo_owner_dms_total{job=~\"$job\",instance=~\"$instance\"}[1h])",
+          "legendFormat": "owner DMs"
+        },
+        {
+          "refId": "B",
+          "expr": "increase(garbanzo_rate_limited_total{job=~\"$job\",instance=~\"$instance\"}[1h])",
+          "legendFormat": "rate-limited"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "MarkdownV2 fallbacks",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, platform) (increase(garbanzo_markdown_v2_fallbacks_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{platform}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "AI Provider Fallback and Latency",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "AI requests per hour by provider",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, provider) (increase(garbanzo_ai_requests_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "AI latency average by provider",
+      "gridPos": {
+        "x": 8,
+        "y": 24,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_ai_latency_ms_avg{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "AI cost per day by provider",
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, provider) (increase(garbanzo_ai_cost_usd_total{job=~\"$job\",instance=~\"$instance\"}[24h]))",
+          "legendFormat": "{{job}} {{provider}}"
         }
       ]
     },
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Reconnects (per 6h)",
+      "title": "Tool calls per hour",
       "gridPos": {
-        "x": 12,
+        "x": 0,
         "y": 31,
         "w": 12,
-        "h": 5
+        "h": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -681,7 +653,8 @@
             "fillOpacity": 12,
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -696,75 +669,81 @@
       },
       "targets": [
         {
-          "expr": "increase(garbanzo_reconnect_count{job=~\"$job\"}[6h])",
           "refId": "A",
-          "legendFormat": "reconnects"
+          "expr": "sum by (job, instance, tool) (increase(garbanzo_tool_calls_total{job=~\"$job\",instance=~\"$instance\",outcome=\"ok\"}[1h]))",
+          "legendFormat": "{{job}} {{tool}}"
         }
       ]
     },
     {
       "id": 17,
+      "type": "timeseries",
+      "title": "AI and tool errors per hour",
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance) (increase(garbanzo_ai_errors_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} AI errors"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job, instance) (increase(garbanzo_tool_calls_total{job=~\"$job\",instance=~\"$instance\",outcome=\"error\"}[1h]))",
+          "legendFormat": "{{job}} tool errors"
+        }
+      ]
+    },
+    {
+      "id": 18,
       "type": "row",
-      "title": "Anti-ban Safety",
+      "title": "Bridge Health",
       "gridPos": {
         "x": 0,
-        "y": 36,
+        "y": 38,
         "w": 24,
         "h": 1
       },
       "collapsed": false
     },
     {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Risk score",
-      "gridPos": {
-        "x": 0,
-        "y": 37,
-        "w": 12,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_whatsapp_safety_risk_score{job=~\"$job\"}",
-          "refId": "A",
-          "legendFormat": "risk"
-        }
-      ]
-    },
-    {
       "id": 19,
       "type": "timeseries",
-      "title": "Outbound: sent last hour / held",
+      "title": "Outbox depth and oldest age",
       "gridPos": {
-        "x": 12,
-        "y": 37,
-        "w": 8,
-        "h": 6
+        "x": 0,
+        "y": 39,
+        "w": 12,
+        "h": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -777,7 +756,8 @@
             "fillOpacity": 12,
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -792,100 +772,26 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_whatsapp_outbound_sent_last_hour{job=~\"$job\"}",
           "refId": "A",
-          "legendFormat": "sent (1h)"
+          "expr": "garbanzo_bridge_outbox_depth{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} depth"
         },
         {
-          "expr": "garbanzo_whatsapp_outbound_held{job=~\"$job\"}",
           "refId": "B",
-          "legendFormat": "held"
+          "expr": "garbanzo_bridge_outbox_oldest_pending_age_seconds{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} oldest age"
         }
       ]
     },
     {
       "id": 20,
-      "type": "stat",
-      "title": "Sending paused",
-      "gridPos": {
-        "x": 20,
-        "y": 37,
-        "w": 4,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "ACTIVE"
-                },
-                "1": {
-                  "text": "PAUSED"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_whatsapp_safety_paused{job=~\"$job\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 21,
-      "type": "row",
-      "title": "Community Features",
-      "gridPos": {
-        "x": 0,
-        "y": 43,
-        "w": 24,
-        "h": 1
-      },
-      "collapsed": false
-    },
-    {
-      "id": 22,
       "type": "timeseries",
-      "title": "Memory facts by source",
+      "title": "Outbox delivery outcomes per hour",
       "gridPos": {
-        "x": 0,
-        "y": 44,
-        "w": 8,
-        "h": 6
+        "x": 12,
+        "y": 39,
+        "w": 12,
+        "h": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -898,7 +804,8 @@
             "fillOpacity": 12,
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -913,21 +820,127 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_memory_facts{job=~\"$job\"}",
           "refId": "A",
-          "legendFormat": "{{source}}"
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_sent_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} sent"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_failed_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} failed"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_dead_lettered_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} dead"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Summary buffer size and flushes",
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_bridge_summary_buffer_size{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{route}} buffered"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_summary_flushes_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} flushes"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Dedup hits and safety-held relays",
+      "gridPos": {
+        "x": 8,
+        "y": 46,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_seen_dedup_hits_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} dedup"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job, instance, route) (increase(garbanzo_bridge_held_by_outbound_safety_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{route}} held"
         }
       ]
     },
     {
       "id": 23,
       "type": "timeseries",
-      "title": "Event reminders",
+      "title": "Relay delivery latency window",
       "gridPos": {
-        "x": 8,
-        "y": 44,
+        "x": 16,
+        "y": 46,
         "w": 8,
-        "h": 6
+        "h": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -935,12 +948,13 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "s",
           "custom": {
             "fillOpacity": 12,
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -955,80 +969,220 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_event_reminders_pending{job=~\"$job\"}",
           "refId": "A",
-          "legendFormat": "pending"
+          "expr": "garbanzo_bridge_delivery_latency_seconds_min{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{route}} min"
         },
         {
-          "expr": "increase(garbanzo_event_reminders_sent_total{job=~\"$job\"}[24h])",
           "refId": "B",
-          "legendFormat": "sent (24h)"
+          "expr": "garbanzo_bridge_delivery_latency_seconds_avg{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{route}} avg"
+        },
+        {
+          "refId": "C",
+          "expr": "garbanzo_bridge_delivery_latency_seconds_max{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{route}} max"
         }
       ]
     },
     {
       "id": 24,
-      "type": "timeseries",
-      "title": "Moderation flags (per day)",
-      "gridPos": {
-        "x": 16,
-        "y": 44,
-        "w": 8,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (group) (increase(garbanzo_moderation_flags_total{job=~\"$job\"}[24h]))",
-          "refId": "A",
-          "legendFormat": "{{group}}"
-        }
-      ]
-    },
-    {
-      "id": 25,
       "type": "row",
-      "title": "System & Backups",
+      "title": "Memory Growth",
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 53,
         "w": 24,
         "h": 1
       },
       "collapsed": false
     },
     {
-      "id": 26,
+      "id": 25,
       "type": "timeseries",
-      "title": "Memory RSS vs 1GB watchdog",
+      "title": "Memory facts by source",
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 54,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_memory_facts{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} {{source}}"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Memory saves rejected per hour",
+      "gridPos": {
+        "x": 8,
+        "y": 54,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, reason) (increase(garbanzo_memory_save_rejections_total{job=~\"$job\",instance=~\"$instance\"}[1h]))",
+          "legendFormat": "{{job}} {{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Event reminders",
+      "gridPos": {
+        "x": 16,
+        "y": 54,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "garbanzo_event_reminders_pending{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} pending"
+        },
+        {
+          "refId": "B",
+          "expr": "increase(garbanzo_event_reminders_sent_total{job=~\"$job\",instance=~\"$instance\"}[24h])",
+          "legendFormat": "{{job}} sent / 24h"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Moderation flags per day",
+      "gridPos": {
+        "x": 0,
+        "y": 61,
         "w": 12,
-        "h": 6
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "garbanzo-prom"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, instance, group) (increase(garbanzo_moderation_flags_total{job=~\"$job\",instance=~\"$instance\"}[24h]))",
+          "legendFormat": "{{job}} {{group}}"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Process memory",
+      "gridPos": {
+        "x": 12,
+        "y": 61,
+        "w": 12,
+        "h": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -1041,7 +1195,8 @@
             "fillOpacity": 12,
             "lineWidth": 2,
             "spanNulls": true
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -1056,174 +1211,14 @@
       },
       "targets": [
         {
-          "expr": "garbanzo_memory_rss_bytes{job=~\"$job\"}",
           "refId": "A",
-          "legendFormat": "RSS"
+          "expr": "garbanzo_memory_rss_bytes{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} RSS"
         },
         {
-          "expr": "garbanzo_memory_heap_used_bytes{job=~\"$job\"}",
           "refId": "B",
-          "legendFormat": "heap used"
-        }
-      ]
-    },
-    {
-      "id": 27,
-      "type": "stat",
-      "title": "Uptime",
-      "gridPos": {
-        "x": 12,
-        "y": 51,
-        "w": 4,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_up_time_seconds{job=~\"$job\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 28,
-      "type": "stat",
-      "title": "Backup present",
-      "gridPos": {
-        "x": 16,
-        "y": 51,
-        "w": 4,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "MISSING"
-                },
-                "1": {
-                  "text": "OK"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_backup_available{job=~\"$job\"}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 29,
-      "type": "stat",
-      "title": "Backup integrity",
-      "gridPos": {
-        "x": 20,
-        "y": 51,
-        "w": 4,
-        "h": 6
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "garbanzo-prom"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "FAILED"
-                },
-                "1": {
-                  "text": "OK"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "garbanzo_backup_integrity_ok{job=~\"$job\"}",
-          "refId": "A"
+          "expr": "garbanzo_memory_heap_used_bytes{job=~\"$job\",instance=~\"$instance\"}",
+          "legendFormat": "{{job}} heap"
         }
       ]
     }

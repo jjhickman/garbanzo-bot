@@ -25,7 +25,11 @@ export interface CoreMessageHooks {
     inbound: InboundMessage;
     text: string;
     hasMedia: boolean;
-    audio?: { url: string; contentType: string };
+    // `buffer` is Telegram-only (F1, T2 review) — see InboundMessage.audio's
+    // doc comment. Downstream consumers (e.g. the songwriting `!idea`
+    // handler) prefer it over re-fetching `url`, which for Telegram is a
+    // safe, non-fetchable placeholder.
+    audio?: { url: string; contentType: string; buffer?: Buffer };
   }): Promise<void>;
 
   /** Continue into platform-specific owner DM handling. */
@@ -196,6 +200,16 @@ export async function processInboundMessage(
     hooks.captureForBridge?.(inbound);
   } catch (err) {
     logger.error({ err, chatId: inbound.chatId }, 'Bridge capture hook threw synchronously');
+  }
+
+  // Synthesized placeholders (voice notes whose transcription failed) have
+  // been moderated, recorded, and bridge-captured above — but there is
+  // nothing to reply to or parse as a command, so dispatch stops here.
+  // Keyed on the flag, never on text equality: a user who literally types
+  // "[voice note]" still gets a normal reply.
+  if (inbound.synthesizedPlaceholder) {
+    logger.debug({ chatId: inbound.chatId }, 'Skipping reply dispatch for synthesized placeholder message');
+    return;
   }
 
   // Dispatch

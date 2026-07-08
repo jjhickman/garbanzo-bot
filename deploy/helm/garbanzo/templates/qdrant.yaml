@@ -26,7 +26,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 6333
+              containerPort: {{ .Values.qdrant.port }}
               protocol: TCP
           volumeMounts:
             - name: qdrant-storage
@@ -47,7 +47,7 @@ spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 6333
+      port: {{ .Values.qdrant.port }}
       targetPort: http
       protocol: TCP
   selector:

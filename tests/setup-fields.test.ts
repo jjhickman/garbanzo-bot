@@ -8,6 +8,8 @@ import {
   DISCORD_FIELDS,
   SHARED_FIELDS,
   WHATSAPP_FIELDS,
+  TELEGRAM_FIELDS,
+  MATRIX_FIELDS,
   FIELD_TABLE,
   getField,
   promptHint,
@@ -19,6 +21,7 @@ import {
   resolveMessagingPlatform,
   DEFAULT_MESSAGING_PLATFORM,
   mergeExistingEnvForPlatform,
+  mergeEnvFileContent,
   buildPlatformEnvLines,
   buildSharedEnvLines,
   redactEnvContent,
@@ -62,10 +65,34 @@ describe('setup field resolver', () => {
   });
 
   it('marks every API key/token field as secret', () => {
-    for (const env of ['ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GITHUB_ISSUES_TOKEN', 'DISCORD_BOT_TOKEN']) {
+    for (const env of ['ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GITHUB_ISSUES_TOKEN', 'DISCORD_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN']) {
       expect(getField(env).secret).toBe(true);
     }
     expect(getField('OPENAI_MODEL').secret).toBeUndefined();
+  });
+
+  it('exposes Telegram setup fields separately from the always-collected fields', () => {
+    expect(TELEGRAM_FIELDS.map((field) => field.env)).toEqual([
+      'TELEGRAM_BOT_TOKEN',
+      'TELEGRAM_OWNER_ID',
+      'TELEGRAM_CHAT_SCOPE',
+    ]);
+  });
+
+  it('resolves Telegram fields from cli, existing env, then defaults', () => {
+    const token = getField('TELEGRAM_BOT_TOKEN');
+    expect(resolveEnvField(token, cli({ 'telegram-bot-token': 'cli-token' }), { TELEGRAM_BOT_TOKEN: 'existing-token' })).toBe('cli-token');
+    expect(resolveEnvField(token, cli({}), { TELEGRAM_BOT_TOKEN: 'existing-token' })).toBe('existing-token');
+    expect(resolveEnvField(token, cli({}), {})).toBe('');
+
+    const ownerId = getField('TELEGRAM_OWNER_ID');
+    expect(resolveEnvField(ownerId, cli({ 'telegram-owner-id': 'cli-owner' }), { TELEGRAM_OWNER_ID: 'existing-owner' })).toBe('cli-owner');
+
+    const chatScope = getField('TELEGRAM_CHAT_SCOPE');
+    expect(resolveEnvField(chatScope, cli({}), {})).toBe('configured');
+    expect(promptHint(token, { TELEGRAM_BOT_TOKEN: 'telegram-secret-token' })).toBe('set');
+    expect(promptHint(token, {})).toBe('empty');
+    expect(promptHint(token, { TELEGRAM_BOT_TOKEN: 'telegram-secret-token' })).not.toContain('telegram-secret-token');
   });
 
   it('exposes Discord setup fields separately from the always-collected fields', () => {
@@ -140,13 +167,15 @@ describe('setup field resolver', () => {
     expect(resolveComposeProfiles('whatsapp', false)).toBe('whatsapp');
   });
 
-  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD_FIELDS', () => {
+  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD/TELEGRAM/MATRIX_FIELDS', () => {
     const sharedKeys = SHARED_FIELDS.map((f) => f.env);
     const whatsappKeys = WHATSAPP_FIELDS.map((f) => f.env);
     const discordKeys = DISCORD_FIELDS.map((f) => f.env);
-    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys];
+    const telegramKeys = TELEGRAM_FIELDS.map((f) => f.env);
+    const matrixKeys = MATRIX_FIELDS.map((f) => f.env);
+    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys, ...telegramKeys, ...matrixKeys];
 
-    // No duplicates across the three lists (disjoint partition).
+    // No duplicates across the four lists (disjoint partition).
     expect(new Set(allKeys).size).toBe(allKeys.length);
 
     // Spot-check expected homes for a few keys per the brief.
@@ -154,8 +183,10 @@ describe('setup field resolver', () => {
     expect(sharedKeys).not.toContain('BOT_PHONE_NUMBER');
     expect(whatsappKeys).toEqual(expect.arrayContaining(['OWNER_JID', 'BOT_PHONE_NUMBER']));
     expect(discordKeys).toContain('DISCORD_BOT_TOKEN');
+    expect(telegramKeys).toContain('TELEGRAM_BOT_TOKEN');
+    expect(matrixKeys).toContain('MATRIX_ACCESS_TOKEN');
 
-    // FIELD_TABLE is exactly the union of the three partitioned lists.
+    // FIELD_TABLE is exactly the union of the four partitioned lists.
     expect(FIELD_TABLE.map((f) => f.env).sort()).toEqual(allKeys.slice().sort());
   });
 
@@ -180,6 +211,33 @@ describe('setup field resolver', () => {
     });
   });
 
+  it('merges generated env content into existing files without dropping unknown keys or comments', () => {
+    const generatedContent = [
+      '# generated header',
+      'MESSAGING_PLATFORM=whatsapp',
+      '',
+      '# models',
+      'OPENAI_MODEL=gpt-updated',
+      'ANTHROPIC_MODEL=claude-haiku-4-5-20251001',
+      '',
+    ].join('\n');
+    const existingContent = [
+      '# operator note',
+      'MESSAGING_PLATFORM=discord',
+      'OPERATOR_ONLY=keep-me',
+      'OPENAI_MODEL=old-model',
+      '',
+    ].join('\n');
+
+    const merged = mergeEnvFileContent(existingContent, generatedContent);
+
+    expect(merged).toContain('# operator note');
+    expect(merged).toMatch(/^OPERATOR_ONLY=keep-me$/m);
+    expect(merged).toMatch(/^MESSAGING_PLATFORM=whatsapp$/m);
+    expect(merged).toMatch(/^OPENAI_MODEL=gpt-updated$/m);
+    expect(merged).toMatch(/^ANTHROPIC_MODEL=claude-haiku-4-5-20251001$/m);
+  });
+
   it('redacts MONITORING_TOKEN in dry-run env previews', () => {
     const redacted = redactEnvContent([
       'MONITORING_TOKEN=real-generated-monitoring-token',
@@ -195,33 +253,54 @@ describe('setup field resolver', () => {
     expect(redacted).toContain('MONITORING_TOKEN=');
   });
 
+  it('redacts MATRIX_ACCESS_TOKEN in dry-run env previews', () => {
+    const redacted = redactEnvContent([
+      'MATRIX_HOMESERVER_URL=https://matrix.example.org',
+      'MATRIX_ACCESS_TOKEN=real-matrix-access-token',
+      'MATRIX_ACCESS_TOKEN=',
+    ].join('\n'));
+
+    expect(redacted).toContain('MATRIX_ACCESS_TOKEN=[REDACTED]');
+    expect(redacted).not.toContain('real-matrix-access-token');
+    expect(redacted).toContain('MATRIX_HOMESERVER_URL=https://matrix.example.org');
+    expect(redacted).toContain('MATRIX_ACCESS_TOKEN=');
+  });
+
   it('does not collect WhatsApp prompt fields for the Discord setup path', () => {
     expect(promptFieldEnvsForPlatform('discord')).toEqual(DISCORD_FIELDS.map((field) => field.env));
     expect(promptFieldEnvsForPlatform('discord')).not.toEqual(expect.arrayContaining(
       WHATSAPP_FIELDS.map((field) => field.env),
     ));
     expect(promptFieldEnvsForPlatform('whatsapp')).toEqual(WHATSAPP_FIELDS.map((field) => field.env));
+    expect(promptFieldEnvsForPlatform('telegram')).toEqual(TELEGRAM_FIELDS.map((field) => field.env));
   });
 
   it('builds and partitions the actual emitted env line sets from one source', () => {
     const sharedKeys = envKeysFromLines(buildSharedEnvLines({}));
     const discordPlatformKeys = envKeysFromLines(buildPlatformEnvLines('discord', {}));
     const whatsappPlatformKeys = envKeysFromLines(buildPlatformEnvLines('whatsapp', {}));
+    const telegramPlatformKeys = envKeysFromLines(buildPlatformEnvLines('telegram', {}));
     const discordKeys = emittedKeysForPlatform('discord');
     const whatsappKeys = emittedKeysForPlatform('whatsapp');
+    const telegramKeys = emittedKeysForPlatform('telegram');
 
     expect(new Set(discordKeys.sharedKeys).size).toBe(discordKeys.sharedKeys.length);
     expect(new Set(discordKeys.platformKeys).size).toBe(discordKeys.platformKeys.length);
     expect(new Set(whatsappKeys.platformKeys).size).toBe(whatsappKeys.platformKeys.length);
+    expect(new Set(telegramKeys.platformKeys).size).toBe(telegramKeys.platformKeys.length);
     expect(discordKeys.sharedKeys).toEqual(sharedKeys);
     expect(whatsappKeys.sharedKeys).toEqual(sharedKeys);
+    expect(telegramKeys.sharedKeys).toEqual(sharedKeys);
     expect(discordKeys.platformKeys).toEqual(discordPlatformKeys);
     expect(whatsappKeys.platformKeys).toEqual(whatsappPlatformKeys);
+    expect(telegramKeys.platformKeys).toEqual(telegramPlatformKeys);
 
     const discordIntersection = discordKeys.sharedKeys.filter((key) => discordKeys.platformKeys.includes(key));
     const whatsappIntersection = whatsappKeys.sharedKeys.filter((key) => whatsappKeys.platformKeys.includes(key));
+    const telegramIntersection = telegramKeys.sharedKeys.filter((key) => telegramKeys.platformKeys.includes(key));
     expect(discordIntersection).toEqual([]);
     expect(whatsappIntersection).toEqual([]);
+    expect(telegramIntersection).toEqual([]);
 
     expect(NATIVE_RUN_DEFAULT_SHARED_KEYS).toEqual(['MESSAGING_PLATFORM']);
     expect(SHARED_LAYER_EXCEPTION_KEYS).toEqual(expect.arrayContaining([
@@ -230,10 +309,12 @@ describe('setup field resolver', () => {
       'METRICS_ENABLED',
     ]));
     expect(PLATFORM_LAYER_EXCEPTION_KEYS.discord).toContain('QDRANT_COLLECTION');
+    expect(PLATFORM_LAYER_EXCEPTION_KEYS.telegram).toContain('TELEGRAM_CHATS_CONFIG_PATH');
 
     for (const key of [...SHARED_FIELDS.map((field) => field.env), ...SHARED_LAYER_EXCEPTION_KEYS]) {
       expect(discordKeys.sharedKeys).toContain(key);
       expect(whatsappKeys.sharedKeys).toContain(key);
+      expect(telegramKeys.sharedKeys).toContain(key);
     }
     for (const key of WHATSAPP_FIELDS.map((field) => field.env)) {
       expect(whatsappKeys.platformKeys).toContain(key);
@@ -242,6 +323,10 @@ describe('setup field resolver', () => {
     for (const key of DISCORD_FIELDS.map((field) => field.env)) {
       expect(discordKeys.platformKeys).toContain(key);
       expect(whatsappKeys.sharedKeys).not.toContain(key);
+    }
+    for (const key of TELEGRAM_FIELDS.map((field) => field.env)) {
+      expect(telegramKeys.platformKeys).toContain(key);
+      expect(discordKeys.sharedKeys).not.toContain(key);
     }
 
     const sharedPreview = buildSharedEnvLines({ MONITORING_TOKEN: 'real-generated-monitoring-token' }).join('\n');
@@ -255,6 +340,7 @@ describe('setup field resolver', () => {
     expect(setupSource).toMatch(/buildSharedEnvLines\(finalEnv\)\.join\('\\n'\)/);
     expect(setupSource).toMatch(/buildPlatformEnvLines\('discord', finalEnv\)\.join\('\\n'\)/);
     expect(setupSource).toMatch(/buildPlatformEnvLines\('whatsapp', finalEnv\)\.join\('\\n'\)/);
+    expect(setupSource).toMatch(/buildPlatformEnvLines\('telegram', finalEnv\)\.join\('\\n'\)/);
   });
 
   it('resolves the non-interactive messaging platform with a discord default', () => {
@@ -262,6 +348,14 @@ describe('setup field resolver', () => {
     expect(resolveMessagingPlatform(cli({}), {})).toBe('discord');
     expect(resolveMessagingPlatform(cli({ platform: 'whatsapp' }), {})).toBe('whatsapp');
     expect(resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'whatsapp' })).toBe('whatsapp');
-    expect(resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toBe('discord');
+    expect(resolveMessagingPlatform(cli({ platform: 'telegram' }), {})).toBe('telegram');
+  });
+
+  it('rejects explicit platform values the wizard does not support instead of silently defaulting', () => {
+    expect(() => resolveMessagingPlatform(cli({ platform: 'teams' }), {})).toThrow(/Unsupported platform "teams"/);
+    expect(resolveMessagingPlatform(cli({ platform: 'matrix' }), {})).toBe('matrix');
+    expect(() => resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toThrow(/Unsupported platform/);
+    // An existing .env carrying a removed platform must also fail loudly, not migrate silently
+    expect(() => resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'teams' })).toThrow(/Unsupported platform "teams"/);
   });
 });
