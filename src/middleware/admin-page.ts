@@ -78,18 +78,11 @@ export interface AdminMemoryRow {
   fact: string;
   category: string;
   source: string;
-  /**
-   * True only when this row IS a shared-memory entry. getAllMemories() only
-   * ever returns LOCAL rows (LocalMemoryEntry), so this is always false
-   * today — whether a given local fact has separately been copied into the
-   * shared Qdrant collection via `!memory share <id>` is tracked only in
-   * that collection (keyed by `<instanceId>:<localId>`), which has no cheap
-   * "list" or "exists" primitive in the current VectorStore interface.
-   * Surfacing true per-fact shared status is left for a later phase rather
-   * than faked here or implemented via N per-row vector lookups on every
-   * admin page load.
-   */
-  shared: boolean;
+  // A per-fact "shared" flag is intentionally NOT surfaced here: getAllMemories()
+  // returns only local rows, and whether a fact has been copied into the shared
+  // Qdrant collection (`!memory share <id>`) lives in that collection with no
+  // cheap list/exists primitive. Showing an always-"local" column would mislead;
+  // it belongs to a later phase, not a faked value or N per-row vector lookups.
 }
 
 export interface AdminMemorySection {
@@ -177,11 +170,6 @@ function buildMemorySection(memories: Array<{ id: number; fact: string; category
     fact: m.fact,
     category: m.category,
     source: m.source,
-    // getAllMemories() only returns local rows, so `shared` is always
-    // false|undefined here (see the AdminMemoryRow.shared doc comment) —
-    // Boolean(...) instead of `=== true` keeps that honest without TS
-    // flagging an always-false literal comparison.
-    shared: Boolean(m.shared),
   }));
 
   return {
@@ -339,8 +327,8 @@ function renderOverviewSection(overview: AdminOverviewSection): string {
 function renderMemorySection(memory: AdminMemorySection): string {
   const rows = memory.rows.map((m) => {
     const sourceTag = m.source === 'auto' ? 'auto' : m.source === 'ai-tool' ? 'ai' : m.source;
-    return `<tr><td>${m.id}</td><td>${escapeHtml(m.fact)}</td><td>${escapeHtml(m.category)}</td><td>${escapeHtml(sourceTag)}</td><td>${m.shared ? 'shared' : 'local'}</td></tr>`;
-  }).join('') || '<tr><td colspan="5">No facts stored yet.</td></tr>';
+    return `<tr><td>${m.id}</td><td>${escapeHtml(m.fact)}</td><td>${escapeHtml(m.category)}</td><td>${escapeHtml(sourceTag)}</td></tr>`;
+  }).join('') || '<tr><td colspan="4">No facts stored yet.</td></tr>';
 
   const capNote = memory.totalCount > memory.shownCount
     ? ` (showing the newest ${memory.shownCount} of ${memory.totalCount})`
@@ -348,7 +336,7 @@ function renderMemorySection(memory: AdminMemorySection): string {
 
   return `<h2>Memory — your community's lore</h2>
 <p class="muted">${memory.totalCount} fact${memory.totalCount === 1 ? '' : 's'} stored${capNote}</p>
-<table><thead><tr><th>ID</th><th>Fact</th><th>Category</th><th>Source</th><th>Shared</th></tr></thead>
+<table><thead><tr><th>ID</th><th>Fact</th><th>Category</th><th>Source</th></tr></thead>
 <tbody>${rows}</tbody></table>`;
 }
 
