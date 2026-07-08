@@ -120,7 +120,7 @@ const TELEGRAM_USER_ID_HINT = 'a Telegram user id is numeric digits only — get
 const MATRIX_USER_ID_RE = /^@[^:\s]+:[^\s]+$/;
 const MATRIX_ROOM_ID_RE = /^![^:\s]+:[^\s]+$/;
 const MATRIX_ROOM_ALIAS_RE = /^#[^:\s]+:[^\s]+$/;
-const MATRIX_OWNER_ID_HINT = 'a Matrix user id looks like @you:example.org';
+const MATRIX_OWNER_ID_HINT = 'a Matrix user id (shaped like @you:example.org)';
 const MATRIX_ROOM_HINT = 'a Matrix room id looks like !abc123:example.org (Element: Room Settings -> Advanced -> '
   + 'Internal room ID); a published alias like #community:example.org also works and is resolved to the id';
 
@@ -560,9 +560,16 @@ async function resolveMatrixRoomAlias(homeserverUrl, alias) {
   const url = `${base}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`;
   let response;
   try {
-    response = await fetch(url);
+    // Bound the wait — a header-stalling host would otherwise hang the
+    // wizard for undici's default (~300s) before the plain fetch failure
+    // ever surfaces.
+    response = await fetch(url, { signal: AbortSignal.timeout(15000) });
   } catch (err) {
-    throw new Error(`Could not reach ${base} to resolve ${alias}: ${err instanceof Error ? err.message : String(err)}`);
+    const message = err instanceof Error ? err.message : String(err);
+    const causeCode = err instanceof Error && err.cause && typeof err.cause === 'object' && 'code' in err.cause
+      ? ` (${String(err.cause.code)})`
+      : '';
+    throw new Error(`Could not reach ${base} to resolve ${alias}: ${message}${causeCode}`);
   }
   if (!response.ok) {
     throw new Error(`Homeserver could not resolve ${alias} (HTTP ${response.status}) — is the alias published?`);
@@ -739,13 +746,24 @@ async function main() {
   // (which covers both the success and the caught-error paths, the latter
   // already reported by main().catch), so this handler only fires for a
   // close we didn't ask for.
+  //
+  // Only armed in interactive mode: a non-interactive run never legitimately
+  // reads stdin, but it does hit other early `await`s (e.g. the Matrix alias
+  // fetch in resolveMatrixRoomAlias) that yield the event loop just like a
+  // pending question() would. Node treats a closed/absent stdin in
+  // non-interactive contexts (CI runners, cron, containers without a TTY) as
+  // an incidental 'close' on the readline interface, not user abandonment —
+  // arming this handler there killed those runs before they ever touched
+  // stdin.
   let intentionalClose = false;
-  rl.on('close', () => {
-    if (!intentionalClose) {
-      process.stderr.write('Setup aborted before completion\n');
-      process.exit(1);
-    }
-  });
+  if (!nonInteractive) {
+    rl.on('close', () => {
+      if (!intentionalClose) {
+        process.stderr.write('Setup aborted before completion\n');
+        process.exit(1);
+      }
+    });
+  }
 
   const rootExisting = parseEnvFile(ENV_PATH);
   let existing = rootExisting;
@@ -1025,6 +1043,12 @@ async function main() {
         if (!matrixEnv.MATRIX_HOMESERVER_URL) {
           throw new Error(
             'Matrix quickstart requires a homeserver URL — pass --matrix-homeserver-url=https://matrix.example.org or run interactively.',
+          );
+        }
+        if (!/^https?:\/\//.test(matrixEnv.MATRIX_HOMESERVER_URL)) {
+          throw new Error(
+            `--matrix-homeserver-url "${matrixEnv.MATRIX_HOMESERVER_URL}" doesn't look like a homeserver URL — ` +
+            'it must start with https:// (or http:// on a trusted LAN), e.g. https://matrix.example.org.',
           );
         }
         if (!matrixEnv.MATRIX_ACCESS_TOKEN) {

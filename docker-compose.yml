@@ -119,10 +119,9 @@ services:
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=telegram
       # 3001/3002 are whatsapp/discord; 3003 is the documented whatsapp-band
-      # compose-copy example port (docs/BRIDGING.md); 3004 is reserved for
-      # the Matrix service landing later in this release (see
-      # docs/_internal/specs/2026-07-07-matrix-sdk-spike.md) — 3005 is the
-      # first genuinely unclaimed port.
+      # compose-copy example port (docs/BRIDGING.md); 3004 is the matrix
+      # service (see it below in this file) — 3005 is the first genuinely
+      # unclaimed port.
       - HEALTH_PORT=3005
       - HEALTH_BIND_HOST=0.0.0.0
       # Operator overrides from root .env win; default targets the compose service

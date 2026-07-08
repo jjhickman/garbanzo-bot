@@ -327,6 +327,7 @@ export function redactEnvContent(content) {
     'BRIDGE_BROKER_PASSWORD=',
     'BRIDGE_BROKER_URL=',
     'TELEGRAM_BOT_TOKEN=',
+    'MATRIX_ACCESS_TOKEN=',
   ];
 
   return content

@@ -903,6 +903,10 @@ describe('ops scripts', () => {
         /Matrix quickstart requires a homeserver URL/,
       );
       expectSetupFailure(
+        [...base, '--matrix-homeserver-url=matrix.example.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /--matrix-homeserver-url .* doesn't look like a homeserver URL/,
+      );
+      expectSetupFailure(
         [...base, '--matrix-homeserver-url=https://x.org', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
         /Matrix quickstart requires a bot access token/,
       );

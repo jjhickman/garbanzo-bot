@@ -225,6 +225,19 @@ describe('setup field resolver', () => {
     expect(redacted).toContain('MONITORING_TOKEN=');
   });
 
+  it('redacts MATRIX_ACCESS_TOKEN in dry-run env previews', () => {
+    const redacted = redactEnvContent([
+      'MATRIX_HOMESERVER_URL=https://matrix.example.org',
+      'MATRIX_ACCESS_TOKEN=real-matrix-access-token',
+      'MATRIX_ACCESS_TOKEN=',
+    ].join('\n'));
+
+    expect(redacted).toContain('MATRIX_ACCESS_TOKEN=[REDACTED]');
+    expect(redacted).not.toContain('real-matrix-access-token');
+    expect(redacted).toContain('MATRIX_HOMESERVER_URL=https://matrix.example.org');
+    expect(redacted).toContain('MATRIX_ACCESS_TOKEN=');
+  });
+
   it('does not collect WhatsApp prompt fields for the Discord setup path', () => {
     expect(promptFieldEnvsForPlatform('discord')).toEqual(DISCORD_FIELDS.map((field) => field.env));
     expect(promptFieldEnvsForPlatform('discord')).not.toEqual(expect.arrayContaining(
