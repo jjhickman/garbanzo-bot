@@ -294,7 +294,7 @@ describe('Telegram processor — voice transcription (F1, T2 review)', () => {
     );
   });
 
-  it('falls back to the [voice note] placeholder (never drops the message) when transcription fails', async () => {
+  it('synthesizes the [voice note] placeholder without an AI reply when transcription fails', async () => {
     const transcribeAudio = vi.fn(async () => null);
     const mocks = setupVoiceMocks(transcribeAudio);
     const { processTelegramEvent } = await importProcessor();
@@ -310,15 +310,13 @@ describe('Telegram processor — voice transcription (F1, T2 review)', () => {
       { ownerId: 'owner-chat', ownerUserId: '111' },
     );
 
-    expect(mocks.getResponse).toHaveBeenCalledWith(
-      '[voice note]',
-      expect.anything(),
-      expect.any(Function),
-      undefined,
-    );
+    // The message survives (transcription was attempted, nothing threw),
+    // but a synthesized placeholder is not a prompt: no AI reply dispatch.
+    expect(transcribeAudio).toHaveBeenCalled();
+    expect(mocks.getResponse).not.toHaveBeenCalled();
   });
 
-  it('falls back to the [voice note] placeholder (never drops the message) when the buffer failed to download', async () => {
+  it('synthesizes the placeholder without an AI reply when the buffer failed to download', async () => {
     const transcribeAudio = vi.fn(async () => 'should not be called');
     const mocks = setupVoiceMocks(transcribeAudio);
     const { processTelegramEvent } = await importProcessor();
@@ -335,6 +333,22 @@ describe('Telegram processor — voice transcription (F1, T2 review)', () => {
     );
 
     expect(transcribeAudio).not.toHaveBeenCalled();
+    expect(mocks.getResponse).not.toHaveBeenCalled();
+  });
+
+  it('still replies when a user literally types "[voice note]" as text', async () => {
+    const transcribeAudio = vi.fn(async () => 'unused');
+    const mocks = setupVoiceMocks(transcribeAudio);
+    const { processTelegramEvent } = await importProcessor();
+    const messenger = createMessenger();
+
+    await processTelegramEvent(
+      messenger,
+      baseEvent({ chatId: 'open', text: '[voice note]' }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    // Flag-not-text-equality: user-typed placeholder text is a normal message.
     expect(mocks.getResponse).toHaveBeenCalledWith(
       '[voice note]',
       expect.anything(),

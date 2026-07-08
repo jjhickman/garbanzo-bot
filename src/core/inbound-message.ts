@@ -69,6 +69,21 @@ export interface InboundMessage {
    */
   audio?: { url: string; contentType: string; buffer?: Buffer };
 
+  /**
+   * True when `text` is a processor-synthesized placeholder (a voice note
+   * whose transcription failed became VOICE_NOTE_PLACEHOLDER). The message
+   * still flows through moderation, recording, and bridge capture, but
+   * reply dispatch skips it — keyed on this flag, never on text equality,
+   * so a user who literally types "[voice note]" is unaffected.
+   */
+  synthesizedPlaceholder?: boolean;
+
   /** Platform-specific raw message for advanced operations. */
   raw: MessageRef;
 }
+
+/**
+ * Shared placeholder for audio content that could not be transcribed.
+ * Bridge relay capture uses the same literal for media placeholders.
+ */
+export const VOICE_NOTE_PLACEHOLDER = '[voice note]';

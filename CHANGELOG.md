@@ -6,6 +6,14 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- WhatsApp voice messages are no longer silently dropped when transcription
+  is unavailable: they flow through moderation, recording, and bridging as a
+  `[voice note]` placeholder (recap and moderation counts include them now),
+  and the bot does not reply to a placeholder it synthesized itself. The
+  same no-reply rule applies to Telegram voice placeholders.
+
 ### Removed
 
 - The Microsoft Teams platform stub (`src/platforms/teams/`) is deleted, along

@@ -23,7 +23,7 @@ import {
 // can't be transcribed still reaches the core pipeline as text instead of
 // being silently dropped, per the v3.3 plan's WS3 placeholder-on-failure
 // semantics.
-const VOICE_NOTE_PLACEHOLDER = '[voice note]';
+import { VOICE_NOTE_PLACEHOLDER } from '../../core/inbound-message.js';
 
 const TelegramAudioSchema = z.object({
   url: z.string(),
@@ -90,24 +90,24 @@ function normalizeTelegramInbound(event: TelegramEvent): TelegramInbound {
  * continues with a `[voice note]` placeholder so moderation, capture, and
  * bridging still see SOMETHING rather than silence.
  */
-async function resolveVoiceText(event: TelegramEvent): Promise<string> {
+async function resolveVoiceText(event: TelegramEvent): Promise<{ text: string; synthesized: boolean }> {
   // A captioned voice message already has text (client.ts maps `caption`
   // into `text`) — only a captionless voice message needs transcription.
-  if (event.text || !event.audio) return event.text;
+  if (event.text || !event.audio) return { text: event.text, synthesized: false };
 
   if (!event.audio.buffer) {
     logger.debug('Telegram voice message download unavailable — using placeholder');
-    return VOICE_NOTE_PLACEHOLDER;
+    return { text: VOICE_NOTE_PLACEHOLDER, synthesized: true };
   }
 
   const transcript = await transcribeAudio(event.audio.buffer, event.audio.contentType);
   if (!transcript) {
     logger.debug('Telegram voice message transcription failed — using placeholder');
-    return VOICE_NOTE_PLACEHOLDER;
+    return { text: VOICE_NOTE_PLACEHOLDER, synthesized: true };
   }
 
   logger.info({ transcriptLen: transcript.length }, 'Telegram voice message transcribed');
-  return transcript;
+  return { text: transcript, synthesized: false };
 }
 
 function buildTelegramMentionRegex(botUsername: string | undefined): RegExp | null {
@@ -229,7 +229,8 @@ export async function processTelegramEvent(
     return;
   }
 
-  const resolvedText = await resolveVoiceText(parsed.data);
-  const inbound = normalizeTelegramInbound({ ...parsed.data, text: resolvedText });
+  const resolved = await resolveVoiceText(parsed.data);
+  const inbound = normalizeTelegramInbound({ ...parsed.data, text: resolved.text });
+  if (resolved.synthesized) inbound.synthesizedPlaceholder = true;
   await processTelegramInbound(messenger, inbound, env);
 }

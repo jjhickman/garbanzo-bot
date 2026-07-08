@@ -202,6 +202,16 @@ export async function processInboundMessage(
     logger.error({ err, chatId: inbound.chatId }, 'Bridge capture hook threw synchronously');
   }
 
+  // Synthesized placeholders (voice notes whose transcription failed) have
+  // been moderated, recorded, and bridge-captured above — but there is
+  // nothing to reply to or parse as a command, so dispatch stops here.
+  // Keyed on the flag, never on text equality: a user who literally types
+  // "[voice note]" still gets a normal reply.
+  if (inbound.synthesizedPlaceholder) {
+    logger.debug({ chatId: inbound.chatId }, 'Skipping reply dispatch for synthesized placeholder message');
+    return;
+  }
+
   // Dispatch
   if (inbound.isGroupChat) {
     if (!env.isGroupEnabled(inbound.chatId)) return;
