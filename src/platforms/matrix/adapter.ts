@@ -71,16 +71,30 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Longest wait we tolerate INSIDE a call. Anything above this is thrown as
- * MatrixRateLimitError so callers with their own timeout/retry machinery
- * (the bridge outbox defers on it; its HTTP transport times out at 10s)
- * schedule the retry instead of a blocked request sleeping through it.
+ * Longest wait we tolerate INSIDE a DIRECT (interactive) call — group
+ * replies, owner DMs, welcome messages, moderation alerts. This matches the
+ * cap on the thrown error (MAX_RETRY_AFTER_MS) so a direct send only ever
+ * throws when the homeserver's own retry_after is unreasonable, restoring
+ * the original sleep-and-deliver behavior for the common case of a normal
+ * M_LIMIT_EXCEEDED wait.
  */
-const INLINE_RETRY_MAX_MS = 2_000;
+const DIRECT_INLINE_RETRY_MAX_MS = MAX_RETRY_AFTER_MS;
+
+/**
+ * Longest wait we tolerate INSIDE a BRIDGE delivery call. Bridge deliveries
+ * run through the outbox's serial drain and the HTTP transport's 10s
+ * timeout, so anything longer than this must throw MatrixRateLimitError for
+ * the caller (the bridge outbox) to convert into a scheduled deferral
+ * instead of a blocked request sleeping through it. See
+ * sendMatrixTextForBridge below — this is intentionally far smaller than
+ * DIRECT_INLINE_RETRY_MAX_MS.
+ */
+const BRIDGE_INLINE_RETRY_MAX_MS = 2_000;
 
 async function matrixClientRequest<T>(
   method: string,
   action: () => Promise<T>,
+  maxInlineWaitMs: number = DIRECT_INLINE_RETRY_MAX_MS,
 ): Promise<T> {
   try {
     return await action();
@@ -88,9 +102,9 @@ async function matrixClientRequest<T>(
     const retryAfterMs = getRetryAfterMs(err);
     if (retryAfterMs === undefined) throw err;
 
-    if (retryAfterMs > INLINE_RETRY_MAX_MS) {
+    if (retryAfterMs > maxInlineWaitMs) {
       logger.warn(
-        { method, retryAfterMs },
+        { method, retryAfterMs, maxInlineWaitMs },
         'Matrix 429 — retry_after exceeds the inline wait budget, throwing for the caller to schedule',
       );
       throw new MatrixRateLimitError(method, Math.min(retryAfterMs, MAX_RETRY_AFTER_MS));
@@ -120,6 +134,21 @@ function getEventId(sent: string | { event_id?: string }): string {
   return typeof sent === 'string' ? sent : sent.event_id ?? '';
 }
 
+/**
+ * Bridge-only text send: identical content shape to `sendText`, but bounded
+ * by BRIDGE_INLINE_RETRY_MAX_MS instead of the direct-send budget, so a slow
+ * homeserver rate limit throws MatrixRateLimitError for the bridge outbox to
+ * defer instead of blocking its serial drain. Takes the raw MatrixSendClient
+ * (not a PlatformMessenger) so it can be called with just the same client
+ * the adapter itself closes over — createMatrixAdapter's returned
+ * `sendTextForBridge` is a thin wrapper around this for callers that only
+ * have the adapter/messenger in hand.
+ */
+export async function sendMatrixTextForBridge(client: MatrixSendClient, roomId: string, text: string): Promise<void> {
+  const content = toMatrixMessageContent(roomId, text);
+  await matrixClientRequest('sendMessage', () => client.sendMessage(roomId, content), BRIDGE_INLINE_RETRY_MAX_MS);
+}
+
 export function createMatrixAdapter(client: MatrixSendClient): PlatformMessenger {
   async function sendContent(roomId: string, content: Record<string, unknown>): Promise<MessageRef> {
     const sent = await matrixClientRequest('sendMessage', () => client.sendMessage(roomId, content));
@@ -132,6 +161,10 @@ export function createMatrixAdapter(client: MatrixSendClient): PlatformMessenger
 
     async sendText(roomId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       await sendContent(roomId, toMatrixMessageContent(roomId, text, getReplyEventId(options?.replyTo)));
+    },
+
+    async sendTextForBridge(roomId: string, text: string): Promise<void> {
+      await sendMatrixTextForBridge(client, roomId, text);
     },
 
     async sendTextWithRef(roomId: string, text: string, options?: { replyTo?: MessageRef }): Promise<MessageRef> {

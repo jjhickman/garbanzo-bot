@@ -41,29 +41,37 @@ function envelope(overrides: Partial<BridgeEnvelope> = {}): BridgeEnvelope {
   };
 }
 
+type SendTextForBridge = NonNullable<PlatformMessenger['sendTextForBridge']>;
+
 function deliverer(
   options: {
     platform?: MessagingPlatform;
     sendText?: SendText;
+    sendTextForBridge?: SendTextForBridge;
     bufferEnvelope?: (env: BridgeEnvelope) => Promise<void>;
   } = {},
 ): {
   deliver: ReturnType<typeof createRelayDeliverer>;
   sendText: ReturnType<typeof vi.fn<SendText>>;
+  sendTextForBridge: ReturnType<typeof vi.fn<SendTextForBridge>> | undefined;
   bufferEnvelope: ReturnType<typeof vi.fn<(env: BridgeEnvelope) => Promise<void>>>;
 } {
   const sendText = vi.fn<SendText>(options.sendText ?? (async () => undefined));
+  const sendTextForBridge = options.sendTextForBridge
+    ? vi.fn<SendTextForBridge>(options.sendTextForBridge)
+    : undefined;
   const bufferEnvelope = vi.fn<(env: BridgeEnvelope) => Promise<void>>(
     options.bufferEnvelope ?? (async () => undefined),
   );
 
   return {
     deliver: createRelayDeliverer({
-      messenger: { sendText },
+      messenger: sendTextForBridge ? { sendText, sendTextForBridge } : { sendText },
       platform: options.platform ?? 'discord',
       bufferEnvelope,
     }),
     sendText,
+    sendTextForBridge,
     bufferEnvelope,
   };
 }
@@ -285,6 +293,44 @@ describe('createRelayDeliverer', () => {
     vi.setSystemTime(1_800_000_003_000);
     await expect(deliver.deliver(envelope())).resolves.toBe('sent');
     expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the messenger sendTextForBridge (bridge-specific budget) for a Matrix destination, not plain sendText', async () => {
+    const { deliver, sendText, sendTextForBridge } = deliverer({
+      platform: 'matrix',
+      sendTextForBridge: async () => undefined,
+    });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendTextForBridge).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello');
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('falls back to plain sendText for a Matrix destination when the messenger has no sendTextForBridge', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'matrix' });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello');
+  });
+
+  it('converts a MatrixRateLimitError from sendTextForBridge into a BridgeDeliveryDeferredError for the outbox to reschedule', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    const { MatrixRateLimitError } = await import('../src/platforms/matrix/adapter.js');
+    const { deliver, sendTextForBridge } = deliverer({
+      platform: 'matrix',
+      sendTextForBridge: async () => {
+        throw new MatrixRateLimitError('sendMessage', 45_000);
+      },
+    });
+
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_045_000,
+    });
+    await expect(deliver.deliver(envelope())).rejects.toBeInstanceOf(BridgeDeliveryDeferredError);
+    expect(sendTextForBridge).toHaveBeenCalledTimes(2);
   });
 
   it('does not import or call the WhatsApp control-send bypass', () => {

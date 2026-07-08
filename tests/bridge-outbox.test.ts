@@ -391,6 +391,38 @@ describe('bridge durable outbox', () => {
     expect(String(reclaimed[0]?.status)).toBe('claimed');
   });
 
+  it('counts pending/sent/dead independently when the table holds a mix of all three (F4 review debt)', async () => {
+    const pendingRow = await enqueueBridgeOutbox(envelope('mix-pending'));
+    const sentRow = await enqueueBridgeOutbox(envelope('mix-sent'));
+    const deadRow = await enqueueBridgeOutbox(envelope('mix-dead'));
+    await claimDueBridgeOutbox(10);
+    await markBridgeOutboxSent(sentRow.id);
+    await markBridgeOutboxDead(deadRow.id, 'boom');
+
+    expect(bridgeOutboxCounts()).toEqual({
+      pending: 1,
+      sent: 1,
+      dead: 1,
+      oldestPendingCreatedAt: pendingRow.createdAt,
+    });
+  });
+
+  it('resolves the pending/oldest-age query with an indexed scan, not a full table scan (F4: /metrics scrape must be O(pending))', () => {
+    // selectBridgeOutboxPending used to be one query aggregating every row in
+    // the table with no WHERE clause — a full scan on every /metrics
+    // scrape. Asserting the query plan here catches a regression back to
+    // that shape without needing to synthesize a large table.
+    const plan = db.prepare(
+      `EXPLAIN QUERY PLAN
+       SELECT COUNT(*) AS pending, MIN(created_at) AS oldestPendingCreatedAt
+       FROM bridge_outbox
+       WHERE status IN ('pending', 'claimed')`,
+    ).all() as Array<{ detail: string }>;
+
+    const usesFullTableScan = plan.some((step) => /SCAN bridge_outbox\b/.test(step.detail) && !/USING INDEX/.test(step.detail));
+    expect(usesFullTableScan).toBe(false);
+  });
+
   it('returns whether a bridge idempotency key was newly inserted', async () => {
     expect(bridgeSeenInsert('origin:chat:message-1')).toBe(true);
     expect(bridgeSeenInsert('origin:chat:message-1')).toBe(false);

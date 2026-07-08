@@ -113,6 +113,10 @@ describe('monitoring dashboard and scrape config', () => {
       query: 'label_values(job)',
       multi: true,
       includeAll: true,
+      // refresh: 1 = "On Dashboard Load" — a stale (never-refreshing)
+      // template variable list can silently drift from the live set of
+      // jobs/instances Prometheus is actually scraping.
+      refresh: 1,
       current: {
         selected: true,
         text: 'All',
@@ -133,6 +137,7 @@ describe('monitoring dashboard and scrape config', () => {
       query: 'label_values(garbanzo_up_time_seconds{job=~"$job"}, instance)',
       multi: true,
       includeAll: true,
+      refresh: 1,
       current: {
         selected: true,
         text: 'All',

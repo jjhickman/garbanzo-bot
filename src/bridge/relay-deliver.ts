@@ -24,7 +24,7 @@ const SECONDS_TO_MS = 1_000;
 const TELEGRAM_MIN_SEND_INTERVAL_MS = 3_000;
 
 type RelayDelivererOptions = {
-  messenger: Pick<PlatformMessenger, 'sendText'>;
+  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'>;
   platform: MessagingPlatform;
   bufferEnvelope: (envelope: BridgeEnvelope) => Promise<void>;
 };
@@ -144,19 +144,28 @@ async function sendDiscordWithRateGuard(
  */
 /**
  * Matrix delivery: convert the adapter's rate-limit signal into the outbox's
- * deferral machinery. The adapter retries short waits inline and throws
- * MatrixRateLimitError (carrying the homeserver's retry_after) for longer
- * ones — sleeping through those inside a delivery would block the serial
- * outbox drain and outlive the HTTP transport's timeout.
+ * deferral machinery. Bridge deliveries call the messenger's
+ * `sendTextForBridge` (a short, throw-fast inline budget — see
+ * PlatformMessenger.sendTextForBridge and matrix/adapter.ts's
+ * BRIDGE_INLINE_RETRY_MAX_MS) rather than plain `sendText`, which now uses
+ * the much longer direct-send budget: sleeping through a long retry_after
+ * inside a bridge delivery would block the serial outbox drain and outlive
+ * the HTTP transport's timeout. Falls back to `sendText` if the messenger
+ * doesn't implement the bridge-specific method (defensive; matrix's adapter
+ * always does).
  */
 async function sendMatrixWithDeferral(
-  messenger: Pick<PlatformMessenger, 'sendText'>,
+  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'>,
   chatId: string,
   text: string,
 ): Promise<void> {
   const { MatrixRateLimitError } = await import('../platforms/matrix/adapter.js');
   try {
-    await messenger.sendText(chatId, text);
+    if (messenger.sendTextForBridge) {
+      await messenger.sendTextForBridge(chatId, text);
+    } else {
+      await messenger.sendText(chatId, text);
+    }
   } catch (err) {
     if (err instanceof MatrixRateLimitError) {
       const retryAtMs = Date.now() + err.retryAfterMs;

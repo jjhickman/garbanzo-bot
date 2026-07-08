@@ -24,6 +24,7 @@
         "query": "label_values(job)",
         "multi": true,
         "includeAll": true,
+        "refresh": 1,
         "current": {
           "selected": true,
           "text": "All",
@@ -40,6 +41,7 @@
         "query": "label_values(garbanzo_up_time_seconds{job=~\"$job\"}, instance)",
         "multi": true,
         "includeAll": true,
+        "refresh": 1,
         "current": {
           "selected": true,
           "text": "All",

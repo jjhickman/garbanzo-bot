@@ -70,24 +70,42 @@ describe('Matrix adapter', () => {
     vi.useRealTimers();
   });
 
-  it('throws MatrixRateLimitError instead of sleeping when retry_after exceeds the inline budget', async () => {
-    // A 45s in-call sleep would outlive the bridge HTTP transport's 10s
-    // timeout and block the serial outbox drain — the caller schedules it.
+  it('honors a 45s Matrix M_LIMIT_EXCEEDED retry once for a direct send (restored ≤60s inline wait)', async () => {
+    // Direct sends (group replies, owner DMs, welcome messages, moderation
+    // alerts) have no outbox/transport deadline riding on them, so a normal
+    // homeserver retry_after should be slept through and delivered — this
+    // regressed when the adapter briefly throw-fast'd at a flat 2s budget
+    // for every call, dropping any direct send a homeserver rate-limited
+    // for longer than that (F2, review debt). Bridge deliveries keep the
+    // short throw-fast budget — see 'still throws fast for a bridge
+    // delivery' below.
+    vi.useFakeTimers();
+    const calls: Record<string, unknown>[] = [];
+    let attempt = 0;
     const client = createClient({
-      sendMessage: vi.fn(async () => {
-        throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 45_000 } };
+      sendMessage: vi.fn(async (_roomId, content) => {
+        calls.push(content);
+        attempt += 1;
+        if (attempt === 1) {
+          throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 45_000 } };
+        }
+        return '$after';
       }),
     });
     const adapter = createMatrixAdapter(client);
 
-    const result = await adapter.sendText('!room:example.org', 'medium wait').catch((err: unknown) => err);
+    const sendPromise = adapter.sendText('!room:example.org', 'medium wait');
+    await vi.advanceTimersByTimeAsync(44_999);
+    expect(calls).toHaveLength(1);
 
-    expect(result).toBeInstanceOf(MatrixRateLimitError);
-    expect((result as MatrixRateLimitError).retryAfterMs).toBe(45_000);
-    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await sendPromise;
+
+    expect(calls).toHaveLength(2);
+    vi.useRealTimers();
   });
 
-  it('caps the thrown retryAfterMs at 60s for absurd server values', async () => {
+  it('caps the thrown retryAfterMs at 60s and throws immediately for absurd server values, even for a direct send', async () => {
     const client = createClient({
       sendMessage: vi.fn(async () => {
         throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 90_000 } };
@@ -102,18 +120,69 @@ describe('Matrix adapter', () => {
     expect(client.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reads a Retry-After header (seconds) when retry_after_ms is absent', async () => {
+  it('reads a Retry-After header (seconds) when retry_after_ms is absent and waits it out inline for a direct send', async () => {
+    // Below the restored 60s direct-send budget, so this now sleeps and
+    // delivers rather than throwing — the header value must still be
+    // parsed correctly and drive the wait duration.
+    vi.useFakeTimers();
+    let attempt = 0;
     const client = createClient({
       sendMessage: vi.fn(async () => {
-        throw { statusCode: 429, headers: { 'retry-after': '30' } };
+        attempt += 1;
+        if (attempt === 1) {
+          throw { statusCode: 429, headers: { 'retry-after': '30' } };
+        }
+        return '$after-header';
       }),
     });
     const adapter = createMatrixAdapter(client);
 
-    const result = await adapter.sendText('!room:example.org', 'header only').catch((err: unknown) => err);
+    const sendPromise = adapter.sendText('!room:example.org', 'header only');
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await sendPromise;
+
+    expect(client.sendMessage).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('still throws fast for a bridge delivery even at 45s, unlike the restored direct-send inline wait', async () => {
+    // sendTextForBridge (used by the bridge's relay-deliver.ts, not plain
+    // sendText) keeps the original narrow throw-fast budget: a bridge
+    // delivery runs through the outbox's serial drain and the HTTP
+    // transport's 10s timeout, so it must never sleep through a long
+    // retry_after inside the call.
+    const client = createClient({
+      sendMessage: vi.fn(async () => {
+        throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 45_000 } };
+      }),
+    });
+    const adapter = createMatrixAdapter(client);
+
+    const result = await adapter.sendTextForBridge?.('!room:example.org', 'bridge relay')
+      .catch((err: unknown) => err);
 
     expect(result).toBeInstanceOf(MatrixRateLimitError);
-    expect((result as MatrixRateLimitError).retryAfterMs).toBe(30_000);
+    expect((result as MatrixRateLimitError).retryAfterMs).toBe(45_000);
+    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('sendMatrixTextForBridge throws fast on the same 2s budget when called directly with a raw client', async () => {
+    const { sendMatrixTextForBridge } = await import('../src/platforms/matrix/adapter.js');
+    const client = createClient({
+      sendMessage: vi.fn(async () => {
+        throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 3_000 } };
+      }),
+    });
+
+    const result = await sendMatrixTextForBridge(client, '!room:example.org', 'bridge relay')
+      .catch((err: unknown) => err);
+
+    expect(result).toBeInstanceOf(MatrixRateLimitError);
+    expect((result as MatrixRateLimitError).retryAfterMs).toBe(3_000);
+    expect(client.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('uploads and sends documents and audio through mxc URIs', async () => {

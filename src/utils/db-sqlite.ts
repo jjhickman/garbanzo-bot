@@ -531,13 +531,31 @@ const deleteBridgeBufferByRoute = db.prepare(`DELETE FROM bridge_buffer WHERE ro
 const selectBridgeBufferDepths = db.prepare(
   `SELECT route_id, COUNT(*) as count FROM bridge_buffer GROUP BY route_id`,
 );
-const selectBridgeOutboxCounts = db.prepare(
+// bridgeOutboxCounts() is called once per /metrics scrape (pushBridgeOutboxGauges
+// in middleware/health.ts) via outbox.ts's depth(), so it runs on every scrape
+// interval for the lifetime of the process. It used to be one query that
+// unconditionally summed every row in bridge_outbox regardless of status —
+// an O(table) full scan every scrape, growing without bound as 'sent' rows
+// (delivered, terminal, never purged) accumulate over the deployment's
+// lifetime, even though only `pending` and `oldestPendingCreatedAt` are ever
+// read from the result (health.ts never reads `.sent`/`.dead` today).
+// idx_bridge_outbox_status_next_attempt (status, next_attempt_at) lets each
+// of these three queries do an indexed lookup scoped to its own status
+// value instead — `pending` in particular becomes O(pending+claimed rows),
+// which is what should stay small in a healthy system and is the number
+// that actually drives alerting.
+const selectBridgeOutboxPending = db.prepare(
   `SELECT
-     SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
-     SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead,
-     MIN(CASE WHEN status IN ('pending', 'claimed') THEN created_at ELSE NULL END) AS oldestPendingCreatedAt
-   FROM bridge_outbox`,
+     COUNT(*) AS pending,
+     MIN(created_at) AS oldestPendingCreatedAt
+   FROM bridge_outbox
+   WHERE status IN ('pending', 'claimed')`,
+);
+const selectBridgeOutboxSentCount = db.prepare(
+  `SELECT COUNT(*) AS sent FROM bridge_outbox WHERE status = 'sent'`,
+);
+const selectBridgeOutboxDeadCount = db.prepare(
+  `SELECT COUNT(*) AS dead FROM bridge_outbox WHERE status = 'dead'`,
 );
 const selectWhatsAppMetricCounts = db.prepare(
   `SELECT
@@ -941,17 +959,17 @@ export function bridgeSeenDelete(key: string): boolean {
 }
 
 export function bridgeOutboxCounts(): BridgeOutboxCounts {
-  const row = selectBridgeOutboxCounts.get() as {
+  const pendingRow = selectBridgeOutboxPending.get() as {
     pending: number | null;
-    sent: number | null;
-    dead: number | null;
     oldestPendingCreatedAt: number | null;
   };
+  const sentRow = selectBridgeOutboxSentCount.get() as { sent: number | null };
+  const deadRow = selectBridgeOutboxDeadCount.get() as { dead: number | null };
   return {
-    pending: toNumber(row.pending ?? 0),
-    sent: toNumber(row.sent ?? 0),
-    dead: toNumber(row.dead ?? 0),
-    oldestPendingCreatedAt: row.oldestPendingCreatedAt === null ? null : toNumber(row.oldestPendingCreatedAt),
+    pending: toNumber(pendingRow.pending ?? 0),
+    sent: toNumber(sentRow.sent ?? 0),
+    dead: toNumber(deadRow.dead ?? 0),
+    oldestPendingCreatedAt: pendingRow.oldestPendingCreatedAt === null ? null : toNumber(pendingRow.oldestPendingCreatedAt),
   };
 }
 

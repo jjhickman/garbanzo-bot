@@ -129,11 +129,20 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
   // The messenger only exists once the platform runtime has connected, and it
   // is re-created across WhatsApp reconnects, so the bridge holds a lazy
   // accessor rather than a snapshot taken at assembly time.
-  const lazyMessenger: Pick<PlatformMessenger, 'sendText'> = {
+  const lazyMessenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'> = {
     async sendText(chatId: string, text: string): Promise<void> {
       const messenger = deps.getMessenger();
       if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
       await messenger.sendText(chatId, text);
+    },
+    async sendTextForBridge(chatId: string, text: string): Promise<void> {
+      const messenger = deps.getMessenger();
+      if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
+      if (messenger.sendTextForBridge) {
+        await messenger.sendTextForBridge(chatId, text);
+      } else {
+        await messenger.sendText(chatId, text);
+      }
     },
   };
 

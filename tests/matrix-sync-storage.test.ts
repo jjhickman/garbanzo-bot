@@ -2,9 +2,44 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createMatrixStorageProvider, MatrixSyncTokenStorageProvider } from '../src/platforms/matrix/sync-storage.js';
+// ESM's node:fs export bindings aren't reconfigurable, so vi.spyOn can't
+// patch renameSync directly — mock the module instead, gated by a flag the
+// "IO race" test flips on and resets. Every other test leaves the flag
+// false, so real fs behavior passes through untouched.
+let renameSyncShouldThrow = false;
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    renameSync: (...args: Parameters<typeof actual.renameSync>) => {
+      if (renameSyncShouldThrow) throw new Error('EBUSY: resource busy or locked');
+      return actual.renameSync(...args);
+    },
+  };
+});
+
+import {
+  createMatrixStorageProvider,
+  MatrixSyncTokenStorageProvider,
+  type MatrixStorageProvider,
+} from '../src/platforms/matrix/sync-storage.js';
+
+// Mimics SimpleFsStorageProvider: a MISSING file is fine (fresh store), but
+// corrupt JSON throws — so quarantineCorruptSyncFile must run before this
+// constructor sees the path.
+class FakeSdkProvider implements MatrixStorageProvider {
+  constructor(providerPath: string) {
+    try {
+      JSON.parse(readFileSync(providerPath, 'utf8'));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+  }
+  getSyncToken(): string | null { return null; }
+  setSyncToken(): void {}
+}
 
 const dirs: string[] = [];
 
@@ -58,6 +93,45 @@ describe('Matrix sync-token storage', () => {
     expect(provider).toBeInstanceOf(FakeSdkProvider);
     expect(constructed).toEqual([path]);
     expect(readFileSync(`${path}.corrupt`, 'utf8')).toBe('{ definitely not json');
+  });
+
+  it('does not clobber a prior quarantine — increments to .corrupt.1, .corrupt.2, ...', () => {
+    const path = tempPath();
+    writeFileSync(path, '{ still not json', 'utf8');
+    writeFileSync(`${path}.corrupt`, 'previous quarantine 0', 'utf8');
+    writeFileSync(`${path}.corrupt.1`, 'previous quarantine 1', 'utf8');
+
+    const provider = createMatrixStorageProvider(FakeSdkProvider as never, path);
+
+    expect(provider).toBeInstanceOf(FakeSdkProvider);
+    // Earlier quarantines are untouched...
+    expect(readFileSync(`${path}.corrupt`, 'utf8')).toBe('previous quarantine 0');
+    expect(readFileSync(`${path}.corrupt.1`, 'utf8')).toBe('previous quarantine 1');
+    // ...and the new one lands in the next free slot.
+    expect(readFileSync(`${path}.corrupt.2`, 'utf8')).toBe('{ still not json');
+  });
+
+  it('degrades to the fallback token store instead of throwing when quarantining a corrupt store itself fails (IO race)', () => {
+    const path = tempPath();
+    writeFileSync(path, '{ nope', 'utf8');
+    renameSyncShouldThrow = true;
+
+    try {
+      // The corrupt file is still in place (quarantine failed), so
+      // FakeSdkProvider's own constructor throws on it too — exactly the
+      // "SDK provider construction throws" path, proving the whole chain
+      // degrades to MatrixSyncTokenStorageProvider rather than the process
+      // crashing on an uncaught renameSync error during startup.
+      let provider: MatrixStorageProvider | undefined;
+      expect(() => {
+        provider = createMatrixStorageProvider(FakeSdkProvider as never, path);
+      }).not.toThrow();
+
+      expect(provider).toBeInstanceOf(MatrixSyncTokenStorageProvider);
+      expect(readFileSync(path, 'utf8')).toBe('{ nope');
+    } finally {
+      renameSyncShouldThrow = false;
+    }
   });
 
   it('falls back to the token store when the SDK provider construction throws', () => {

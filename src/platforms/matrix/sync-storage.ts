@@ -52,19 +52,49 @@ export class MatrixSyncTokenStorageProvider implements MatrixStorageProvider {
 }
 
 /**
+ * Find a quarantine destination that won't clobber a previous quarantine:
+ * `<path>.corrupt`, then `<path>.corrupt.1`, `<path>.corrupt.2`, ... — each
+ * corrupt file found across restarts is kept for inspection instead of
+ * silently overwriting the last one.
+ */
+function findQuarantinePath(path: string): string {
+  const base = `${path}.corrupt`;
+  if (!existsSync(base)) return base;
+  let n = 1;
+  while (existsSync(`${base}.${n}`)) n += 1;
+  return `${base}.${n}`;
+}
+
+/**
  * The SDK's SimpleFsStorageProvider throws on corrupt JSON instead of
  * starting fresh, so the corrupt-file guard must run BEFORE handing it the
  * path: a broken store is moved aside (kept for inspection) and the sync
  * starts fresh with a warning — same recovery the fallback provider gives.
+ *
+ * Every filesystem call here is wrapped in try/catch: a rare IO race (the
+ * file is deleted or replaced between our existsSync probe and the actual
+ * read/rename, a transient permission or EBUSY error, etc.) must degrade
+ * gracefully rather than throwing out of startup. If quarantining itself
+ * fails, we log and leave the file in place — worst case
+ * SimpleFsStorageProvider's own constructor then throws on the still-corrupt
+ * file, and createMatrixStorageProvider's existing catch below falls back to
+ * MatrixSyncTokenStorageProvider, so startup still completes.
  */
 function quarantineCorruptSyncFile(path: string): void {
-  if (!existsSync(path)) return;
   try {
+    if (!existsSync(path)) return;
     JSON.parse(readFileSync(path, 'utf8'));
   } catch (err) {
-    const quarantined = `${path}.corrupt`;
-    logger.warn({ err, path, quarantined }, 'Matrix sync store is corrupt; moving it aside and starting a fresh sync');
-    renameSync(path, quarantined);
+    try {
+      const quarantined = findQuarantinePath(path);
+      logger.warn({ err, path, quarantined }, 'Matrix sync store is corrupt; moving it aside and starting a fresh sync');
+      renameSync(path, quarantined);
+    } catch (quarantineErr) {
+      logger.warn(
+        { err: quarantineErr, path },
+        'Matrix sync store is corrupt but quarantining it also failed (IO race?) — leaving it in place; the caller falls back to the token store if the SDK provider then fails to load it',
+      );
+    }
   }
 }
 

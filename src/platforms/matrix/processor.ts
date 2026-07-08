@@ -18,7 +18,11 @@ import {
   matrixRoomRequiresMention,
 } from './matrix-config.js';
 
-const VOICE_NOTE_PLACEHOLDER = '[voice note]';
+// Shared with telegram/processor.ts and the bridge's own media-placeholder
+// text (src/bridge/relay-capture.ts uses the same literal) — a single
+// source of truth for the placeholder string, and the flag below (not text
+// equality) is what tells the core dispatch-skip gate to stay quiet.
+import { VOICE_NOTE_PLACEHOLDER } from '../../core/inbound-message.js';
 
 const MatrixAudioSchema = z.object({
   url: z.string(),
@@ -73,22 +77,32 @@ function normalizeMatrixInbound(event: MatrixEvent): MatrixInbound {
   };
 }
 
-async function resolveAudioText(event: MatrixEvent): Promise<string> {
-  if (event.text || !event.audio) return event.text;
+/**
+ * Mirrors telegram/processor.ts's resolveVoiceText: a captionless voice
+ * message that fails to download or transcribe falls back to the
+ * VOICE_NOTE_PLACEHOLDER text so moderation, capture, and bridging still see
+ * SOMETHING rather than silence — but `synthesized: true` tells the caller
+ * to set `inbound.synthesizedPlaceholder`, which is what actually makes the
+ * core dispatch-skip gate (process-inbound-message.ts) stay quiet. Without
+ * that flag, the message reaches handleGroupMessage/handleOwnerDM like any
+ * normal text message and the bot replies to its own placeholder.
+ */
+async function resolveAudioText(event: MatrixEvent): Promise<{ text: string; synthesized: boolean }> {
+  if (event.text || !event.audio) return { text: event.text, synthesized: false };
 
   if (!event.audio.buffer) {
     logger.debug('Matrix audio message download unavailable — using placeholder');
-    return VOICE_NOTE_PLACEHOLDER;
+    return { text: VOICE_NOTE_PLACEHOLDER, synthesized: true };
   }
 
   const transcript = await transcribeAudio(event.audio.buffer, event.audio.contentType);
   if (!transcript) {
     logger.debug('Matrix audio message transcription failed — using placeholder');
-    return VOICE_NOTE_PLACEHOLDER;
+    return { text: VOICE_NOTE_PLACEHOLDER, synthesized: true };
   }
 
   logger.info({ transcriptLen: transcript.length }, 'Matrix audio message transcribed');
-  return transcript;
+  return { text: transcript, synthesized: false };
 }
 
 function buildLeadingMentionRegex(botMxid: string | undefined, botDisplayName: string | undefined): RegExp | null {
@@ -197,7 +211,8 @@ export async function processMatrixEvent(
     return;
   }
 
-  const resolvedText = await resolveAudioText(parsed.data);
-  const inbound = normalizeMatrixInbound({ ...parsed.data, text: resolvedText });
+  const resolved = await resolveAudioText(parsed.data);
+  const inbound = normalizeMatrixInbound({ ...parsed.data, text: resolved.text });
+  if (resolved.synthesized) inbound.synthesizedPlaceholder = true;
   await processMatrixInbound(messenger, inbound, env);
 }
