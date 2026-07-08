@@ -118,19 +118,28 @@ plain HTTP with no extra containers.
        network. The bridge loader expands `${VAR}` and `${VAR:-default}`
        placeholders before validating the JSON. Not used by the AMQP
        transport.
-   - **`routes`** - one entry per bridged channel/group pair:
+   - **`routes`** - one entry per bridged conversation group:
      - `id` - a unique, human-readable route slug.
-     - `endpoints` - exactly two `{instance, chatId}` entries. `instance`
-       must match a declared instance id; `chatId` is the Discord channel id
-       or the WhatsApp group JID on that instance. The two endpoints must
-       differ.
-     - `direction` - `both` (relay each way) or `one-way`. `one-way` requires
-       `from`, set to one of the two endpoint instance ids (the side allowed
-       to send).
+     - `endpoints` - two or more `{instance, chatId}` entries. `instance`
+       must match a declared instance id; `chatId` is the channel/group/room
+       id on that instance. A message from one endpoint fans out to every
+       other endpoint in the route. Each `(instance, chatId)` pair must be
+       distinct; the same instance may appear more than once with different
+       chat ids, but bridge groups should normally use distinct instances
+       because same-instance loopback depends on the selected transport and
+       runtime wiring.
+     - `direction` - `both` (relay from any member to all other members) or
+       `one-way`. `one-way` requires `from`, set to one endpoint instance id;
+       only messages from that instance fan out. This is not transitive:
+       relayed messages are delivered as direct sends and are never
+       re-captured as new inbound bridge messages.
      - `modeToWhatsApp` - `summary` (default) or `verbatim`. Governs how
-       messages arriving *at* a WhatsApp endpoint are delivered.
+       messages arriving *at* each WhatsApp endpoint are delivered.
      - `modeToDiscord` - `verbatim` (default) or `summary`. Same idea, for a
-       Discord endpoint. There is no `modeToTelegram` field: Telegram
+       Discord endpoint. In an N-ary group, mode is resolved by each
+       destination platform, so a WhatsApp target can summarize while a
+       Discord target receives the same source message verbatim. There is no
+       `modeToTelegram` field: Telegram
        endpoints always relay directly (verbatim) — the summary buffer exists
        to fold messages behind WhatsApp's outbound-safety backpressure, which
        Telegram's official Bot API has no equivalent of. Instead, sends to a
@@ -155,20 +164,25 @@ plain HTTP with no extra containers.
        for routes where both sides should inform the receiver's local context.
        Summary-mode digests and held/buffered sends are never ingested.
 
-   Example, bridging one Discord channel with one WhatsApp group:
+   Example, bridging one conversation group across Discord, WhatsApp,
+   Telegram, and Matrix:
 
    ```json
    {
      "instances": [
        { "id": "discord-main", "platform": "discord", "url": "http://discord:${DISCORD_HEALTH_PORT:-3002}" },
-       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}" }
+       { "id": "whatsapp-main", "platform": "whatsapp", "url": "http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}" },
+       { "id": "telegram-main", "platform": "telegram", "url": "http://telegram:${TELEGRAM_HEALTH_PORT:-3005}" },
+       { "id": "matrix-main", "platform": "matrix", "url": "http://matrix:${MATRIX_HEALTH_PORT:-3004}" }
      ],
      "routes": [
        {
          "id": "main-channel",
          "endpoints": [
            { "instance": "discord-main", "chatId": "111111111111111111" },
-           { "instance": "whatsapp-main", "chatId": "120363000000000000@g.us" }
+           { "instance": "whatsapp-main", "chatId": "120363000000000000@g.us" },
+           { "instance": "telegram-main", "chatId": "-1001111111111" },
+           { "instance": "matrix-main", "chatId": "!roomid:matrix.example.org" }
          ],
          "direction": "both",
          "modeToWhatsApp": "summary",
@@ -180,9 +194,12 @@ plain HTTP with no extra containers.
    }
    ```
 
+   A two-endpoint route uses the same shape with only two entries in
+   `endpoints`; it remains valid for simple Discord-to-WhatsApp pairs.
+
    `docker-compose.yml` already bind-mounts `./config/bridge-map.json`
-   read-only into both the `discord` and `whatsapp` services, so no compose
-   edit is needed for a two-instance setup; only the file content changes.
+   read-only into platform services, so no compose edit is needed for the
+   standard profiles; only the file content changes.
 
 3. **Restart both instances:**
 

@@ -132,7 +132,7 @@ describe('BridgeEnvelopeSchema', () => {
     text: 'hello',
     kind: 'message',
     sentAtMs: 1_788_221_000_000,
-    idempotencyKey: 'whatsapp-community:chat-1:message-1',
+    idempotencyKey: 'whatsapp-community:chat-1:message-1:discord-community:channel-1',
   } as const;
 
   it('accepts a valid bridge envelope and preserves its fields', () => {
@@ -167,8 +167,11 @@ describe('BridgeEnvelopeSchema', () => {
     ).toBe(false);
   });
 
-  it('builds idempotency keys from origin identity', () => {
-    expect(buildIdempotencyKey(validEnvelope.origin)).toBe('whatsapp-community:chat-1:message-1');
+  it('builds idempotency keys from origin and target identity', () => {
+    expect(buildIdempotencyKey(validEnvelope.origin, {
+      instance: validEnvelope.targetInstance,
+      chatId: validEnvelope.targetChatId,
+    })).toBe('whatsapp-community:chat-1:message-1:discord-community:channel-1');
   });
 
   it('returns null instead of throwing on invalid raw input', () => {

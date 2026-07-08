@@ -26,6 +26,7 @@ export const BridgeEnvelopeSchema = z
     text: z.string(),
     kind: z.enum(['message', 'media-placeholder']),
     sentAtMs: z.number().int().positive(),
+    /** Dedup key scoped to one origin message and one fan-out target. */
     idempotencyKey: z.string().min(1),
   })
   .strict();
@@ -33,10 +34,15 @@ export const BridgeEnvelopeSchema = z
 export type BridgeOrigin = z.infer<typeof BridgeOriginSchema>;
 export type BridgeEnvelope = z.infer<typeof BridgeEnvelopeSchema>;
 
+/**
+ * Target-scoped dedup key. A single origin message can fan out to multiple
+ * bridge targets, and each leg must survive receiver-side bridge_seen dedup.
+ */
 export function buildIdempotencyKey(
   origin: Pick<BridgeOrigin, 'instance' | 'chatId' | 'messageId'>,
+  target: { instance: string; chatId: string },
 ): string {
-  return `${origin.instance}:${origin.chatId}:${origin.messageId}`;
+  return `${origin.instance}:${origin.chatId}:${origin.messageId}:${target.instance}:${target.chatId}`;
 }
 
 export function parseBridgeEnvelope(raw: unknown): BridgeEnvelope | null {

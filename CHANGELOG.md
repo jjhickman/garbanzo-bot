@@ -40,6 +40,9 @@ an observability upgrade, a persona gallery, and a read-only operations page.
   delivery outcomes, dedup hits, relay latency, backpressure holds), memory
   metrics by source, and a per-instance Grafana dashboard templated on the
   scrape `job`/`instance` labels.
+- **N-ary bridge groups**: one bridge route can now list 2+ endpoints and
+  fans each source message out to all other members, replacing pairwise
+  meshes for multi-community conversations.
 
 ### Changed
 

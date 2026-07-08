@@ -14,7 +14,7 @@ const BridgeEndpointSchema = z.object({
 
 const BridgeRouteSchema = z.object({
   id: z.string().min(1),
-  endpoints: z.tuple([BridgeEndpointSchema, BridgeEndpointSchema]),
+  endpoints: z.array(BridgeEndpointSchema).min(2),
   direction: z.enum(['both', 'one-way']),
   from: z.string().min(1).optional(),
   modeToWhatsApp: z.enum(['summary', 'verbatim']).default('summary'),
@@ -54,7 +54,7 @@ export const BridgeMapSchema = z.object({
     }
     routeIds.add(route.id);
 
-    const [first, second] = route.endpoints;
+    const endpointKeys = new Set<string>();
     for (const [endpointIndex, endpoint] of route.endpoints.entries()) {
       if (!instanceIds.has(endpoint.instance)) {
         ctx.addIssue({
@@ -63,14 +63,16 @@ export const BridgeMapSchema = z.object({
           message: `Unknown bridge instance: ${endpoint.instance}`,
         });
       }
-    }
 
-    if (first.instance === second.instance && first.chatId === second.chatId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['routes', index, 'endpoints'],
-        message: 'Bridge route endpoints must differ',
-      });
+      const endpointKey = `${endpoint.instance}\0${endpoint.chatId}`;
+      if (endpointKeys.has(endpointKey)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['routes', index, 'endpoints', endpointIndex],
+          message: 'Bridge route endpoints must differ by instance and chatId',
+        });
+      }
+      endpointKeys.add(endpointKey);
     }
 
     if (route.direction === 'one-way') {
@@ -80,7 +82,7 @@ export const BridgeMapSchema = z.object({
           path: ['routes', index, 'from'],
           message: 'One-way bridge routes require from',
         });
-      } else if (route.from !== first.instance && route.from !== second.instance) {
+      } else if (!route.endpoints.some((endpoint) => endpoint.instance === route.from)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['routes', index, 'from'],
