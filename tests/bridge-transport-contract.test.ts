@@ -2,7 +2,10 @@ process.env.MESSAGING_PLATFORM ??= 'whatsapp';
 process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
-process.env.MONITORING_TOKEN ??= 'bridge-test-token';
+// Hard assignment, not ??=: dotenv's config-import injection can populate an
+// EMPTY MONITORING_TOKEN from a developer's real .env into this worker's
+// process.env before this file runs, and '' survives ??=.
+process.env.MONITORING_TOKEN = 'bridge-test-token';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';

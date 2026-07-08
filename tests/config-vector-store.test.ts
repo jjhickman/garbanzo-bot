@@ -3,6 +3,15 @@ process.env.OWNER_JID ??= 'test_owner@s.whatsapp.net';
 process.env.OPENROUTER_API_KEY ??= 'test_key_ci';
 process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// This suite asserts schema DEFAULTS, so it must not layer values from a
+// developer's real .env in the repo root — point config's home at an empty
+// temp dir before any config import (paths.ts reads it at import time).
+process.env.GARBANZO_HOME = mkdtempSync(join(tmpdir(), 'garbanzo-vector-config-'));
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 async function loadConfig(env: Record<string, string>) {
