@@ -733,7 +733,14 @@ async function handleRequest(
       return;
     }
 
-    const snapshot = buildAdminSnapshot();
+    const rssMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const snapshot = await buildAdminSnapshot({
+      connectionStatus: state.status,
+      uptimeSeconds: Math.floor((now - state.startedAt) / 1000),
+      lastMessageAgoSeconds: state.lastMessageAt ? Math.floor((now - state.lastMessageAt) / 1000) : null,
+      stale: isConnectionStale(),
+      memoryWatchdog: { rssMB, warnMB: MEMORY_WARN_MB, restartMB: MEMORY_RESTART_MB },
+    });
     const whatsappSafety = await getWhatsAppSafetyMetrics(
       Math.floor((now - 60 * 60 * 1000) / 1000),
       Math.floor((now - 24 * 60 * 60 * 1000) / 1000),

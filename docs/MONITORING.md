@@ -5,7 +5,7 @@ Three layers, all optional, all runnable on a Pi-class host:
 
 | Layer | What it gives you | Cost |
 |---|---|---|
-| `/admin` page | Today's AI spend, provider mix, per-group activity, anti-ban counters | Built in — zero setup |
+| `/admin` page | Overview, Memory ("Lore"), Bridges, Health, plus today's AI spend/provider mix/per-group activity | Built in — zero setup |
 | Uptime Kuma | Up/down alerting (push, Telegram, email, …) | One small container |
 | **Prometheus + Grafana** | Historical graphs of everything below, 30-day retention | Two containers, ~600MB RAM combined |
 
@@ -111,6 +111,30 @@ Scrape auth: `/metrics` accepts `Authorization: Bearer <MONITORING_TOKEN>` (what
 Prometheus uses) or `?token=<MONITORING_TOKEN>` (handy for `curl`). The same
 token gates `/admin` unless it is unset, in which case the bot generates a
 per-run token and logs how to pin one.
+
+### The `/admin` page, section by section
+
+Server-rendered, no build step, read-only — `/admin.json` mirrors the same
+data for scripting. Four community-operations sections plus the original
+usage/cost tables:
+
+- **Overview** — platform, instance id, version, connection state, uptime,
+  and message freshness.
+- **Memory — your community's lore** — browse stored facts (id, text,
+  category, source tag, shared status), newest 100 with a total count so you
+  know if there's more.
+- **Bridges** — configured routes, outbox depth and oldest-pending age,
+  dead-letter count, and summary-buffer sizes; reads "bridging is not
+  enabled" plainly when it isn't.
+- **Health** — inline AI provider mix, memory-watchdog RSS vs. thresholds,
+  and bridge failure counts, with a link to `/metrics` for full history.
+
+Everything here is read-only in v3.3.0 — no delete/edit/import endpoints
+ship yet. The mutation gate for that (a separate write-only listener plus
+its own token, evaluated against the WhatsApp LAN-exposure threat model) is
+designed in
+`docs/_internal/specs/2026-07-08-admin-write-gate-design.md` ahead of
+v3.4.0.
 
 ## Uptime Kuma (alerting)
 

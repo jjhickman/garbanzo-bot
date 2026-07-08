@@ -95,8 +95,86 @@ describe('admin page', () => {
     const stats = await import('../src/middleware/stats.js');
     stats.recordGroupMessage('<script>alert(1)</script>@g.us', 'bob@s.whatsapp.net');
 
-    const html = renderAdminHtml(buildAdminSnapshot(), {});
+    const snapshot = await buildAdminSnapshot(testOverviewInputs());
+    const html = renderAdminHtml(snapshot, {});
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  it('renders the Overview section with platform/instance/version/connection identity', async () => {
+    const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
+    const res = await fetch(`${baseUrl}/admin?token=T`);
+    const html = await res.text();
+
+    expect(html).toContain('Overview');
+    expect(html).toContain('Instance');
+    expect(html).toContain('Version');
+    expect(html).toContain('Connection');
+  });
+
+  it('renders an honest "not enabled" line for Bridges when bridging is off', async () => {
+    const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
+    const res = await fetch(`${baseUrl}/admin?token=T`);
+    const html = await res.text();
+
+    expect(html).toContain('Bridges');
+    expect(html).toContain('Bridging is not enabled');
+  });
+
+  it('renders every section safely on a fresh install with no data', async () => {
+    const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
+    const res = await fetch(`${baseUrl}/admin?token=T`);
+    expect(res.status).toBe(200);
+
+    const html = await res.text();
+    expect(html).toContain('No facts stored yet');
+    expect(html).toContain('No AI requests yet');
+  });
+
+  it('exposes memory, bridges, and health sections in /admin.json for machine-readable parity', async () => {
+    const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
+    const res = await fetch(`${baseUrl}/admin.json?token=T`);
+    expect(res.status).toBe(200);
+
+    const body = await res.json() as {
+      overview: { platform: string; instanceId: string };
+      memory: { totalCount: number; cap: number; rows: unknown[] };
+      bridges: { enabled: boolean; routes: unknown[] };
+      health: { metricsPath: string };
+    };
+    expect(body.overview.platform).toBeTruthy();
+    expect(body.overview.instanceId).toBeTruthy();
+    expect(body.memory.cap).toBe(100);
+    expect(Array.isArray(body.memory.rows)).toBe(true);
+    expect(body.bridges.enabled).toBe(false);
+    expect(Array.isArray(body.bridges.routes)).toBe(true);
+    expect(body.health.metricsPath).toBe('/metrics');
+  });
+
+  it('escapes a malicious stored fact in HTML but keeps it intact (unescaped) in JSON', async () => {
+    const db = await import('../src/utils/db.js');
+    const malicious = '<script>alert(1)</script>';
+    await db.addMemory(malicious, 'general', 'owner');
+
+    const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
+
+    const htmlRes = await fetch(`${baseUrl}/admin?token=T`);
+    const html = await htmlRes.text();
+    expect(html).not.toContain(malicious);
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+
+    const jsonRes = await fetch(`${baseUrl}/admin.json?token=T`);
+    const body = await jsonRes.json() as { memory: { rows: Array<{ fact: string }> } };
+    expect(body.memory.rows.some((row) => row.fact === malicious)).toBe(true);
+  });
 });
+
+function testOverviewInputs(): Parameters<(typeof import('../src/middleware/admin-page.js'))['buildAdminSnapshot']>[0] {
+  return {
+    connectionStatus: 'connected',
+    uptimeSeconds: 42,
+    lastMessageAgoSeconds: null,
+    stale: false,
+    memoryWatchdog: { rssMB: 100, warnMB: 500, restartMB: 1024 },
+  };
+}
