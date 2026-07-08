@@ -29,4 +29,5 @@ config/*.json.bak
 docs/PERSONA.md.bak
 
 # Agent working notes (never published)
+docs/_internal/
 .superpowers/
