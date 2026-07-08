@@ -54,19 +54,20 @@ function stringList(value: unknown): string[] {
 }
 
 describe('monitoring dashboard and scrape config', () => {
-  it('scrapes the Discord and WhatsApp bot instances with bearer token auth', () => {
+  it('scrapes the Discord, WhatsApp, and Telegram bot instances with bearer token auth', () => {
     const prometheus = parsePrometheusConfig();
     const scrapeConfigs = prometheus.scrape_configs ?? [];
     const jobs = new Map(
       scrapeConfigs.map((config) => [String(config.job_name), config]),
     );
 
-    expect([...jobs.keys()].sort()).toEqual(['discord', 'prometheus', 'whatsapp']);
+    expect([...jobs.keys()].sort()).toEqual(['discord', 'prometheus', 'telegram', 'whatsapp']);
     expect(jobs.has('garbanzo')).toBe(false);
 
     for (const [jobName, target] of [
       ['discord', 'discord:3002'],
       ['whatsapp', 'whatsapp:3001'],
+      ['telegram', 'telegram:3005'],
     ] as const) {
       const job = jobs.get(jobName);
       expect(job).toBeDefined();

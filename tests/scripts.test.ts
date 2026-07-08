@@ -530,6 +530,12 @@ describe('ops scripts', () => {
     expect(out).toContain('--install-deps');
   });
 
+  it('setup --help documents --telegram-chat-ids and --telegram-chat-name', () => {
+    const out = runNodeScript(setupPath, ['--help']);
+    expect(out).toContain('--telegram-chat-ids');
+    expect(out).toContain('--telegram-chat-name');
+  });
+
   it('setup native Discord non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
     const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
     try {
@@ -576,6 +582,157 @@ describe('ops scripts', () => {
         enabled: true,
         requireMention: true,
       });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup native Telegram non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=telegram',
+        '--deploy=native',
+        '--telegram-bot-token=test_telegram_token',
+        '--telegram-owner-id=123456789',
+        '--telegram-chat-id=-1001234567890',
+        '--telegram-chat-name=general',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.telegram');
+      expect(out).toContain('✅ Wrote config/telegram-chats.json with 1 enabled chat');
+
+      // Exact file set under GARBANZO_HOME: .env, .env.telegram, config/telegram-chats.json.
+      // No config/groups.json (Telegram doesn't need it), no docs/PERSONA.md (no custom
+      // persona given), no .git/hooks touched (pre-commit install is repo-mode only).
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.telegram', 'config']);
+      const configFiles = readdirSync(join(home, 'config')).sort();
+      expect(configFiles).toEqual(['telegram-chats.json']);
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).not.toMatch(/^COMPOSE_PROFILES=/m);
+      expect(envContent).toMatch(/^VECTOR_STORE=none$/m);
+
+      const telegramEnvContent = readFileSync(join(home, '.env.telegram'), 'utf8');
+      expect(telegramEnvContent).toContain('TELEGRAM_BOT_TOKEN=test_telegram_token');
+      expect(telegramEnvContent).toContain('TELEGRAM_OWNER_ID=123456789');
+      expect(telegramEnvContent).toContain('TELEGRAM_CHAT_SCOPE=configured');
+
+      const chatsConfig = JSON.parse(
+        readFileSync(join(home, 'config', 'telegram-chats.json'), 'utf8'),
+      ) as { ownerId?: string; chats: Record<string, { name: string; enabled: boolean }> };
+      expect(chatsConfig.ownerId).toBe('123456789');
+      expect(chatsConfig.chats['-1001234567890']).toEqual({
+        name: 'general',
+        enabled: true,
+        requireMention: true,
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Docker Telegram non-interactive run pins COMPOSE_PROFILES=telegram and writes the platform-keyed env file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=telegram',
+        '--telegram-bot-token=test_telegram_token',
+        '--telegram-owner-id=123456789',
+        '--telegram-chat-id=-1001234567890',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.telegram');
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toMatch(/^COMPOSE_PROFILES=telegram$/m);
+      expect(envContent).not.toMatch(/^VECTOR_STORE=/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Telegram non-interactive run requires a bot token, owner ID, and enabled chat or fails clearly', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+
+    function expectSetupFailure(args: string[], expected: RegExp): void {
+      let caught: unknown;
+      try {
+        runNodeScriptWithEnv(setupPath, ['--non-interactive', '--dry-run', ...args], { GARBANZO_HOME: home });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeDefined();
+      const stdout = String((caught as { stdout?: string }).stdout ?? '');
+      expect(stdout).toMatch(expected);
+    }
+
+    try {
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-owner-id=123456789',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires a bot token/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires an owner user ID/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /Telegram quickstart requires at least one chat to enable/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=not-numeric',
+          '--telegram-chat-id=-1001234567890',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /doesn't look like a Telegram user id/,
+      );
+
+      expectSetupFailure(
+        [
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          '--telegram-chat-id=not-a-chat-id',
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ],
+        /doesn't look like a Telegram chat ID/,
+      );
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

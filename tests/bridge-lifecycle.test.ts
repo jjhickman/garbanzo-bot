@@ -280,6 +280,39 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     await bridge.stop();
   });
 
+  it('always relays directly for a Telegram destination, ignoring the route modeToDiscord field (fixes the binary whatsapp-else-discord mode check)', async () => {
+    config.BRIDGE_ENABLED = true;
+    config.MESSAGING_PLATFORM = 'telegram';
+    const summaryMap: BridgeMap = {
+      ...MAP,
+      // modeToDiscord: 'summary' must be irrelevant to a Telegram destination
+      // — the old else-branch bug read this field for any non-whatsapp
+      // platform, including Telegram.
+      routes: [{ ...VERBATIM_ROUTE, modeToDiscord: 'summary' }],
+    };
+    const sendText = vi.fn(async () => undefined);
+    const seen = fakeBridgeSeen();
+    const bufferOps = fakeBufferOps();
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText),
+      loadBridgeMap: () => summaryMap,
+      bridgeSeenInsert: seen.insert,
+      bridgeSeenDelete: seen.del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps,
+      transport: fakeTransport(),
+    }));
+
+    const result = await bridge.handler(makeEnvelope());
+
+    expect(result).toBe('accepted');
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(bufferOps.appendBridgeBuffer).not.toHaveBeenCalled();
+
+    await bridge.stop();
+  });
+
   it('records relayed text into receiving context after verbatim delivery when the route opts in', async () => {
     config.BRIDGE_ENABLED = true;
     const ingestMap: BridgeMap = {

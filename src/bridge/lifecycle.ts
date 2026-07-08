@@ -56,8 +56,23 @@ export function getCaptureForBridge(): ((inbound: InboundMessage) => void) | nul
   return activeCapture;
 }
 
+/**
+ * Resolve delivery mode per DESTINATION platform explicitly, rather than a
+ * binary whatsapp-else-discord check (fixed per review — the old else branch
+ * silently handed Telegram destinations Discord's per-route modeToDiscord
+ * setting, which was never meant to configure Telegram). WhatsApp gets the
+ * bridge-map-configurable modeToWhatsApp because the summary buffer exists
+ * to fold messages behind WhatsApp's outbound-safety backpressure
+ * (WhatsAppOutboundHeldError) — no other platform's messenger throws that.
+ * Discord keeps its own configurable modeToDiscord. Telegram (and any future
+ * platform with no dedicated bridge-map field) always relays directly:
+ * there is nothing to buffer against, and Telegram's own 429 handling is
+ * internalized in the adapter's send path (see relay-deliver.ts).
+ */
 function modeForPlatform(route: BridgeRoute, platform: MessagingPlatform): 'summary' | 'verbatim' {
-  return platform === 'whatsapp' ? route.modeToWhatsApp : route.modeToDiscord;
+  if (platform === 'whatsapp') return route.modeToWhatsApp;
+  if (platform === 'discord') return route.modeToDiscord;
+  return 'verbatim';
 }
 
 /**

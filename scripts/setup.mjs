@@ -10,6 +10,7 @@ import { execSync } from 'node:child_process';
 import {
   DISCORD_FIELDS,
   WHATSAPP_FIELDS,
+  TELEGRAM_FIELDS,
   getField,
   promptHint,
   resolveEnvField,
@@ -47,8 +48,10 @@ const OUTPUT_ROOT = GARBANZO_HOME_ENV ? resolve(GARBANZO_HOME_ENV) : PROJECT_ROO
 const ENV_PATH = resolve(OUTPUT_ROOT, '.env');
 const ENV_DISCORD_PATH = resolve(OUTPUT_ROOT, '.env.discord');
 const ENV_WHATSAPP_PATH = resolve(OUTPUT_ROOT, '.env.whatsapp');
+const ENV_TELEGRAM_PATH = resolve(OUTPUT_ROOT, '.env.telegram');
 const GROUPS_PATH = resolve(OUTPUT_ROOT, 'config', 'groups.json');
 const DISCORD_CHANNELS_PATH = resolve(OUTPUT_ROOT, 'config', 'discord-channels.json');
+const TELEGRAM_CHATS_PATH = resolve(OUTPUT_ROOT, 'config', 'telegram-chats.json');
 const PERSONA_PATH = resolve(OUTPUT_ROOT, 'docs', 'PERSONA.md');
 
 // Discord walkthrough copy is cross-checked against what the runtime actually
@@ -87,6 +90,21 @@ function isSnowflake(value) {
 }
 const SNOWFLAKE_HINT = 'a Discord snowflake ID is 17-20 digits, numbers only — enable Developer '
   + 'Mode (User Settings -> Advanced), then right-click the channel/user/application and choose "Copy ID"';
+
+// Telegram chat/user ids are plain (not snowflake-shaped) integers: user and
+// small-group ids are positive/negative up to ~10 digits, supergroup and
+// channel ids are negative and prefixed with -100 (e.g. -1001234567890).
+// A leading '-' plus digits covers every real shape; there is no fixed
+// length to check the way Discord's snowflakes have.
+const TELEGRAM_CHAT_ID_RE = /^-?\d+$/;
+function isTelegramChatId(value) {
+  return TELEGRAM_CHAT_ID_RE.test(String(value ?? '').trim());
+}
+const TELEGRAM_CHAT_ID_HINT = 'a Telegram chat ID is numeric — groups are negative, and supergroups/'
+  + 'channels are negative with a -100 prefix (e.g. -1001234567890); add the bot to the chat, send a '
+  + 'message, then read the id off @userinfobot (forward the message to it) or the getUpdates response '
+  + '(https://api.telegram.org/bot<token>/getUpdates)';
+const TELEGRAM_USER_ID_HINT = 'a Telegram user id is numeric digits only — get it from @userinfobot';
 
 let DEFAULT_APP_VERSION = '0.1.0';
 try {
@@ -349,6 +367,88 @@ async function resolveDiscordChannels({ nonInteractive, cli, rl }) {
   return { channelsMap, changed, ownerId: existingConfig?.ownerId };
 }
 
+// Collects one { id, name } chat entry interactively, re-prompting on
+// empty/invalid input until a valid Telegram chat id is given. Mirrors
+// promptChannelEntry() for Discord.
+async function promptTelegramChatEntry(rl) {
+  let chatId = '';
+  while (!chatId) {
+    const answer = (await rl.question('   Chat ID to enable: ')).trim();
+    if (!answer) {
+      output.write('   ⚠️ A chat ID is required — the quickstart cannot finish with zero enabled chats.\n');
+      continue;
+    }
+    if (!isTelegramChatId(answer)) {
+      output.write(`   ⚠️ "${answer}" doesn't look like a Telegram chat ID — ${TELEGRAM_CHAT_ID_HINT}.\n`);
+      continue;
+    }
+    chatId = answer;
+  }
+  const chatName = (await rl.question('   Chat name/label [general]: ')).trim() || 'general';
+  return { id: chatId, name: chatName };
+}
+
+// Resolves the full set of enabled Telegram chats for this run, mirroring
+// resolveDiscordChannels() exactly (same merge/gate/re-prompt contract, one
+// enabled chat required to finish the quickstart) against
+// config/telegram-chats.json's { ownerId, chats } shape instead of
+// discord-channels.json's { ownerId, channels }.
+async function resolveTelegramChats({ nonInteractive, cli, rl }) {
+  let existingConfig = null;
+  if (existsSync(TELEGRAM_CHATS_PATH)) {
+    try {
+      existingConfig = JSON.parse(readFileSync(TELEGRAM_CHATS_PATH, 'utf-8'));
+    } catch (err) {
+      throw new Error(`config/telegram-chats.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const chatsMap = { ...(existingConfig?.chats ?? {}) };
+  let changed = false;
+
+  const explicitIds = parseCsv(cli.options['telegram-chat-id'] ?? cli.options['telegram-chat-ids'] ?? '');
+  const invalidIds = explicitIds.filter((id) => !isTelegramChatId(id));
+  if (invalidIds.length > 0) {
+    throw new Error(
+      `--telegram-chat-id(s) contains a value that doesn't look like a Telegram chat ID (${TELEGRAM_CHAT_ID_HINT}): `
+      + invalidIds.map((id) => `"${id}"`).join(', '),
+    );
+  }
+  if (explicitIds.length > 0) {
+    // Object keys naturally dedupe repeated ids from --telegram-chat-ids.
+    const explicitName = (cli.options['telegram-chat-name'] || 'general').trim() || 'general';
+    for (const id of explicitIds) {
+      chatsMap[id] = { name: explicitName, enabled: true, requireMention: true };
+    }
+    changed = true;
+  }
+
+  const countEnabled = () => Object.values(chatsMap).filter((entry) => entry && entry.enabled).length;
+
+  if (countEnabled() === 0) {
+    if (nonInteractive) {
+      throw new Error(
+        'Telegram quickstart requires at least one chat to enable — the bot ignores every ' +
+        'chat until one is enabled. Pass --telegram-chat-id=<chat id> (add the bot to the chat, send a ' +
+        "message, then read the id off @userinfobot or the bot's getUpdates response) or run interactively.",
+      );
+    }
+    if (existingConfig) {
+      output.write('\n⚠️ config/telegram-chats.json exists but has zero enabled chats — the quickstart cannot finish like that.\n');
+    }
+    output.write('\n4) At least one chat to enable: add the bot to the group, send a message, then read\n');
+    output.write('   the chat id off @userinfobot (forward the group message to it) or from\n');
+    output.write('   https://api.telegram.org/bot<token>/getUpdates ("chat":{"id":...}). Group ids are\n');
+    output.write('   negative; supergroup/channel ids are negative with a -100 prefix. The bot ignores\n');
+    output.write('   every chat until one is enabled here — add more later by editing\n');
+    output.write('   config/telegram-chats.json (schema: config/telegram-chats.example.json).\n');
+    const entry = await promptTelegramChatEntry(rl);
+    chatsMap[entry.id] = { name: entry.name, enabled: true, requireMention: true };
+    changed = true;
+  }
+
+  return { chatsMap, changed, ownerId: existingConfig?.ownerId };
+}
+
 async function main() {
   const cli = parseArgs(process.argv.slice(2));
   const nonInteractive = cli.flags.has('non-interactive');
@@ -368,9 +468,12 @@ async function main() {
     output.write('  npm run setup -- --non-interactive --dry-run --providers=openai --profile=lightweight\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-client-id=123... --discord-owner-id=456... --discord-channel-id=789... --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('  npm run setup -- --non-interactive --platform=discord --deploy=native --discord-bot-token=$DISCORD_BOT_TOKEN --discord-owner-id=456... --discord-channel-ids=789...,790... --discord-channel-name=general --install-deps=false --vector-store=none --providers=openai --openai-key=$OPENAI_API_KEY\n');
+    output.write('  npm run setup -- --non-interactive --platform=telegram --telegram-bot-token=$TELEGRAM_BOT_TOKEN --telegram-owner-id=123456789 --telegram-chat-id=-1001234567890 --providers=openai --openai-key=$OPENAI_API_KEY\n');
     output.write('\nOther non-interactive flags:\n');
     output.write('  --discord-channel-ids   comma-separated Discord channel IDs to enable (alias for --discord-channel-id)\n');
     output.write('  --discord-channel-name  label applied to every channel in --discord-channel-id(s) (default: general)\n');
+    output.write('  --telegram-chat-ids     comma-separated Telegram chat IDs to enable (alias for --telegram-chat-id)\n');
+    output.write('  --telegram-chat-name    label applied to every chat in --telegram-chat-id(s) (default: general)\n');
     output.write('  --install-deps          true/false — run `npm install` before writing config (default: true unless GARBANZO_CLI=1)\n');
     output.write('  --vector-store          native deploy target only — VECTOR_STORE value written to .env (default: none)\n');
     process.exit(0);
@@ -446,12 +549,13 @@ async function main() {
     }
 
     // Discord is the promoted quickstart choice; WhatsApp stays available with
-    // its account-risk caveat. Slack is a scaffold path — not offered on the
-    // interactive menu, but still reachable non-interactively via
+    // its account-risk caveat; Telegram (grammY, long polling) has its own
+    // BotFather walkthrough below. Slack is a scaffold path — not offered on
+    // the interactive menu, but still reachable non-interactively via
     // --platform=slack (resolveMessagingPlatform below), so the existing
-    // Slack dry-run coverage keeps working unchanged. Telegram/Matrix have
-    // enum support (MESSAGING_PLATFORM accepts them) but no wizard flow yet —
-    // that lands with their adapters.
+    // Slack dry-run coverage keeps working unchanged. Matrix has enum support
+    // (MESSAGING_PLATFORM accepts it) but no wizard flow yet — that lands
+    // with its adapter.
     let messagingPlatform = 'discord';
     if (nonInteractive) {
       messagingPlatform = resolveMessagingPlatform(cli, existing);
@@ -462,17 +566,20 @@ async function main() {
         [
           'Discord (recommended — official Gateway API, native quickstart)',
           'WhatsApp (unofficial API — account-risk caveat applies)',
+          'Telegram (official Bot API, long polling — grammY)',
         ],
-        existing.MESSAGING_PLATFORM === 'whatsapp' ? 1 : 0,
+        existing.MESSAGING_PLATFORM === 'whatsapp' ? 1 : existing.MESSAGING_PLATFORM === 'telegram' ? 2 : 0,
       );
-      messagingPlatform = platformIndex === 1 ? 'whatsapp' : 'discord';
+      messagingPlatform = platformIndex === 1 ? 'whatsapp' : platformIndex === 2 ? 'telegram' : 'discord';
     }
 
     const platformEnvPath = messagingPlatform === 'discord'
       ? ENV_DISCORD_PATH
       : messagingPlatform === 'whatsapp'
         ? ENV_WHATSAPP_PATH
-        : null;
+        : messagingPlatform === 'telegram'
+          ? ENV_TELEGRAM_PATH
+          : null;
     existing = mergeExistingEnvForPlatform(
       rootExisting,
       platformEnvPath ? parseEnvFile(platformEnvPath) : {},
@@ -499,6 +606,7 @@ async function main() {
 
     const discordEnv = {};
     const whatsappEnv = {};
+    const telegramEnv = {};
     let bandDeployment = false;
     let qdrantCollection = existing.QDRANT_COLLECTION || 'garbanzo_memory';
     let discordClientId = '';
@@ -595,6 +703,67 @@ async function main() {
       qdrantCollection = nonInteractive
         ? (cli.options['qdrant-collection'] ?? qdrantDefault)
         : ((await rl.question(`QDRANT_COLLECTION [${qdrantDefault}]: `)).trim() || qdrantDefault);
+    }
+
+    // Populated below by resolveTelegramChats() once token/owner ID are
+    // resolved; { chatsMap, changed, ownerId }.
+    let telegramChatsMap = {};
+    let telegramChatsChanged = false;
+    let existingTelegramChatsOwnerId;
+    if (messagingPlatform === 'telegram') {
+      if (nonInteractive) {
+        for (const field of TELEGRAM_FIELDS) {
+          telegramEnv[field.env] = await resolveText(field.env);
+        }
+        if (!telegramEnv.TELEGRAM_BOT_TOKEN) {
+          throw new Error(
+            'Telegram quickstart requires a bot token — pass --telegram-bot-token=<token> ' +
+            '(message @BotFather, run /newbot) or run interactively.',
+          );
+        }
+        if (!telegramEnv.TELEGRAM_OWNER_ID) {
+          throw new Error(
+            'Telegram quickstart requires an owner user ID — pass --telegram-owner-id=<id> ' +
+            '(message @userinfobot) or run interactively.',
+          );
+        }
+        if (!/^\d+$/.test(telegramEnv.TELEGRAM_OWNER_ID)) {
+          throw new Error(`--telegram-owner-id "${telegramEnv.TELEGRAM_OWNER_ID}" doesn't look like ${TELEGRAM_USER_ID_HINT}.`);
+        }
+      } else {
+        // BotFather walkthrough: create bot -> copy token -> disable privacy
+        // mode (the recommended setup, explained inline) -> owner user id ->
+        // chat(s) to enable (below, via resolveTelegramChats).
+        output.write('\n📮 Telegram quickstart — BotFather walkthrough\n');
+        output.write('   https://t.me/BotFather\n');
+
+        output.write('\n1) Message @BotFather and run /newbot; follow its prompts to create the bot,\n');
+        output.write('   then copy the token it gives you.\n');
+        telegramEnv.TELEGRAM_BOT_TOKEN = await promptRequiredField(rl, getField('TELEGRAM_BOT_TOKEN'), existing);
+
+        output.write('\n2) Message @BotFather again, run /setprivacy, choose this bot, then choose\n');
+        output.write('   Disable. Telegram never delivers plain-text messages (including @mentions)\n');
+        output.write('   to a privacy-ON bot, so this is the recommended setup — the bot still only\n');
+        output.write('   RESPONDS on @mentions/replies/!commands via requireMention (config/telegram-chats.json),\n');
+        output.write('   same as Discord\'s MessageContent + requireMention. This is a manual BotFather\n');
+        output.write('   step; the wizard cannot toggle it for you.\n');
+
+        output.write('\n3) Owner user id: message @userinfobot from your own account — it replies with\n');
+        output.write('   your numeric Telegram user id.\n');
+        telegramEnv.TELEGRAM_OWNER_ID = await promptRequiredField(rl, getField('TELEGRAM_OWNER_ID'), existing, {
+          validate: (value) => /^\d+$/.test(value),
+          invalidHint: TELEGRAM_USER_ID_HINT,
+        });
+
+        output.write('\nOptional Telegram settings:\n');
+        telegramEnv.TELEGRAM_CHAT_SCOPE = await resolveText('TELEGRAM_CHAT_SCOPE');
+      }
+
+      ({
+        chatsMap: telegramChatsMap,
+        changed: telegramChatsChanged,
+        ownerId: existingTelegramChatsOwnerId,
+      } = await resolveTelegramChats({ nonInteractive, cli, rl }));
     }
 
     let deployTarget = 'docker';
@@ -915,6 +1084,10 @@ async function main() {
       QDRANT_COLLECTION: String(qdrantCollection || existing.QDRANT_COLLECTION || 'garbanzo_memory').trim(),
       OWNER_JID: (whatsappEnv.OWNER_JID || existing.OWNER_JID || 'your_number@s.whatsapp.net').trim(),
       WHATSAPP_LOGIN_MODE: (whatsappEnv.WHATSAPP_LOGIN_MODE || existing.WHATSAPP_LOGIN_MODE || 'web').trim(),
+      TELEGRAM_BOT_TOKEN: (telegramEnv.TELEGRAM_BOT_TOKEN || existing.TELEGRAM_BOT_TOKEN || '').trim(),
+      TELEGRAM_OWNER_ID: (telegramEnv.TELEGRAM_OWNER_ID || existing.TELEGRAM_OWNER_ID || '').trim(),
+      TELEGRAM_CHAT_SCOPE: (telegramEnv.TELEGRAM_CHAT_SCOPE || existing.TELEGRAM_CHAT_SCOPE || 'configured').trim(),
+      TELEGRAM_CHATS_CONFIG_PATH: (existing.TELEGRAM_CHATS_CONFIG_PATH || 'config/telegram-chats.json').trim(),
     };
 
     // Layered emission (modular-config v2): `.env` carries only the shared
@@ -966,6 +1139,12 @@ async function main() {
         path: ENV_WHATSAPP_PATH,
         content: buildPlatformEnvLines('whatsapp', finalEnv).join('\n'),
         label: '.env.whatsapp',
+      });
+    } else if (messagingPlatform === 'telegram') {
+      envTargets.push({
+        path: ENV_TELEGRAM_PATH,
+        content: buildPlatformEnvLines('telegram', finalEnv).join('\n'),
+        label: '.env.telegram',
       });
     }
 
@@ -1087,6 +1266,38 @@ async function main() {
       }
     }
 
+    // Same contract as the Discord channels block above, for
+    // config/telegram-chats.json (resolveTelegramChats() already enforces at
+    // least one enabled chat).
+    if (messagingPlatform === 'telegram') {
+      if (!telegramChatsChanged) {
+        output.write('ℹ️ Using existing config/telegram-chats.json; leaving it unchanged.\n');
+      } else {
+        const resolvedTelegramOwnerId = existingTelegramChatsOwnerId || finalEnv.TELEGRAM_OWNER_ID;
+        const telegramChatsConfig = {
+          ...(resolvedTelegramOwnerId ? { ownerId: resolvedTelegramOwnerId } : {}),
+          chats: telegramChatsMap,
+        };
+
+        if (dryRun) {
+          output.write('🧪 Dry-run: would write config/telegram-chats.json with these contents:\n');
+          output.write('--- config/telegram-chats.json (preview) ---\n');
+          output.write(`${JSON.stringify(telegramChatsConfig, null, 2)}\n`);
+          output.write('--- end telegram-chats.json preview ---\n');
+        } else {
+          mkdirSync(resolve(OUTPUT_ROOT, 'config'), { recursive: true });
+          if (existsSync(TELEGRAM_CHATS_PATH)) {
+            copyFileSync(TELEGRAM_CHATS_PATH, `${TELEGRAM_CHATS_PATH}.bak`);
+            output.write('🗂️ Existing config/telegram-chats.json backed up to config/telegram-chats.json.bak\n');
+          }
+          writeFileSync(TELEGRAM_CHATS_PATH, `${JSON.stringify(telegramChatsConfig, null, 2)}\n`, 'utf-8');
+          const count = Object.values(telegramChatsMap).filter((entry) => entry && entry.enabled).length;
+          output.write(`✅ Wrote config/telegram-chats.json with ${count} enabled chat${count === 1 ? '' : 's'}\n`);
+        }
+        output.write('ℹ️ Add more chats later by editing config/telegram-chats.json (schema: config/telegram-chats.example.json).\n');
+      }
+    }
+
     // Pre-commit hook install is a repo-contributor concern — only relevant
     // when the wizard is writing into the checkout itself (no GARBANZO_HOME
     // redirect), and only when that checkout has a .git dir.
@@ -1137,6 +1348,13 @@ async function main() {
       if (discordClientId) {
         output.write(`- Invite URL: ${buildDiscordInviteUrl(discordClientId)}\n`);
       }
+    }
+
+    if (messagingPlatform === 'telegram') {
+      output.write(`- Telegram chat scope: ${finalEnv.TELEGRAM_CHAT_SCOPE}\n`);
+      const enabledChatIds = Object.keys(telegramChatsMap).filter((id) => telegramChatsMap[id]?.enabled);
+      output.write(`- Enabled chats: ${telegramChatsChanged ? enabledChatIds.join(', ') : '(existing config/telegram-chats.json unchanged)'}\n`);
+      output.write('- Privacy mode: disable it via @BotFather -> /setprivacy -> Disable (manual step, see walkthrough above)\n');
     }
 
     if (deployTarget === 'docker') {

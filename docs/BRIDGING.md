@@ -109,11 +109,13 @@ plain HTTP with no extra containers.
      - `id` - matches that instance's `INSTANCE_ID` (or its `MESSAGING_PLATFORM`
        if `INSTANCE_ID` is unset).
      - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`
-       (Telegram and Matrix accept the value at the schema level ahead of
-       their runtimes landing; there is nothing to bridge to until then).
+       (Matrix accepts the value at the schema level ahead of its runtime
+       landing; there is nothing to bridge to until then. Telegram has a
+       runtime and can be bridged today).
      - `url` (optional) - the base URL the HTTP transport uses to reach that
-       instance, for example `http://discord:3002` or `http://whatsapp:3001`
-       on the compose network. Not used by the AMQP transport.
+       instance, for example `http://discord:3002`, `http://whatsapp:3001`,
+       or `http://telegram:3005` on the compose network. Not used by the AMQP
+       transport.
    - **`routes`** - one entry per bridged channel/group pair:
      - `id` - a unique, human-readable route slug.
      - `endpoints` - exactly two `{instance, chatId}` entries. `instance`
@@ -126,7 +128,15 @@ plain HTTP with no extra containers.
      - `modeToWhatsApp` - `summary` (default) or `verbatim`. Governs how
        messages arriving *at* a WhatsApp endpoint are delivered.
      - `modeToDiscord` - `verbatim` (default) or `summary`. Same idea, for a
-       Discord endpoint.
+       Discord endpoint. There is no `modeToTelegram` field: Telegram
+       endpoints always relay directly (verbatim) — the summary buffer exists
+       to fold messages behind WhatsApp's outbound-safety backpressure, which
+       Telegram's official Bot API has no equivalent of. Instead, sends to a
+       Telegram destination chat are proactively paced at least 3 seconds
+       apart (per destination chat) so a burst of relays from a busy source
+       can't systematically trip Telegram's per-chat rate limit; the
+       Telegram adapter also retries a single 429 using the server's own
+       `retry_after` on top of that spacing.
      - `relayCommands` - `false` by default. When false, messages starting
        with `!` (bang commands like `!weather`) are not relayed.
      - `ingestRelayed` - `false` by default. When true, successfully delivered

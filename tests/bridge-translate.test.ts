@@ -47,8 +47,32 @@ describe('translateFormatting', () => {
     expect(translateFormatting('*same* _same_', 'whatsapp', 'whatsapp')).toBe('*same* _same_');
     expect(translateFormatting('*same* _same_', 'discord', 'discord')).toBe('*same* _same_');
     expect(translateFormatting('*slack* _text_', 'slack', 'discord')).toBe('*slack* _text_');
-    expect(translateFormatting('*telegram* _text_', 'discord', 'telegram')).toBe('*telegram* _text_');
     expect(translateFormatting('*matrix* _text_', 'discord', 'matrix')).toBe('*matrix* _text_');
+  });
+
+  it('translates Discord formatting to Telegram using the same whatsapp-style token mapping as Discord -> WhatsApp', () => {
+    expect(
+      translateFormatting(
+        '**bold** *italic* _also italic_ ~~strike~~ __underline__ `inline` ```mono```',
+        'discord',
+        'telegram',
+      ),
+    ).toBe('*bold* _italic_ _also italic_ ~strike~ underline `inline` ```mono```');
+  });
+
+  it('leaves WhatsApp-origin text unchanged for a Telegram destination (already whatsapp-style)', () => {
+    expect(translateFormatting('*bold* _italic_ ~strike~', 'whatsapp', 'telegram')).toBe(
+      '*bold* _italic_ ~strike~',
+    );
+  });
+
+  it('leaves Telegram-origin text unchanged for WhatsApp and Discord destinations (no inline markup to translate)', () => {
+    expect(translateFormatting('*not bold* _not italic_', 'telegram', 'whatsapp')).toBe(
+      '*not bold* _not italic_',
+    );
+    expect(translateFormatting('*not bold* _not italic_', 'telegram', 'discord')).toBe(
+      '*not bold* _not italic_',
+    );
   });
 
   it('does not corrupt user text that collides with the internal placeholder format', () => {

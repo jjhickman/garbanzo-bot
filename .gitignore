@@ -5,6 +5,7 @@ dist/
 .env.discord
 .env.remy
 .env.whatsapp
+.env.telegram
 .env.bak
 .env.*.bak
 opencode.json

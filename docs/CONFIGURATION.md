@@ -116,6 +116,10 @@ cp .env.discord.example .env.discord
 | `EVENT_REMINDER_LEAD_MINUTES` | No | Minutes before a parsed event start time to post a reminder (default: `120`) |
 | `APP_VERSION` | No | Version marker used for Docker image labels + release note headers |
 | `OWNER_JID` | WhatsApp only | Owner WhatsApp JID; required only when `MESSAGING_PLATFORM=whatsapp` |
+| `TELEGRAM_BOT_TOKEN` | Telegram only | Bot token from @BotFather; required only when `MESSAGING_PLATFORM=telegram` |
+| `TELEGRAM_OWNER_ID` | Telegram only | Owner's numeric Telegram user id (from @userinfobot); required only when `MESSAGING_PLATFORM=telegram` |
+| `TELEGRAM_CHATS_CONFIG_PATH` | No | Path to the Telegram chat config file (default: `config/telegram-chats.json`) |
+| `TELEGRAM_CHAT_SCOPE` | No | Telegram inbound scope: `configured` (default) ingests only enabled chats from `config/telegram-chats.json`; `all` ingests every chat the bot is added to. Default differs from WhatsApp's `all` because anyone can add the bot to any group via its `@username`. DMs still flow either way |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 | `INSTANCE_ID` | No | Deployment identity for cross-instance bridging; defaults to `MESSAGING_PLATFORM` |
 | `BRIDGE_ENABLED` | No | Master switch for cross-platform message bridging (default: `false`) |

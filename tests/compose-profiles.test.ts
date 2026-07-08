@@ -121,12 +121,14 @@ describe('platform-profile compose contract', () => {
       'prometheus',
       'qdrant',
       'rabbitmq',
+      'telegram',
       'whatsapp',
     ]);
 
-    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp']);
+    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp', 'telegram']);
     expect(service(compose, 'discord').profiles).toEqual(['discord']);
     expect(service(compose, 'whatsapp').profiles).toEqual(['whatsapp']);
+    expect(service(compose, 'telegram').profiles).toEqual(['telegram']);
     expect(service(compose, 'prometheus').profiles).toEqual(['monitoring']);
     expect(service(compose, 'grafana').profiles).toEqual(['monitoring']);
     expect(service(compose, 'rabbitmq').profiles).toEqual(['broker']);
@@ -148,6 +150,10 @@ describe('platform-profile compose contract', () => {
       { path: '.env', required: true },
       { path: '.env.whatsapp', required: false },
     ]);
+    expect(envFileEntries(service(compose, 'telegram'))).toEqual([
+      { path: '.env', required: true },
+      { path: '.env.telegram', required: false },
+    ]);
   });
 
   it('preserves all named Docker volumes byte-for-byte', () => {
@@ -161,12 +167,14 @@ describe('platform-profile compose contract', () => {
       'garbanzo-bot-qdrant',
       'garbanzo-bot-rabbitmq',
       'garbanzo-bot-remy-data',
+      'garbanzo-bot-telegram-data',
     ]);
   });
 
   it('pins platform identity, health ports, public ports, qdrant dependency, and host gateway', () => {
     const discord = service(compose, 'discord');
     const whatsapp = service(compose, 'whatsapp');
+    const telegram = service(compose, 'telegram');
 
     expect(envEntries(discord)).toEqual(
       expect.arrayContaining([
@@ -184,15 +192,26 @@ describe('platform-profile compose contract', () => {
         'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
       ]),
     );
+    expect(envEntries(telegram)).toEqual(
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=telegram',
+        'HEALTH_PORT=3005',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+      ]),
+    );
 
     expect(toStringList(discord.ports)).toContain('127.0.0.1:3002:3002');
     expect(toStringList(whatsapp.ports)).toContain('0.0.0.0:3001:3001');
+    expect(toStringList(telegram.ports)).toContain('127.0.0.1:3005:3005');
 
     expect(dependsOnEntries(discord)).toContain('qdrant');
     expect(dependsOnEntries(whatsapp)).toContain('qdrant');
+    expect(dependsOnEntries(telegram)).toContain('qdrant');
 
     expect(toStringList(discord.extra_hosts)).toContain('host.docker.internal:host-gateway');
     expect(toStringList(whatsapp.extra_hosts)).toContain('host.docker.internal:host-gateway');
+    expect(toStringList(telegram.extra_hosts)).toContain('host.docker.internal:host-gateway');
   });
 
   it('keeps platform-specific persisted data mounts', () => {
@@ -209,13 +228,22 @@ describe('platform-profile compose contract', () => {
         './config/groups.json:/app/config/groups.json:ro',
       ]),
     );
+    expect(toStringList(service(compose, 'telegram').volumes)).toEqual(
+      expect.arrayContaining([
+        'telegram_data:/app/data',
+        './config/telegram-chats.json:/app/config/telegram-chats.json:ro',
+      ]),
+    );
   });
 
-  it('ro-mounts the bridge map on both bot services', () => {
+  it('ro-mounts the bridge map on all bot services', () => {
     expect(toStringList(service(compose, 'discord').volumes)).toContain(
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
     expect(toStringList(service(compose, 'whatsapp').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
+    expect(toStringList(service(compose, 'telegram').volumes)).toContain(
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
   });

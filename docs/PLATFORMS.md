@@ -104,6 +104,76 @@ docker compose up -d
 docker compose logs -f whatsapp
 ```
 
+## Telegram Support
+
+Telegram runs on [grammY](https://grammy.dev/) over long polling — no inbound
+webhook config needed, which fits self-hosters. Setup uses the official
+BotFather:
+
+1. Message [@BotFather](https://t.me/BotFather) and run `/newbot`; follow its
+   prompts to create the bot, then copy the token it gives you.
+2. Message @BotFather again, run `/setprivacy`, choose the bot, then choose
+   **Disable**. This is the recommended setup: Telegram bots default to
+   "privacy mode," which withholds plain-text messages (including
+   `@mentions`) from the bot entirely — disabling it lets the bot see every
+   message in a group so it can apply `requireMention` itself, the same
+   shape as Discord's Message Content intent plus `requireMention`. Privacy
+   mode stays a valid, degraded, replies-and-commands-only fallback for
+   operators who don't want to touch this setting.
+3. Message [@userinfobot](https://t.me/userinfobot) from your own account to
+   get your numeric Telegram user id (`TELEGRAM_OWNER_ID`).
+4. Add the bot to a group, send a message, then read the chat id off
+   @userinfobot (forward the group message to it) or from
+   `https://api.telegram.org/bot<token>/getUpdates` (`"chat":{"id":...}`).
+   Group ids are negative; supergroup/channel ids are negative with a `-100`
+   prefix (e.g. `-1001234567890`).
+
+For Docker Compose:
+
+```bash
+cp .env.example .env
+cp .env.telegram.example .env.telegram
+cp config/telegram-chats.example.json config/telegram-chats.json
+# In .env: COMPOSE_PROFILES=telegram
+# In .env.telegram: set TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID, and chat ids.
+docker compose up -d
+docker compose logs -f telegram
+```
+
+For native development:
+
+```bash
+# .env
+MESSAGING_PLATFORM=telegram
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_OWNER_ID=...
+
+npm run dev
+```
+
+Chat allowlists live in `config/telegram-chats.json`, following the same
+`{ name, enabled, requireMention, enabledFeatures }` shape as
+`config/discord-channels.json`.
+
+`TELEGRAM_CHAT_SCOPE` controls which chats the bot ingests, and its default
+differs deliberately from WhatsApp's: it defaults to `configured` (only
+chats enabled in `config/telegram-chats.json`), not `all`. A WhatsApp number
+only joins groups the operator explicitly links; anyone can add a Telegram
+bot to any group via its `@username`, so ingesting every group by default
+would be unsafe. DMs are never gated by this setting.
+
+The Docker service is `telegram`, and its health server listens on port
+`3005` (3001 is WhatsApp, 3002 is Discord, 3003 is a documented
+compose-copy example port, and 3004 is reserved for the Matrix service).
+
+Voice notes are transcribed through the same Whisper/`WHISPER_URL` path used
+by the other platforms — no separate transcription config.
+
+The model is instructed to write the same WhatsApp-style markdown
+(`*bold*`, `_italic_`, `~strike~`) used across every other platform prompt;
+the Telegram adapter translates that into Telegram's MarkdownV2 at send
+time, so persona and prompt authors never need Telegram-specific syntax.
+
 ## Slack Support
 
 For official Slack runtime:

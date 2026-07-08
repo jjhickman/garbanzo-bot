@@ -9,6 +9,18 @@ import { translateFormatting } from './format-translate.js';
 const MAX_DISCORD_RETRY_AFTER_MS = 5_000;
 const SECONDS_TO_MS = 1_000;
 
+// Telegram enforces roughly 20 messages/minute per group (undocumented but
+// widely observed limit) on top of its per-chat 429 responses. The adapter's
+// send path already retries a 429 once using the server's own retry_after
+// (src/platforms/telegram/adapter.ts) — that is REACTIVE and per-call, so it
+// protects a single send but does nothing to stop a burst of bridge relays
+// (a busy WhatsApp/Discord source relaying many messages in quick
+// succession) from systematically tripping 429s against a Telegram
+// destination chat. This is a conservative PROACTIVE minimum spacing
+// between sends to the SAME destination chat, applied only when this
+// instance's platform is Telegram — other platforms are unaffected.
+const TELEGRAM_MIN_SEND_INTERVAL_MS = 3_000;
+
 type RelayDelivererOptions = {
   messenger: Pick<PlatformMessenger, 'sendText'>;
   platform: MessagingPlatform;
@@ -31,6 +43,11 @@ export function createRelayDeliverer({
   platform,
   bufferEnvelope,
 }: RelayDelivererOptions): { deliver(envelope: BridgeEnvelope): Promise<RelayDeliveryStatus> } {
+  // Per-destination-chat "last sent at" clock, scoped to this deliverer
+  // instance (one per running bridge). Only consulted when platform ===
+  // 'telegram' (see sendTelegramWithPacing).
+  const lastSentAtByChat = new Map<string, number>();
+
   return {
     async deliver(envelope: BridgeEnvelope): Promise<RelayDeliveryStatus> {
       const text = relayText(envelope, platform);
@@ -38,6 +55,8 @@ export function createRelayDeliverer({
       try {
         if (platform === 'discord') {
           await sendDiscordWithRateGuard(messenger, envelope.targetChatId, text);
+        } else if (platform === 'telegram') {
+          await sendTelegramWithPacing(messenger, envelope.targetChatId, text, lastSentAtByChat);
         } else {
           await messenger.sendText(envelope.targetChatId, text);
         }
@@ -100,6 +119,37 @@ async function sendDiscordWithRateGuard(
     if (!isDiscordRateLimitError(err)) throw err;
     await sleep(parseDiscordRetryAfterMs(err));
     await messenger.sendText(chatId, text);
+  }
+}
+
+/**
+ * Enforce a minimum gap since the last send to this destination chat before
+ * sending, so a burst of bridge relays can't systematically outrun
+ * Telegram's per-chat rate limit. The 429-retry the adapter already does
+ * (adapter.ts) stays as a reactive backstop for the rare case this proactive
+ * spacing still isn't enough (clock skew, other traffic to the same chat,
+ * etc.) — this does not replace it.
+ */
+async function sendTelegramWithPacing(
+  messenger: Pick<PlatformMessenger, 'sendText'>,
+  chatId: string,
+  text: string,
+  lastSentAtByChat: Map<string, number>,
+): Promise<void> {
+  const lastSentAt = lastSentAtByChat.get(chatId);
+  if (lastSentAt !== undefined) {
+    const elapsed = Date.now() - lastSentAt;
+    const remaining = TELEGRAM_MIN_SEND_INTERVAL_MS - elapsed;
+    if (remaining > 0) await sleep(remaining);
+  }
+
+  try {
+    await messenger.sendText(chatId, text);
+  } finally {
+    // Recorded even on failure: a failed send still consumed a moment at
+    // the chat, and NOT recording it would let a fast retry loop bypass the
+    // spacing entirely on repeated errors.
+    lastSentAtByChat.set(chatId, Date.now());
   }
 }
 

@@ -9,8 +9,10 @@ global:
   evaluation_interval: 30s
 
 scrape_configs:
-  # Prometheus scrapes both platform instances. If one profile is not running,
-  # that instance intentionally appears as a down target.
+  # Prometheus scrapes every platform instance. If a profile is not running,
+  # that instance intentionally appears as a down target (this is expected
+  # for operators who don't run every platform, e.g. telegram:3005 is
+  # permanently down for a discord-only or whatsapp-only deployment).
   - job_name: discord
     metrics_path: /metrics
     authorization:
@@ -26,6 +28,14 @@ scrape_configs:
       credentials_file: /prometheus/token
     static_configs:
       - targets: ["whatsapp:3001"]
+
+  - job_name: telegram
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /prometheus/token
+    static_configs:
+      - targets: ["telegram:3005"]
 
   - job_name: prometheus
     static_configs:

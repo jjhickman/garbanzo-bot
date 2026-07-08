@@ -6,7 +6,7 @@ Garbanzo is a Discord-first, multi-platform community bot. One process runs one 
 ## Runtime Shape
 
 - **Entry and lifecycle:** startup, config validation, health server, maintenance jobs, bridge lifecycle, and platform runtime selection.
-- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp and Discord are fully supported. Slack, Telegram, and Matrix are in development.
+- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp, Discord, and Telegram are fully supported. Slack is an experimental scaffold; Matrix is in development.
 - **Core pipeline:** platform-neutral inbound processing, group command routing, owner DM routing, response generation, and outbound messenger contracts.
 - **AI layer:** provider failover through `AI_PROVIDER_ORDER`, optional local OpenAI API-compatible AI provider for simple queries, shared tool definitions, and provider-specific request builders.
 - **Persistence:** SQLite is the default source of record. Postgres support exists behind the database backend layer for managed deployments.
@@ -39,7 +39,9 @@ Discord uses the official Gateway through the Discord runtime. Channel and role 
 
 WhatsApp uses Baileys with persistent auth state, browser or terminal login, and outbound anti-ban controls. Group bindings live in `config/groups.json`. The default Docker service is `whatsapp`, and its health server listens on port `3001`.
 
-Both services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, and `.env.whatsapp` for WhatsApp instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `monitoring`, and optional `broker`.
+Telegram uses grammY over long polling (no inbound webhook config needed). Chat bindings live in `config/telegram-chats.json`, with `TELEGRAM_CHATS_CONFIG_PATH` available for overrides. The default Docker service is `telegram`, and its health server listens on port `3005`. See [docs/PLATFORMS.md](PLATFORMS.md) for the BotFather setup walkthrough and the privacy-mode recommendation.
+
+All three services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, `.env.whatsapp` for WhatsApp instance settings, and `.env.telegram` for Telegram instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `telegram`, `monitoring`, and optional `broker`.
 
 ## Bridge Subsystem
 

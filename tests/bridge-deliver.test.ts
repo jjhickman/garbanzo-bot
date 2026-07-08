@@ -218,6 +218,73 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledTimes(1);
   });
 
+  it('sends immediately to a Telegram destination when no prior send to that chat is recorded', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('paces sends to the same Telegram destination chat at least 3s apart', async () => {
+    vi.useFakeTimers();
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    const first = deliver.deliver(envelope());
+    await vi.runAllTimersAsync();
+    await expect(first).resolves.toBe('sent');
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    const second = deliver.deliver(envelope());
+    // Not yet sent — waiting out the 3s minimum interval.
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(second).resolves.toBe('sent');
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not pace sends to different Telegram destination chats', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'telegram' });
+
+    await deliver.deliver(envelope({ targetChatId: 'chat-a' }));
+    await deliver.deliver(envelope({ targetChatId: 'chat-b' }));
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not pace non-Telegram destinations', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+
+    await deliver.deliver(envelope());
+    await deliver.deliver(envelope());
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('records the Telegram pacing clock even when the send fails, so a fast retry loop cannot bypass spacing', async () => {
+    vi.useFakeTimers();
+    const failure = new Error('telegram boom');
+    const sendText = vi.fn<SendText>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(undefined);
+    const { deliver } = deliverer({ platform: 'telegram', sendText });
+
+    const first = expect(deliver.deliver(envelope())).rejects.toBe(failure);
+    await vi.runAllTimersAsync();
+    await first;
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    const second = deliver.deliver(envelope());
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(sendText).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(second).resolves.toBe('sent');
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
   it('does not import or call the WhatsApp control-send bypass', () => {
     const source = readFileSync('src/bridge/relay-deliver.ts', 'utf8');
 

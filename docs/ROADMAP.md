@@ -52,8 +52,8 @@ Priority order:
   secret before the first publish; docs use the git-clone quickstart until
   publish succeeds, then flip to `npx garbanzo-bot setup`. Pending release.
 - Setup guide: [docs/QUICKSTART.md](QUICKSTART.md).
-- Telegram remains the next platform adapter after this milestone (see
-  Platform expansion below).
+- Telegram shipped as a fully supported platform adapter (v3.3.0); Matrix is
+  next (see Platform expansion below).
 
 ### Platform Bridging - Delivered (v3)
 
@@ -98,15 +98,15 @@ Priority order:
 
 ## Platform expansion (researched 2026-07-06)
 
-Candidates for the next platform adapter, ranked:
+Candidates for the next platform adapter, ranked at research time:
 
-1. **Telegram** — lowest engineering risk of any candidate: an official free
-   Bot API and a mature TypeScript-native client library, with no account-ban
-   risk (unlike WhatsApp/Baileys).
-2. **Matrix** — best fit for a self-hosted, privacy-minded community
-   audience, backed by a real demand signal (a large spike in Matrix interest
-   during a 2026 Discord trust incident), with a healthy TypeScript-native
-   bot SDK.
+1. ~~**Telegram**~~ — shipped in v3.3.0: an official free Bot API and a
+   mature TypeScript-native client library (grammY), with no account-ban
+   risk (unlike WhatsApp/Baileys). See [docs/PLATFORMS.md](PLATFORMS.md).
+2. **Matrix** (in development, riding with the v3.3.0 series) — best fit for
+   a self-hosted, privacy-minded community audience, backed by a real demand
+   signal (a large spike in Matrix interest during a 2026 Discord trust
+   incident), with a healthy TypeScript-native bot SDK.
 3. **Mattermost** — a clean official bot-account API and a genuinely free
    self-hosted core (bot accounts don't consume paid seats), with strong
    audience overlap as another self-hosted OSS chat tool.

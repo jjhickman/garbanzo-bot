@@ -16,6 +16,11 @@ export const BANNED_STALE_DOC_PATTERNS = [
   /\bdefault\b.*http:\/\/qdrant:6333/i,
   /npx garbanzo\b(?!-bot)/,
   /Docker (?:and Docker Compose )?(?:is|are) required/i,
+  // Regression guard (T3, v3.3.0): Telegram shipped as a fully supported
+  // platform — "Telegram (in development)"-style claims (Telegram named as
+  // the direct subject of "in development", not merely co-mentioned near a
+  // still-in-development platform like Matrix) must not creep back in.
+  /Telegram\s*(?:<em>)?\s*(?:is\s+|are\s+)?in development/i,
 ] as const;
 
 const repoRoot = process.cwd();

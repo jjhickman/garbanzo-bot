@@ -207,8 +207,10 @@ function configExistence(homeDir: string): Record<string, boolean> {
     '.env',
     '.env.discord',
     '.env.whatsapp',
+    '.env.telegram',
     'config/groups.json',
     'config/discord-channels.json',
+    'config/telegram-chats.json',
     'config/bridge-map.json',
     'config/rag-sources.json',
   ];

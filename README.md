@@ -8,7 +8,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord and WhatsApp today, with Telegram and Matrix adapters in development.
+Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord, WhatsApp, and Telegram today, with a Matrix adapter in development.
 
 ## Why Garbanzo
 - Runs anywhere, including self-hosted, with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
@@ -117,7 +117,8 @@ Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 - **Discord** - default runtime using the official Gateway API, opt-in channels, owner escalation, welcomes, scheduled recaps, reminders, and band-mode roles.
 - **WhatsApp** - fully supported through Baileys v7, browser login, linked-device auth persistence, group config, and anti-ban outbound safety.
 - **Slack** - Events API support plus a local demo mode for pipeline checks.
-- **Telegram and Matrix** - the platform architecture supports them; adapters are in development.
+- **Telegram** - grammY-based long-polling bot, privacy-mode-off recommended setup, MarkdownV2 formatting, and voice-note transcription.
+- **Matrix** - the platform architecture supports it; an adapter is in development.
 
 Bridging connects channels and groups across platforms into a single conversation while keeping each bot instance independent. Transports scale from a simple two-instance setup to a message broker for larger topologies, and instances can share one account or stay fully isolated. Setup, topology options, and rate-safety details live in [docs/BRIDGING.md](docs/BRIDGING.md).
 
