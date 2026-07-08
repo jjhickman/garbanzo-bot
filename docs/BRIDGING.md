@@ -236,9 +236,13 @@ transport when either is true:
 - **Durability across long peer outages.** Under HTTP, an undelivered
   message keeps retrying from the sender's outbox with growing backoff and
   eventually dead-letters if the peer stays unreachable too long. Under
-  AMQP, once a message is published (with a publisher confirm) it sits
-  durably on the broker's queue for that instance, regardless of how long
-  the instance is down, and is delivered when it reconnects.
+  AMQP, once a message is published with `mandatory: true`, routed to the
+  target instance queue, and confirmed by the broker, it sits durably on that
+  queue regardless of how long the instance is down, and is delivered when it
+  reconnects. If the target queue/binding does not exist yet, RabbitMQ
+  returns the mandatory publish; Garbanzo treats that as a retryable transport
+  failure so the sender's outbox keeps the row and retries instead of
+  accepting silent loss.
 
 To enable it:
 

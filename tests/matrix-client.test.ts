@@ -266,6 +266,28 @@ describe('Matrix client handler wiring', () => {
     expect(env.botUserId).toBe(BOT.userId);
   });
 
+  it('passes the resolved owner DM room id separately from the owner MXID', async () => {
+    const { client, fakeClient, processMatrixEvent } = await setup();
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent());
+    await Promise.resolve();
+
+    const [, , env] = processMatrixEvent.mock.calls[0] as [unknown, unknown, Record<string, unknown>];
+    expect(env.ownerId).toBe('@owner:example.org');
+    expect(env.ownerRoomId).toBe('!dm:example.org');
+  });
+
+  it('logs loudly when the owner DM room cannot be resolved', async () => {
+    const { client, loggerWarn } = await setup({ resolveOwnerRoomId: async () => null });
+    await client.start();
+
+    expect(loggerWarn).toHaveBeenCalledWith(
+      { ownerId: '@owner:example.org' },
+      'Matrix owner DM room could not be resolved; moderation and feedback alerts cannot be delivered until this is fixed',
+    );
+  });
+
   it('drops fromSelf messages without dispatching', async () => {
     const { client, fakeClient, processMatrixEvent } = await setup();
     await client.start();

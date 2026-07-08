@@ -27,6 +27,9 @@ export interface AmqpTransportOptions {
 }
 
 type InboundHandler = (envelope: BridgeEnvelope) => Promise<InboundBridgeResult>;
+type ReturnedPublish = ConsumeMessage & {
+  fields: ConsumeMessage['fields'] & { exchange?: string; routingKey?: string };
+};
 
 /**
  * AMQP/RabbitMQ bridge transport (owner-directed N-instance topology).
@@ -51,6 +54,8 @@ export function createAmqpBridgeTransport({ instanceId, brokerUrl }: AmqpTranspo
   let inboundHandler: InboundHandler | null = null;
   let connectPromise: Promise<ConfirmChannel> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  const pendingMandatoryReturns = new Map<string, (msg: ReturnedPublish) => void>();
+  let publishSeq = 0;
   // In-flight setTimeout handles from deferred deliveries (see
   // attemptDelivery) that are still waiting to retry. Tracked so stop() can
   // cancel them — the held messages themselves need no cleanup beyond that,
@@ -104,6 +109,19 @@ export function createAmqpBridgeTransport({ instanceId, brokerUrl }: AmqpTranspo
 
     const ch = await conn.createConfirmChannel();
     ch.on('error', (err) => logger.error({ err }, 'Bridge AMQP channel error'));
+    ch.on('return', (msg: ReturnedPublish) => {
+      const correlationId = msg.properties.correlationId;
+      const pending = correlationId ? pendingMandatoryReturns.get(correlationId) : undefined;
+      if (pending) {
+        pendingMandatoryReturns.delete(correlationId);
+        pending(msg);
+        return;
+      }
+      logger.warn(
+        { exchange: msg.fields.exchange, routingKey: msg.fields.routingKey, correlationId },
+        'Bridge AMQP: unroutable returned publish without a pending delivery',
+      );
+    });
     await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
 
     connection = conn;
@@ -270,10 +288,20 @@ export function createAmqpBridgeTransport({ instanceId, brokerUrl }: AmqpTranspo
       }
 
       const body = Buffer.from(JSON.stringify(envelope), 'utf8');
+      const correlationId = `${envelope.idempotencyKey}:${++publishSeq}`;
 
       try {
         await new Promise<void>((resolve, reject) => {
-          ch.publish(EXCHANGE, envelope.targetInstance, body, { persistent: true }, (err) => {
+          pendingMandatoryReturns.set(correlationId, (msg) => {
+            reject(new Error(`AMQP mandatory publish returned unroutable message for ${msg.fields.routingKey ?? envelope.targetInstance}`));
+          });
+
+          ch.publish(EXCHANGE, envelope.targetInstance, body, {
+            persistent: true,
+            mandatory: true,
+            correlationId,
+          }, (err) => {
+            pendingMandatoryReturns.delete(correlationId);
             if (err) reject(err instanceof Error ? err : new Error(String(err)));
             else resolve();
           });

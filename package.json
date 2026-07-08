@@ -83,6 +83,7 @@
     "url": "https://github.com/jjhickman/garbanzo-bot/issues"
   },
   "dependencies": {
+    "@matrix-org/matrix-sdk-crypto-nodejs": "file:stubs/matrix-sdk-crypto-nodejs",
     "@aws-sdk/client-bedrock-runtime": "^3.1080.0",
     "@hapi/boom": "^10.0.1",
     "@qdrant/js-client-rest": "^1.18.0",
@@ -115,6 +116,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "@matrix-org/matrix-sdk-crypto-nodejs": "$@matrix-org/matrix-sdk-crypto-nodejs",
     "fast-xml-parser": ">=5.3.6",
     "protobufjs": "^7.6.2",
     "undici": "^6.27.0",

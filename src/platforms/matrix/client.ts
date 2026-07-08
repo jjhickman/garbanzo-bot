@@ -359,6 +359,12 @@ export function createMatrixClient(deps: MatrixClientDeps): {
       });
 
       ownerRoomId ??= await deps.resolveOwnerRoomId?.(matrixClient, deps.ownerId) ?? undefined;
+      if (!ownerRoomId) {
+        logger.warn(
+          { ownerId: deps.ownerId },
+          'Matrix owner DM room could not be resolved; moderation and feedback alerts cannot be delivered until this is fixed',
+        );
+      }
       messenger = createMatrixAdapter(matrixClient);
 
       void Promise.resolve(matrixClient.start()).then(() => {

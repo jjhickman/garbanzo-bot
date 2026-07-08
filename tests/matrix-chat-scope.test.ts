@@ -262,3 +262,130 @@ describe('Matrix processor — synthesized voice placeholder (mirrors telegram)'
     expect(mocks.getResponse).toHaveBeenCalledWith('has a caption', expect.anything(), expect.any(Function), undefined);
   });
 });
+
+describe('Matrix processor — owner alert routing', () => {
+  function createMessenger() {
+    const sendText = vi.fn(async () => undefined);
+    return {
+      platform: 'matrix' as const,
+      sendText,
+      sendPoll: vi.fn(async () => undefined),
+      sendTextWithRef: vi.fn(async (chatId: string) => ({ platform: 'matrix' as const, chatId, id: 'm1', ref: {} })),
+      sendDocument: vi.fn(async (chatId: string) => ({ platform: 'matrix' as const, chatId, id: 'd1', ref: {} })),
+      sendAudio: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => undefined),
+    };
+  }
+
+  function setupRealPipelineMocks(options: {
+    moderationFlag?: boolean;
+    feedbackOwnerAlert?: string;
+  } = {}) {
+    vi.doMock('../src/platforms/matrix/matrix-config.js', () => ({
+      isMatrixRoomEnabled: vi.fn(() => true),
+      matrixRoomRequiresMention: vi.fn(() => false),
+      isMatrixFeatureEnabled: vi.fn(() => true),
+      getMatrixRoomName: vi.fn(() => 'Matrix Room'),
+    }));
+    vi.doMock('../src/core/response-router.js', () => ({ getResponse: vi.fn(async () => null) }));
+    vi.doMock('../src/bridge/capture-hook.js', () => ({ captureForBridge: vi.fn() }));
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio: vi.fn(async () => null) }));
+    vi.doMock('../src/middleware/context.js', () => ({ recordMessage: vi.fn(async () => undefined) }));
+    vi.doMock('../src/middleware/stats.js', () => ({
+      recordGroupMessage: vi.fn(),
+      recordModerationFlag: vi.fn(),
+      recordBotResponse: vi.fn(),
+    }));
+    vi.doMock('../src/utils/db.js', () => ({
+      touchProfile: vi.fn(async () => undefined),
+      updateActiveGroups: vi.fn(async () => undefined),
+      logModeration: vi.fn(async () => undefined),
+      getStrikeCount: vi.fn(async () => 0),
+    }));
+    vi.doMock('../src/middleware/rate-limit.js', () => ({
+      checkRateLimit: vi.fn(() => null),
+      recordResponse: vi.fn(),
+    }));
+    vi.doMock('../src/middleware/retry.js', () => ({ queueRetry: vi.fn() }));
+    vi.doMock('../src/features/memory-extract.js', () => ({ maybeExtractCommunityFacts: vi.fn(async () => undefined) }));
+    vi.doMock('../src/features/moderation.js', () => ({
+      checkMessage: vi.fn(async () => (options.moderationFlag
+        ? { reason: 'hate', severity: 'high', source: 'regex' }
+        : null)),
+      formatModerationAlert: vi.fn(() => 'moderation alert'),
+      applyStrikeAndMute: vi.fn(() => ({ muted: false })),
+      isSoftMuted: vi.fn(() => false),
+    }));
+    vi.doMock('../src/features/feedback.js', () => ({
+      handleFeedbackSubmit: vi.fn(async () => ({
+        response: 'feedback received',
+        ownerAlert: options.feedbackOwnerAlert,
+      })),
+      handleUpvote: vi.fn(async () => 'upvoted'),
+    }));
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.doUnmock('../src/core/process-inbound-message.js');
+    vi.doUnmock('../src/core/process-group-message.js');
+    vi.doUnmock('../src/utils/config.js');
+    vi.doUnmock('../src/middleware/logger.js');
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  it('sends Matrix moderation owner alerts to the resolved owner DM room id', async () => {
+    setupRealPipelineMocks({ moderationFlag: true });
+    const { processMatrixEvent } = await import('../src/platforms/matrix/processor.js');
+    const messenger = createMessenger();
+
+    await processMatrixEvent(
+      messenger as never,
+      baseEvent({ text: 'flag this message' }),
+      {
+        ownerId: '@owner:example.org',
+        ownerRoomId: '!owner-dm:example.org',
+        botUserId: '@garbanzo:example.org',
+      },
+    );
+
+    expect(messenger.sendText).toHaveBeenCalledWith('!owner-dm:example.org', 'moderation alert');
+    expect(messenger.sendText).not.toHaveBeenCalledWith('@owner:example.org', 'moderation alert');
+  });
+
+  it('sends Matrix feedback owner alerts to the room id while owner identity remains the MXID', async () => {
+    setupRealPipelineMocks({ feedbackOwnerAlert: 'feedback alert' });
+    vi.doMock('../src/core/process-group-message.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../src/core/process-group-message.js')>();
+      return {
+        ...actual,
+        processGroupMessage: vi.fn(actual.processGroupMessage),
+      };
+    });
+    const { processMatrixEvent } = await import('../src/platforms/matrix/processor.js');
+    const groupModule = await import('../src/core/process-group-message.js');
+    const messenger = createMessenger();
+
+    await processMatrixEvent(
+      messenger as never,
+      baseEvent({ text: '!suggest make this better', senderId: '@owner:example.org' }),
+      {
+        ownerId: '@owner:example.org',
+        ownerRoomId: '!owner-dm:example.org',
+        botUserId: '@garbanzo:example.org',
+      },
+    );
+
+    expect(messenger.sendText).toHaveBeenCalledWith('!configured:example.org', 'feedback received', expect.anything());
+    expect(messenger.sendText).toHaveBeenCalledWith('!owner-dm:example.org', 'feedback alert');
+    const calls = vi.mocked(groupModule.processGroupMessage).mock.calls;
+    expect(calls[0]?.[0]).toMatchObject({
+      ownerId: '!owner-dm:example.org',
+      ownerUserId: '@owner:example.org',
+    });
+  });
+});

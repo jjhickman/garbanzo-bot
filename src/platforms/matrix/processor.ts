@@ -128,6 +128,7 @@ async function processMatrixInbound(
   const roomEnabled = options.roomEnabled ?? isMatrixRoomEnabled;
   const featureEnabled = options.featureEnabled
     ?? ((roomId: string, feature: string) => isMatrixFeatureEnabled(roomId, feature));
+  const ownerAlertRoomId = env.ownerRoomId ?? env.ownerId;
 
   await processInboundMessage(messenger, inbound, {
     isReplyToBot: () => false,
@@ -158,7 +159,7 @@ async function processMatrixInbound(
         chatId: m.chatId,
         senderId: m.senderId,
         groupName: getMatrixRoomName(m.chatId) ?? `Matrix ${m.chatId}`,
-        ownerId: env.ownerId,
+        ownerId: ownerAlertRoomId,
         ownerUserId: env.ownerId,
         query,
         isFeatureEnabled: featureEnabled,
@@ -190,7 +191,7 @@ async function processMatrixInbound(
 
     captureForBridge,
   }, {
-    ownerId: env.ownerId,
+    ownerId: ownerAlertRoomId,
     isGroupEnabled: roomEnabled,
     shouldIngestGroupChat: config.MATRIX_CHAT_SCOPE === 'configured' ? roomEnabled : undefined,
     introductionsChatId: null,

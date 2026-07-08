@@ -19,6 +19,7 @@ class FakeChannel {
   nacked: Array<{ msg: unknown; requeue: boolean }> = [];
   closed = false;
   confirmBehavior: 'ok' | 'error' = 'ok';
+  returnOnPublish = false;
   handlers = new Map<string, OnHandler[]>();
 
   on(event: string, handler: OnHandler): this {
@@ -53,10 +54,19 @@ class FakeChannel {
     exchange: string,
     routingKey: string,
     content: Buffer,
-    options: unknown,
+    options: { correlationId?: string } & Record<string, unknown>,
     callback?: (err: unknown, ok: unknown) => void,
   ): boolean {
     this.published.push({ exchange, routingKey, content, options });
+    if (this.returnOnPublish) {
+      for (const handler of this.handlers.get('return') ?? []) {
+        handler({
+          fields: { exchange, routingKey },
+          properties: { correlationId: options.correlationId },
+          content,
+        });
+      }
+    }
     if (this.confirmBehavior === 'ok') callback?.(null, {});
     else callback?.(new Error('publish nacked'), undefined);
     return true;
@@ -168,7 +178,24 @@ describe('createAmqpBridgeTransport', () => {
     expect(lastConnection.channel.published).toHaveLength(1);
     const [publishCall] = lastConnection.channel.published;
     expect(publishCall?.routingKey).toBe('whatsapp-band');
-    expect(publishCall?.options).toMatchObject({ persistent: true });
+    expect(publishCall?.options).toMatchObject({ persistent: true, mandatory: true });
+
+    await transport.stop();
+  });
+
+  it('rejects delivery as retryable when RabbitMQ returns an unroutable mandatory publish', async () => {
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const { TransportDeliveryError } = await import('../src/bridge/transport.js');
+    lastConnection.channel.returnOnPublish = true;
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+
+    await expect(transport.deliver(makeEnvelope({ targetInstance: 'not-yet-declared' }), null)).rejects.toMatchObject({
+      name: 'TransportDeliveryError',
+      retryable: true,
+    });
+    await expect(transport.deliver(makeEnvelope({ targetInstance: 'not-yet-declared' }), null)).rejects.toBeInstanceOf(
+      TransportDeliveryError,
+    );
 
     await transport.stop();
   });

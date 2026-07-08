@@ -33,16 +33,29 @@ npm name, MIT)** for T5, gap disclosed for sign-off (§2), not glossed over.
 
 ### E2EE cost per SDK (the plan's named discriminator)
 
-`matrix-bot-sdk` E2EE is opt-in via `RustSdkCryptoStorageProvider`,
-wrapping `@matrix-org/matrix-sdk-crypto-nodejs` — an N-API **native
-binary** (Olm/Megolm). Its latest release (v0.6.1, 2026-06-12) ships
-prebuilds for `linux-x64-gnu`, `linux-x64-musl`, `linux-arm64-gnu`, darwin,
-win32 — **no `linux-arm64-musl`**. Production here is a Raspberry Pi 5
-(arm64) on `node:25-alpine` (musl) (`Dockerfile:7,35`): no prebuilt binary
-exists for that combination, so E2EE would mean compiling from source —
-adding a Rust toolchain to the Docker build. Access token/device ID must
-also stay stable across restarts (crypto storage keys off device ID); key
-backup/cross-signing UX is unaddressed by the SDK's own docs.
+`matrix-bot-sdk` E2EE is opt-in at runtime via
+`RustSdkCryptoStorageProvider`, but the SDK declares
+`@matrix-org/matrix-sdk-crypto-nodejs` as a regular dependency, so the native
+package is on the install path even when this project never enables E2EE.
+That package is an N-API **native binary** (Olm/Megolm). The version pulled
+by `matrix-bot-sdk@0.8.0` is `0.4.0`; its `postinstall` runs
+`download-lib.js`, and that script throws on `linux/arm64` + musl. Production
+here is a Raspberry Pi 5 (arm64) on `node:25-alpine` (musl)
+(`Dockerfile:7,35`), so leaving the real package in the tree breaks
+`npm ci` before the app can build.
+
+Garbanzo resolves that install-time problem by depending on a repo-local
+stub package at `stubs/matrix-sdk-crypto-nodejs` and overriding
+`@matrix-org/matrix-sdk-crypto-nodejs` to that direct dependency. The stub
+has no install script and exports just enough CommonJS/type surface for
+`matrix-bot-sdk` to import in unencrypted mode. Any attempted E2EE
+initialization throws a clear "unencrypted rooms only" error. The Dockerfile
+copies `stubs/` before `npm ci`, and
+`tests/dockerfile-runtime-assets.test.ts` asserts the override and the
+absence of a native crypto install script in the locked install path. Access
+token/device ID must also stay stable across restarts if E2EE is ever
+revisited (crypto storage keys off device ID); key backup/cross-signing UX is
+unaddressed by the SDK's own docs.
 `matrix-js-sdk`'s E2EE (`@matrix-org/matrix-sdk-crypto-wasm`,
 `initRustCrypto()`) is pure WASM — no os/cpu restriction, zero deps,
 released 2026-06-02 — sidestepping the native-binary/arch gap, though it
@@ -303,11 +316,13 @@ room on the owner's homeserver, bridged to Discord, before tagging
   (2024-01→2026-01) and the absence of built-in 429 retry handling — both
   real, both manageable, neither a reason to pick a worse-fitting
   alternative.
-- **E2EE posture:** defer, confirming the plan's default. Deferring is
-  cheap; shipping it is not — the native crypto module has no
-  `linux-arm64-musl` prebuild for this project's actual deployment target
-  (Raspberry Pi 5 + `node:25-alpine`), so enabling E2EE today means adding
-  a Rust toolchain to the Docker build. Document "invite the bot only into
+- **E2EE posture:** defer, confirming the plan's default. Shipping it is not
+  cheap: the native crypto module that `matrix-bot-sdk` installs by default
+  has no usable `linux-arm64-musl` install path for this project's actual
+  deployment target (Raspberry Pi 5 + `node:25-alpine`). v3.3.0 replaces that
+  dependency with the repo-local no-native stub described in §1, so
+  unencrypted Matrix support can build on Alpine arm64 without adding Rust or
+  downloading a native crypto binary. Document "invite the bot only into
   unencrypted rooms" explicitly in PLATFORMS.md and in-product logging.
 - **Config shape:** `MATRIX_HOMESERVER_URL` + `MATRIX_ACCESS_TOKEN` +
   `MATRIX_OWNER_ID` (`@user:server`, regex-validated), required iff
