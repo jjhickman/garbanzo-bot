@@ -13,10 +13,12 @@ services:
     image: qdrant/qdrant:latest
     profiles: ["discord", "whatsapp", "telegram", "matrix"]
     restart: unless-stopped
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=${QDRANT_PORT:-6333}
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333' || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/$${QDRANT__SERVICE__HTTP_PORT:-6333}' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -36,12 +38,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=discord
-      - HEALTH_PORT=3002
+      - HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}
       - HEALTH_BIND_HOST=0.0.0.0
       # Operator overrides from root .env win; default targets the compose service
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "127.0.0.1:3002:3002"
+      - "127.0.0.1:${DISCORD_HEALTH_PORT:-3002}:${DISCORD_HEALTH_PORT:-3002}"
     volumes:
       - discord_data:/app/data
       - ./config/discord-channels.json:/app/config/discord-channels.json:ro
@@ -75,12 +77,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=whatsapp
-      - HEALTH_PORT=3001
+      - HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}
       - HEALTH_BIND_HOST=0.0.0.0
       # Operator overrides from root .env win; default targets the compose service
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "0.0.0.0:3001:3001"
+      - "0.0.0.0:${WHATSAPP_HEALTH_PORT:-3001}:${WHATSAPP_HEALTH_PORT:-3001}"
     volumes:
       - baileys_auth:/app/baileys_auth
       - garbanzo_data:/app/data
@@ -118,16 +120,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=telegram
-      # 3001/3002 are whatsapp/discord; 3003 is the documented whatsapp-band
-      # compose-copy example port (docs/BRIDGING.md); 3004 is the matrix
-      # service (see it below in this file) — 3005 is the first genuinely
-      # unclaimed port.
-      - HEALTH_PORT=3005
+      - HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}
       - HEALTH_BIND_HOST=0.0.0.0
       # Operator overrides from root .env win; default targets the compose service
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "127.0.0.1:3005:3005"
+      - "127.0.0.1:${TELEGRAM_HEALTH_PORT:-3005}:${TELEGRAM_HEALTH_PORT:-3005}"
     volumes:
       - telegram_data:/app/data
       - ./config/telegram-chats.json:/app/config/telegram-chats.json:ro
@@ -161,14 +159,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - GARBANZO_VERSION=${APP_VERSION:-latest}
       - MESSAGING_PLATFORM=matrix
-      # 3004 was reserved for Matrix when the Telegram service claimed 3005
-      # (see the telegram service's port comment above).
-      - HEALTH_PORT=3004
+      - HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}
       - HEALTH_BIND_HOST=0.0.0.0
       # Operator overrides from root .env win; default targets the compose service
-      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}
     ports:
-      - "127.0.0.1:3004:3004"
+      - "127.0.0.1:${MATRIX_HEALTH_PORT:-3004}:${MATRIX_HEALTH_PORT:-3004}"
     volumes:
       # data volume also carries data/matrix-sync.json (the sync token)
       - matrix_data:/app/data
@@ -199,9 +195,14 @@ services:
     environment:
       # Interpolated from .env - the same pinned token that guards /metrics.
       - PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}
-    # Materialize the scrape token from the env var, then start Prometheus.
-    # Written to the data volume because /etc/prometheus is root-owned and
-    # the image runs as nobody.
+      - DISCORD_HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}
+      - WHATSAPP_HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}
+      - TELEGRAM_HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}
+      - MATRIX_HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}
+    # Materialize the scrape token and render the prometheus.yml template from
+    # env-var placeholders. prom/prometheus has no envsubst and mounts the
+    # template read-only, so sed writes the rendered config to the data volume.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -210,12 +211,24 @@ services:
           exit 1
         fi
         printf '%s' "$$PROM_BEARER_TOKEN" > /prometheus/token
-        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.retention.time=30d
+        discord_port="$${DISCORD_HEALTH_PORT}"
+        whatsapp_port="$${WHATSAPP_HEALTH_PORT}"
+        telegram_port="$${TELEGRAM_HEALTH_PORT}"
+        matrix_port="$${MATRIX_HEALTH_PORT}"
+        prometheus_port="$${PROMETHEUS_PORT}"
+        sed \
+          -e "s|\$${DISCORD_HEALTH_PORT:-3002}|$${discord_port}|g" \
+          -e "s|\$${WHATSAPP_HEALTH_PORT:-3001}|$${whatsapp_port}|g" \
+          -e "s|\$${TELEGRAM_HEALTH_PORT:-3005}|$${telegram_port}|g" \
+          -e "s|\$${MATRIX_HEALTH_PORT:-3004}|$${matrix_port}|g" \
+          -e "s|\$${PROMETHEUS_PORT:-9090}|$${prometheus_port}|g" \
+          /etc/prometheus/prometheus.yml > /prometheus/prometheus.yml
+        exec /bin/prometheus --config.file=/prometheus/prometheus.yml --web.listen-address=0.0.0.0:"$$prometheus_port" --storage.tsdb.retention.time=30d
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:${PROMETHEUS_PORT:-9090}"
     mem_limit: 300m
 
   grafana:
@@ -229,6 +242,7 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
       - MONITORING_TOKEN=${MONITORING_TOKEN:-}
+      - GF_SERVER_HTTP_PORT=${GRAFANA_PORT:-3000}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
     # Admin password: GRAFANA_ADMIN_PASSWORD if set, else MONITORING_TOKEN.
@@ -252,7 +266,7 @@ services:
     # devices. Anonymous access is read-only; restrict with an iptables
     # DOCKER-USER allowlist or bind to 127.0.0.1 + reverse proxy if needed.
     ports:
-      - "0.0.0.0:3000:3000"
+      - "0.0.0.0:${GRAFANA_PORT:-3000}:${GRAFANA_PORT:-3000}"
     mem_limit: 300m
     depends_on:
       - prometheus
@@ -267,6 +281,7 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=${BRIDGE_BROKER_USER:-garbanzo}
       - RABBITMQ_DEFAULT_PASS=${BRIDGE_BROKER_PASSWORD:-}
+      - RABBITMQ_MGMT_PORT=${RABBITMQ_MGMT_PORT:-15672}
     # Refuses to start when BRIDGE_BROKER_PASSWORD is unset; enforced here
     # (not via ${VAR:?}) so plain `docker compose up` without the broker
     # profile keeps working.
@@ -277,6 +292,7 @@ services:
           echo "Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile" >&2
           exit 1
         fi
+        printf 'management.tcp.port = %s\n' "$$RABBITMQ_MGMT_PORT" > /etc/rabbitmq/conf.d/10-management-port.conf
         exec docker-entrypoint.sh rabbitmq-server
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -289,7 +305,7 @@ services:
     # Management UI is localhost-only; the AMQP port (5672) is reachable only
     # over the compose network, never published to the host.
     ports:
-      - "127.0.0.1:15672:15672"
+      - "127.0.0.1:${RABBITMQ_MGMT_PORT:-15672}:${RABBITMQ_MGMT_PORT:-15672}"
     mem_limit: 400m
 
 volumes:

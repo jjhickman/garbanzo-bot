@@ -76,6 +76,6 @@ Qdrant URL used by the bot when the bundled qdrant deployment is enabled.
 {{- if .Values.qdrant.url -}}
 {{- .Values.qdrant.url -}}
 {{- else -}}
-{{- printf "http://%s-qdrant:6333" (include "garbanzo.fullname" .) -}}
+{{- printf "http://%s-qdrant:%v" (include "garbanzo.fullname" .) .Values.qdrant.port -}}
 {{- end -}}
 {{- end -}}

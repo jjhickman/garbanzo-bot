@@ -14,6 +14,8 @@ describe('qdrant compose service', () => {
     expect(text).toMatch(/qdrant\/qdrant/);
     expect(text).toMatch(/\/qdrant\/storage/);
     expect(text).toMatch(/^  qdrant_data:/m);
+    expect(text).toContain('QDRANT__SERVICE__HTTP_PORT=${QDRANT_PORT:-6333}');
+    expect(text).toContain('$${QDRANT__SERVICE__HTTP_PORT:-6333}');
   });
 
   for (const file of overlayFiles) {

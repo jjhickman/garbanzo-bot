@@ -32,6 +32,7 @@ type ValuesYaml = {
   qdrant?: {
     enabled?: unknown;
     url?: unknown;
+    port?: unknown;
   };
   resources?: {
     limits?: {
@@ -94,6 +95,7 @@ describe('garbanzo helm chart', () => {
     expect(values.qdrant).toEqual({
       enabled: false,
       url: '',
+      port: 6333,
     });
     expect(values.resources?.limits?.memory).toBe('1Gi');
   });

@@ -178,33 +178,36 @@ describe('platform-profile compose contract', () => {
     ]);
   });
 
-  it('pins platform identity, health ports, public ports, qdrant dependency, and host gateway', () => {
+  it('pins platform identity, env-driven health ports, qdrant dependency, and host gateway', () => {
+    const qdrant = service(compose, 'qdrant');
     const discord = service(compose, 'discord');
     const whatsapp = service(compose, 'whatsapp');
     const telegram = service(compose, 'telegram');
 
+    expect(envEntries(qdrant)).toContain('QDRANT__SERVICE__HTTP_PORT=${QDRANT_PORT:-6333}');
+    expect(String((qdrant.healthcheck as { test?: unknown })?.test)).toContain(
+      '$${QDRANT__SERVICE__HTTP_PORT:-6333}',
+    );
+
     expect(envEntries(discord)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=discord',
-        'HEALTH_PORT=3002',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
     expect(envEntries(whatsapp)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=whatsapp',
-        'HEALTH_PORT=3001',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
     expect(envEntries(telegram)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=telegram',
-        'HEALTH_PORT=3005',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
 
@@ -212,16 +215,23 @@ describe('platform-profile compose contract', () => {
     expect(envEntries(matrix)).toEqual(
       expect.arrayContaining([
         'MESSAGING_PLATFORM=matrix',
-        'HEALTH_PORT=3004',
-        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
-        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+        'HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}',
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:${QDRANT_PORT:-6333}}',
       ]),
     );
 
-    expect(toStringList(discord.ports)).toContain('127.0.0.1:3002:3002');
-    expect(toStringList(whatsapp.ports)).toContain('0.0.0.0:3001:3001');
-    expect(toStringList(telegram.ports)).toContain('127.0.0.1:3005:3005');
-    expect(toStringList(matrix.ports)).toContain('127.0.0.1:3004:3004');
+    expect(toStringList(discord.ports)).toContain(
+      '127.0.0.1:${DISCORD_HEALTH_PORT:-3002}:${DISCORD_HEALTH_PORT:-3002}',
+    );
+    expect(toStringList(whatsapp.ports)).toContain(
+      '0.0.0.0:${WHATSAPP_HEALTH_PORT:-3001}:${WHATSAPP_HEALTH_PORT:-3001}',
+    );
+    expect(toStringList(telegram.ports)).toContain(
+      '127.0.0.1:${TELEGRAM_HEALTH_PORT:-3005}:${TELEGRAM_HEALTH_PORT:-3005}',
+    );
+    expect(toStringList(matrix.ports)).toContain(
+      '127.0.0.1:${MATRIX_HEALTH_PORT:-3004}:${MATRIX_HEALTH_PORT:-3004}',
+    );
 
     expect(dependsOnEntries(discord)).toContain('qdrant');
     expect(dependsOnEntries(whatsapp)).toContain('qdrant');
@@ -279,12 +289,29 @@ describe('platform-profile compose contract', () => {
 
   it('uses MONITORING_TOKEN for monitoring entrypoint wiring', () => {
     expect(composeText).not.toContain('WHATSAPP_LOGIN_TOKEN');
-    expect(envEntries(service(compose, 'prometheus'))).toContain(
-      'PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}',
+    const prometheus = service(compose, 'prometheus');
+
+    expect(envEntries(prometheus)).toEqual(
+      expect.arrayContaining([
+        'PROM_BEARER_TOKEN=${MONITORING_TOKEN:-}',
+        'DISCORD_HEALTH_PORT=${DISCORD_HEALTH_PORT:-3002}',
+        'WHATSAPP_HEALTH_PORT=${WHATSAPP_HEALTH_PORT:-3001}',
+        'TELEGRAM_HEALTH_PORT=${TELEGRAM_HEALTH_PORT:-3005}',
+        'MATRIX_HEALTH_PORT=${MATRIX_HEALTH_PORT:-3004}',
+        'PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}',
+      ]),
     );
     expect(envEntries(service(compose, 'grafana'))).toContain('MONITORING_TOKEN=${MONITORING_TOKEN:-}');
-    expect(String(service(compose, 'prometheus').command)).toContain('PROM_BEARER_TOKEN');
+    expect(String(prometheus.command)).toContain('PROM_BEARER_TOKEN');
+    expect(String(prometheus.command)).toContain('/prometheus/prometheus.yml');
+    expect(String(prometheus.command)).toContain('DISCORD_HEALTH_PORT');
     expect(String(service(compose, 'grafana').command)).toContain('MONITORING_TOKEN');
+    expect(toStringList(prometheus.ports)).toContain(
+      '127.0.0.1:${PROMETHEUS_PORT:-9090}:${PROMETHEUS_PORT:-9090}',
+    );
+    expect(toStringList(service(compose, 'grafana').ports)).toContain(
+      '0.0.0.0:${GRAFANA_PORT:-3000}:${GRAFANA_PORT:-3000}',
+    );
   });
 
   it('wires the broker profile rabbitmq service with a refusal entrypoint and localhost-only management UI', () => {
@@ -296,7 +323,7 @@ describe('platform-profile compose contract', () => {
     expect(String((rabbitmq.healthcheck as { test?: unknown })?.test)).toContain('rabbitmq-diagnostics');
 
     const ports = toStringList(rabbitmq.ports);
-    expect(ports).toContain('127.0.0.1:15672:15672');
+    expect(ports).toContain('127.0.0.1:${RABBITMQ_MGMT_PORT:-15672}:${RABBITMQ_MGMT_PORT:-15672}');
     expect(ports.some((port) => port.includes('5672:5672'))).toBe(false);
     expect(composeText).not.toMatch(/^\s*-\s*"?[\d.]*:?5672:5672"?\s*$/m);
 
@@ -304,9 +331,11 @@ describe('platform-profile compose contract', () => {
       expect.arrayContaining([
         'RABBITMQ_DEFAULT_USER=${BRIDGE_BROKER_USER:-garbanzo}',
         'RABBITMQ_DEFAULT_PASS=${BRIDGE_BROKER_PASSWORD:-}',
+        'RABBITMQ_MGMT_PORT=${RABBITMQ_MGMT_PORT:-15672}',
       ]),
     );
     expect(String(rabbitmq.command)).toContain('BRIDGE_BROKER_PASSWORD');
+    expect(String(rabbitmq.command)).toContain('management.tcp.port');
     expect(String(rabbitmq.command)).toContain('Set BRIDGE_BROKER_PASSWORD in .env to enable the broker profile');
   });
 

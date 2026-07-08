@@ -65,10 +65,10 @@ describe('monitoring dashboard and scrape config', () => {
     expect(jobs.has('garbanzo')).toBe(false);
 
     for (const [jobName, target] of [
-      ['discord', 'discord:3002'],
-      ['whatsapp', 'whatsapp:3001'],
-      ['telegram', 'telegram:3005'],
-      ['matrix', 'matrix:3004'],
+      ['discord', 'discord:${DISCORD_HEALTH_PORT:-3002}'],
+      ['whatsapp', 'whatsapp:${WHATSAPP_HEALTH_PORT:-3001}'],
+      ['telegram', 'telegram:${TELEGRAM_HEALTH_PORT:-3005}'],
+      ['matrix', 'matrix:${MATRIX_HEALTH_PORT:-3004}'],
     ] as const) {
       const job = jobs.get(jobName);
       expect(job).toBeDefined();
@@ -92,7 +92,7 @@ describe('monitoring dashboard and scrape config', () => {
     const prometheusTargets = prometheusStaticConfigs.flatMap((config) =>
       isRecord(config) ? stringList(config.targets) : [],
     );
-    expect(prometheusTargets).toEqual(['localhost:9090']);
+    expect(prometheusTargets).toEqual(['localhost:${PROMETHEUS_PORT:-9090}']);
   });
 
   it('keeps every Garbanzo metric panel scoped by the dashboard job variable', () => {

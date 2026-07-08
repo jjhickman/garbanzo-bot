@@ -38,6 +38,7 @@ configFiles:
 qdrant:
   enabled: false
   url: ""
+  port: 6333
 
 resources:
   requests:
