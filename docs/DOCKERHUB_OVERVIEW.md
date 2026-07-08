@@ -38,8 +38,8 @@ cp .env.discord.example .env.discord
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=3.2.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-APP_VERSION=3.2.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.3.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+APP_VERSION=3.3.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:

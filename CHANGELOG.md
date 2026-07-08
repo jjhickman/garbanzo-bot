@@ -6,38 +6,58 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
-### Fixed
+## [3.3.0] — 2026-07-08
 
-- WhatsApp voice messages are no longer silently dropped when transcription
-  is unavailable: they flow through moderation, recording, and bridging as a
-  `[voice note]` placeholder (recap and moderation counts include them now),
-  and the bot does not reply to a placeholder it synthesized itself. The
-  same no-reply rule applies to Telegram voice placeholders.
-
-### Removed
-
-- The Microsoft Teams platform stub (`src/platforms/teams/`) is deleted, along
-  with every `teams` enum entry (config, `MessagingPlatform`, the bridge
-  envelope mirror, `BridgeMapSchema`) and its wizard `--platform=teams` path.
-  It was never functional — the runtime always threw "not implemented" — and
-  its SDK (`botbuilder-js`) was archived in January 2026. Compatibility note:
-  a `bridge-map.json` naming a `teams` instance now fails schema validation
-  at startup; this is acceptable because no working Teams config could ever
-  have existed. The bridge-map loader's error now names the offending
-  instance/route entry (by id, or by index when the entry has no usable id)
-  so operators can find and fix the bad entry without cross-referencing
-  indices by hand. If an old setup wrote `MESSAGING_PLATFORM=teams` into
-  your env file, boot and the setup wizard both fail with a clear message —
-  change the value to a supported platform.
+Platform expansion: Telegram and Matrix join Discord and WhatsApp, alongside
+an observability upgrade, a persona gallery, and a read-only operations page.
 
 ### Added
 
-- `telegram` and `matrix` are now accepted `MESSAGING_PLATFORM` values (config
-  enum, `MessagingPlatform` union, bridge envelope mirror, `BridgeMapSchema`)
-  — enum groundwork ahead of the v3.3.0 adapters. No runtime exists yet for
-  either platform; `getPlatformRuntime()` throws a clear
-  `Platform "telegram" is not available in this build yet.`-style error until
-  their runtimes land.
+- **Telegram adapter** (grammY, long polling): full command set, voice-note
+  transcription through the shared Whisper path, and cross-platform bridging.
+  Recommended setup disables BotFather privacy mode so the bot sees group
+  messages and applies `requireMention` itself (Telegram withholds plain
+  messages from privacy-on bots); `TELEGRAM_CHAT_SCOPE` defaults to
+  `configured` because anyone can add the bot to any group. Compose service
+  `telegram` on health port 3005. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
+- **Matrix adapter** (matrix-bot-sdk, `/sync` long polling): message send and
+  receive with `org.matrix.custom.html` formatting, reply and audio handling,
+  and bridging. Unencrypted rooms only — E2EE is not supported this release.
+  Requires Node 20 for the project but the Matrix runtime asserts Node 22 at
+  start (the SDK's floor). Sync token persists at `data/matrix-sync.json`.
+  Compose service `matrix` on health port 3004.
+- **Persona gallery**: six ready-to-run personas (Riff, Quill, Margie, Bea,
+  Patch, Callie) mapped to real feature sets, selectable in the setup wizard
+  (`--persona`) and copied into the platform's persona slot.
+- **Community operations page**: the token-gated `/admin` surface gains
+  read-only Overview, Memory (your community's lore), Bridges, and Health
+  sections, with machine-readable parity on `/admin.json`.
+- **Observability**: bridge metrics (outbox depth and age, per-route
+  delivery outcomes, dedup hits, relay latency, backpressure holds), memory
+  metrics by source, and a per-instance Grafana dashboard templated on the
+  scrape `job`/`instance` labels.
+
+### Changed
+
+- "Community lore" is the memory term across public copy (README, website,
+  quickstart); commands, config keys, and reference docs are unchanged.
+- Bridge delivery to Telegram paces per destination chat, and to Telegram
+  and Matrix defers through the outbox on rate limits (including over the
+  AMQP transport) instead of dropping or blocking.
+
+### Fixed
+
+- WhatsApp (and Telegram and Matrix) voice messages are no longer silently
+  dropped when transcription is unavailable: they flow through moderation,
+  recording, and bridging as a `[voice note]` placeholder, and the bot never
+  replies to a placeholder it synthesized itself.
+
+### Removed
+
+- The Microsoft Teams platform stub is deleted (its `botbuilder-js` SDK was
+  archived in January 2026 and the runtime never functioned). A
+  `bridge-map.json` or env file naming `teams` now fails at startup with a
+  clear message identifying the offending entry.
 
 ## [3.2.0] — 2026-07-07
 
