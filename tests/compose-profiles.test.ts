@@ -307,6 +307,7 @@ describe('layered env example coherence', () => {
   const sharedExample = parseEnvExample('.env.example');
   const discordExample = parseEnvExample('.env.discord.example');
   const whatsappExample = parseEnvExample('.env.whatsapp.example');
+  const telegramExample = parseEnvExample('.env.telegram.example');
   const discordExampleText = readFileSync('.env.discord.example', 'utf-8');
   const sharedExampleText = readFileSync('.env.example', 'utf-8');
 
@@ -314,6 +315,7 @@ describe('layered env example coherence', () => {
     for (const [instanceName, instanceExample] of [
       ['discord', discordExample],
       ['whatsapp', whatsappExample],
+      ['telegram', telegramExample],
     ] as const) {
       const duplicatedKeys = [...instanceExample.keys()].filter((key) => sharedExample.has(key));
 
@@ -334,6 +336,13 @@ describe('layered env example coherence', () => {
     expect(whatsappExample.has('OWNER_JID')).toBe(true);
     expect(sharedExample.has('OWNER_JID')).toBe(false);
     expect(discordExample.has('OWNER_JID')).toBe(false);
+  });
+
+  it('keeps Telegram credentials scoped to the Telegram example', () => {
+    expect(telegramExample.has('TELEGRAM_BOT_TOKEN')).toBe(true);
+    expect(telegramExample.has('TELEGRAM_OWNER_ID')).toBe(true);
+    expect(telegramExample.get('TELEGRAM_CHAT_SCOPE')).toBe('configured');
+    expect(sharedExample.has('TELEGRAM_BOT_TOKEN')).toBe(false);
   });
 
   it('removes the retired Remy env example', () => {
