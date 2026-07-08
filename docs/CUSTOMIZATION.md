@@ -39,4 +39,4 @@ Edit `config/groups.json` for WhatsApp group names, enabled features, mention pa
 
 ## Memory
 
-Teach local community facts with `!memory add`. Share facts across instances only with explicit owner commands such as `!memory share <id>`.
+This is your community's lore: the facts your bot remembers about the group. Teach local community facts with `!memory add`. Share facts across instances only with explicit owner commands such as `!memory share <id>`.

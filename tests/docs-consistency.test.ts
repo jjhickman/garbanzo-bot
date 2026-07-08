@@ -21,6 +21,10 @@ export const BANNED_STALE_DOC_PATTERNS = [
   // the direct subject of "in development", not merely co-mentioned near a
   // still-in-development platform like Matrix) must not creep back in.
   /Telegram\s*(?:<em>)?\s*(?:is\s+|are\s+)?in development/i,
+  // Regression guard (T10, v3.3.0): Matrix also shipped as a fully supported
+  // platform (a T1-era "in development" claim lingered on the website until
+  // this task) — "Matrix (in development)"-style claims must not creep back.
+  /Matrix\s*(?:<em>)?\s*(?:is\s+|are\s+)?in development/i,
 ] as const;
 
 const repoRoot = process.cwd();

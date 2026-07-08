@@ -1,4 +1,7 @@
 # Garbanzo
+
+Self-hosted community lore and operations for group chats.
+
 > Website: https://garbanzobot.com | Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
@@ -20,7 +23,7 @@ Garbanzo brings AI-driven moderation and enrichment to communities where they al
 <a id="features"></a>
 
 ## What It Does
-- **AI chat and memory** - mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
+- **Community lore** - your group's community memory: mention-gated chat, context compression, session summaries, curated facts, optional auto-extracted facts, semantic recall, shared facts, and read-only RAG federation. [Memory](docs/RAG_FEDERATION.md), [configuration](docs/CONFIGURATION.md)
 - **Community workflows** - introductions, welcomes, summaries, event reminders, polls, profiles, recommendations, release notes, feedback, and owner digests. [Architecture](docs/ARCHITECTURE.md), [customization](docs/CUSTOMIZATION.md)
 - **Integrations** - weather, transit, venues, news, books, web search, D&D dice/lookups, character PDFs, speech transcription, and language detection. [Configuration](docs/CONFIGURATION.md)
 - **Band features** - an optional feature set adds songs, rehearsals, availability, setlists, practice agendas, idea capture, audio transcription, sections, and lyrics. [Band deployment](docs/BAND_FEATURES.md)

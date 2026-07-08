@@ -480,6 +480,9 @@ for now. Cross-platform WhatsApp media download is a roadmap item.
 
 ## Shared memory
 
+Each community keeps its own lore. An instance shares selected lore with
+another community only when the owner permits it.
+
 `!memory share <id>` and `!memory unshare <id>` are owner-only, DM-only
 commands gated by `SHARED_MEMORY_ENABLED` (default `false` — replies with a
 "Shared memory is disabled" message otherwise on both instances involved).
