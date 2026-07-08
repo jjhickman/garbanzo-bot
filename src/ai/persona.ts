@@ -92,16 +92,12 @@ export function buildFormattingInstruction(platform: MessagingPlatform): string 
   if (platform === 'discord') {
     return 'Keep responses concise. Use Discord markdown: **bold**, *italic*, ~~strike~~, `code`, > quotes.';
   }
-  if (platform === 'telegram') {
+  if (platform === 'telegram' || platform === 'matrix') {
     // DECISION: the model is taught the SAME WhatsApp-style markdown as every
-    // other platform rather than Telegram's MarkdownV2 syntax directly. The
-    // Telegram adapter (src/platforms/telegram/markdown.ts) is the only place
-    // that understands MarkdownV2's escaping rules — it translates these
-    // markers into valid MarkdownV2 entities and escapes everything else on
-    // send. This keeps one formatting vocabulary across all prompts and
-    // centralizes Telegram's fiddly escaping in one tested module instead of
-    // teaching every prompt variant a platform-specific syntax.
-    return 'Keep responses concise and use WhatsApp-style formatting (*bold*, _italic_, ~strike~, `code`) — it is translated to Telegram formatting automatically.';
+    // other platform rather than Telegram MarkdownV2 or Matrix HTML syntax
+    // directly. The adapters translate these markers on send.
+    const target = platform === 'telegram' ? 'Telegram formatting' : 'Matrix HTML';
+    return `Keep responses concise and use WhatsApp-style formatting (*bold*, _italic_, ~strike~, \`code\`) — it is translated to ${target} automatically.`;
   }
   return 'Keep responses concise and use WhatsApp formatting (*bold*, _italic_, ~strike~).';
 }
@@ -202,10 +198,10 @@ export async function buildOllamaPrompt(ctx: MessageContext, userMessage: string
   const bandKnowledge = await formatBandKnowledgeForPrompt();
   const formattingRule = config.MESSAGING_PLATFORM === 'discord'
     ? '- Use Discord markdown: **bold**, *italic*, ~~strike~~.'
-    : config.MESSAGING_PLATFORM === 'telegram'
+    : config.MESSAGING_PLATFORM === 'telegram' || config.MESSAGING_PLATFORM === 'matrix'
       // Same decision as buildFormattingInstruction: emit WhatsApp-style
-      // markers, let the Telegram adapter translate + escape on send.
-      ? '- Use WhatsApp-style formatting: *bold*, _italic_, ~strike~ (translated to Telegram automatically).'
+      // markers, let the platform adapter translate + escape on send.
+      ? `- Use WhatsApp-style formatting: *bold*, _italic_, ~strike~ (translated to ${config.MESSAGING_PLATFORM === 'telegram' ? 'Telegram' : 'Matrix'} automatically).`
       : '- Use WhatsApp formatting: *bold*, _italic_, ~strike~.';
 
   return [

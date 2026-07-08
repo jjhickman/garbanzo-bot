@@ -232,6 +232,8 @@ describe('config module parity', () => {
         "INSTANCE_ID",
         "KOFI_URL",
         "LOG_LEVEL",
+        "MATRIX_CHAT_SCOPE",
+        "MATRIX_ROOMS_CONFIG_PATH",
         "MBTA_API_KEY",
         "MEMORY_AUTO_EXTRACT",
         "MEMORY_AUTO_EXTRACT_INTERVAL_MINUTES",

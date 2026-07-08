@@ -1,0 +1,12 @@
+{
+  "ownerId": "@owner:example.org",
+  "rooms": {
+    "!abcdefghijklmno:example.org": {
+      "_comment": "alias #general:example.org, resolved to this room id by setup",
+      "alias": "#general:example.org",
+      "name": "general",
+      "enabled": true,
+      "requireMention": true
+    }
+  }
+}

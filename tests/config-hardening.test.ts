@@ -193,12 +193,61 @@ describe('config hardening', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
-  it('accepts MESSAGING_PLATFORM=matrix at the config layer (no runtime yet — enum groundwork only)', async () => {
+  it('requires Matrix env when MESSAGING_PLATFORM=matrix', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: undefined,
+      MATRIX_ACCESS_TOKEN: undefined,
+      MATRIX_OWNER_ID: undefined,
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_HOMESERVER_URL is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_ACCESS_TOKEN is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'MATRIX_OWNER_ID is required when MESSAGING_PLATFORM=matrix — set it in .env.matrix',
+      ),
+    );
+  });
+
+  it('validates Matrix homeserver URL and owner MXID shape', async () => {
+    await expect(importConfigWithEnv({
+      MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: 'not-a-url',
+      MATRIX_ACCESS_TOKEN: 'test_matrix_token',
+      MATRIX_OWNER_ID: 'not-a-mxid',
+    })).rejects.toThrow('process.exit called');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MATRIX_HOMESERVER_URL must be a valid URL'),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MATRIX_OWNER_ID must be a Matrix user id like @user:server'),
+    );
+  });
+
+  it('accepts MESSAGING_PLATFORM=matrix when required Matrix env is present', async () => {
     const { config, instanceId } = await importConfigWithEnv({
       MESSAGING_PLATFORM: 'matrix',
+      MATRIX_HOMESERVER_URL: 'https://matrix.example.org',
+      MATRIX_ACCESS_TOKEN: 'test_matrix_token',
+      MATRIX_OWNER_ID: '@owner:example.org',
     });
 
     expect(config.MESSAGING_PLATFORM).toBe('matrix');
+    expect(config.MATRIX_HOMESERVER_URL).toBe('https://matrix.example.org');
+    expect(config.MATRIX_ACCESS_TOKEN).toBe('test_matrix_token');
+    expect(config.MATRIX_OWNER_ID).toBe('@owner:example.org');
     expect(instanceId).toBe('matrix');
     expect(exitSpy).not.toHaveBeenCalled();
   });
