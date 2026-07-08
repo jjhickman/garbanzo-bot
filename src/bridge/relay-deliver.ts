@@ -1,5 +1,6 @@
 import type { MessagingPlatform } from '../core/messaging-platform.js';
 import type { PlatformMessenger } from '../core/platform-messenger.js';
+import { recordBridgeDeliveryLatency, recordBridgeHeldByOutboundSafety } from '../middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../platforms/whatsapp/outbound-safety.js';
 import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
@@ -51,6 +52,7 @@ export function createRelayDeliverer({
   return {
     async deliver(envelope: BridgeEnvelope): Promise<RelayDeliveryStatus> {
       const text = relayText(envelope, platform);
+      const startedAt = Date.now();
 
       try {
         if (platform === 'discord') {
@@ -60,9 +62,11 @@ export function createRelayDeliverer({
         } else {
           await messenger.sendText(envelope.targetChatId, text);
         }
+        recordBridgeDeliveryLatency(envelope.routeId, Date.now() - startedAt);
         return 'sent';
       } catch (err) {
         if (err instanceof WhatsAppOutboundHeldError) {
+          recordBridgeHeldByOutboundSafety(envelope.routeId);
           await bufferEnvelope(envelope);
           return 'buffered';
         }

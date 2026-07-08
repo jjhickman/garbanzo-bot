@@ -20,6 +20,7 @@ const dbMocks = vi.hoisted(() => ({
 vi.mock('../src/utils/db.js', () => dbMocks);
 
 import { getEnabledTools, type AiTool } from '../src/ai/tools.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { config } from '../src/utils/config.js';
 
 function makeEntry(overrides: Partial<LocalMemoryEntry> = {}): LocalMemoryEntry {
@@ -116,6 +117,7 @@ describe('save_community_memory tool', () => {
     dbMocks.searchMemory.mockResolvedValue([
       makeEntry({ id: 3, fact: 'Anna hosts the monthly board-game night', source: 'owner' }),
     ]);
+    const before = getLifetimeCounters().memorySaveRejectionsByReason.get('dedup') ?? 0;
 
     const result = await saveTool().execute({
       fact: 'Anna hosts the monthly board-game night',
@@ -123,6 +125,7 @@ describe('save_community_memory tool', () => {
 
     expect(result).toContain('already in community memory');
     expect(dbMocks.addMemory).not.toHaveBeenCalled();
+    expect(getLifetimeCounters().memorySaveRejectionsByReason.get('dedup')).toBe(before + 1);
   });
 
   it('prunes machine-written facts beyond the cap after a save', async () => {
@@ -181,5 +184,7 @@ describe('save_community_memory rate limiting', () => {
     const blocked = await tool.execute({ fact: 'One more community fact beyond the cap' });
     expect(blocked).toContain('save limit');
     expect(dbMocks.addMemory).toHaveBeenCalledTimes(5);
+    const { getLifetimeCounters: freshCounters } = await import('../src/middleware/stats.js');
+    expect(freshCounters().memorySaveRejectionsByReason.get('rate-limit')).toBe(1);
   });
 });

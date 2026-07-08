@@ -1,5 +1,5 @@
 import { config } from '../utils/config.js';
-import { recordToolCall } from '../middleware/stats.js';
+import { recordMemorySaveRejection, recordToolCall } from '../middleware/stats.js';
 import { getSearchProviderName } from '../features/web-search.js';
 
 const TOOL_RESULT_MAX_CHARS = 1500;
@@ -223,12 +223,14 @@ const tools: AiTool[] = [
       }
       if (memorySaveRateLimited(Date.now())) {
         recordToolCall('save_community_memory', 'error');
+        recordMemorySaveRejection('rate-limit');
         return 'Memory not saved: the save limit was reached for now. Suggest trying again later or asking the owner to use !memory add.';
       }
       try {
         const { isDuplicateFact } = await import('../features/memory-extract.js');
         if (await isDuplicateFact(fact)) {
           recordToolCall('save_community_memory', 'ok');
+          recordMemorySaveRejection('dedup');
           return 'Not saved: an equivalent fact is already in community memory.';
         }
         const { addMemory } = await import('../utils/db.js');

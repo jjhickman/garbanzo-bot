@@ -530,7 +530,8 @@ const selectBridgeOutboxCounts = db.prepare(
   `SELECT
      SUM(CASE WHEN status IN ('pending', 'claimed') THEN 1 ELSE 0 END) AS pending,
      SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
-     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead
+     SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead,
+     MIN(CASE WHEN status IN ('pending', 'claimed') THEN created_at ELSE NULL END) AS oldestPendingCreatedAt
    FROM bridge_outbox`,
 );
 const selectWhatsAppMetricCounts = db.prepare(
@@ -931,11 +932,17 @@ export function bridgeSeenDelete(key: string): boolean {
 }
 
 export function bridgeOutboxCounts(): BridgeOutboxCounts {
-  const row = selectBridgeOutboxCounts.get() as { pending: number | null; sent: number | null; dead: number | null };
+  const row = selectBridgeOutboxCounts.get() as {
+    pending: number | null;
+    sent: number | null;
+    dead: number | null;
+    oldestPendingCreatedAt: number | null;
+  };
   return {
     pending: toNumber(row.pending ?? 0),
     sent: toNumber(row.sent ?? 0),
     dead: toNumber(row.dead ?? 0),
+    oldestPendingCreatedAt: row.oldestPendingCreatedAt === null ? null : toNumber(row.oldestPendingCreatedAt),
   };
 }
 

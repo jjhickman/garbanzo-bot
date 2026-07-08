@@ -11,6 +11,7 @@ import type { BridgeOutboxOps } from '../src/bridge/outbox.js';
 import type { BridgeBufferOps } from '../src/bridge/summary-buffer.js';
 import type { BridgeTransport } from '../src/bridge/transport.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import { config } from '../src/utils/config.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
@@ -94,7 +95,12 @@ function fakeOutboxOps(): BridgeOutboxOps {
     markBridgeOutboxSent: vi.fn(async () => true),
     markBridgeOutboxDead: vi.fn(async () => true),
     bumpBridgeOutboxAttempt: vi.fn(async () => true),
-    bridgeOutboxCounts: vi.fn(async () => ({ pending: 0, sent: 0, dead: 0 })),
+    bridgeOutboxCounts: vi.fn(async () => ({
+      pending: 0,
+      sent: 0,
+      dead: 0,
+      oldestPendingCreatedAt: null,
+    })),
   };
 }
 
@@ -247,6 +253,7 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     const secondResult = await bridge.handler(envelope);
     expect(secondResult).toBe('duplicate');
     expect(sendText).toHaveBeenCalledTimes(1);
+    expect(getLifetimeCounters().bridgeSeenDedupHitsByRoute.get('verbatim-route')).toBeGreaterThanOrEqual(1);
 
     await bridge.stop();
   });

@@ -4,6 +4,7 @@ import type { MessagingPlatform } from '../src/core/messaging-platform.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createRelayDeliverer } from '../src/bridge/relay-deliver.js';
+import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import { config } from '../src/utils/config.js';
 
@@ -77,6 +78,7 @@ describe('createRelayDeliverer', () => {
     await expect(deliver.deliver(envelope({ text: 'hello relay' }))).resolves.toBe('sent');
 
     expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): hello relay');
+    expect(getLifetimeCounters().bridgeDeliveryLatencyByRoute.get('route-1')?.maxSeconds).toBeGreaterThanOrEqual(0);
   });
 
   it('includes origin chat display name in attribution when present', async () => {
@@ -158,6 +160,7 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(bufferEnvelope).toHaveBeenCalledTimes(1);
     expect(bufferEnvelope).toHaveBeenCalledWith(env);
+    expect(getLifetimeCounters().bridgeHeldByOutboundSafetyByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
   });
 
   it('rethrows non-held errors without buffering', async () => {

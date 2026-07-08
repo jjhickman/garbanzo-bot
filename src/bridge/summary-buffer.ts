@@ -22,6 +22,11 @@
 import type { DbBackend } from '../utils/db-backend.js';
 import type { MessagingPlatform } from '../core/messaging-platform.js';
 import { logger } from '../middleware/logger.js';
+import {
+  recordBridgeDeliveryLatency,
+  recordBridgeHeldByOutboundSafety,
+  recordBridgeSummaryFlush,
+} from '../middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../platforms/whatsapp/outbound-safety.js';
 import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
@@ -138,14 +143,20 @@ export function createSummaryBuffer(options: SummaryBufferOptions): SummaryBuffe
     const header = `${headerLabel} — last ${intervalMinutes} min:`;
     const lines = envelopes.map((envelope) => envelopeLine(envelope, targetPlatform));
     const text = buildDigestText(header, lines, maxText);
+    const startedAt = Date.now();
 
     try {
       await options.sendText(targetChatId, text);
       consecutiveFailures.set(routeId, 0);
+      recordBridgeSummaryFlush(routeId);
+      recordBridgeDeliveryLatency(routeId, Date.now() - startedAt);
     } catch (err) {
       await options.ops.restoreBridgeBuffer(rows);
 
-      if (err instanceof WhatsAppOutboundHeldError) return;
+      if (err instanceof WhatsAppOutboundHeldError) {
+        recordBridgeHeldByOutboundSafety(routeId);
+        return;
+      }
 
       const failures = (consecutiveFailures.get(routeId) ?? 0) + 1;
       consecutiveFailures.set(routeId, failures);

@@ -1,5 +1,6 @@
 import { logger } from '../middleware/logger.js';
 import { recordMessage } from '../middleware/context.js';
+import { recordBridgeSeenDedupHit } from '../middleware/stats.js';
 import { config } from '../utils/config.js';
 import type { InboundMessage } from '../core/inbound-message.js';
 import type { MessagingPlatform } from '../core/messaging-platform.js';
@@ -172,7 +173,10 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
   // of silently dropped as a duplicate.
   const handler: BridgeInboundHandler = async (envelope) => {
     const fresh = await bridgeSeenInsert(envelope.idempotencyKey);
-    if (!fresh) return 'duplicate';
+    if (!fresh) {
+      recordBridgeSeenDedupHit(envelope.routeId);
+      return 'duplicate';
+    }
 
     try {
       const route = routeById(envelope.routeId);

@@ -1,4 +1,5 @@
 import type { DbBackend } from '../utils/db-backend.js';
+import { recordBridgeDeadLettered, recordBridgeFailed, recordBridgeSent } from '../middleware/stats.js';
 import type { BridgeEnvelope } from './envelope.js';
 import type { BridgeTransport } from './transport.js';
 
@@ -75,6 +76,10 @@ export function getBridgeOutboxStats(): BridgeOutboxStats {
   return { ...stats };
 }
 
+function routeLabel(envelope: BridgeEnvelope | null): string {
+  return envelope?.routeId ?? 'unknown';
+}
+
 export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
   let timer: ReturnType<typeof setInterval> | null = null;
   let pumping = false;
@@ -91,6 +96,7 @@ export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
         if (!envelope) {
           await options.ops.markBridgeOutboxDead(row.id, 'stored bridge envelope failed validation');
           stats.dead++;
+          recordBridgeDeadLettered(routeLabel(envelope));
           await logOutboxError({ id: row.id }, 'Bridge outbox row dead-lettered: invalid envelope');
           continue;
         }
@@ -99,14 +105,17 @@ export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
           await options.transport.deliver(envelope, options.resolveTargetUrl(row.targetInstance));
           await options.ops.markBridgeOutboxSent(row.id);
           stats.delivered++;
+          recordBridgeSent(routeLabel(envelope));
         } catch (err) {
           const message = errorMessage(err);
           const retryable = isRetryableTransportError(err) ? err.retryable : true;
           const nextAttempt = row.attempts + 1;
+          recordBridgeFailed(routeLabel(envelope));
 
           if (!retryable || nextAttempt >= MAX_ATTEMPTS) {
             await options.ops.markBridgeOutboxDead(row.id, message);
             stats.dead++;
+            recordBridgeDeadLettered(routeLabel(envelope));
             await logOutboxError({ err, id: row.id, targetInstance: row.targetInstance }, 'Bridge outbox row dead-lettered');
           } else {
             await options.ops.bumpBridgeOutboxAttempt(row.id, nextAttemptAt(row.attempts), message);
