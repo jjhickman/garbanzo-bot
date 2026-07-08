@@ -36,6 +36,14 @@ function getNumeric(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function getRetryAfterHeaderMs(source: Record<string, unknown> | undefined): number | undefined {
+  const headers = source ? getNestedRecord(source, 'headers') : undefined;
+  if (!headers) return undefined;
+  const raw = headers['retry-after'] ?? headers['Retry-After'];
+  const seconds = typeof raw === 'string' ? Number(raw) : getNumeric(raw);
+  return seconds !== undefined && Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+}
+
 function getRetryAfterMs(err: unknown): number | undefined {
   if (!isRecord(err)) return undefined;
 
@@ -45,7 +53,10 @@ function getRetryAfterMs(err: unknown): number | undefined {
   const retryAfterMs = getNumeric(err.retryAfterMs)
     ?? getNumeric(err.retry_after_ms)
     ?? getNumeric(body?.retry_after_ms)
-    ?? getNumeric(body?.retryAfterMs);
+    ?? getNumeric(body?.retryAfterMs)
+    // Some homeservers/proxies only send a Retry-After header (seconds)
+    ?? getRetryAfterHeaderMs(err)
+    ?? getRetryAfterHeaderMs(body);
 
   if (errcode === 'M_LIMIT_EXCEEDED' || status === 429) {
     return retryAfterMs ?? 1000;
@@ -59,6 +70,14 @@ async function sleep(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Longest wait we tolerate INSIDE a call. Anything above this is thrown as
+ * MatrixRateLimitError so callers with their own timeout/retry machinery
+ * (the bridge outbox defers on it; its HTTP transport times out at 10s)
+ * schedule the retry instead of a blocked request sleeping through it.
+ */
+const INLINE_RETRY_MAX_MS = 2_000;
+
 async function matrixClientRequest<T>(
   method: string,
   action: () => Promise<T>,
@@ -69,12 +88,12 @@ async function matrixClientRequest<T>(
     const retryAfterMs = getRetryAfterMs(err);
     if (retryAfterMs === undefined) throw err;
 
-    if (retryAfterMs > MAX_RETRY_AFTER_MS) {
+    if (retryAfterMs > INLINE_RETRY_MAX_MS) {
       logger.warn(
         { method, retryAfterMs },
-        'Matrix 429 — retry_after exceeds cap, throwing immediately instead of sleep-and-fail',
+        'Matrix 429 — retry_after exceeds the inline wait budget, throwing for the caller to schedule',
       );
-      throw new MatrixRateLimitError(method, retryAfterMs);
+      throw new MatrixRateLimitError(method, Math.min(retryAfterMs, MAX_RETRY_AFTER_MS));
     }
 
     logger.warn({ method, retryAfterMs }, 'Matrix 429 — waiting retry_after once before retrying');

@@ -43,7 +43,7 @@ describe('Matrix adapter', () => {
     }));
   });
 
-  it('honors a 45s Matrix M_LIMIT_EXCEEDED retry once', async () => {
+  it('retries a short M_LIMIT_EXCEEDED wait inline, once', async () => {
     vi.useFakeTimers();
     const calls: Record<string, unknown>[] = [];
     let attempt = 0;
@@ -52,15 +52,15 @@ describe('Matrix adapter', () => {
         calls.push(content);
         attempt += 1;
         if (attempt === 1) {
-          throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 45_000 } };
+          throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 1_500 } };
         }
         return '$after';
       }),
     });
     const adapter = createMatrixAdapter(client);
 
-    const sendPromise = adapter.sendText('!room:example.org', 'medium wait');
-    await vi.advanceTimersByTimeAsync(44_999);
+    const sendPromise = adapter.sendText('!room:example.org', 'short wait');
+    await vi.advanceTimersByTimeAsync(1_499);
     expect(calls).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(1);
@@ -70,8 +70,24 @@ describe('Matrix adapter', () => {
     vi.useRealTimers();
   });
 
-  it('throws immediately when Matrix retry_after exceeds the 60s cap', async () => {
-    vi.useFakeTimers();
+  it('throws MatrixRateLimitError instead of sleeping when retry_after exceeds the inline budget', async () => {
+    // A 45s in-call sleep would outlive the bridge HTTP transport's 10s
+    // timeout and block the serial outbox drain — the caller schedules it.
+    const client = createClient({
+      sendMessage: vi.fn(async () => {
+        throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 45_000 } };
+      }),
+    });
+    const adapter = createMatrixAdapter(client);
+
+    const result = await adapter.sendText('!room:example.org', 'medium wait').catch((err: unknown) => err);
+
+    expect(result).toBeInstanceOf(MatrixRateLimitError);
+    expect((result as MatrixRateLimitError).retryAfterMs).toBe(45_000);
+    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps the thrown retryAfterMs at 60s for absurd server values', async () => {
     const client = createClient({
       sendMessage: vi.fn(async () => {
         throw { statusCode: 429, body: { errcode: 'M_LIMIT_EXCEEDED', retry_after_ms: 90_000 } };
@@ -82,9 +98,22 @@ describe('Matrix adapter', () => {
     const result = await adapter.sendText('!room:example.org', 'too long').catch((err: unknown) => err);
 
     expect(result).toBeInstanceOf(MatrixRateLimitError);
-    expect((result as MatrixRateLimitError).retryAfterMs).toBe(90_000);
+    expect((result as MatrixRateLimitError).retryAfterMs).toBe(60_000);
     expect(client.sendMessage).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+  });
+
+  it('reads a Retry-After header (seconds) when retry_after_ms is absent', async () => {
+    const client = createClient({
+      sendMessage: vi.fn(async () => {
+        throw { statusCode: 429, headers: { 'retry-after': '30' } };
+      }),
+    });
+    const adapter = createMatrixAdapter(client);
+
+    const result = await adapter.sendText('!room:example.org', 'header only').catch((err: unknown) => err);
+
+    expect(result).toBeInstanceOf(MatrixRateLimitError);
+    expect((result as MatrixRateLimitError).retryAfterMs).toBe(30_000);
   });
 
   it('uploads and sends documents and audio through mxc URIs', async () => {

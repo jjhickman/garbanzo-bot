@@ -60,6 +60,12 @@ export function createRelayDeliverer({
           await sendDiscordWithRateGuard(messenger, envelope.targetChatId, text);
         } else if (platform === 'telegram') {
           await sendTelegramWithPacing(messenger, envelope.targetChatId, text, lastSentAtByChat);
+        } else if (platform === 'matrix') {
+          // No proactive pacing for Matrix: homeserver limits are
+          // operator-configurable, so the adapter's inline short-wait retry
+          // plus this deferral (long retry_after → outbox reschedule without
+          // an attempt) replace a fixed pacing interval.
+          await sendMatrixWithDeferral(messenger, envelope.targetChatId, text);
         } else {
           await messenger.sendText(envelope.targetChatId, text);
         }
@@ -136,6 +142,34 @@ async function sendDiscordWithRateGuard(
  * process-local pacing, so a receiver restart can forget the last-send clock;
  * Telegram's adapter-level 429 retry remains the reactive backstop.
  */
+/**
+ * Matrix delivery: convert the adapter's rate-limit signal into the outbox's
+ * deferral machinery. The adapter retries short waits inline and throws
+ * MatrixRateLimitError (carrying the homeserver's retry_after) for longer
+ * ones — sleeping through those inside a delivery would block the serial
+ * outbox drain and outlive the HTTP transport's timeout.
+ */
+async function sendMatrixWithDeferral(
+  messenger: Pick<PlatformMessenger, 'sendText'>,
+  chatId: string,
+  text: string,
+): Promise<void> {
+  const { MatrixRateLimitError } = await import('../platforms/matrix/adapter.js');
+  try {
+    await messenger.sendText(chatId, text);
+  } catch (err) {
+    if (err instanceof MatrixRateLimitError) {
+      const retryAtMs = Date.now() + err.retryAfterMs;
+      throw new BridgeDeliveryDeferredError(
+        retryAtMs,
+        `Matrix rate limit deferred until ${retryAtMs}`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+}
+
 async function sendTelegramWithPacing(
   messenger: Pick<PlatformMessenger, 'sendText'>,
   chatId: string,

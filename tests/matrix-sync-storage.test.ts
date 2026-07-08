@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { MatrixSyncTokenStorageProvider } from '../src/platforms/matrix/sync-storage.js';
+import { createMatrixStorageProvider, MatrixSyncTokenStorageProvider } from '../src/platforms/matrix/sync-storage.js';
 
 const dirs: string[] = [];
 
@@ -32,6 +32,44 @@ describe('Matrix sync-token storage', () => {
 
     const storage = new MatrixSyncTokenStorageProvider(path);
     expect(storage.getSyncToken()).toBeNull();
+  });
+
+  it('quarantines a corrupt store before handing the path to the SDK provider', () => {
+    const path = tempPath();
+    writeFileSync(path, '{ definitely not json', 'utf8');
+    const constructed: string[] = [];
+    class FakeSdkProvider {
+      // Mimics SimpleFsStorageProvider: a MISSING file is fine (fresh
+      // store), but corrupt JSON throws — so the quarantine must run first.
+      constructor(providerPath: string) {
+        constructed.push(providerPath);
+        try {
+          JSON.parse(readFileSync(providerPath, 'utf8'));
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        }
+      }
+      getSyncToken(): string | null { return null; }
+      setSyncToken(): void {}
+    }
+
+    const provider = createMatrixStorageProvider(FakeSdkProvider as never, path);
+
+    expect(provider).toBeInstanceOf(FakeSdkProvider);
+    expect(constructed).toEqual([path]);
+    expect(readFileSync(`${path}.corrupt`, 'utf8')).toBe('{ definitely not json');
+  });
+
+  it('falls back to the token store when the SDK provider construction throws', () => {
+    const path = tempPath();
+    class ExplodingProvider {
+      constructor() { throw new Error('sdk storage boom'); }
+      getSyncToken(): string | null { return null; }
+      setSyncToken(): void {}
+    }
+
+    const provider = createMatrixStorageProvider(ExplodingProvider as never, path);
+    expect(provider).toBeInstanceOf(MatrixSyncTokenStorageProvider);
   });
 
   it('roundtrips the sync token with an atomic JSON write', () => {

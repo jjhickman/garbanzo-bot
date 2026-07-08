@@ -51,12 +51,34 @@ export class MatrixSyncTokenStorageProvider implements MatrixStorageProvider {
   }
 }
 
+/**
+ * The SDK's SimpleFsStorageProvider throws on corrupt JSON instead of
+ * starting fresh, so the corrupt-file guard must run BEFORE handing it the
+ * path: a broken store is moved aside (kept for inspection) and the sync
+ * starts fresh with a warning — same recovery the fallback provider gives.
+ */
+function quarantineCorruptSyncFile(path: string): void {
+  if (!existsSync(path)) return;
+  try {
+    JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    const quarantined = `${path}.corrupt`;
+    logger.warn({ err, path, quarantined }, 'Matrix sync store is corrupt; moving it aside and starting a fresh sync');
+    renameSync(path, quarantined);
+  }
+}
+
 export function createMatrixStorageProvider(
   SimpleFsStorageProvider?: new (path: string) => MatrixStorageProvider,
   path: string = MATRIX_SYNC_STORAGE_PATH,
 ): MatrixStorageProvider {
   if (SimpleFsStorageProvider) {
-    return new SimpleFsStorageProvider(path);
+    quarantineCorruptSyncFile(path);
+    try {
+      return new SimpleFsStorageProvider(path);
+    } catch (err) {
+      logger.warn({ err, path }, 'SDK sync storage failed to initialize; using the fallback token store');
+    }
   }
 
   return new MatrixSyncTokenStorageProvider(path);

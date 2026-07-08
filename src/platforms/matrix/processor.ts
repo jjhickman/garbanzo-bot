@@ -96,7 +96,9 @@ function buildLeadingMentionRegex(botMxid: string | undefined, botDisplayName: s
     .filter((value): value is string => !!value && value.trim().length > 0)
     .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   if (candidates.length === 0) return null;
-  return new RegExp(`^(?:${candidates.join('|')})[:,\\s]*`, 'i');
+  // A real boundary must follow the name: 'Garbanzo help' and 'Garbanzo:'
+  // are addressed, 'Garbanzobot help' is a different name entirely.
+  return new RegExp(`^(?:${candidates.join('|')})(?:$|[:,\\s]+)`, 'i');
 }
 
 async function processMatrixInbound(

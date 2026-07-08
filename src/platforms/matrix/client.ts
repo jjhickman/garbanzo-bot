@@ -16,6 +16,7 @@ export interface RawMatrixMessageContent {
   formatted_body?: string;
   format?: string;
   url?: string;
+  filename?: string;
   info?: { mimetype?: string };
   membership?: string;
   'm.relates_to'?: {
@@ -113,7 +114,7 @@ function senderNameFromMxid(sender: string | undefined): string | undefined {
   return localpart && localpart.length > 0 ? localpart : sender;
 }
 
-function stripPlainReplyFallback(body: string): { text: string; quotedText?: string } {
+function stripPlainReplyFallback(body: string): { text: string; quotedText?: string; quotedAuthor?: string } {
   const lines = body.split('\n');
   const quoteLines: string[] = [];
   let idx = 0;
@@ -126,10 +127,15 @@ function stripPlainReplyFallback(body: string): { text: string; quotedText?: str
   }
   if (quoteLines.length === 0) return { text: body };
 
+  // The rich-reply fallback's first quoted line is "<@author:server> text" —
+  // the only reply-author signal available without a per-message API call.
+  const quotedAuthor = /^<(@[^>]+)>/.exec(quoteLines[0] ?? '')?.[1];
+
   if (lines[idx] === '') idx += 1;
   return {
     text: lines.slice(idx).join('\n').trimStart(),
     quotedText: quoteLines.join('\n').trim(),
+    quotedAuthor,
   };
 }
 
@@ -138,7 +144,7 @@ function stripHtmlReplyFallback(formatted: string | undefined): string | undefin
   return formatted.replace(/<mx-reply>[\s\S]*?<\/mx-reply>/i, '').trimStart();
 }
 
-function contentText(content: RawMatrixMessageContent): { text: string; quotedText?: string } {
+function contentText(content: RawMatrixMessageContent): { text: string; quotedText?: string; quotedAuthor?: string } {
   const body = content.body ?? '';
   const plain = stripPlainReplyFallback(body);
   if (plain.quotedText) return plain;
@@ -171,12 +177,30 @@ export function mapMatrixMessageToPayload(
   if (msgtype !== 'm.text' && msgtype !== 'm.audio') return null;
 
   const textParts = contentText(content);
+  // m.audio's body is the FILENAME (or a fallback label like "voice"), not a
+  // caption — treating it as text made transcription unreachable, because
+  // the processor only transcribes when text is empty. Per MSC2530, body is
+  // a real caption only when a separate `filename` field exists and differs
+  // from body; everything else clears to empty so the audio path runs.
+  const isAudio = msgtype === 'm.audio';
+  const audioCaption = isAudio && content.filename && content.body !== content.filename
+    ? textParts.text
+    : '';
+  const text = isAudio ? audioCaption : textParts.text;
   const senderId = event.sender ?? '';
   const mentionedIds = new Set<string>(content['m.mentions']?.user_ids ?? []);
-  if (mentionsBot(textParts.text, bot.userId, bot.displayName)) {
+  if (mentionsBot(text, bot.userId, bot.displayName)) {
     mentionedIds.add(bot.userId);
   }
-  if (content['m.relates_to']?.['m.in_reply_to']?.event_id) {
+  // A reply only addresses the bot when the replied-to message was the
+  // bot's own. Without a per-message API lookup, the reply-fallback quote
+  // author is the available signal; modern clients also put the replied-to
+  // user in m.mentions (handled above). A reply to anyone else must NOT
+  // wake the bot in requireMention rooms.
+  if (
+    content['m.relates_to']?.['m.in_reply_to']?.event_id
+    && textParts.quotedAuthor === bot.userId
+  ) {
     mentionedIds.add(bot.userId);
   }
 
@@ -184,7 +208,7 @@ export function mapMatrixMessageToPayload(
     messageId: event.event_id ?? '',
     roomId,
     isGroupChat: knownDmRoomId ? roomId !== knownDmRoomId : true,
-    text: textParts.text,
+    text,
     senderId,
     senderName: senderNameFromMxid(senderId),
     timestampMs: event.origin_server_ts ?? Date.now(),

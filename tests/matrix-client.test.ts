@@ -72,6 +72,21 @@ describe('mapMatrixMessageToPayload', () => {
 
     expect(payload?.text).toBe('reply text');
     expect(payload?.quotedText).toBe('<@ada:example.org> original\nsecond line');
+    // Reply to @ada, not to the bot — must NOT be treated as addressing it.
+    expect(payload?.mentionedIds).not.toContain(BOT.userId);
+  });
+
+  it('treats a reply as addressed only when the quoted author is the bot', async () => {
+    const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
+    const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.text',
+        body: `> <${BOT.userId}> what I said earlier\n\nthanks, do that`,
+        'm.relates_to': { 'm.in_reply_to': { event_id: '$mine' } },
+      },
+    }), BOT);
+
+    expect(payload?.text).toBe('thanks, do that');
     expect(payload?.mentionedIds).toContain(BOT.userId);
   });
 
@@ -89,7 +104,53 @@ describe('mapMatrixMessageToPayload', () => {
 
     expect(payload?.text).toBe('reply text');
     expect(payload?.quotedText).toBeUndefined();
+    // No plain-text fallback quote → no author signal → conservatively not
+    // addressed. Modern clients put the replied-to user in m.mentions.
+    expect(payload?.mentionedIds).not.toContain(BOT.userId);
+  });
+
+  it('honors m.mentions for replies from clients that send intentional mentions', async () => {
+    const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
+    const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.text',
+        body: 'reply text',
+        'm.relates_to': { 'm.in_reply_to': { event_id: '$old' } },
+        'm.mentions': { user_ids: [BOT.userId] },
+      },
+    }), BOT);
+
     expect(payload?.mentionedIds).toContain(BOT.userId);
+  });
+
+  it('clears the filename body of an m.audio message so transcription can run', async () => {
+    const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
+    const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.audio',
+        body: 'voice-message.ogg',
+        url: 'mxc://example.org/abc',
+        info: { mimetype: 'audio/ogg' },
+      },
+    }), BOT);
+
+    expect(payload?.text).toBe('');
+    expect(payload?.audio).toMatchObject({ mxcUrl: 'mxc://example.org/abc' });
+  });
+
+  it('keeps a real MSC2530 caption on an m.audio message', async () => {
+    const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
+    const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.audio',
+        body: 'listen to this riff',
+        filename: 'voice-message.ogg',
+        url: 'mxc://example.org/abc',
+        info: { mimetype: 'audio/ogg' },
+      },
+    }), BOT);
+
+    expect(payload?.text).toBe('listen to this riff');
   });
 
   it('maps m.mentions user ids and display-name text matches as bot mentions', async () => {
