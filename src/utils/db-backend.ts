@@ -103,6 +103,7 @@ export interface DbBackend {
   markBridgeOutboxSent(id: number): Promise<boolean>;
   markBridgeOutboxDead(id: number, error: string): Promise<boolean>;
   bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
+  deferBridgeOutbox(id: number, nextAt: number, error: string): Promise<boolean>;
   bridgeSeenInsert(key: string): Promise<boolean>;
   bridgeSeenDelete(key: string): Promise<boolean>;
   bridgeOutboxCounts(): Promise<BridgeOutboxCounts>;

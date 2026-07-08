@@ -6,6 +6,7 @@ import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import type { BridgeEnvelope, BridgeOrigin } from './envelope.js';
 import { translateFormatting } from './format-translate.js';
+import { BridgeDeliveryDeferredError } from './transport.js';
 
 const MAX_DISCORD_RETRY_AFTER_MS = 5_000;
 const SECONDS_TO_MS = 1_000;
@@ -127,12 +128,13 @@ async function sendDiscordWithRateGuard(
 }
 
 /**
- * Enforce a minimum gap since the last send to this destination chat before
- * sending, so a burst of bridge relays can't systematically outrun
- * Telegram's per-chat rate limit. The 429-retry the adapter already does
- * (adapter.ts) stays as a reactive backstop for the rare case this proactive
- * spacing still isn't enough (clock skew, other traffic to the same chat,
- * etc.) — this does not replace it.
+ * Enforce a minimum gap since the last send to this destination chat by
+ * deferring the source outbox row instead of sleeping inside the receiver's
+ * delivery request. The outbox claims rows in id order and handles them
+ * serially; returning a deadline lets later rows for other routes/chats drain
+ * while preserving same-chat order at the claimed-row boundary. This is
+ * process-local pacing, so a receiver restart can forget the last-send clock;
+ * Telegram's adapter-level 429 retry remains the reactive backstop.
  */
 async function sendTelegramWithPacing(
   messenger: Pick<PlatformMessenger, 'sendText'>,
@@ -142,9 +144,13 @@ async function sendTelegramWithPacing(
 ): Promise<void> {
   const lastSentAt = lastSentAtByChat.get(chatId);
   if (lastSentAt !== undefined) {
-    const elapsed = Date.now() - lastSentAt;
-    const remaining = TELEGRAM_MIN_SEND_INTERVAL_MS - elapsed;
-    if (remaining > 0) await sleep(remaining);
+    const retryAtMs = lastSentAt + TELEGRAM_MIN_SEND_INTERVAL_MS;
+    if (Date.now() < retryAtMs) {
+      throw new BridgeDeliveryDeferredError(
+        retryAtMs,
+        `Telegram pacing deferred until ${retryAtMs}`,
+      );
+    }
   }
 
   try {

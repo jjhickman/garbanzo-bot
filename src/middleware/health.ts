@@ -29,6 +29,7 @@ import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
 import { getGroupName } from '../core/groups-config.js';
 import { getVectorStore } from '../utils/vector-memory.js';
 import { parseBridgeEnvelope, type BridgeEnvelope } from '../bridge/envelope.js';
+import { BridgeDeliveryDeferredError } from '../bridge/transport.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -271,6 +272,15 @@ async function handleBridgeInbound(
     }
     writeJson(res, 202, { status: 'accepted' });
   } catch (err) {
+    if (err instanceof BridgeDeliveryDeferredError) {
+      logger.info(
+        { routeId: envelope.routeId, retryAtMs: err.retryAtMs },
+        'Bridge inbound delivery deferred',
+      );
+      writeJson(res, 429, { error: 'delivery deferred', retryAtMs: err.retryAtMs });
+      return;
+    }
+
     logger.warn({ err, routeId: envelope.routeId }, 'Bridge inbound handler failed');
     writeJson(res, 503, { error: 'delivery failed' });
   }

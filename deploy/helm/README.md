@@ -48,8 +48,10 @@ helm install community-tg ./deploy/helm/garbanzo \
   --set secretEnv.OPENAI_API_KEY='<openai-key>'
 ```
 
-Telegram uses `healthPort=3005` by default. Set `configFiles.telegramChatsJson`
-to mount a chart-managed `config/telegram-chats.json`.
+The chart default health port remains `3002`; Telegram deployments should pass
+`--set healthPort=3005` to match the compose and Prometheus convention. Set
+`configFiles.telegramChatsJson` to mount a chart-managed
+`config/telegram-chats.json`.
 
 ## Multiple Instances
 

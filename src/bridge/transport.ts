@@ -17,3 +17,13 @@ export class TransportDeliveryError extends Error {
     this.retryable = retryable;
   }
 }
+
+export class BridgeDeliveryDeferredError extends Error {
+  readonly retryAtMs: number;
+
+  constructor(retryAtMs: number, message?: string, options?: ErrorOptions) {
+    super(message ?? `Bridge delivery deferred until ${retryAtMs}`, options);
+    this.name = 'BridgeDeliveryDeferredError';
+    this.retryAtMs = retryAtMs;
+  }
+}

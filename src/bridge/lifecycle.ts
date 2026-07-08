@@ -13,6 +13,7 @@ import {
   bridgeSeenInsert as bridgeSeenInsertDefault,
   bumpBridgeOutboxAttempt,
   claimDueBridgeOutbox,
+  deferBridgeOutbox,
   enqueueBridgeOutbox,
   markBridgeOutboxDead,
   markBridgeOutboxSent,
@@ -108,6 +109,7 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
     markBridgeOutboxSent,
     markBridgeOutboxDead,
     bumpBridgeOutboxAttempt,
+    deferBridgeOutbox,
     bridgeOutboxCounts,
   };
   const bufferOps: BridgeBufferOps = deps.bufferOps ?? {

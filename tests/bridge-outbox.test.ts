@@ -8,13 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createBridgeOutbox, getBridgeOutboxStats } from '../src/bridge/outbox.js';
 import { getLifetimeCounters } from '../src/middleware/stats.js';
-import { TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
+import { BridgeDeliveryDeferredError, TransportDeliveryError, type BridgeTransport } from '../src/bridge/transport.js';
 import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
 import {
   appendBridgeBuffer,
   bridgeOutboxCounts,
   bridgeSeenInsert,
   claimDueBridgeOutbox,
+  deferBridgeOutbox,
   enqueueBridgeOutbox,
   bumpBridgeOutboxAttempt,
   markBridgeOutboxDead,
@@ -65,6 +66,7 @@ type BridgeOutboxOpsLike = {
   markBridgeOutboxSent(id: number): Promise<boolean>;
   markBridgeOutboxDead(id: number, error: string): Promise<boolean>;
   bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): Promise<boolean>;
+  deferBridgeOutbox(id: number, nextAt: number, error: string): Promise<boolean>;
   bridgeOutboxCounts(): Promise<{ pending: number; sent: number; dead: number; oldestPendingCreatedAt: number | null }>;
 };
 
@@ -78,6 +80,7 @@ const sqliteOps: BridgeOutboxOpsLike = {
   markBridgeOutboxSent: async (id) => markBridgeOutboxSent(id),
   markBridgeOutboxDead: async (id, error) => markBridgeOutboxDead(id, error),
   bumpBridgeOutboxAttempt: async (id, nextAt, error) => bumpBridgeOutboxAttempt(id, nextAt, error),
+  deferBridgeOutbox: async (id, nextAt, error) => deferBridgeOutbox(id, nextAt, error),
   bridgeOutboxCounts: async () => bridgeOutboxCounts(),
 };
 
@@ -206,6 +209,59 @@ describe('bridge durable outbox', () => {
     const thirdDue = await claimDueBridgeOutbox(10);
     expect(thirdDue).toHaveLength(1);
     expect(thirdDue[0]?.attempts).toBe(2);
+  });
+
+  it('defers bridge pacing rows without incrementing attempts or blocking later rows', async () => {
+    const deferred = await enqueueBridgeOutbox({
+      ...envelope('defer-1'),
+      routeId: 'route-telegram',
+      targetChatId: 'telegram-chat-a',
+    });
+    const later = await enqueueBridgeOutbox({
+      ...envelope('success-2'),
+      routeId: 'route-discord',
+      targetChatId: 'discord-chat-b',
+    });
+    const deliver = vi.fn<BridgeTransport['deliver']>(async (env) => {
+      if (env.idempotencyKey.endsWith('defer-1')) {
+        throw new BridgeDeliveryDeferredError(BASE_TIME + 3_000, 'Telegram pacing deferred until 1800000003000');
+      }
+    });
+    const outbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://target.local',
+      ops: sqliteOps,
+    }));
+
+    outbox.start();
+    await runOnePump();
+    await outbox.stop();
+
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(getOutboxRow(deferred.id)).toMatchObject({
+      status: 'pending',
+      attempts: 0,
+      nextAttemptAt: BASE_TIME + 3_000,
+      lastError: 'Telegram pacing deferred until 1800000003000',
+    });
+    expect(getOutboxRow(later.id)).toMatchObject({ status: 'sent', attempts: 0 });
+    expect(getLifetimeCounters().bridgeFailedByRoute.get('route-telegram') ?? 0).toBe(0);
+
+    vi.setSystemTime(BASE_TIME + 2_999);
+    expect(claimDueBridgeOutbox(10)).toHaveLength(0);
+
+    vi.setSystemTime(BASE_TIME + 3_000);
+    deliver.mockResolvedValue(undefined);
+    const retryOutbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://target.local',
+      ops: sqliteOps,
+    }));
+    retryOutbox.start();
+    await runOnePump();
+    await retryOutbox.stop();
+
+    expect(getOutboxRow(deferred.id)).toMatchObject({ status: 'sent', attempts: 0 });
   });
 
   it('dead-letters non-retryable failures immediately', async () => {
@@ -361,6 +417,7 @@ describe('bridge durable outbox', () => {
       markBridgeOutboxSent: vi.fn(async () => true),
       markBridgeOutboxDead: vi.fn(async () => true),
       bumpBridgeOutboxAttempt: vi.fn(async () => true),
+      deferBridgeOutbox: vi.fn(async () => true),
       bridgeOutboxCounts: vi.fn(async () => ({
         pending: rows.length,
         sent: 0,
@@ -411,6 +468,7 @@ describe('bridge durable outbox', () => {
       }),
       markBridgeOutboxDead: vi.fn(async () => true),
       bumpBridgeOutboxAttempt: vi.fn(async () => true),
+      deferBridgeOutbox: vi.fn(async () => true),
       bridgeOutboxCounts: vi.fn(async () => ({
         pending: row.status === 'sent' ? 0 : 1,
         sent: row.status === 'sent' ? 1 : 0,

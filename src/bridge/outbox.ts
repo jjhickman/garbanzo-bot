@@ -1,7 +1,7 @@
 import type { DbBackend } from '../utils/db-backend.js';
 import { recordBridgeDeadLettered, recordBridgeFailed, recordBridgeSent } from '../middleware/stats.js';
 import type { BridgeEnvelope } from './envelope.js';
-import type { BridgeTransport } from './transport.js';
+import { BridgeDeliveryDeferredError, type BridgeTransport } from './transport.js';
 
 const PUMP_INTERVAL_MS = 5_000;
 const CLAIM_LIMIT = 10;
@@ -15,6 +15,7 @@ export type BridgeOutboxOps = Pick<
   | 'markBridgeOutboxSent'
   | 'markBridgeOutboxDead'
   | 'bumpBridgeOutboxAttempt'
+  | 'deferBridgeOutbox'
   | 'bridgeOutboxCounts'
 >;
 
@@ -107,6 +108,11 @@ export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
           stats.delivered++;
           recordBridgeSent(routeLabel(envelope));
         } catch (err) {
+          if (err instanceof BridgeDeliveryDeferredError) {
+            await options.ops.deferBridgeOutbox(row.id, err.retryAtMs, err.message);
+            continue;
+          }
+
           const message = errorMessage(err);
           const retryable = isRetryableTransportError(err) ? err.retryable : true;
           const nextAttempt = row.attempts + 1;

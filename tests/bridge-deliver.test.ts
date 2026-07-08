@@ -4,6 +4,7 @@ import type { MessagingPlatform } from '../src/core/messaging-platform.js';
 import type { PlatformMessenger } from '../src/core/platform-messenger.js';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
 import { createRelayDeliverer } from '../src/bridge/relay-deliver.js';
+import { BridgeDeliveryDeferredError } from '../src/bridge/transport.js';
 import { getLifetimeCounters } from '../src/middleware/stats.js';
 import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-safety.js';
 import { config } from '../src/utils/config.js';
@@ -229,23 +230,19 @@ describe('createRelayDeliverer', () => {
     expect(sendText).toHaveBeenCalledTimes(1);
   });
 
-  it('paces sends to the same Telegram destination chat at least 3s apart', async () => {
+  it('defers a fast follow-up to the same Telegram destination chat instead of sleeping', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
     const { deliver, sendText } = deliverer({ platform: 'telegram' });
 
-    const first = deliver.deliver(envelope());
-    await vi.runAllTimersAsync();
-    await expect(first).resolves.toBe('sent');
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
     expect(sendText).toHaveBeenCalledTimes(1);
 
-    const second = deliver.deliver(envelope());
-    // Not yet sent — waiting out the 3s minimum interval.
-    await vi.advanceTimersByTimeAsync(2_999);
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_003_000,
+    });
     expect(sendText).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(second).resolves.toBe('sent');
-    expect(sendText).toHaveBeenCalledTimes(2);
+    await expect(deliver.deliver(envelope())).rejects.toBeInstanceOf(BridgeDeliveryDeferredError);
   });
 
   it('does not pace sends to different Telegram destination chats', async () => {
@@ -268,6 +265,7 @@ describe('createRelayDeliverer', () => {
 
   it('records the Telegram pacing clock even when the send fails, so a fast retry loop cannot bypass spacing', async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
     const failure = new Error('telegram boom');
     const sendText = vi.fn<SendText>()
       .mockRejectedValueOnce(failure)
@@ -279,12 +277,13 @@ describe('createRelayDeliverer', () => {
     await first;
     expect(sendText).toHaveBeenCalledTimes(1);
 
-    const second = deliver.deliver(envelope());
-    await vi.advanceTimersByTimeAsync(2_999);
+    await expect(deliver.deliver(envelope())).rejects.toMatchObject({
+      retryAtMs: 1_800_000_003_000,
+    });
     expect(sendText).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(second).resolves.toBe('sent');
+    vi.setSystemTime(1_800_000_003_000);
+    await expect(deliver.deliver(envelope())).resolves.toBe('sent');
     expect(sendText).toHaveBeenCalledTimes(2);
   });
 

@@ -6,6 +6,7 @@ import { Readable } from 'stream';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeEnvelope } from '../src/bridge/envelope.js';
+import { BridgeDeliveryDeferredError } from '../src/bridge/transport.js';
 
 async function loadHealthModule(): Promise<typeof import('../src/middleware/health.js')> {
   return import('../src/middleware/health.js');
@@ -263,5 +264,19 @@ describe('bridge inbound endpoint', () => {
 
     expect(response.status).toBe(503);
     expect(response.json()).toEqual({ error: 'delivery failed' });
+  });
+
+  it('returns delivery deferred when the handler reports a bridge pacing deadline', async () => {
+    const bridgeInboundHandler = vi.fn(async () => {
+      throw new BridgeDeliveryDeferredError(1_800_000_003_000, 'Telegram pacing deferred until 1800000003000');
+    });
+
+    const response = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, envelope());
+
+    expect(response.status).toBe(429);
+    expect(response.json()).toEqual({
+      error: 'delivery deferred',
+      retryAtMs: 1_800_000_003_000,
+    });
   });
 });

@@ -91,17 +91,20 @@ function isSnowflake(value) {
 const SNOWFLAKE_HINT = 'a Discord snowflake ID is 17-20 digits, numbers only — enable Developer '
   + 'Mode (User Settings -> Advanced), then right-click the channel/user/application and choose "Copy ID"';
 
-// Telegram chat/user ids are plain (not snowflake-shaped) integers: user and
-// small-group ids are positive/negative up to ~10 digits, supergroup and
-// channel ids are negative and prefixed with -100 (e.g. -1001234567890).
-// A leading '-' plus digits covers every real shape; there is no fixed
-// length to check the way Discord's snowflakes have.
-const TELEGRAM_CHAT_ID_RE = /^-?\d+$/;
+// Telegram chat/user ids are plain (not snowflake-shaped) integers. Accept
+// positive ids, legacy negative group ids, and -100-prefixed supergroup/channel
+// ids, but reject zero, incomplete -100, leading-zero forms, and values far
+// beyond Telegram's current id sizes.
+const TELEGRAM_CHAT_ID_RE = /^-?[1-9]\d*$/;
 function isTelegramChatId(value) {
-  return TELEGRAM_CHAT_ID_RE.test(String(value ?? '').trim());
+  const normalized = String(value ?? '').trim();
+  if (!TELEGRAM_CHAT_ID_RE.test(normalized)) return false;
+  if (normalized === '-100') return false;
+  return normalized.replace(/^-/, '').length <= 16;
 }
 const TELEGRAM_CHAT_ID_HINT = 'a Telegram chat ID is numeric — groups are negative, and supergroups/'
-  + 'channels are negative with a -100 prefix (e.g. -1001234567890); add the bot to the chat, send a '
+  + 'channels are negative with a -100 prefix (e.g. -1001234567890); do not use 0, leading zeros, '
+  + 'bare -100, or ids longer than 16 digits; add the bot to the chat, send a '
   + 'message, then read the id off @userinfobot (forward the message to it) or the getUpdates response '
   + '(https://api.telegram.org/bot<token>/getUpdates)';
 const TELEGRAM_USER_ID_HINT = 'a Telegram user id is numeric digits only — get it from @userinfobot';

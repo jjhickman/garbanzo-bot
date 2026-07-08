@@ -507,6 +507,11 @@ const updateBridgeOutboxAttempt = db.prepare(
    SET status = 'pending', attempts = attempts + 1, next_attempt_at = ?, last_error = ?
    WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
+const deferBridgeOutboxAttempt = db.prepare(
+  `UPDATE bridge_outbox
+   SET status = 'pending', next_attempt_at = ?, last_error = ?
+   WHERE id = ? AND status IN ('pending', 'claimed')`,
+);
 const insertBridgeSeen = db.prepare(
   `INSERT OR IGNORE INTO bridge_seen (idempotency_key, seen_at) VALUES (?, ?)`,
 );
@@ -914,6 +919,10 @@ export function markBridgeOutboxDead(id: number, error: string): boolean {
 
 export function bumpBridgeOutboxAttempt(id: number, nextAt: number, error: string): boolean {
   return updateBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
+}
+
+export function deferBridgeOutbox(id: number, nextAt: number, error: string): boolean {
+  return deferBridgeOutboxAttempt.run(nextAt, error, id).changes > 0;
 }
 
 export function bridgeSeenInsert(key: string): boolean {
@@ -1595,6 +1604,8 @@ export function createSqliteBackend(): DbBackend {
     markBridgeOutboxDead: async (id: number, error: string) => markBridgeOutboxDead(id, error),
     bumpBridgeOutboxAttempt: async (id: number, nextAt: number, error: string) =>
       bumpBridgeOutboxAttempt(id, nextAt, error),
+    deferBridgeOutbox: async (id: number, nextAt: number, error: string) =>
+      deferBridgeOutbox(id, nextAt, error),
     bridgeSeenInsert: async (key: string) => bridgeSeenInsert(key),
     bridgeSeenDelete: async (key: string) => bridgeSeenDelete(key),
     bridgeOutboxCounts: async () => bridgeOutboxCounts(),

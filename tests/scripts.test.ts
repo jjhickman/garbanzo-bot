@@ -661,6 +661,73 @@ describe('ops scripts', () => {
     }
   });
 
+  it('setup Telegram non-interactive run accepts valid chat id shapes', () => {
+    const validIds = [
+      '123456789',
+      '-123456789',
+      '-1001234567890',
+    ];
+
+    for (const chatId of validIds) {
+      const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+      try {
+        const out = runNodeScriptWithEnv(setupPath, [
+          '--non-interactive',
+          '--dry-run',
+          '--platform=telegram',
+          '--telegram-bot-token=test_telegram_token',
+          '--telegram-owner-id=123456789',
+          `--telegram-chat-id=${chatId}`,
+          '--providers=openai',
+          '--openai-key=test_key_setup',
+        ], { GARBANZO_HOME: home });
+
+        expect(out).toContain(chatId);
+        expect(out).toContain('config/telegram-chats.json');
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('setup Telegram non-interactive run rejects invalid chat id shapes with the value named', () => {
+    const invalidIds = [
+      '0',
+      '-100',
+      '123456789012345678901234567890',
+      'not-a-chat-id',
+      '012345',
+    ];
+
+    for (const chatId of invalidIds) {
+      const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+      try {
+        let caught: unknown;
+        try {
+          runNodeScriptWithEnv(setupPath, [
+            '--non-interactive',
+            '--dry-run',
+            '--platform=telegram',
+            '--telegram-bot-token=test_telegram_token',
+            '--telegram-owner-id=123456789',
+            `--telegram-chat-id=${chatId}`,
+            '--providers=openai',
+            '--openai-key=test_key_setup',
+          ], { GARBANZO_HOME: home });
+        } catch (err) {
+          caught = err;
+        }
+
+        expect(caught).toBeDefined();
+        const stdout = String((caught as { stdout?: string }).stdout ?? '');
+        expect(stdout).toContain(`"${chatId}"`);
+        expect(stdout).toMatch(/doesn't look like a Telegram chat ID/);
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+  });
+
   it('setup Telegram non-interactive run requires a bot token, owner ID, and enabled chat or fails clearly', () => {
     const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
 

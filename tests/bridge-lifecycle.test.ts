@@ -95,6 +95,7 @@ function fakeOutboxOps(): BridgeOutboxOps {
     markBridgeOutboxSent: vi.fn(async () => true),
     markBridgeOutboxDead: vi.fn(async () => true),
     bumpBridgeOutboxAttempt: vi.fn(async () => true),
+    deferBridgeOutbox: vi.fn(async () => true),
     bridgeOutboxCounts: vi.fn(async () => ({
       pending: 0,
       sent: 0,

@@ -1,6 +1,6 @@
 import { config } from '../utils/config.js';
 import type { BridgeEnvelope } from './envelope.js';
-import { TransportDeliveryError, type BridgeTransport } from './transport.js';
+import { BridgeDeliveryDeferredError, TransportDeliveryError, type BridgeTransport } from './transport.js';
 
 const DELIVERY_TIMEOUT_MS = 10_000;
 
@@ -34,6 +34,9 @@ export function createHttpBridgeTransport(): BridgeTransport {
 
       if (response.ok) return;
 
+      const deferred = await parseBridgeDeferral(response);
+      if (deferred) throw deferred;
+
       if (response.status === 400 || response.status === 401) {
         throw new TransportDeliveryError(`Bridge HTTP delivery rejected with ${response.status}`, false);
       }
@@ -49,4 +52,22 @@ export function createHttpBridgeTransport(): BridgeTransport {
       // No persistent resources for fetch-based delivery.
     },
   };
+}
+
+async function parseBridgeDeferral(response: Response): Promise<BridgeDeliveryDeferredError | null> {
+  if (response.status !== 429) return null;
+
+  let body: unknown;
+  try {
+    body = JSON.parse(await response.text()) as unknown;
+  } catch {
+    return null;
+  }
+
+  if (typeof body !== 'object' || body === null) return null;
+  const record = body as Record<string, unknown>;
+  if (record.error !== 'delivery deferred') return null;
+  const retryAtMs = record.retryAtMs;
+  if (typeof retryAtMs !== 'number' || !Number.isFinite(retryAtMs)) return null;
+  return new BridgeDeliveryDeferredError(retryAtMs);
 }
