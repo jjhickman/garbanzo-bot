@@ -7,6 +7,8 @@ type DocFile = {
   text: string;
 };
 
+export const BANNED_GROUP_CHAT_PATTERN = /(?<!\bWhatsApp\s)group chats?/i;
+
 export const BANNED_STALE_DOC_PATTERNS = [
   /APP_VERSION=0\.2/,
   /logs -f garbanzo\b/,
@@ -17,7 +19,7 @@ export const BANNED_STALE_DOC_PATTERNS = [
   /npx garbanzo\b(?!-bot)/,
   /Docker (?:and Docker Compose )?(?:is|are) required/i,
   /self-hosted/i,
-  /group chats?/i,
+  BANNED_GROUP_CHAT_PATTERN,
   /uptime kuma|\bKuma\b/i,
   // Regression guard (T3, v3.3.0): Telegram shipped as a fully supported
   // platform — "Telegram (in development)"-style claims (Telegram named as
@@ -28,6 +30,21 @@ export const BANNED_STALE_DOC_PATTERNS = [
   // platform (a T1-era "in development" claim lingered on the website until
   // this task) — "Matrix (in development)"-style claims must not creep back.
   /Matrix\s*(?:<em>)?\s*(?:is\s+|are\s+)?in development/i,
+] as const;
+
+const PORT_REGRESSION_DOC_PATHS = [
+  'docs/SETUP_EXAMPLES.md',
+  'docs/BAND_FEATURES.md',
+  'deploy/helm/garbanzo/templates/NOTES.txt',
+] as const;
+
+const BANNED_BARE_HEALTH_PORT_PATTERNS = [
+  /http:\/\/(?:127\.0\.0\.1|localhost):300[1-5]\b/i,
+  /\b(?:discord|whatsapp|telegram|matrix):300[1-5]\b/i,
+  /\bhealth port 300[1-5]\b/i,
+  /\bhealthPort=300[1-5]\b/,
+  /\bset healthPort=300[1-5]\b/i,
+  /\b300[1-5]\/tcp\b/i,
 ] as const;
 
 const repoRoot = process.cwd();
@@ -145,6 +162,36 @@ describe('docs consistency', () => {
     }
 
     expect(failures).toEqual([]);
+  });
+
+  it('flags generic group chat copy without blocking WhatsApp-qualified wording', () => {
+    expect(BANNED_GROUP_CHAT_PATTERN.test('community operations for group chats')).toBe(true);
+    expect(BANNED_GROUP_CHAT_PATTERN.test('WhatsApp group chat')).toBe(false);
+    expect(BANNED_GROUP_CHAT_PATTERN.test('WhatsApp group')).toBe(false);
+  });
+
+  it('keeps operator health ports expressed through platform placeholders', () => {
+    const failures: string[] = [];
+
+    for (const relativePath of PORT_REGRESSION_DOC_PATHS) {
+      const path = resolve(repoRoot, relativePath);
+      const lines = readFileSync(path, 'utf-8').split(/\r?\n/);
+      for (const [index, line] of lines.entries()) {
+        for (const pattern of BANNED_BARE_HEALTH_PORT_PATTERNS) {
+          if (pattern.test(line)) {
+            failures.push(`${relativePath}:${index + 1} matches ${pattern}`);
+          }
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
+  it('keeps the Docker Hub release description off rejected framing', () => {
+    const workflow = readFileSync(resolve(repoRoot, '.github/workflows/release-docker.yml'), 'utf-8');
+
+    expect(workflow).not.toMatch(/self-hosted/i);
   });
 
   it('resolves scoped relative markdown links in README and top-level docs', () => {

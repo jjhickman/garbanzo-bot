@@ -96,6 +96,34 @@ export type BridgeRoute = BridgeMap['routes'][number];
 
 let loadedBridgeMap: BridgeMap | null | undefined;
 
+function expandEnvPlaceholder(match: string, name: string, defaultValue: string | undefined): string {
+  const envValue = process.env[name];
+  if (envValue !== undefined && envValue !== '') return envValue;
+  if (defaultValue !== undefined) return defaultValue;
+  throw new Error(`Missing environment variable ${name} for bridge map placeholder ${match}`);
+}
+
+export function expandBridgeMapEnvPlaceholders(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.replace(
+      /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g,
+      expandEnvPlaceholder,
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => expandBridgeMapEnvPlaceholders(entry));
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, expandBridgeMapEnvPlaceholders(entry)]),
+    );
+  }
+
+  return value;
+}
+
 /**
  * Build a human-readable description of a single zod issue against the
  * bridge map, naming the offending instance/route entry by its declared id
@@ -139,6 +167,7 @@ export function loadBridgeMap(): BridgeMap | null {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(BRIDGE_MAP_PATH, 'utf8')) as unknown;
+    raw = expandBridgeMapEnvPlaceholders(raw);
     loadedBridgeMap = BridgeMapSchema.parse(raw);
     return loadedBridgeMap;
   } catch (err) {

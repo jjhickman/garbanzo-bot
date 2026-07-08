@@ -40,7 +40,7 @@ Then edit `config/discord-channels.json` from `config/discord-channels.example.j
 ```bash
 docker compose up -d
 docker compose logs -f discord
-curl http://127.0.0.1:3002/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
 ```
 
 ## 2. WhatsApp Community Bot
@@ -65,7 +65,7 @@ The wizard writes `.env` and `.env.whatsapp` and can write `config/groups.json` 
 ```bash
 docker compose up -d
 docker compose logs -f whatsapp
-curl http://127.0.0.1:3001/health
+curl "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
 ```
 
 ## 3. Discord Band Mode
@@ -92,7 +92,7 @@ Fill `config/discord-channels.json` with the real channel and role ids before st
 ```bash
 docker compose up -d
 docker compose logs -f discord
-curl http://127.0.0.1:3002/health/ready
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health/ready"
 ```
 
 ## 4. Discord and WhatsApp with Monitoring
@@ -138,8 +138,8 @@ APP_VERSION=3.1.0 docker compose -f docker-compose.yml -f docker-compose.prod.ym
 docker compose logs -f discord
 docker compose logs -f whatsapp
 
-curl http://127.0.0.1:3002/health
-curl http://127.0.0.1:3001/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
+curl "http://127.0.0.1:${WHATSAPP_HEALTH_PORT:-3001}/health"
 ```
 
 ## 5. Discord Community Bot (No Docker)
@@ -172,7 +172,7 @@ npm run setup -- --non-interactive \
   --discord-channel-id=$DISCORD_CHANNEL_ID
 
 npm run build && npm start
-curl http://127.0.0.1:3002/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
 ```
 
 The native deploy target skips Docker-only prompts (monitoring,

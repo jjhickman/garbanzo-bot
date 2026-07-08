@@ -19,14 +19,15 @@ an observability upgrade, a persona gallery, and a read-only operations page.
   messages and applies `requireMention` itself (Telegram withholds plain
   messages from privacy-on bots); `TELEGRAM_CHAT_SCOPE` defaults to
   `configured` because anyone can add the bot to any group. Compose service
-  `telegram` on health port 3005. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
+  `telegram` uses `${TELEGRAM_HEALTH_PORT:-3005}`. See
+  [docs/PLATFORMS.md](docs/PLATFORMS.md).
 - **Matrix adapter** (matrix-bot-sdk, `/sync` long polling): message send and
   receive with `org.matrix.custom.html` formatting, reply and audio handling,
   and bridging. Unencrypted rooms only — E2EE is not supported this release.
   Requires Node 20 for the project but the Matrix runtime asserts Node 22 at
   start (the SDK's floor). Sync token persists at `data/matrix-sync.json`.
-  Compose service `matrix` on health port 3004. Installed via Docker (any
-  architecture) or npm on x86-64/arm64-glibc; on bare-metal arm64-musl the
+  Compose service `matrix` uses `${MATRIX_HEALTH_PORT:-3004}`. Installed via
+  Docker (any architecture) or npm on x86-64/arm64-glibc; on bare-metal arm64-musl the
   npm install skips Matrix and points you at the Docker image (its native
   crypto dependency has no arm64-musl build).
 - **Persona gallery**: six ready-to-run personas (Riff, Quill, Margie, Bea,
@@ -161,7 +162,9 @@ See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive
 
 - Discord is the default platform path in docs, setup, and config examples.
 - Band mode runs on the Discord compose profile with `.env.discord` and `BAND_FEATURES_ENABLED=true`.
-- Prometheus scrapes both platform jobs: `discord:3002` and `whatsapp:3001`.
+- Prometheus scrapes both platform jobs:
+  `discord:${DISCORD_HEALTH_PORT:-3002}` and
+  `whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`.
 
 ## [1.1.0] — 2026-07-04
 

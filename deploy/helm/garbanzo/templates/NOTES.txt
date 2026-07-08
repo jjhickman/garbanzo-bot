@@ -13,5 +13,5 @@ For first login, port-forward the service and open:
   http://127.0.0.1:8080/whatsapp/login?token=<WHATSAPP_LOGIN_TOKEN>
 {{- else }}
 
-For WhatsApp installs, enable persistence.whatsappAuth and set healthPort=3001.
+For WhatsApp installs, enable persistence.whatsappAuth and set healthPort='${WHATSAPP_HEALTH_PORT:-3001}'.
 {{- end }}

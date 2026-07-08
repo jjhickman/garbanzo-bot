@@ -45,7 +45,7 @@ docker compose logs -f discord
 Health:
 
 ```bash
-curl http://127.0.0.1:3002/health
+curl "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/health"
 ```
 
 Band commands remain gated by `BAND_FEATURES_ENABLED=true`. Shared provider,

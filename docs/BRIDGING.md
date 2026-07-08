@@ -115,7 +115,9 @@ plain HTTP with no extra containers.
        `http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}`,
        `http://telegram:${TELEGRAM_HEALTH_PORT:-3005}`, or
        `http://matrix:${MATRIX_HEALTH_PORT:-3004}` on the compose
-       network. Not used by the AMQP transport.
+       network. The bridge loader expands `${VAR}` and `${VAR:-default}`
+       placeholders before validating the JSON. Not used by the AMQP
+       transport.
    - **`routes`** - one entry per bridged channel/group pair:
      - `id` - a unique, human-readable route slug.
      - `endpoints` - exactly two `{instance, chatId}` entries. `instance`

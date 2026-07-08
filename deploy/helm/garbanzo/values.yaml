@@ -14,8 +14,10 @@ env: {}
 secretEnv: {}
 existingSecret: ""
 
-# Discord defaults to 3002. Use 3001 for WhatsApp, 3005 for Telegram, or
-# 3004 for Matrix to match the compose profile ports.
+# Discord defaults to ${DISCORD_HEALTH_PORT:-3002}. Use
+# ${WHATSAPP_HEALTH_PORT:-3001} for WhatsApp,
+# ${TELEGRAM_HEALTH_PORT:-3005} for Telegram, or
+# ${MATRIX_HEALTH_PORT:-3004} for Matrix to match the compose profile ports.
 healthPort: 3002
 
 persistence:
