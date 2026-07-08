@@ -1,7 +1,4 @@
 # Garbanzo
-
-Self-hosted AI operations layer for group chat: Discord-first, WhatsApp-supported, and bridgeable into one conversation.
-
 > Website: https://garbanzobot.com | Docker Hub: https://hub.docker.com/r/jjhickman/garbanzo
 
 ![Garbanzo Logo](docs/assets/garbanzo-logo.svg)
