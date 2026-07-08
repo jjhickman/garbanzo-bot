@@ -444,6 +444,7 @@ describe('ops scripts', () => {
       mkdirSync(configDir, { recursive: true });
       const originalConfig = {
         ownerId: '888888888888888888',
+        operatorNote: 'keep this top-level setting',
         channels: {
           '333333333333333333': { name: 'general', enabled: true, requireMention: true },
         },
@@ -472,7 +473,7 @@ describe('ops scripts', () => {
 
       const channelsConfig = JSON.parse(
         readFileSync(join(configDir, 'discord-channels.json'), 'utf8'),
-      ) as { ownerId?: string; channels: Record<string, { name: string; enabled: boolean }> };
+      ) as { ownerId?: string; operatorNote?: string; channels: Record<string, { name: string; enabled: boolean }> };
       // Original entry preserved...
       expect(channelsConfig.channels['333333333333333333']).toEqual({
         name: 'general',
@@ -487,6 +488,157 @@ describe('ops scripts', () => {
       });
       // Pre-existing ownerId in the file is preserved over the run's --discord-owner-id.
       expect(channelsConfig.ownerId).toBe('888888888888888888');
+      expect(channelsConfig.operatorNote).toBe('keep this top-level setting');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup rerun preserves unrelated operator keys in existing env files', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      writeFileSync(
+        join(home, '.env'),
+        [
+          '# existing operator note',
+          'MESSAGING_PLATFORM=whatsapp',
+          'OPENAI_MODEL=old-model',
+          'OPERATOR_ONLY=keep-me',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      writeFileSync(
+        join(home, '.env.whatsapp'),
+        [
+          '# platform operator note',
+          'OWNER_JID=old_owner@s.whatsapp.net',
+          'WHATSAPP_EXTRA=keep-platform',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=whatsapp',
+        '--write-groups=false',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--openai-model=gpt-updated',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toContain('# existing operator note');
+      expect(envContent).toMatch(/^OPERATOR_ONLY=keep-me$/m);
+      expect(envContent).toMatch(/^OPENAI_MODEL=gpt-updated$/m);
+
+      const whatsappEnvContent = readFileSync(join(home, '.env.whatsapp'), 'utf8');
+      expect(whatsappEnvContent).toContain('# platform operator note');
+      expect(whatsappEnvContent).toMatch(/^WHATSAPP_EXTRA=keep-platform$/m);
+      expect(whatsappEnvContent).toMatch(/^OWNER_JID=test_owner@s\.whatsapp\.net$/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup dry-run env preview includes preserved operator keys from the merged output', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      writeFileSync(
+        join(home, '.env'),
+        [
+          'MESSAGING_PLATFORM=whatsapp',
+          'OPERATOR_ONLY=keep-me',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=whatsapp',
+        '--write-groups=false',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('--- .env (preview) ---');
+      expect(out).toContain('OPERATOR_ONLY=keep-me');
+      expect(readFileSync(join(home, '.env'), 'utf8')).toContain('OPERATOR_ONLY=keep-me');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup rerun merges config/groups.json and preserves unrelated groups and admin settings', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const configDir = join(home, 'config');
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(
+        join(configDir, 'groups.json'),
+        JSON.stringify({
+          groups: {
+            '999000000000000000@g.us': {
+              name: 'Unrelated',
+              enabled: true,
+              requireMention: false,
+              persona: 'Keep me',
+              enabledFeatures: ['help'],
+            },
+          },
+          mentionPatterns: ['@oldbot'],
+          admins: {
+            owner: { name: 'Old Owner', jid: 'old_owner@s.whatsapp.net' },
+            moderators: ['moderator@s.whatsapp.net'],
+          },
+          operatorNote: 'keep this groups setting',
+        }),
+        'utf8',
+      );
+
+      runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=whatsapp',
+        '--group-id=120000000000000000@g.us',
+        '--group-name=General',
+        '--bot-name=garbanzo',
+        '--owner-name=Owner',
+        '--write-groups=true',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+        '--owner-jid=test_owner@s.whatsapp.net',
+      ], { GARBANZO_HOME: home });
+
+      const groupsConfig = JSON.parse(
+        readFileSync(join(configDir, 'groups.json'), 'utf8'),
+      ) as {
+        groups: Record<string, unknown>;
+        admins: { moderators: string[] };
+        mentionPatterns: string[];
+        operatorNote?: string;
+      };
+      expect(groupsConfig.groups['999000000000000000@g.us']).toEqual({
+        name: 'Unrelated',
+        enabled: true,
+        requireMention: false,
+        persona: 'Keep me',
+        enabledFeatures: ['help'],
+      });
+      expect(groupsConfig.groups['120000000000000000@g.us']).toEqual({
+        name: 'General',
+        enabled: true,
+        requireMention: true,
+        persona: 'Friendly community assistant. Help with logistics, planning, and conversation.',
+        enabledFeatures: ['weather', 'transit', 'news', 'events', 'dnd', 'roll', 'books', 'venues', 'poll', 'fun', 'character', 'feedback', 'profile', 'summary', 'recommend', 'voice'],
+      });
+      expect(groupsConfig.admins.moderators).toEqual(['moderator@s.whatsapp.net']);
+      expect(groupsConfig.mentionPatterns).toEqual(['@garbanzo', '@Garbanzo', '@bot']);
+      expect(groupsConfig.operatorNote).toBe('keep this groups setting');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

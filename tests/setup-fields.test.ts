@@ -21,6 +21,7 @@ import {
   resolveMessagingPlatform,
   DEFAULT_MESSAGING_PLATFORM,
   mergeExistingEnvForPlatform,
+  mergeEnvFileContent,
   buildPlatformEnvLines,
   buildSharedEnvLines,
   redactEnvContent,
@@ -208,6 +209,33 @@ describe('setup field resolver', () => {
       OWNER_JID: 'root-owner@s.whatsapp.net',
       DISCORD_OWNER_ID: 'platform-owner',
     });
+  });
+
+  it('merges generated env content into existing files without dropping unknown keys or comments', () => {
+    const generatedContent = [
+      '# generated header',
+      'MESSAGING_PLATFORM=whatsapp',
+      '',
+      '# models',
+      'OPENAI_MODEL=gpt-updated',
+      'ANTHROPIC_MODEL=claude-haiku-4-5-20251001',
+      '',
+    ].join('\n');
+    const existingContent = [
+      '# operator note',
+      'MESSAGING_PLATFORM=discord',
+      'OPERATOR_ONLY=keep-me',
+      'OPENAI_MODEL=old-model',
+      '',
+    ].join('\n');
+
+    const merged = mergeEnvFileContent(existingContent, generatedContent);
+
+    expect(merged).toContain('# operator note');
+    expect(merged).toMatch(/^OPERATOR_ONLY=keep-me$/m);
+    expect(merged).toMatch(/^MESSAGING_PLATFORM=whatsapp$/m);
+    expect(merged).toMatch(/^OPENAI_MODEL=gpt-updated$/m);
+    expect(merged).toMatch(/^ANTHROPIC_MODEL=claude-haiku-4-5-20251001$/m);
   });
 
   it('redacts MONITORING_TOKEN in dry-run env previews', () => {

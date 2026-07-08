@@ -21,6 +21,7 @@ import {
   resolveComposeProfiles,
   buildPlatformEnvLines,
   buildSharedEnvLines,
+  mergeEnvFileContent,
   redactEnvContent,
   OPENAI_AUTH_MODES,
   WHATSAPP_LOGIN_MODES,
@@ -325,6 +326,15 @@ function parseBoolean(value, fallback) {
   return fallback;
 }
 
+function asRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function mergeEnvTargetContent(path, generatedContent) {
+  if (!existsSync(path)) return generatedContent;
+  return mergeEnvFileContent(readFileSync(path, 'utf-8'), generatedContent);
+}
+
 function sanitizeFeatureList(features) {
   const normalized = Array.from(new Set(features.map((f) => f.trim().toLowerCase()).filter(Boolean)));
   const invalid = normalized.filter((f) => !ALL_FEATURES.includes(f));
@@ -467,7 +477,7 @@ async function resolveDiscordChannels({ nonInteractive, cli, rl }) {
     changed = true;
   }
 
-  return { channelsMap, changed, ownerId: existingConfig?.ownerId };
+  return { channelsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
 }
 
 // Collects one { id, name } chat entry interactively, re-prompting on
@@ -549,7 +559,7 @@ async function resolveTelegramChats({ nonInteractive, cli, rl }) {
     changed = true;
   }
 
-  return { chatsMap, changed, ownerId: existingConfig?.ownerId };
+  return { chatsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
 }
 
 // Resolves a #alias:server to its permanent !room:server id via the
@@ -676,7 +686,7 @@ async function resolveMatrixRooms({ nonInteractive, cli, rl, homeserverUrl, dryR
     changed = true;
   }
 
-  return { roomsMap, changed, ownerId: existingConfig?.ownerId };
+  return { roomsMap, changed, ownerId: existingConfig?.ownerId, existingConfig };
 }
 
 async function main() {
@@ -880,6 +890,7 @@ async function main() {
     let discordChannelsMap = {};
     let discordChannelsChanged = false;
     let existingChannelsOwnerId;
+    let existingDiscordChannelsConfig = null;
     if (messagingPlatform === 'discord') {
       if (nonInteractive) {
         discordClientId = (cli.options['discord-client-id'] ?? existing.DISCORD_CLIENT_ID ?? '').trim();
@@ -950,6 +961,7 @@ async function main() {
         channelsMap: discordChannelsMap,
         changed: discordChannelsChanged,
         ownerId: existingChannelsOwnerId,
+        existingConfig: existingDiscordChannelsConfig,
       } = await resolveDiscordChannels({ nonInteractive, cli, rl }));
 
       if (nonInteractive) {
@@ -975,6 +987,7 @@ async function main() {
     let telegramChatsMap = {};
     let telegramChatsChanged = false;
     let existingTelegramChatsOwnerId;
+    let existingTelegramChatsConfig = null;
     if (messagingPlatform === 'telegram') {
       if (nonInteractive) {
         for (const field of TELEGRAM_FIELDS) {
@@ -1028,6 +1041,7 @@ async function main() {
         chatsMap: telegramChatsMap,
         changed: telegramChatsChanged,
         ownerId: existingTelegramChatsOwnerId,
+        existingConfig: existingTelegramChatsConfig,
       } = await resolveTelegramChats({ nonInteractive, cli, rl }));
     }
 
@@ -1035,6 +1049,7 @@ async function main() {
     let matrixRoomsMap = {};
     let matrixRoomsChanged = false;
     let existingMatrixRoomsOwnerId;
+    let existingMatrixRoomsConfig = null;
     if (messagingPlatform === 'matrix') {
       if (nonInteractive) {
         for (const field of MATRIX_FIELDS) {
@@ -1101,6 +1116,7 @@ async function main() {
         roomsMap: matrixRoomsMap,
         changed: matrixRoomsChanged,
         ownerId: existingMatrixRoomsOwnerId,
+        existingConfig: existingMatrixRoomsConfig,
       } = await resolveMatrixRooms({
         nonInteractive,
         cli,
@@ -1556,7 +1572,7 @@ async function main() {
       output.write(`\nℹ️ ${vectorStoreNote}\n`);
     }
 
-    const envTargets = [{ path: ENV_PATH, content: sharedEnvContent, label: '.env' }];
+    const envTargets = [{ path: ENV_PATH, content: mergeEnvTargetContent(ENV_PATH, sharedEnvContent), label: '.env' }];
     if (messagingPlatform === 'discord') {
       let discordEnvContent = buildPlatformEnvLines('discord', finalEnv).join('\n');
       if (discordClientId) {
@@ -1569,25 +1585,25 @@ async function main() {
       }
       envTargets.push({
         path: ENV_DISCORD_PATH,
-        content: discordEnvContent,
+        content: mergeEnvTargetContent(ENV_DISCORD_PATH, discordEnvContent),
         label: '.env.discord',
       });
     } else if (messagingPlatform === 'whatsapp') {
       envTargets.push({
         path: ENV_WHATSAPP_PATH,
-        content: buildPlatformEnvLines('whatsapp', finalEnv).join('\n'),
+        content: mergeEnvTargetContent(ENV_WHATSAPP_PATH, buildPlatformEnvLines('whatsapp', finalEnv).join('\n')),
         label: '.env.whatsapp',
       });
     } else if (messagingPlatform === 'telegram') {
       envTargets.push({
         path: ENV_TELEGRAM_PATH,
-        content: buildPlatformEnvLines('telegram', finalEnv).join('\n'),
+        content: mergeEnvTargetContent(ENV_TELEGRAM_PATH, buildPlatformEnvLines('telegram', finalEnv).join('\n')),
         label: '.env.telegram',
       });
     } else if (messagingPlatform === 'matrix') {
       envTargets.push({
         path: ENV_MATRIX_PATH,
-        content: buildPlatformEnvLines('matrix', finalEnv).join('\n'),
+        content: mergeEnvTargetContent(ENV_MATRIX_PATH, buildPlatformEnvLines('matrix', finalEnv).join('\n')),
         label: '.env.matrix',
       });
     }
@@ -1663,8 +1679,20 @@ async function main() {
       : false;
 
     if (shouldWriteGroups) {
+      let existingGroupsConfig = null;
+      if (existsSync(GROUPS_PATH)) {
+        try {
+          existingGroupsConfig = JSON.parse(readFileSync(GROUPS_PATH, 'utf-8'));
+        } catch (err) {
+          throw new Error(`config/groups.json exists but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      const existingGroupsRecord = asRecord(existingGroupsConfig);
+      const existingAdminsRecord = asRecord(existingGroupsRecord.admins);
       const groupsConfig = {
+        ...existingGroupsRecord,
         groups: {
+          ...asRecord(existingGroupsRecord.groups),
           [groupId]: {
             name: groupName,
             enabled: true,
@@ -1675,11 +1703,12 @@ async function main() {
         },
         mentionPatterns: [`@${botName}`, `@${botName.charAt(0).toUpperCase()}${botName.slice(1)}`, '@bot'],
         admins: {
+          ...existingAdminsRecord,
           owner: {
             name: ownerName,
             jid: finalEnv.OWNER_JID,
           },
-          moderators: [],
+          moderators: Array.isArray(existingAdminsRecord.moderators) ? existingAdminsRecord.moderators : [],
         },
       };
 
@@ -1709,6 +1738,7 @@ async function main() {
       } else {
         const resolvedOwnerId = existingChannelsOwnerId || finalEnv.DISCORD_OWNER_ID;
         const channelsConfig = {
+          ...asRecord(existingDiscordChannelsConfig),
           ...(resolvedOwnerId ? { ownerId: resolvedOwnerId } : {}),
           channels: discordChannelsMap,
         };
@@ -1741,6 +1771,7 @@ async function main() {
       } else {
         const resolvedTelegramOwnerId = existingTelegramChatsOwnerId || finalEnv.TELEGRAM_OWNER_ID;
         const telegramChatsConfig = {
+          ...asRecord(existingTelegramChatsConfig),
           ...(resolvedTelegramOwnerId ? { ownerId: resolvedTelegramOwnerId } : {}),
           chats: telegramChatsMap,
         };
@@ -1772,6 +1803,7 @@ async function main() {
       } else {
         const resolvedMatrixOwnerId = existingMatrixRoomsOwnerId || finalEnv.MATRIX_OWNER_ID;
         const matrixRoomsConfig = {
+          ...asRecord(existingMatrixRoomsConfig),
           ...(resolvedMatrixOwnerId ? { ownerId: resolvedMatrixOwnerId } : {}),
           rooms: matrixRoomsMap,
         };
