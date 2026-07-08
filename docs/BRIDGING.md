@@ -108,14 +108,12 @@ plain HTTP with no extra containers.
    - **`instances`** - one entry per bridged deployment:
      - `id` - matches that instance's `INSTANCE_ID` (or its `MESSAGING_PLATFORM`
        if `INSTANCE_ID` is unset).
-     - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`
-       (Matrix accepts the value at the schema level ahead of its runtime
-       landing; there is nothing to bridge to until then. Telegram has a
-       runtime and can be bridged today).
+     - `platform` - one of `whatsapp`, `discord`, `slack`, `telegram`, `matrix`.
+       Telegram and Matrix both have runtimes and can be bridged today.
      - `url` (optional) - the base URL the HTTP transport uses to reach that
        instance, for example `http://discord:3002`, `http://whatsapp:3001`,
-       or `http://telegram:3005` on the compose network. Not used by the AMQP
-       transport.
+       `http://telegram:3005`, or `http://matrix:3004` on the compose
+       network. Not used by the AMQP transport.
    - **`routes`** - one entry per bridged channel/group pair:
      - `id` - a unique, human-readable route slug.
      - `endpoints` - exactly two `{instance, chatId}` entries. `instance`
@@ -136,7 +134,14 @@ plain HTTP with no extra containers.
        apart (per destination chat) so a burst of relays from a busy source
        can't systematically trip Telegram's per-chat rate limit; the
        Telegram adapter also retries a single 429 using the server's own
-       `retry_after` on top of that spacing.
+       `retry_after` on top of that spacing. There is likewise no
+       `modeToMatrix` field: Matrix endpoints always relay directly
+       (verbatim). Matrix bridge deliveries have no fixed pacing, unlike
+       Telegram's proactive spacing — homeserver rate limits
+       (`M_LIMIT_EXCEEDED`) are operator-configurable rather than a fixed
+       vendor ceiling, so the Matrix adapter retries inline only for a short
+       wait and defers anything longer through the same durable outbox used
+       for held WhatsApp sends.
      - `relayCommands` - `false` by default. When false, messages starting
        with `!` (bang commands like `!weather`) are not relayed.
      - `ingestRelayed` - `false` by default. When true, successfully delivered

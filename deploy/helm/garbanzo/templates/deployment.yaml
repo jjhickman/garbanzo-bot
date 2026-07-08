@@ -98,6 +98,12 @@ spec:
               subPath: telegram-chats.json
               readOnly: true
             {{- end }}
+            {{- if .Values.configFiles.matrixRoomsJson }}
+            - name: config
+              mountPath: /app/config/matrix-rooms.json
+              subPath: matrix-rooms.json
+              readOnly: true
+            {{- end }}
             {{- if .Values.configFiles.bridgeMapJson }}
             - name: config
               mountPath: /app/config/bridge-map.json

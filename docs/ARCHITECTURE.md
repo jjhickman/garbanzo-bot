@@ -6,7 +6,7 @@ Garbanzo is a Discord-first, multi-platform community bot. One process runs one 
 ## Runtime Shape
 
 - **Entry and lifecycle:** startup, config validation, health server, maintenance jobs, bridge lifecycle, and platform runtime selection.
-- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp, Discord, and Telegram are fully supported. Slack is an experimental scaffold; Matrix is in development.
+- **Platform adapters:** Discord Gateway is the default production runtime. WhatsApp, Discord, Telegram, and Matrix are fully supported. Slack is an experimental scaffold.
 - **Core pipeline:** platform-neutral inbound processing, group command routing, owner DM routing, response generation, and outbound messenger contracts.
 - **AI layer:** provider failover through `AI_PROVIDER_ORDER`, optional local OpenAI API-compatible AI provider for simple queries, shared tool definitions, and provider-specific request builders.
 - **Persistence:** SQLite is the default source of record. Postgres support exists behind the database backend layer for managed deployments.
@@ -41,7 +41,9 @@ WhatsApp uses Baileys with persistent auth state, browser or terminal login, and
 
 Telegram uses grammY over long polling (no inbound webhook config needed). Chat bindings live in `config/telegram-chats.json`, with `TELEGRAM_CHATS_CONFIG_PATH` available for overrides. The default Docker service is `telegram`, and its health server listens on port `3005`. See [docs/PLATFORMS.md](PLATFORMS.md) for the BotFather setup walkthrough and the privacy-mode recommendation.
 
-All three services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, `.env.whatsapp` for WhatsApp instance settings, and `.env.telegram` for Telegram instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `telegram`, `monitoring`, and optional `broker`.
+Matrix uses `matrix-bot-sdk` over `/sync` long polling, with the sync token persisted to `data/matrix-sync.json` so a restart resumes instead of running a fresh initial sync. Room bindings live in `config/matrix-rooms.json`, keyed by room ID, with `MATRIX_ROOMS_CONFIG_PATH` available for overrides. The default Docker service is `matrix`, and its health server listens on port `3004`. Encrypted rooms are not supported. See [docs/PLATFORMS.md](PLATFORMS.md) for the bot-account setup walkthrough and the unencrypted-room requirement.
+
+All four services use layered env files: `.env` for shared provider/runtime settings, `.env.discord` for Discord instance settings, `.env.whatsapp` for WhatsApp instance settings, `.env.telegram` for Telegram instance settings, and `.env.matrix` for Matrix instance settings. `COMPOSE_PROFILES` selects `discord`, `whatsapp`, `telegram`, `matrix`, `monitoring`, and optional `broker`.
 
 ## Bridge Subsystem
 

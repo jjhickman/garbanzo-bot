@@ -118,6 +118,7 @@ describe('platform-profile compose contract', () => {
     expect(Object.keys(compose.services ?? {}).sort()).toEqual([
       'discord',
       'grafana',
+      'matrix',
       'prometheus',
       'qdrant',
       'rabbitmq',
@@ -125,10 +126,11 @@ describe('platform-profile compose contract', () => {
       'whatsapp',
     ]);
 
-    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp', 'telegram']);
+    expect(service(compose, 'qdrant').profiles).toEqual(['discord', 'whatsapp', 'telegram', 'matrix']);
     expect(service(compose, 'discord').profiles).toEqual(['discord']);
     expect(service(compose, 'whatsapp').profiles).toEqual(['whatsapp']);
     expect(service(compose, 'telegram').profiles).toEqual(['telegram']);
+    expect(service(compose, 'matrix').profiles).toEqual(['matrix']);
     expect(service(compose, 'prometheus').profiles).toEqual(['monitoring']);
     expect(service(compose, 'grafana').profiles).toEqual(['monitoring']);
     expect(service(compose, 'rabbitmq').profiles).toEqual(['broker']);
@@ -154,6 +156,10 @@ describe('platform-profile compose contract', () => {
       { path: '.env', required: true },
       { path: '.env.telegram', required: false },
     ]);
+    expect(envFileEntries(service(compose, 'matrix'))).toEqual([
+      { path: '.env', required: true },
+      { path: '.env.matrix', required: false },
+    ]);
   });
 
   it('preserves all named Docker volumes byte-for-byte', () => {
@@ -163,6 +169,7 @@ describe('platform-profile compose contract', () => {
       'garbanzo-bot-auth',
       'garbanzo-bot-data',
       'garbanzo-bot-grafana',
+      'garbanzo-bot-matrix-data',
       'garbanzo-bot-prometheus',
       'garbanzo-bot-qdrant',
       'garbanzo-bot-rabbitmq',
@@ -201,17 +208,30 @@ describe('platform-profile compose contract', () => {
       ]),
     );
 
+    const matrix = service(compose, 'matrix');
+    expect(envEntries(matrix)).toEqual(
+      expect.arrayContaining([
+        'MESSAGING_PLATFORM=matrix',
+        'HEALTH_PORT=3004',
+        // eslint-disable-next-line no-template-curly-in-string -- compose interpolation, not a JS template
+        'QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}',
+      ]),
+    );
+
     expect(toStringList(discord.ports)).toContain('127.0.0.1:3002:3002');
     expect(toStringList(whatsapp.ports)).toContain('0.0.0.0:3001:3001');
     expect(toStringList(telegram.ports)).toContain('127.0.0.1:3005:3005');
+    expect(toStringList(matrix.ports)).toContain('127.0.0.1:3004:3004');
 
     expect(dependsOnEntries(discord)).toContain('qdrant');
     expect(dependsOnEntries(whatsapp)).toContain('qdrant');
     expect(dependsOnEntries(telegram)).toContain('qdrant');
+    expect(dependsOnEntries(matrix)).toContain('qdrant');
 
     expect(toStringList(discord.extra_hosts)).toContain('host.docker.internal:host-gateway');
     expect(toStringList(whatsapp.extra_hosts)).toContain('host.docker.internal:host-gateway');
     expect(toStringList(telegram.extra_hosts)).toContain('host.docker.internal:host-gateway');
+    expect(toStringList(matrix.extra_hosts)).toContain('host.docker.internal:host-gateway');
   });
 
   it('keeps platform-specific persisted data mounts', () => {
@@ -234,6 +254,12 @@ describe('platform-profile compose contract', () => {
         './config/telegram-chats.json:/app/config/telegram-chats.json:ro',
       ]),
     );
+    expect(toStringList(service(compose, 'matrix').volumes)).toEqual(
+      expect.arrayContaining([
+        'matrix_data:/app/data',
+        './config/matrix-rooms.json:/app/config/matrix-rooms.json:ro',
+      ]),
+    );
   });
 
   it('ro-mounts the bridge map on all bot services', () => {
@@ -244,6 +270,9 @@ describe('platform-profile compose contract', () => {
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
     expect(toStringList(service(compose, 'telegram').volumes)).toContain(
+      './config/bridge-map.json:/app/config/bridge-map.json:ro',
+    );
+    expect(toStringList(service(compose, 'matrix').volumes)).toContain(
       './config/bridge-map.json:/app/config/bridge-map.json:ro',
     );
   });
@@ -308,6 +337,7 @@ describe('layered env example coherence', () => {
   const discordExample = parseEnvExample('.env.discord.example');
   const whatsappExample = parseEnvExample('.env.whatsapp.example');
   const telegramExample = parseEnvExample('.env.telegram.example');
+  const matrixExample = parseEnvExample('.env.matrix.example');
   const discordExampleText = readFileSync('.env.discord.example', 'utf-8');
   const sharedExampleText = readFileSync('.env.example', 'utf-8');
 
@@ -316,6 +346,7 @@ describe('layered env example coherence', () => {
       ['discord', discordExample],
       ['whatsapp', whatsappExample],
       ['telegram', telegramExample],
+      ['matrix', matrixExample],
     ] as const) {
       const duplicatedKeys = [...instanceExample.keys()].filter((key) => sharedExample.has(key));
 
@@ -343,6 +374,14 @@ describe('layered env example coherence', () => {
     expect(telegramExample.has('TELEGRAM_OWNER_ID')).toBe(true);
     expect(telegramExample.get('TELEGRAM_CHAT_SCOPE')).toBe('configured');
     expect(sharedExample.has('TELEGRAM_BOT_TOKEN')).toBe(false);
+  });
+
+  it('keeps Matrix credentials scoped to the Matrix example', () => {
+    expect(matrixExample.has('MATRIX_HOMESERVER_URL')).toBe(true);
+    expect(matrixExample.has('MATRIX_ACCESS_TOKEN')).toBe(true);
+    expect(matrixExample.has('MATRIX_OWNER_ID')).toBe(true);
+    expect(matrixExample.get('MATRIX_CHAT_SCOPE')).toBe('configured');
+    expect(sharedExample.has('MATRIX_ACCESS_TOKEN')).toBe(false);
   });
 
   it('removes the retired Remy env example', () => {

@@ -103,10 +103,10 @@ Candidates for the next platform adapter, ranked at research time:
 1. ~~**Telegram**~~ — shipped in v3.3.0: an official free Bot API and a
    mature TypeScript-native client library (grammY), with no account-ban
    risk (unlike WhatsApp/Baileys). See [docs/PLATFORMS.md](PLATFORMS.md).
-2. **Matrix** (in development, riding with the v3.3.0 series) — best fit for
-   a self-hosted, privacy-minded community audience, backed by a real demand
-   signal (a large spike in Matrix interest during a 2026 Discord trust
-   incident), with a healthy TypeScript-native bot SDK.
+2. ~~**Matrix**~~ — shipped in v3.3.0: best fit for a self-hosted,
+   privacy-minded community audience, backed by a real demand signal (a
+   large spike in Matrix interest during a 2026 Discord trust incident).
+   Unencrypted rooms only for now. See [docs/PLATFORMS.md](PLATFORMS.md).
 3. **Mattermost** — a clean official bot-account API and a genuinely free
    self-hosted core (bot accounts don't consume paid seats), with strong
    audience overlap as another self-hosted OSS chat tool.

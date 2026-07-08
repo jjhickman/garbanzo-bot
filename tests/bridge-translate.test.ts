@@ -47,7 +47,15 @@ describe('translateFormatting', () => {
     expect(translateFormatting('*same* _same_', 'whatsapp', 'whatsapp')).toBe('*same* _same_');
     expect(translateFormatting('*same* _same_', 'discord', 'discord')).toBe('*same* _same_');
     expect(translateFormatting('*slack* _text_', 'slack', 'discord')).toBe('*slack* _text_');
-    expect(translateFormatting('*matrix* _text_', 'discord', 'matrix')).toBe('*matrix* _text_');
+    // whatsapp -> matrix/telegram is deliberate identity: those adapters
+    // already speak the whatsapp-style vocabulary at send time.
+    expect(translateFormatting('*matrix* _text_', 'whatsapp', 'matrix')).toBe('*matrix* _text_');
+  });
+
+  it('translates Discord formatting to Matrix using the same whatsapp-style token mapping as Discord -> WhatsApp', () => {
+    expect(translateFormatting('**bold** ~~strike~~', 'discord', 'matrix')).toBe(
+      translateFormatting('**bold** ~~strike~~', 'discord', 'whatsapp'),
+    );
   });
 
   it('translates Discord formatting to Telegram using the same whatsapp-style token mapping as Discord -> WhatsApp', () => {

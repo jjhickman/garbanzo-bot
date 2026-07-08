@@ -43,8 +43,8 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 Validate supported platform values.
 */}}
 {{- define "garbanzo.platform" -}}
-{{- if not (or (eq .Values.platform "discord") (eq .Values.platform "whatsapp") (eq .Values.platform "telegram")) -}}
-{{- fail "platform must be one of: discord, whatsapp, telegram" -}}
+{{- if not (or (eq .Values.platform "discord") (eq .Values.platform "whatsapp") (eq .Values.platform "telegram") (eq .Values.platform "matrix")) -}}
+{{- fail "platform must be one of: discord, whatsapp, telegram, matrix" -}}
 {{- end -}}
 {{- .Values.platform -}}
 {{- end -}}

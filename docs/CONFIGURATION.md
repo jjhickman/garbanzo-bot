@@ -30,7 +30,7 @@ cp .env.discord.example .env.discord
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `COMPOSE_PROFILES` | Docker | Compose profile list, for example `discord`, `whatsapp`, or `discord,whatsapp,monitoring` |
-| `MESSAGING_PLATFORM` | No | Messaging runtime target (`discord`, `whatsapp`, `slack`, `telegram`, `matrix`); defaults to `discord` and is pinned per bot service in `docker-compose.yml`. `telegram`/`matrix` pass config validation but have no runtime yet — the platform factory throws a clear "not available in this build yet" error until their adapters ship |
+| `MESSAGING_PLATFORM` | No | Messaging runtime target (`discord`, `whatsapp`, `slack`, `telegram`, `matrix`); defaults to `discord` and is pinned per bot service in `docker-compose.yml` |
 | `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY` or `BEDROCK_MODEL_ID` | Yes | Cloud AI responses (Claude/OpenAI/Gemini/Bedrock failover) |
 | `AI_PROVIDER_ORDER` | No | Comma-separated cloud provider priority (default: `openai,anthropic`) |
 | `ANTHROPIC_MODEL` | No | Anthropic model override (default: `claude-haiku-4-5-20251001`) |
@@ -120,6 +120,11 @@ cp .env.discord.example .env.discord
 | `TELEGRAM_OWNER_ID` | Telegram only | Owner's numeric Telegram user id (from @userinfobot); required only when `MESSAGING_PLATFORM=telegram` |
 | `TELEGRAM_CHATS_CONFIG_PATH` | No | Path to the Telegram chat config file (default: `config/telegram-chats.json`) |
 | `TELEGRAM_CHAT_SCOPE` | No | Telegram inbound scope: `configured` (default) ingests only enabled chats from `config/telegram-chats.json`; `all` ingests every chat the bot is added to. Default differs from WhatsApp's `all` because anyone can add the bot to any group via its `@username`. DMs still flow either way |
+| `MATRIX_HOMESERVER_URL` | Matrix only | Base URL of the homeserver the bot's account lives on, e.g. `https://matrix.example.org`; required only when `MESSAGING_PLATFORM=matrix` |
+| `MATRIX_ACCESS_TOKEN` | Matrix only | Bot account access token (Element: Settings -> Help & About -> Advanced -> Access Token, or a scripted `/_matrix/client/v3/login`); required only when `MESSAGING_PLATFORM=matrix` |
+| `MATRIX_OWNER_ID` | Matrix only | Owner's Matrix user id, e.g. `@you:example.org`, not the bot's; required only when `MESSAGING_PLATFORM=matrix` |
+| `MATRIX_ROOMS_CONFIG_PATH` | No | Path to the Matrix room config file (default: `config/matrix-rooms.json`) |
+| `MATRIX_CHAT_SCOPE` | No | Matrix inbound scope: `configured` (default) ingests only enabled rooms from `config/matrix-rooms.json`; `all` ingests every room the bot is joined to. Default differs from WhatsApp's `all` because anyone who knows the bot's Matrix user id can invite it to a room, the same rationale as `TELEGRAM_CHAT_SCOPE`. DMs still flow either way |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 | `INSTANCE_ID` | No | Deployment identity for cross-instance bridging; defaults to `MESSAGING_PLATFORM` |
 | `BRIDGE_ENABLED` | No | Master switch for cross-platform message bridging (default: `false`) |

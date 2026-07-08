@@ -53,6 +53,25 @@ The chart default health port remains `3002`; Telegram deployments should pass
 `configFiles.telegramChatsJson` to mount a chart-managed
 `config/telegram-chats.json`.
 
+## Matrix Example
+
+```bash
+helm install community-mx ./deploy/helm/garbanzo \
+  --set platform=matrix \
+  --set instanceId=community-mx \
+  --set healthPort=3004 \
+  --set secretEnv.MATRIX_ACCESS_TOKEN='<bot-access-token>' \
+  --set env.MATRIX_HOMESERVER_URL='https://matrix.example.org' \
+  --set env.MATRIX_OWNER_ID='@you:example.org' \
+  --set secretEnv.OPENAI_API_KEY='<openai-key>'
+```
+
+As with Telegram, pass `--set healthPort=3004` explicitly (the chart default
+stays `3002`). Set `configFiles.matrixRoomsJson` to mount a chart-managed
+`config/matrix-rooms.json`. The sync token lives in the data volume
+(`data/matrix-sync.json`), so the default persistence covers it. Invite the
+bot only into unencrypted rooms; E2EE is not supported.
+
 ## Multiple Instances
 
 Install the chart once per instance:
@@ -61,6 +80,7 @@ Install the chart once per instance:
 helm install band-bot ./deploy/helm/garbanzo --set platform=discord,instanceId=band-bot
 helm install boston-wa ./deploy/helm/garbanzo --set platform=whatsapp,instanceId=boston-wa,healthPort=3001,persistence.whatsappAuth.enabled=true
 helm install community-tg ./deploy/helm/garbanzo --set platform=telegram,instanceId=community-tg,healthPort=3005
+helm install community-mx ./deploy/helm/garbanzo --set platform=matrix,instanceId=community-mx,healthPort=3004
 ```
 
 This follows the `INSTANCE_ID` model used by bridging and shared memory. Keep
@@ -84,8 +104,8 @@ Keys in either Secret are loaded through `envFrom`. Non-secret values belong in
 ## Config Files
 
 Set `configFiles.groupsJson`, `configFiles.discordChannelsJson`,
-`configFiles.telegramChatsJson`, or `configFiles.bridgeMapJson` to mount
-chart-managed files under `/app/config`.
+`configFiles.telegramChatsJson`, `configFiles.matrixRoomsJson`, or
+`configFiles.bridgeMapJson` to mount chart-managed files under `/app/config`.
 For larger files, prefer a values file:
 
 ```bash

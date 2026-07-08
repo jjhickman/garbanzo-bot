@@ -61,13 +61,14 @@ describe('monitoring dashboard and scrape config', () => {
       scrapeConfigs.map((config) => [String(config.job_name), config]),
     );
 
-    expect([...jobs.keys()].sort()).toEqual(['discord', 'prometheus', 'telegram', 'whatsapp']);
+    expect([...jobs.keys()].sort()).toEqual(['discord', 'matrix', 'prometheus', 'telegram', 'whatsapp']);
     expect(jobs.has('garbanzo')).toBe(false);
 
     for (const [jobName, target] of [
       ['discord', 'discord:3002'],
       ['whatsapp', 'whatsapp:3001'],
       ['telegram', 'telegram:3005'],
+      ['matrix', 'matrix:3004'],
     ] as const) {
       const job = jobs.get(jobName);
       expect(job).toBeDefined();

@@ -9,6 +9,7 @@ import {
   SHARED_FIELDS,
   WHATSAPP_FIELDS,
   TELEGRAM_FIELDS,
+  MATRIX_FIELDS,
   FIELD_TABLE,
   getField,
   promptHint,
@@ -165,12 +166,13 @@ describe('setup field resolver', () => {
     expect(resolveComposeProfiles('whatsapp', false)).toBe('whatsapp');
   });
 
-  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD/TELEGRAM_FIELDS', () => {
+  it('partitions every emitted field into exactly one of SHARED/WHATSAPP/DISCORD/TELEGRAM/MATRIX_FIELDS', () => {
     const sharedKeys = SHARED_FIELDS.map((f) => f.env);
     const whatsappKeys = WHATSAPP_FIELDS.map((f) => f.env);
     const discordKeys = DISCORD_FIELDS.map((f) => f.env);
     const telegramKeys = TELEGRAM_FIELDS.map((f) => f.env);
-    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys, ...telegramKeys];
+    const matrixKeys = MATRIX_FIELDS.map((f) => f.env);
+    const allKeys = [...sharedKeys, ...whatsappKeys, ...discordKeys, ...telegramKeys, ...matrixKeys];
 
     // No duplicates across the four lists (disjoint partition).
     expect(new Set(allKeys).size).toBe(allKeys.length);
@@ -181,6 +183,7 @@ describe('setup field resolver', () => {
     expect(whatsappKeys).toEqual(expect.arrayContaining(['OWNER_JID', 'BOT_PHONE_NUMBER']));
     expect(discordKeys).toContain('DISCORD_BOT_TOKEN');
     expect(telegramKeys).toContain('TELEGRAM_BOT_TOKEN');
+    expect(matrixKeys).toContain('MATRIX_ACCESS_TOKEN');
 
     // FIELD_TABLE is exactly the union of the four partitioned lists.
     expect(FIELD_TABLE.map((f) => f.env).sort()).toEqual(allKeys.slice().sort());
@@ -309,7 +312,7 @@ describe('setup field resolver', () => {
 
   it('rejects explicit platform values the wizard does not support instead of silently defaulting', () => {
     expect(() => resolveMessagingPlatform(cli({ platform: 'teams' }), {})).toThrow(/Unsupported platform "teams"/);
-    expect(() => resolveMessagingPlatform(cli({ platform: 'matrix' }), {})).toThrow(/discord, whatsapp, slack, telegram/);
+    expect(resolveMessagingPlatform(cli({ platform: 'matrix' }), {})).toBe('matrix');
     expect(() => resolveMessagingPlatform(cli({ platform: 'not-a-platform' }), {})).toThrow(/Unsupported platform/);
     // An existing .env carrying a removed platform must also fail loudly, not migrate silently
     expect(() => resolveMessagingPlatform(cli({}), { MESSAGING_PLATFORM: 'teams' })).toThrow(/Unsupported platform "teams"/);

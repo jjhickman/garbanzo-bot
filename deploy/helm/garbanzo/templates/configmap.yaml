@@ -18,6 +18,10 @@ data:
   telegram-chats.json: |
 {{ .Values.configFiles.telegramChatsJson | nindent 4 }}
   {{- end }}
+  {{- if .Values.configFiles.matrixRoomsJson }}
+  matrix-rooms.json: |
+{{ .Values.configFiles.matrixRoomsJson | nindent 4 }}
+  {{- end }}
   {{- if .Values.configFiles.bridgeMapJson }}
   bridge-map.json: |
 {{ .Values.configFiles.bridgeMapJson | nindent 4 }}

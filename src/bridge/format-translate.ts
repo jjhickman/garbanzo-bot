@@ -92,9 +92,11 @@ function selectRules(
 ): readonly MarkerRule[] | null {
   if (from === 'whatsapp' && to === 'discord') return WHATSAPP_TO_DISCORD;
   if (from === 'discord' && to === 'whatsapp') return DISCORD_TO_WHATSAPP;
-  // Telegram sends travel through the same whatsapp-style vocabulary the
-  // Telegram adapter's send path expects — see the file-header comment.
-  if (from === 'discord' && to === 'telegram') return DISCORD_TO_WHATSAPP;
+  // Telegram and Matrix sends travel through the same whatsapp-style
+  // vocabulary their adapters' send paths expect (Telegram translates to
+  // MarkdownV2, Matrix to the org.matrix.custom.html subset) — see the
+  // file-header comment.
+  if (from === 'discord' && (to === 'telegram' || to === 'matrix')) return DISCORD_TO_WHATSAPP;
   return null;
 }
 

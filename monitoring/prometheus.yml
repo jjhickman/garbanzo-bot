@@ -37,6 +37,14 @@ scrape_configs:
     static_configs:
       - targets: ["telegram:3005"]
 
+  - job_name: matrix
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /prometheus/token
+    static_configs:
+      - targets: ["matrix:3004"]
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

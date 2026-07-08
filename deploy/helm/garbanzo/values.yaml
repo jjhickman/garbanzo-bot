@@ -14,8 +14,8 @@ env: {}
 secretEnv: {}
 existingSecret: ""
 
-# Discord defaults to 3002. Use 3001 for WhatsApp or 3005 for Telegram to
-# match the compose profile ports.
+# Discord defaults to 3002. Use 3001 for WhatsApp, 3005 for Telegram, or
+# 3004 for Matrix to match the compose profile ports.
 healthPort: 3002
 
 persistence:
@@ -31,6 +31,7 @@ configFiles:
   groupsJson: ""
   discordChannelsJson: ""
   telegramChatsJson: ""
+  matrixRoomsJson: ""
   bridgeMapJson: ""
   ragSourcesJson: ""
 

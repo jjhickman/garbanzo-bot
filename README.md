@@ -8,11 +8,11 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/jjhickman/garbanzo)](https://hub.docker.com/r/jjhickman/garbanzo)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord, WhatsApp, and Telegram today, with a Matrix adapter in development.
+Garbanzo brings AI-driven moderation and enrichment to communities where they already exist. It can answer questions, summarize busy threads, remember owner-approved facts, call local integrations, moderate with human review, and operate across multiple messaging platforms, including Discord, WhatsApp, Telegram, and Matrix today.
 
 ## Why Garbanzo
 - Runs anywhere, including self-hosted, with inspectable state: SQLite by default, optional Postgres, self-hosted Qdrant, and explicit-only shared memory. See [RAG federation](docs/RAG_FEDERATION.md).
-- One core pipeline spans multiple messaging platforms (WhatsApp, Discord, Slack, Telegram, and more), with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
+- One core pipeline spans multiple messaging platforms (WhatsApp, Discord, Slack, Telegram, Matrix, and more), with optional cross-platform bridging for mapped channels and groups. See [bridging](docs/BRIDGING.md).
 - Multi-provider AI routing covers OpenAI, Anthropic, Gemini, Bedrock, OpenRouter, and *any* OpenAI API-compatible model provider, providing fallback and resiliency. See [configuration](docs/CONFIGURATION.md).
 - WhatsApp support includes browser login and outbound safety designed around the Baileys account-risk model. See the [outbound safety ADR](docs/ADR-0001-whatsapp-outbound-safety.md).
 - The persona model shapes the whole bot: a markdown file defines who your bot is, how it talks, and what it cares about, and every surface follows it, including its name, replies, and prompts. Locale, provider order, integrations, and groups are configuration too. See [customization](docs/CUSTOMIZATION.md).
@@ -118,7 +118,7 @@ Platform setup details live in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 - **WhatsApp** - fully supported through Baileys v7, browser login, linked-device auth persistence, group config, and anti-ban outbound safety.
 - **Slack** - Events API support plus a local demo mode for pipeline checks.
 - **Telegram** - grammY-based long-polling bot, privacy-mode-off recommended setup, MarkdownV2 formatting, and voice-note transcription.
-- **Matrix** - the platform architecture supports it; an adapter is in development.
+- **Matrix** - `matrix-bot-sdk` over `/sync` long polling, room config keyed by room ID with alias resolution at setup, and audio transcription. Encrypted rooms aren't supported; invite the bot into unencrypted rooms only.
 
 Bridging connects channels and groups across platforms into a single conversation while keeping each bot instance independent. Transports scale from a simple two-instance setup to a message broker for larger topologies, and instances can share one account or stay fully isolated. Setup, topology options, and rate-safety details live in [docs/BRIDGING.md](docs/BRIDGING.md).
 

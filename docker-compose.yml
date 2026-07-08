@@ -11,7 +11,7 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    profiles: ["discord", "whatsapp", "telegram"]
+    profiles: ["discord", "whatsapp", "telegram", "matrix"]
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
@@ -147,6 +147,48 @@ services:
     depends_on:
       - qdrant
 
+  matrix:
+    image: ghcr.io/jjhickman/garbanzo:${APP_VERSION:-latest}
+    container_name: garbanzo-matrix
+    profiles: ["matrix"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+      - path: .env.matrix
+        required: false
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GARBANZO_VERSION=${APP_VERSION:-latest}
+      - MESSAGING_PLATFORM=matrix
+      # 3004 was reserved for Matrix when the Telegram service claimed 3005
+      # (see the telegram service's port comment above).
+      - HEALTH_PORT=3004
+      - HEALTH_BIND_HOST=0.0.0.0
+      # Operator overrides from root .env win; default targets the compose service
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+    ports:
+      - "127.0.0.1:3004:3004"
+    volumes:
+      # data volume also carries data/matrix-sync.json (the sync token)
+      - matrix_data:/app/data
+      - ./config/matrix-rooms.json:/app/config/matrix-rooms.json:ro
+      - ./config/bridge-map.json:/app/config/bridge-map.json:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+
   # Optional monitoring stack (Prometheus + Grafana), sized for a Pi-class host.
   # Enable by including monitoring in COMPOSE_PROFILES.
   # One-time setup: set MONITORING_TOKEN and METRICS_ENABLED=true in .env.
@@ -260,6 +302,8 @@ volumes:
     name: garbanzo-bot-remy-data
   telegram_data:
     name: garbanzo-bot-telegram-data
+  matrix_data:
+    name: garbanzo-bot-matrix-data
   qdrant_data:
     name: garbanzo-bot-qdrant
   prom_data:

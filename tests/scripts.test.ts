@@ -805,6 +805,133 @@ describe('ops scripts', () => {
     }
   });
 
+  it('setup native Matrix non-interactive run writes the exact file set under GARBANZO_HOME with native defaults', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--deploy=native',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--matrix-room-name=general',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env');
+      expect(out).toContain('✅ Wrote .env.matrix');
+      expect(out).toContain('✅ Wrote config/matrix-rooms.json with 1 enabled room');
+
+      const topLevel = readdirSync(home).sort();
+      expect(topLevel).toEqual(['.env', '.env.matrix', 'config']);
+      const configFiles = readdirSync(join(home, 'config')).sort();
+      expect(configFiles).toEqual(['matrix-rooms.json']);
+
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).not.toMatch(/^COMPOSE_PROFILES=/m);
+      expect(envContent).toMatch(/^VECTOR_STORE=none$/m);
+
+      const matrixEnvContent = readFileSync(join(home, '.env.matrix'), 'utf8');
+      expect(matrixEnvContent).toContain('MATRIX_HOMESERVER_URL=https://matrix.example.org');
+      expect(matrixEnvContent).toContain('MATRIX_ACCESS_TOKEN=test_matrix_token');
+      expect(matrixEnvContent).toContain('MATRIX_OWNER_ID=@owner:example.org');
+      expect(matrixEnvContent).toContain('MATRIX_CHAT_SCOPE=configured');
+
+      const roomsConfig = JSON.parse(
+        readFileSync(join(home, 'config', 'matrix-rooms.json'), 'utf8'),
+      ) as { ownerId?: string; rooms: Record<string, { name: string; enabled: boolean }> };
+      expect(roomsConfig.ownerId).toBe('@owner:example.org');
+      expect(roomsConfig.rooms['!abcdefgh:example.org']).toEqual({
+        name: 'general',
+        enabled: true,
+        requireMention: true,
+      });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Docker Matrix non-interactive run pins COMPOSE_PROFILES=matrix', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--platform=matrix',
+        '--matrix-homeserver-url=https://matrix.example.org',
+        '--matrix-access-token=test_matrix_token',
+        '--matrix-owner-id=@owner:example.org',
+        '--matrix-room-id=!abcdefgh:example.org',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home });
+
+      expect(out).toContain('✅ Wrote .env.matrix');
+      const envContent = readFileSync(join(home, '.env'), 'utf8');
+      expect(envContent).toMatch(/^COMPOSE_PROFILES=matrix$/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('setup Matrix non-interactive run fails clearly on missing or malformed inputs', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+
+    function expectSetupFailure(args: string[], expected: RegExp): void {
+      let caught: unknown;
+      try {
+        runNodeScriptWithEnv(setupPath, ['--non-interactive', '--dry-run', ...args], { GARBANZO_HOME: home });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeDefined();
+      const stdout = String((caught as { stdout?: string }).stdout ?? '');
+      expect(stdout).toMatch(expected);
+    }
+
+    const base = [
+      '--platform=matrix',
+      '--providers=openai',
+      '--openai-key=test_key_setup',
+    ];
+
+    try {
+      expectSetupFailure(
+        [...base, '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires a homeserver URL/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-owner-id=@o:x.org', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires a bot access token/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-room-id=!r:x.org'],
+        /Matrix quickstart requires an owner user id/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=not-an-mxid', '--matrix-room-id=!r:x.org'],
+        /doesn't look like a Matrix user id/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org'],
+        /Matrix quickstart requires at least one room to enable/,
+      );
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=not-a-room'],
+        /neither a room id nor an alias/,
+      );
+      // Aliases need a live homeserver; dry-run must refuse rather than fetch.
+      expectSetupFailure(
+        [...base, '--matrix-homeserver-url=https://x.org', '--matrix-access-token=t', '--matrix-owner-id=@o:x.org', '--matrix-room-id=#alias:x.org'],
+        /Dry-run cannot resolve the alias/,
+      );
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('release-checklist script shows usage with --help', () => {
     const out = runNodeScript(releaseChecklistPath, ['--help']);
     expect(out).toContain('Garbanzo release checklist helper');
