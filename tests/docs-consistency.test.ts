@@ -54,6 +54,7 @@ function walkMarkdownFiles(dir: string): string[] {
 function readDocsForStalePatternScan(): DocFile[] {
   const paths = [
     resolve(repoRoot, 'README.md'),
+    resolve(repoRoot, 'CHANGELOG.md'),
     ...walkMarkdownFiles(docsRoot),
   ];
 

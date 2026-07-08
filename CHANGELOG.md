@@ -168,7 +168,7 @@ See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive
 ### Added
 
 - Discord runs a real Gateway connection (discord.js), so the bot observes and responds to channel messages, welcomes members, runs scheduled digests and recaps, and escalates to the owner by DM. Configure per-channel behavior and band roles in `config/discord-channels.json`.
-- Self-hosted Qdrant vector memory for semantic recall of community facts. `VECTOR_STORE=qdrant` by default and falls back to keyword search when Qdrant is unavailable; `VECTOR_STORE=none` keeps keyword-only.
+- Qdrant vector memory (run it yourself) for semantic recall of community facts. `VECTOR_STORE=qdrant` by default and falls back to keyword search when Qdrant is unavailable; `VECTOR_STORE=none` keeps keyword-only.
 - Remy band-assistant features, all gated behind `BAND_FEATURES_ENABLED` (default off, so the WhatsApp community bot is unaffected):
   - Song catalog (`!song`) with key, tempo, and status.
   - Practice tools: rehearsals with reminders (`!rehearsal`), availability (`!available`), setlists (`!setlist`), and a practice agenda (`!agenda`).
@@ -212,7 +212,7 @@ See [docs/BRIDGING.md](docs/BRIDGING.md) for setup. Everything above is additive
 
 - Community/admin Prometheus metric families for lifetime activity, daily group gauges, memory facts, pending/sent event reminders, rate-limit rejections, tool-call outcomes, and AI cost/request/error totals.
 - Bearer auth support for `/metrics` and `/admin`, alongside the existing query-token flow.
-- Self-hosted Prometheus + Grafana monitoring stack.
+- Prometheus + Grafana monitoring stack (run it yourself).
 
 ## [1.0.2] — 2026-07-02
 
