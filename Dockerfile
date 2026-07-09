@@ -59,6 +59,14 @@ RUN addgroup -S garbanzo && adduser -S garbanzo -G garbanzo
 # Copy production artifacts from builder
 COPY --from=builder --chown=garbanzo:garbanzo /app/dist ./dist
 COPY --from=builder --chown=garbanzo:garbanzo /app/node_modules ./node_modules
+# The Matrix crypto stub is a file: dependency, so npm installs it as a SYMLINK
+# (node_modules/@matrix-org/matrix-sdk-crypto-nodejs -> ../../stubs/...). The
+# symlink target must exist in this runtime stage too, or matrix-bot-sdk (which
+# requires the crypto module at top-level import) fails with "Cannot find
+# module" and the Matrix runtime crash-loops. Only Matrix imports the SDK, so a
+# missing stubs/ here is invisible to Discord/WhatsApp and to CI (which never
+# boots the Matrix platform).
+COPY --from=builder --chown=garbanzo:garbanzo /app/stubs ./stubs
 COPY --from=builder --chown=garbanzo:garbanzo /app/package.json ./
 
 # Copy runtime config (groups.json is needed at runtime)

@@ -28,7 +28,7 @@ describe('Docker runtime assets', () => {
       overrides?: Record<string, string>;
     };
     const packageLock = JSON.parse(readFileSync(packageLockPath, 'utf-8')) as {
-      packages?: Record<string, { resolved?: string; hasInstallScript?: boolean }>;
+      packages?: Record<string, { resolved?: string; hasInstallScript?: boolean; link?: boolean }>;
     };
     const stubPackage = JSON.parse(readFileSync(matrixCryptoStubPackagePath, 'utf-8')) as {
       name?: string;
@@ -36,6 +36,13 @@ describe('Docker runtime assets', () => {
     };
 
     expect(dockerfile).toContain('COPY stubs/ ./stubs/');
+    // The crypto stub is a file: dependency → npm links it as a SYMLINK into
+    // node_modules pointing at stubs/. The multi-stage runtime image must ALSO
+    // carry stubs/, or that symlink dangles and matrix-bot-sdk (imported only
+    // by the Matrix runtime, which CI never boots) crash-loops with "Cannot
+    // find module". Guard the runtime-stage copy so this can't regress.
+    expect(packageLock.packages?.['node_modules/@matrix-org/matrix-sdk-crypto-nodejs']?.link).toBe(true);
+    expect(dockerfile).toContain('COPY --from=builder --chown=garbanzo:garbanzo /app/stubs ./stubs');
     expect(packageJson.dependencies?.['@matrix-org/matrix-sdk-crypto-nodejs']).toBe(
       'file:stubs/matrix-sdk-crypto-nodejs',
     );
