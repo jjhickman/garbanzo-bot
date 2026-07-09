@@ -68,7 +68,6 @@ const GROUP_MAP: BridgeMap = {
     { id: 'whatsapp-band', platform: 'whatsapp' },
     { id: 'telegram-band', platform: 'telegram' },
     { id: 'matrix-band', platform: 'matrix' },
-    { id: 'discord-sidecar', platform: 'discord' },
   ],
   routes: [
     {
@@ -78,18 +77,6 @@ const GROUP_MAP: BridgeMap = {
         { instance: 'whatsapp-band', chatId: 'group-1@g.us' },
         { instance: 'telegram-band', chatId: 'tg-chat-1' },
         { instance: 'matrix-band', chatId: '!room:example.org' },
-      ],
-      direction: 'both',
-      modeToWhatsApp: 'summary',
-      modeToDiscord: 'verbatim',
-      relayCommands: false,
-    },
-    {
-      id: 'same-instance-group',
-      endpoints: [
-        { instance: 'discord-band', chatId: 'chan-4' },
-        { instance: 'discord-sidecar', chatId: 'chan-5' },
-        { instance: 'discord-band', chatId: 'chan-6' },
       ],
       direction: 'both',
       modeToWhatsApp: 'summary',
@@ -147,7 +134,7 @@ describe('createRelayCapture', () => {
       targetChatId: 'group-1@g.us',
       text: 'hello world',
       kind: 'message',
-      idempotencyKey: 'discord-band:chan-1:msg-1:whatsapp-band:group-1@g.us',
+      idempotencyKey: '["discord-band","chan-1","msg-1","whatsapp-band","group-1@g.us"]',
       origin: {
         instance: 'discord-band',
         platform: 'discord',
@@ -178,9 +165,9 @@ describe('createRelayCapture', () => {
     const keys = envelopes.map((envelope) => envelope.idempotencyKey);
     expect(new Set(keys).size).toBe(3);
     expect(keys).toEqual([
-      'discord-band:chan-1:msg-1:whatsapp-band:group-1@g.us',
-      'discord-band:chan-1:msg-1:telegram-band:tg-chat-1',
-      'discord-band:chan-1:msg-1:matrix-band:!room:example.org',
+      '["discord-band","chan-1","msg-1","whatsapp-band","group-1@g.us"]',
+      '["discord-band","chan-1","msg-1","telegram-band","tg-chat-1"]',
+      '["discord-band","chan-1","msg-1","matrix-band","!room:example.org"]',
     ]);
   });
 
@@ -194,21 +181,6 @@ describe('createRelayCapture', () => {
       targetInstance: 'whatsapp-band',
       targetChatId: 'group-1@g.us',
     });
-  });
-
-  it('excludes only the exact originating endpoint when the same instance has another chat in the group', () => {
-    const { relay, enqueue } = capture('discord-band', GROUP_MAP);
-
-    relay.capture(inbound({ chatId: 'chan-4' }));
-
-    expect(enqueue).toHaveBeenCalledTimes(2);
-    expect(enqueue.mock.calls.map(([envelope]) => ({
-      targetInstance: envelope.targetInstance,
-      targetChatId: envelope.targetChatId,
-    }))).toEqual([
-      { targetInstance: 'discord-sidecar', targetChatId: 'chan-5' },
-      { targetInstance: 'discord-band', targetChatId: 'chan-6' },
-    ]);
   });
 
   it('carries the configured chat display name on the envelope origin', () => {

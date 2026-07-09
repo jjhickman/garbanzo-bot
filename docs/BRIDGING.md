@@ -123,11 +123,12 @@ plain HTTP with no extra containers.
      - `endpoints` - two or more `{instance, chatId}` entries. `instance`
        must match a declared instance id; `chatId` is the channel/group/room
        id on that instance. A message from one endpoint fans out to every
-       other endpoint in the route. Each `(instance, chatId)` pair must be
-       distinct; the same instance may appear more than once with different
-       chat ids, but bridge groups should normally use distinct instances
-       because same-instance loopback depends on the selected transport and
-       runtime wiring.
+       other endpoint in the route. Each instance may appear **at most once
+       per route** — a bridge member is one distinct instance. If you need to
+       bridge two chats on the same platform (for example two WhatsApp
+       numbers), run a second instance with its own `INSTANCE_ID` and list
+       both instances in the route, rather than one instance with two chat
+       ids.
      - `direction` - `both` (relay from any member to all other members) or
        `one-way`. `one-way` requires `from`, set to one endpoint instance id;
        only messages from that instance fan out. This is not transitive:

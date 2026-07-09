@@ -42,7 +42,9 @@ an observability upgrade, a persona gallery, and a read-only operations page.
   scrape `job`/`instance` labels.
 - **N-ary bridge groups**: one bridge route can now list 2+ endpoints and
   fans each source message out to all other members, replacing pairwise
-  meshes for multi-community conversations.
+  meshes for multi-community conversations. Each route lists at most one
+  endpoint per instance — bridge distinct instances, and run a second
+  instance if you need two chats on the same platform.
 
 ### Changed
 

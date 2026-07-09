@@ -54,7 +54,7 @@ export const BridgeMapSchema = z.object({
     }
     routeIds.add(route.id);
 
-    const endpointKeys = new Set<string>();
+    const seenInstances = new Set<string>();
     for (const [endpointIndex, endpoint] of route.endpoints.entries()) {
       if (!instanceIds.has(endpoint.instance)) {
         ctx.addIssue({
@@ -64,15 +64,19 @@ export const BridgeMapSchema = z.object({
         });
       }
 
-      const endpointKey = `${endpoint.instance}\0${endpoint.chatId}`;
-      if (endpointKeys.has(endpointKey)) {
+      // A bridge member is one distinct instance: two WhatsApp numbers are two
+      // INSTANCE_IDs, not one instance bound to two chats. Allowing an instance
+      // to appear twice in a route makes summary buffering and one-way `from`
+      // authority ambiguous (both resolve an instance to a single endpoint), so
+      // an instance may appear at most once per route.
+      if (seenInstances.has(endpoint.instance)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['routes', index, 'endpoints', endpointIndex],
-          message: 'Bridge route endpoints must differ by instance and chatId',
+          path: ['routes', index, 'endpoints', endpointIndex, 'instance'],
+          message: `Bridge route "${route.id}" lists instance "${endpoint.instance}" more than once; each instance may appear at most once per route (run a second instance for two chats on the same platform)`,
         });
       }
-      endpointKeys.add(endpointKey);
+      seenInstances.add(endpoint.instance);
     }
 
     if (route.direction === 'one-way') {

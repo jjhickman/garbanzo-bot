@@ -116,13 +116,13 @@ function cleanChatName(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+// Each instance appears at most once per route (enforced by BridgeMapSchema),
+// so excluding the origin by instance excludes exactly the sending endpoint.
 function otherEndpoints(
   route: BridgeRoute,
   instanceId: string,
-  originChatId: string,
 ): { instance: string; chatId: string }[] {
-  return route.endpoints.filter((endpoint) =>
-    !(endpoint.instance === instanceId && endpoint.chatId === originChatId));
+  return route.endpoints.filter((endpoint) => endpoint.instance !== instanceId);
 }
 
 function buildRelayBody(inbound: InboundMessage): RelayBody | null {
@@ -209,7 +209,7 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
       }
       const messageId = inbound.messageId;
 
-      const targets = otherEndpoints(route, instanceId, inbound.chatId);
+      const targets = otherEndpoints(route, instanceId);
       if (targets.length === 0) return;
 
       if (inbound.audio && !inbound.text && process.env.WHISPER_URL) {

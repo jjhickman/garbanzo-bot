@@ -256,8 +256,8 @@ describe('bridge map config', () => {
     expect(result.success).toBe(false);
   });
 
-  it('allows the same instance to appear with different chat ids in one route', () => {
-    const parsed = BridgeMapSchema.parse({
+  it('rejects the same instance appearing twice in one route (bridge distinct instances)', () => {
+    const raw = {
       ...validMap,
       routes: [{
         id: 'same-instance-different-chats',
@@ -268,9 +268,16 @@ describe('bridge map config', () => {
         ],
         direction: 'both',
       }],
-    });
+    };
+    const result = BridgeMapSchema.safeParse(raw);
 
-    expect(parsed.routes[0]?.endpoints.map((endpoint) => endpoint.chatId)).toEqual(['123', '789', '456@g.us']);
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('same-instance-different-chats');
+    expect(message).toContain('remy');
+    expect(message).toContain('at most once per route');
   });
 
   it('rejects one-way routes whose from value is not one endpoint instance', () => {
