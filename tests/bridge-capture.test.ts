@@ -62,6 +62,30 @@ const MAP: BridgeMap = {
   ],
 };
 
+const GROUP_MAP: BridgeMap = {
+  instances: [
+    { id: 'discord-band', platform: 'discord' },
+    { id: 'whatsapp-band', platform: 'whatsapp' },
+    { id: 'telegram-band', platform: 'telegram' },
+    { id: 'matrix-band', platform: 'matrix' },
+  ],
+  routes: [
+    {
+      id: 'all-band-groups',
+      endpoints: [
+        { instance: 'discord-band', chatId: 'chan-1' },
+        { instance: 'whatsapp-band', chatId: 'group-1@g.us' },
+        { instance: 'telegram-band', chatId: 'tg-chat-1' },
+        { instance: 'matrix-band', chatId: '!room:example.org' },
+      ],
+      direction: 'both',
+      modeToWhatsApp: 'summary',
+      modeToDiscord: 'verbatim',
+      relayCommands: false,
+    },
+  ],
+};
+
 function inbound(overrides: Partial<InboundMessage> = {}): InboundMessage {
   return {
     platform: 'discord',
@@ -110,7 +134,7 @@ describe('createRelayCapture', () => {
       targetChatId: 'group-1@g.us',
       text: 'hello world',
       kind: 'message',
-      idempotencyKey: 'discord-band:chan-1:msg-1',
+      idempotencyKey: '["discord-band","chan-1","msg-1","whatsapp-band","group-1@g.us"]',
       origin: {
         instance: 'discord-band',
         platform: 'discord',
@@ -119,6 +143,43 @@ describe('createRelayCapture', () => {
         senderId: 'sender-1',
         senderName: 'Ana',
       },
+    });
+  });
+
+  it('fans out an N-ary group message to every other endpoint with distinct target-scoped keys', () => {
+    const { relay, enqueue } = capture('discord-band', GROUP_MAP);
+
+    relay.capture(inbound());
+
+    expect(enqueue).toHaveBeenCalledTimes(3);
+    const envelopes = enqueue.mock.calls.map(([envelope]) => envelope);
+    expect(envelopes.map((envelope) => ({
+      targetInstance: envelope.targetInstance,
+      targetChatId: envelope.targetChatId,
+    }))).toEqual([
+      { targetInstance: 'whatsapp-band', targetChatId: 'group-1@g.us' },
+      { targetInstance: 'telegram-band', targetChatId: 'tg-chat-1' },
+      { targetInstance: 'matrix-band', targetChatId: '!room:example.org' },
+    ]);
+
+    const keys = envelopes.map((envelope) => envelope.idempotencyKey);
+    expect(new Set(keys).size).toBe(3);
+    expect(keys).toEqual([
+      '["discord-band","chan-1","msg-1","whatsapp-band","group-1@g.us"]',
+      '["discord-band","chan-1","msg-1","telegram-band","tg-chat-1"]',
+      '["discord-band","chan-1","msg-1","matrix-band","!room:example.org"]',
+    ]);
+  });
+
+  it('keeps 2-endpoint routes to one fan-out envelope for back-compat', () => {
+    const { relay, enqueue } = capture('discord-band');
+
+    relay.capture(inbound());
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      targetInstance: 'whatsapp-band',
+      targetChatId: 'group-1@g.us',
     });
   });
 

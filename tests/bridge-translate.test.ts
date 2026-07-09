@@ -132,7 +132,7 @@ describe('BridgeEnvelopeSchema', () => {
     text: 'hello',
     kind: 'message',
     sentAtMs: 1_788_221_000_000,
-    idempotencyKey: 'whatsapp-community:chat-1:message-1',
+    idempotencyKey: '["whatsapp-community","chat-1","message-1","discord-community","channel-1"]',
   } as const;
 
   it('accepts a valid bridge envelope and preserves its fields', () => {
@@ -167,8 +167,34 @@ describe('BridgeEnvelopeSchema', () => {
     ).toBe(false);
   });
 
-  it('builds idempotency keys from origin identity', () => {
-    expect(buildIdempotencyKey(validEnvelope.origin)).toBe('whatsapp-community:chat-1:message-1');
+  it('builds idempotency keys from origin and target identity', () => {
+    expect(buildIdempotencyKey(validEnvelope.origin, {
+      instance: validEnvelope.targetInstance,
+      chatId: validEnvelope.targetChatId,
+    })).toBe('["whatsapp-community","chat-1","message-1","discord-community","channel-1"]');
+  });
+
+  it('produces distinct keys for colon-bearing Matrix-style ids that would collide under a naive ":" join', () => {
+    // Under a plain `a:b:c:d:e` join both tuples flatten to the identical
+    // string "mx:!r:e:mx:!r:e2" vs "mx:!r:e:e2:mx:!r:e" — the field
+    // boundaries are lost. Two DISTINCT origin/target tuples:
+    const keyA = buildIdempotencyKey(
+      { instance: 'mx', chatId: '!room:hs', messageId: '$event:hs' },
+      { instance: 'mx2', chatId: '!other:hs' },
+    );
+    const keyB = buildIdempotencyKey(
+      { instance: 'mx', chatId: '!room:hs', messageId: '$event' },
+      { instance: 'hs:mx2', chatId: '!other:hs' },
+    );
+
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it('produces an identical key when the same leg is retried (exactly-once preserved)', () => {
+    const origin = { instance: 'mx', chatId: '!room:hs', messageId: '$event:hs' };
+    const target = { instance: 'discord-main', chatId: 'channel:with:colons' };
+
+    expect(buildIdempotencyKey(origin, target)).toBe(buildIdempotencyKey(origin, target));
   });
 
   it('returns null instead of throwing on invalid raw input', () => {

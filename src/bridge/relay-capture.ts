@@ -116,8 +116,13 @@ function cleanChatName(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function otherEndpoint(route: BridgeRoute, instanceId: string): { instance: string; chatId: string } | undefined {
-  return route.endpoints.find((endpoint) => endpoint.instance !== instanceId);
+// Each instance appears at most once per route (enforced by BridgeMapSchema),
+// so excluding the origin by instance excludes exactly the sending endpoint.
+function otherEndpoints(
+  route: BridgeRoute,
+  instanceId: string,
+): { instance: string; chatId: string }[] {
+  return route.endpoints.filter((endpoint) => endpoint.instance !== instanceId);
 }
 
 function buildRelayBody(inbound: InboundMessage): RelayBody | null {
@@ -178,11 +183,14 @@ function buildEnvelope(params: {
     text: params.body.text,
     kind: params.body.kind,
     sentAtMs: Date.now(),
-    idempotencyKey: buildIdempotencyKey({
-      instance: params.instanceId,
-      chatId: params.inbound.chatId,
-      messageId: params.messageId,
-    }),
+    idempotencyKey: buildIdempotencyKey(
+      {
+        instance: params.instanceId,
+        chatId: params.inbound.chatId,
+        messageId: params.messageId,
+      },
+      params.target,
+    ),
   };
 }
 
@@ -201,14 +209,15 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
       }
       const messageId = inbound.messageId;
 
-      const target = otherEndpoint(route, instanceId);
-      if (!target) return;
+      const targets = otherEndpoints(route, instanceId);
+      if (targets.length === 0) return;
 
       if (inbound.audio && !inbound.text && process.env.WHISPER_URL) {
         void (async () => {
           const body = await buildAudioOnlyRelayBody(inbound);
-          const envelope = buildEnvelope({ inbound, instanceId, messageId, route, target, body });
-          await enqueue(envelope);
+          await Promise.all(targets.map((target) =>
+            enqueue(buildEnvelope({ inbound, instanceId, messageId, route, target, body })),
+          ));
         })().catch((err) => {
           logger.error({ err, routeId: route.id }, 'Bridge capture: enqueue failed');
         });
@@ -218,11 +227,12 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
       const body = buildRelayBody(inbound);
       if (!body) return;
 
-      const envelope = buildEnvelope({ inbound, instanceId, messageId, route, target, body });
-
-      void enqueue(envelope).catch((err) => {
-        logger.error({ err, routeId: route.id }, 'Bridge capture: enqueue failed');
-      });
+      for (const target of targets) {
+        const envelope = buildEnvelope({ inbound, instanceId, messageId, route, target, body });
+        void enqueue(envelope).catch((err) => {
+          logger.error({ err, routeId: route.id }, 'Bridge capture: enqueue failed');
+        });
+      }
     },
   };
 }

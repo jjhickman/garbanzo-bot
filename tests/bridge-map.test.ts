@@ -20,6 +20,8 @@ const validMap = {
   instances: [
     { id: 'remy', platform: 'discord', url: 'http://discord:3002' },
     { id: 'garbanzo', platform: 'whatsapp', url: 'http://whatsapp:3001' },
+    { id: 'telegram-main', platform: 'telegram', url: 'http://telegram:3005' },
+    { id: 'matrix-main', platform: 'matrix', url: 'http://matrix:3004' },
   ],
   routes: [
     {
@@ -55,12 +57,38 @@ describe('bridge map config', () => {
     });
   });
 
+  it('parses an N-ary bridge group route', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      routes: [{
+        id: 'all-communities',
+        endpoints: [
+          { instance: 'remy', chatId: 'discord-channel' },
+          { instance: 'garbanzo', chatId: 'whatsapp-group@g.us' },
+          { instance: 'telegram-main', chatId: 'telegram-chat' },
+          { instance: 'matrix-main', chatId: 'matrix-room' },
+        ],
+        direction: 'both',
+      }],
+    });
+
+    expect(parsed.routes[0]?.endpoints).toHaveLength(4);
+  });
+
+  it('keeps 2-endpoint bridge routes valid for back-compat', () => {
+    const parsed = BridgeMapSchema.parse(validMap);
+
+    expect(parsed.routes[0]?.endpoints).toHaveLength(2);
+  });
+
   it('keeps literal URLs unchanged for existing bridge maps', () => {
     const expanded = expandBridgeMapEnvPlaceholders(validMap);
 
     expect(BridgeMapSchema.parse(expanded).instances.map((instance) => instance.url)).toEqual([
       'http://discord:3002',
       'http://whatsapp:3001',
+      'http://telegram:3005',
+      'http://matrix:3004',
     ]);
   });
 
@@ -211,6 +239,47 @@ describe('bridge map config', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects any duplicate instance and chat endpoint inside an N-ary route', () => {
+    const result = BridgeMapSchema.safeParse({
+      ...validMap,
+      routes: [{
+        id: 'duplicate-endpoint',
+        endpoints: [
+          { instance: 'remy', chatId: '123' },
+          { instance: 'garbanzo', chatId: '456@g.us' },
+          { instance: 'remy', chatId: '123' },
+        ],
+        direction: 'both',
+      }],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects the same instance appearing twice in one route (bridge distinct instances)', () => {
+    const raw = {
+      ...validMap,
+      routes: [{
+        id: 'same-instance-different-chats',
+        endpoints: [
+          { instance: 'remy', chatId: '123' },
+          { instance: 'remy', chatId: '789' },
+          { instance: 'garbanzo', chatId: '456@g.us' },
+        ],
+        direction: 'both',
+      }],
+    };
+    const result = BridgeMapSchema.safeParse(raw);
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected parse failure');
+
+    const message = formatBridgeMapZodError(result.error, raw);
+    expect(message).toContain('same-instance-different-chats');
+    expect(message).toContain('remy');
+    expect(message).toContain('at most once per route');
+  });
+
   it('rejects one-way routes whose from value is not one endpoint instance', () => {
     const result = BridgeMapSchema.safeParse({
       ...validMap,
@@ -222,6 +291,25 @@ describe('bridge map config', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts one-way N-ary routes whose from value names any member instance', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      routes: [{
+        id: 'telegram-out',
+        endpoints: [
+          { instance: 'remy', chatId: '123' },
+          { instance: 'garbanzo', chatId: '456@g.us' },
+          { instance: 'telegram-main', chatId: '789' },
+        ],
+        direction: 'one-way',
+        from: 'telegram-main',
+      }],
+    });
+
+    expect(outboundRoutesForInstance(parsed, 'telegram-main').map((route) => route.id)).toEqual(['telegram-out']);
+    expect(outboundRoutesForInstance(parsed, 'remy')).toEqual([]);
   });
 
   it('filters and finds outbound routes by instance and chat id', () => {
