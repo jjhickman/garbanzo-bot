@@ -10,6 +10,7 @@ import { processPrinter, type CliPrinter } from './cli/cli-print.js';
 
 export type CliCommand =
   | { kind: 'setup'; args: string[] }
+  | { kind: 'config'; args: string[] }
   | { kind: 'start' }
   | { kind: 'doctor' }
   | { kind: 'service'; action: 'install' | 'uninstall'; force: boolean; system: boolean }
@@ -22,6 +23,7 @@ function helpText(): string {
     '',
     'Commands:',
     '  setup                 Run the setup wizard',
+    '  config                Run the loopback browser config service',
     '  start                 Start the bot runtime',
     '  doctor                Print an environment report',
     '  service install       Write a systemd user unit or launchd agent',
@@ -43,6 +45,9 @@ export function parseCliCommand(args: string[]): CliCommand {
   }
   if (command === 'setup') {
     return { kind: 'setup', args: rest };
+  }
+  if (command === 'config') {
+    return { kind: 'config', args: rest };
   }
   if (command === 'start') {
     return { kind: 'start' };
@@ -181,6 +186,11 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
       tsxResolvable: canResolveTsx(),
     });
     return spawnSetup(setupPath, parsed.args, GARBANZO_HOME_DIR);
+  }
+
+  if (parsed.kind === 'config') {
+    const { runConfigService } = await import('./cli/config-service/index.js');
+    return runConfigService(parsed.args);
   }
 
   if (parsed.kind === 'doctor') {
