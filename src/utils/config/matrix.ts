@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalString } from './shared.js';
+import { blankToUndefined, optionalString } from './shared.js';
 
 export const matrixSchema = z.object({
   // Matrix runtime (unencrypted rooms only). These three values are required
@@ -10,5 +10,5 @@ export const matrixSchema = z.object({
   MATRIX_ROOMS_CONFIG_PATH: z.string().default('config/matrix-rooms.json'),
   // Same rationale as Telegram: anyone who knows the bot's MXID can invite
   // it to a room, so group ingestion defaults to configured rooms only.
-  MATRIX_CHAT_SCOPE: z.enum(['all', 'configured']).default('configured'),
+  MATRIX_CHAT_SCOPE: z.preprocess(blankToUndefined, z.enum(['all', 'configured']).default('configured')),
 });
