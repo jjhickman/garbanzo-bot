@@ -69,9 +69,12 @@ describe('setup field resolver', () => {
     }
   });
 
-  it('preserves the exact target mode even when the process umask would mask it', () => {
+  it('preserves the exact target mode of a non-credential file even when the umask would mask it', () => {
     const dir = mkdtempSync(join(tmpdir(), 'garbanzo-config-writer-mode-'));
-    const path = join(dir, '.env');
+    // A config/*.json file (container-read, mode preserved) proves the
+    // chmod-after-write defeats the umask; a .env is instead forced to 0o600
+    // by the credential policy (asserted below).
+    const path = join(dir, 'discord-channels.json');
     const previousUmask = process.umask(0o022);
     try {
       writeFileSync(path, 'before\n', 'utf8');
@@ -80,6 +83,35 @@ describe('setup field resolver', () => {
       writeFileWithBackupAtomic(path, 'after\n');
 
       expect(statSync(path).mode & 0o777).toBe(0o666);
+    } finally {
+      process.umask(previousUmask);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('forces credential files (.env*) to owner-only and never leaks via the backup', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'garbanzo-config-writer-secret-'));
+    const previousUmask = process.umask(0o022);
+    try {
+      // New credential file → owner-only, not the 0o644 config default.
+      const fresh = join(dir, '.env');
+      writeFileWithBackupAtomic(fresh, 'OPENAI_API_KEY=secret\n');
+      expect(statSync(fresh).mode & 0o777).toBe(0o600);
+
+      // An already world-readable .env is tightened on rewrite, and its backup
+      // is never world-readable regardless of the original mode.
+      const loose = join(dir, '.env.discord');
+      writeFileSync(loose, 'DISCORD_BOT_TOKEN=old\n', 'utf8');
+      chmodSync(loose, 0o644);
+      writeFileWithBackupAtomic(loose, 'DISCORD_BOT_TOKEN=new\n');
+      expect(statSync(loose).mode & 0o777).toBe(0o600);
+      expect(statSync(`${loose}.bak`).mode & 0o777).toBe(0o600);
+
+      // New config/*.json stays container-readable (0o644) so the bind-mounted
+      // file remains readable by the container's differing uid.
+      const cfg = join(dir, 'groups.json');
+      writeFileWithBackupAtomic(cfg, '{}\n');
+      expect(statSync(cfg).mode & 0o777).toBe(0o644);
     } finally {
       process.umask(previousUmask);
       rmSync(dir, { recursive: true, force: true });
