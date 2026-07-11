@@ -1,27 +1,35 @@
 import { spawn } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 import { parse as parseDotenv } from 'dotenv';
 
 import { parseConfig } from '../../utils/config/parse-config.js';
+import { applyEnvLayers } from '../../utils/config/shared.js';
+import { mergeEnvFileContent, MESSAGING_PLATFORMS } from '../../config-core/fields.js';
+import { writeFileWithBackupAtomic } from '../../config-core/writers.js';
 import { isSecretKey } from '../../config-core/secret-classifier.js';
 import { writeJsonWithBackupAtomic } from '../../config-core/writers.js';
 import { appendConfigAudit, writeRecoveryNote } from './audit.js';
 import {
   applyStagedBundle,
+  bundlePreconditionsMatch,
   buildExportBundle,
+  captureBundlePreconditions,
   envWithoutRedactedPlaceholders,
   IMPORT_LIMITS,
+  pruneStaleStaging,
+  readStagedBundle,
   stageBundle,
   restoreJsonPlaceholders,
   validateBundleLimits,
   type ConfigBundle,
+  type BundlePreconditions,
 } from './bundle.js';
-import { readEnvSnapshot, writeEnvUpdate } from './env-files.js';
+import { ENV_FILE_NAMES, readEnvSnapshot, writeEnvUpdate } from './env-files.js';
 import {
   CONFIG_FILE_NAMES,
   isConfigFileName,
@@ -139,8 +147,38 @@ function parseMultipartBundle(contentType: string, body: Buffer): ConfigBundle {
   return JSON.parse(content) as ConfigBundle;
 }
 
+const CONFIG_PATH_KEYS: Partial<Record<string, string>> = {
+  'discord-channels': 'DISCORD_CHANNELS_CONFIG_PATH',
+  'telegram-chats': 'TELEGRAM_CHATS_CONFIG_PATH',
+  'matrix-rooms': 'MATRIX_ROOMS_CONFIG_PATH',
+};
+const CONFIG_PATH_PLATFORMS: Partial<Record<string, string>> = {
+  'discord-channels': 'discord',
+  'telegram-chats': 'telegram',
+  'matrix-rooms': 'matrix',
+};
+
 function configFilePath(root: string, name: string): string {
-  return resolve(root, 'config', `${name}.json`);
+  const platform = CONFIG_PATH_PLATFORMS[name];
+  const env = platform
+    ? applyEnvLayers({ baseDir: root, env: {}, realEnv: {}, platform }).env
+    : readEnvSnapshot(root).values;
+  const configured = CONFIG_PATH_KEYS[name] ? env[CONFIG_PATH_KEYS[name] as string] : undefined;
+  const path = configured
+    ? (isAbsolute(configured) ? resolve(configured) : resolve(root, configured))
+    : resolve(root, 'config', `${name}.json`);
+  const rel = relative(root, path);
+  if (rel === '..' || rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(rel)) {
+    throw new Error(`${CONFIG_PATH_KEYS[name] ?? name} points outside the managed config root`);
+  }
+  return path;
+}
+
+function effectiveConfigPaths(root: string): Record<string, string> {
+  return Object.fromEntries(CONFIG_FILE_NAMES.map((name) => [
+    `config/${name}.json`,
+    configFilePath(root, name),
+  ]));
 }
 
 function readConfigFiles(root: string): Record<string, { value: unknown; masked: unknown; mtimeMs: number } | null> {
@@ -173,9 +211,45 @@ function mergeJsonUpdate(existing: unknown, update: unknown): unknown {
   return result;
 }
 
-function mtimesMatch(expected: unknown, current: Record<string, number | null>): boolean {
-  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return true;
+function snapshotFieldMatches(expected: unknown, current: Record<string, number | string | null>): boolean {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return false;
   return Object.entries(current).every(([name, mtime]) => (expected as Record<string, unknown>)[name] === mtime);
+}
+
+function discoveredPlatforms(root: string): string[] {
+  const basePath = resolve(root, '.env');
+  const base = existsSync(basePath) ? parseDotenv(readFileSync(basePath, 'utf8')) : {};
+  const platforms = new Set<string>();
+  if (base.MESSAGING_PLATFORM) platforms.add(base.MESSAGING_PLATFORM.toLowerCase());
+  for (const platform of MESSAGING_PLATFORMS) {
+    if (existsSync(resolve(root, `.env.${platform}`))) platforms.add(platform);
+  }
+  if (platforms.size === 0) platforms.add(base.MESSAGING_PLATFORM?.toLowerCase() || 'discord');
+  return [...platforms];
+}
+
+function validateEnvRoot(root: string, source: string): unknown[] {
+  const issues: unknown[] = [];
+  for (const platform of discoveredPlatforms(root)) {
+    if (!MESSAGING_PLATFORMS.includes(platform)) {
+      issues.push({ platform, path: ['MESSAGING_PLATFORM'], message: `Unsupported messaging platform: ${platform}` });
+      continue;
+    }
+    const layered = applyEnvLayers({ baseDir: root, env: {}, realEnv: {}, platform }).env;
+    layered.MESSAGING_PLATFORM = platform;
+    const parsed = parseConfig(layered, { source });
+    if (!parsed.ok) issues.push(...parsed.issues.map((issue) => ({ ...issue, platform })));
+  }
+  return issues;
+}
+
+function makeCandidateRoot(root: string): string {
+  const candidateRoot = mkdtempSync(resolve(tmpdir(), 'garbanzo-config-candidate-'));
+  for (const name of ENV_FILE_NAMES) {
+    const source = resolve(root, name);
+    if (existsSync(source)) copyFileSync(source, resolve(candidateRoot, name));
+  }
+  return candidateRoot;
 }
 
 function discover(root: string): JsonRecord {
@@ -200,17 +274,61 @@ function discover(root: string): JsonRecord {
 }
 
 function validateCandidates(root: string, payload: JsonRecord): Array<unknown> {
-  const current = readEnvSnapshot(root);
-  const candidateEnv = payload.env && typeof payload.env === 'object' && !Array.isArray(payload.env)
-    ? { ...current.values, ...(payload.env as Record<string, string | undefined>) }
-    : current.values;
-  const parsed = parseConfig(candidateEnv, { source: 'config-service' });
-  const issues: unknown[] = parsed.ok ? [] : [...parsed.issues];
+  const candidateRoot = makeCandidateRoot(root);
+  const issues: unknown[] = [];
+  try {
+    if (payload.env && typeof payload.env === 'object' && !Array.isArray(payload.env)) {
+      const snapshot = readEnvSnapshot(candidateRoot);
+      writeEnvUpdate(candidateRoot, payload.env as Record<string, string | null>, snapshot);
+    }
+    issues.push(...validateEnvRoot(candidateRoot, 'config-service'));
+  } finally {
+    rmSync(candidateRoot, { recursive: true, force: true });
+  }
   if (payload.files && typeof payload.files === 'object' && !Array.isArray(payload.files)) {
     for (const [name, value] of Object.entries(payload.files as Record<string, unknown>)) {
       if (!isConfigFileName(name) || name === 'bridge-map') continue;
       issues.push(...zodIssues(validateConfigFile(name, value)).map((issue) => ({ ...issue, file: name })));
     }
+  }
+  return issues;
+}
+
+function validateImportBundle(root: string, bundle: ConfigBundle): unknown[] {
+  const issues: unknown[] = [];
+  const deadline = Date.now() + IMPORT_LIMITS.timeoutMs;
+  for (const [path, content] of Object.entries(bundle.files)) {
+    if (Date.now() > deadline) throw new Error('import-timeout');
+    const match = path.match(/^config\/([^/]+)\.json$/);
+    if (!match) continue;
+    const name = match[1] ?? '';
+    if (name === 'bridge-map') {
+      issues.push({ file: path, message: 'bridge-map is read-only in v3.4.0 and omitted from v1 exports' });
+      continue;
+    }
+    if (!isConfigFileName(name)) continue;
+    try {
+      const target = configFilePath(root, name);
+      const existing = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) as unknown : undefined;
+      const candidate = restoreJsonPlaceholders(existing, JSON.parse(content) as unknown);
+      issues.push(...zodIssues(validateConfigFile(name, candidate)).map((issue) => ({ ...issue, file: path })));
+    } catch (error) {
+      issues.push({ file: path, message: error instanceof SyntaxError ? 'invalid JSON' : issueResponse(error).error });
+    }
+  }
+
+  const candidateRoot = makeCandidateRoot(root);
+  try {
+    for (const [path, content] of Object.entries(bundle.files)) {
+      if (!/^\.env(?:\.|$)/.test(path)) continue;
+      const destination = resolve(candidateRoot, path);
+      const existing = existsSync(destination) ? readFileSync(destination, 'utf8') : '';
+      const imported = envWithoutRedactedPlaceholders(content);
+      writeFileWithBackupAtomic(destination, mergeEnvFileContent(existing, imported), { backup: false });
+    }
+    issues.push(...validateEnvRoot(candidateRoot, 'config-service-import'));
+  } finally {
+    rmSync(candidateRoot, { recursive: true, force: true });
   }
   return issues;
 }
@@ -225,12 +343,13 @@ async function dockerComposeAvailable(root: string): Promise<boolean> {
 
 export async function startConfigService(options: ConfigServiceOptions): Promise<ConfigServiceHandle> {
   const root = resolve(options.root);
+  pruneStaleStaging(root);
   const entryToken = randomBytes(32).toString('base64url');
   let sessionToken: string | null = null;
   let entryUsed = false;
   let applied = false;
   const changedTargets = new Set<string>();
-  const staging = new Map<string, string>();
+  const staging = new Map<string, { dir: string; preconditions: BundlePreconditions }>();
   let idleTimer: NodeJS.Timeout;
   let resolveClosed: () => void = () => undefined;
   const closed = new Promise<void>((resolvePromise) => { resolveClosed = resolvePromise; });
@@ -294,6 +413,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           env: env.masked,
           mtimeMs: env.mtimeMs,
           fileMtimes: env.fileMtimes,
+          fileHashes: env.fileHashes,
           files: Object.fromEntries(Object.entries(files).map(([name, file]) => [name, file && {
             value: file.masked,
             mtimeMs: file.mtimeMs,
@@ -304,7 +424,9 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       if (req.method === 'PUT' && url.pathname === '/api/config') {
         const { value: payload } = await readJson(req);
         const current = readEnvSnapshot(root);
-        if (payload.mtimeMs !== current.mtimeMs || !mtimesMatch(payload.fileMtimes, current.fileMtimes)) {
+        if (payload.mtimeMs !== current.mtimeMs
+          || !snapshotFieldMatches(payload.fileMtimes, current.fileMtimes)
+          || !snapshotFieldMatches(payload.fileHashes, current.fileHashes)) {
           json(res, 409, { reason: 'changed-on-disk' });
           return;
         }
@@ -316,11 +438,13 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           if (value === '' && isSecretKey(key)) continue;
           normalized[key] = value;
         }
-        const candidate = { ...current.values };
-        for (const [key, value] of Object.entries(normalized)) candidate[key] = value ?? '';
-        const parsed = parseConfig(candidate, { source: 'config-service' });
-        if (!parsed.ok) {
-          json(res, 422, { issues: parsed.issues });
+        const candidateRoot = makeCandidateRoot(root);
+        writeEnvUpdate(candidateRoot, normalized, readEnvSnapshot(candidateRoot));
+        const candidateIssues = validateEnvRoot(candidateRoot, 'config-service');
+        const candidate = readEnvSnapshot(candidateRoot).values;
+        rmSync(candidateRoot, { recursive: true, force: true });
+        if (candidateIssues.length > 0) {
+          json(res, 422, { issues: candidateIssues });
           return;
         }
         writeEnvUpdate(root, normalized, current);
@@ -383,7 +507,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
         return;
       }
       if (req.method === 'GET' && url.pathname === '/api/export') {
-        json(res, 200, buildExportBundle(root));
+        json(res, 200, buildExportBundle(root, effectiveConfigPaths(root)));
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/import') {
@@ -393,14 +517,25 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           ? parseMultipartBundle(contentType, body)
           : JSON.parse(body.toString('utf8')) as ConfigBundle & { stagingId?: string; confirm?: boolean };
         if ('confirm' in raw && raw.confirm && raw.stagingId) {
-          const dir = staging.get(raw.stagingId);
-          if (!dir) {
+          const pending = staging.get(raw.stagingId);
+          if (!pending) {
             json(res, 404, { error: 'staging-id-not-found' });
             return;
           }
-          const changed = applyStagedBundle(root, dir);
+          const configPaths = effectiveConfigPaths(root);
+          if (!bundlePreconditionsMatch(root, pending.preconditions, configPaths)) {
+            json(res, 409, { reason: 'changed-on-disk' });
+            return;
+          }
+          const stagedBundle = readStagedBundle(pending.dir);
+          const confirmIssues = validateImportBundle(root, stagedBundle);
+          if (confirmIssues.length > 0) {
+            json(res, 422, { issues: confirmIssues });
+            return;
+          }
+          const changed = applyStagedBundle(root, pending.dir, (path) => configPaths[path]);
           writeRecoveryNote(root, changed);
-          rmSync(dir, { recursive: true, force: true });
+          rmSync(pending.dir, { recursive: true, force: true });
           staging.delete(raw.stagingId);
           appendConfigAudit(root, {
             action: 'import-apply', target: 'config-root', sourceIp: req.socket.remoteAddress,
@@ -417,40 +552,16 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           json(res, 422, { error: limitError });
           return;
         }
-        const validationIssues: unknown[] = [];
-        const importDeadline = Date.now() + IMPORT_LIMITS.timeoutMs;
-        const importedEnv = { ...readEnvSnapshot(root).values };
-        for (const [path, content] of Object.entries(bundle.files)) {
-          if (Date.now() > importDeadline) throw new Error('import-timeout');
-          if (/^\.env(?:\.|$)/.test(path)) {
-            Object.assign(importedEnv, parseDotenv(envWithoutRedactedPlaceholders(content)));
-            continue;
-          }
-          const match = path.match(/^config\/([^/]+)\.json$/);
-          if (!match) continue;
-          const name = match[1] ?? '';
-          if (name === 'bridge-map') {
-            validationIssues.push({ file: path, message: 'bridge-map is read-only in v3.4.0' });
-            continue;
-          }
-          if (!isConfigFileName(name)) continue;
-          try {
-            const target = configFilePath(root, name);
-            const existing = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) as unknown : undefined;
-            const candidate = restoreJsonPlaceholders(existing, JSON.parse(content) as unknown);
-            validationIssues.push(...zodIssues(validateConfigFile(name, candidate)).map((issue) => ({ ...issue, file: path })));
-          } catch {
-            validationIssues.push({ file: path, message: 'invalid JSON' });
-          }
-        }
-        const envValidation = parseConfig(importedEnv, { source: 'config-service-import' });
-        if (!envValidation.ok) validationIssues.push(...envValidation.issues);
+        const validationIssues = validateImportBundle(root, bundle);
         if (validationIssues.length > 0) {
           json(res, 422, { issues: validationIssues });
           return;
         }
         const staged = stageBundle(root, bundle);
-        staging.set(staged.id, staged.dir);
+        staging.set(staged.id, {
+          dir: staged.dir,
+          preconditions: captureBundlePreconditions(root, bundle, effectiveConfigPaths(root)),
+        });
         json(res, 200, { stagingId: staged.id, diff: buildExportBundle(staged.dir).files });
         return;
       }
@@ -488,8 +599,13 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
         const env = readEnvSnapshot(root).values;
         const compose = state.shape === 'compose' && await dockerComposeAvailable(root);
         if (compose) {
-          const services = [...changedTargets].filter((name) => ['discord', 'whatsapp', 'telegram', 'matrix', 'slack'].includes(name));
-          const args = ['compose', 'up', '-d', ...(services.length > 0 ? services : [...(state.platforms as string[])])];
+          const services = [...changedTargets].filter((name) => MESSAGING_PLATFORMS.includes(name));
+          const fallbackServices = [...(state.platforms as string[])];
+          if (fallbackServices.some((name) => !MESSAGING_PLATFORMS.includes(name))) {
+            json(res, 422, { error: 'unsupported messaging platform discovered; refusing compose apply' });
+            return;
+          }
+          const args = ['compose', 'up', '-d', ...(services.length > 0 ? services : fallbackServices)];
           res.statusCode = 200;
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
           res.write(`$ docker ${args.join(' ')}\n`);
@@ -527,6 +643,8 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
 
   server.on('close', () => {
     clearTimeout(idleTimer);
+    for (const pending of staging.values()) rmSync(pending.dir, { recursive: true, force: true });
+    staging.clear();
     resolveClosed();
   });
   await new Promise<void>((resolveListen, reject) => {

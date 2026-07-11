@@ -214,6 +214,15 @@ export const KNOWN_SCHEMA_KEYS: readonly string[] = Object.freeze(schemaKeys);
 const SECRET_NAME_HEURISTIC = /(?:^|_)(?:TOKEN|KEY|SECRET|PASSWORD|PASS)$/i;
 const SENSITIVE_QUERY_PARAM = /(?:^|[_-])(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|key|secret|password|passwd|pass)(?:$|[_-])/i;
 
+const PUBLIC_JSON_KEYS = new Set([
+  '_comment', '_comment_embedding_models', 'groups', 'mentionPatterns', 'admins', 'owner', 'moderators',
+  'name', 'enabled', 'requireMention', 'enabledFeatures', 'persona', 'ownerId', 'bandRoleIds',
+  'introductionsChannelId', 'eventsChannelId', 'channels', 'features', 'chats', 'rooms', 'alias', 'sources',
+  'id', 'label', 'collection', 'textField', 'embedding', 'provider', 'model', 'dimensions', 'maxHits',
+  'minScore', 'instances', 'routes', 'platform', 'direction', 'from', 'modeToWhatsApp', 'modeToDiscord',
+  'relayCommands', 'ingestRelayed', 'instance', 'chatId', 'url',
+]);
+
 function quotedValueBounds(value: string): { start: number; end: number } | undefined {
   const start = value.search(/\S/);
   if (start < 0) return undefined;
@@ -238,7 +247,7 @@ function scalarValue(value: string): string {
   return (comment >= 0 ? value.slice(0, comment) : value).trim();
 }
 
-function hasCredentialsInUrl(value: string): boolean {
+export function hasCredentialsInUrl(value: string): boolean {
   const unquoted = scalarValue(value);
   try {
     const url = new URL(unquoted);
@@ -249,6 +258,28 @@ function hasCredentialsInUrl(value: string): boolean {
     return /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]+@/i.test(unquoted)
       || /[?&][^=&]*(?:api[_-]?key|token|key|secret|password|passwd|pass)[^=&]*=/i.test(unquoted);
   }
+}
+
+export function isJsonSecretPath(path: readonly string[], value: unknown): boolean {
+  const key = path.at(-1) ?? '';
+  if (/^(?:jid|api.?key|token|secret|password|passwd|pass)$/i.test(key)) return true;
+  if (!PUBLIC_JSON_KEYS.has(key)) return true;
+  return typeof value === 'string' && hasCredentialsInUrl(value);
+}
+
+export function maskJsonSecrets(value: unknown, path: readonly string[] = []): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => maskJsonSecrets(item, [...path, String(index)]));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [
+      key,
+      maskJsonSecrets(child, [...path, key]),
+    ]));
+  }
+  return isJsonSecretPath(path, value)
+    ? { set: value !== null && value !== undefined && value !== '' }
+    : value;
 }
 
 export function isSecretKey(key: string): boolean {

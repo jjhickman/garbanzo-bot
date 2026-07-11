@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 import { parse as parseDotenv } from 'dotenv';
 
 import { isSecretKey } from '../../config-core/secret-classifier.js';
-import { writeFileWithBackupAtomic } from '../../config-core/writers.js';
+import { writeFileWithBackupAtomic, writeJsonWithBackupAtomic } from '../../config-core/writers.js';
 
 export const ENV_FILE_NAMES = ['.env', '.env.discord', '.env.whatsapp', '.env.telegram', '.env.matrix'] as const;
 export type EnvFileName = (typeof ENV_FILE_NAMES)[number];
@@ -14,28 +15,37 @@ export type EnvSnapshot = {
   masked: Record<string, string | { set: boolean }>;
   mtimeMs: number;
   fileMtimes: Record<string, number | null>;
+  fileHashes: Record<string, string | null>;
 };
+
+function contentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
 
 export function readEnvSnapshot(root: string): EnvSnapshot {
   const values: Record<string, string> = {};
   const fileMtimes: Record<string, number | null> = {};
+  const fileHashes: Record<string, string | null> = {};
   let mtimeMs = 0;
   for (const name of ENV_FILE_NAMES) {
     const path = resolve(root, name);
     if (!existsSync(path)) {
       fileMtimes[name] = null;
+      fileHashes[name] = null;
       continue;
     }
     const mtime = statSync(path).mtimeMs;
     fileMtimes[name] = mtime;
     mtimeMs = Math.max(mtimeMs, mtime);
-    Object.assign(values, parseDotenv(readFileSync(path, 'utf8')));
+    const content = readFileSync(path, 'utf8');
+    fileHashes[name] = contentHash(content);
+    Object.assign(values, parseDotenv(content));
   }
   const masked = Object.fromEntries(Object.entries(values).map(([key, value]) => [
     key,
     isSecretKey(key) ? { set: value.length > 0 } : value,
   ]));
-  return { values, masked, mtimeMs, fileMtimes };
+  return { values, masked, mtimeMs, fileMtimes, fileHashes };
 }
 
 function replaceEnvValues(content: string, update: Record<string, string | null>): string {
@@ -62,12 +72,18 @@ function targetForKey(root: string, key: string, values: Record<string, string>)
     telegram: ['TELEGRAM_'],
     matrix: ['MATRIX_'],
   };
-  if (platform && (prefixes[platform] ?? []).some((prefix) => key === prefix || key.startsWith(prefix))) {
-    return resolve(root, `.env.${platform}`);
-  }
   for (const name of ENV_FILE_NAMES) {
     const path = resolve(root, name);
     if (existsSync(path) && Object.hasOwn(parseDotenv(readFileSync(path, 'utf8')), key)) return path;
+  }
+  for (const [candidatePlatform, candidatePrefixes] of Object.entries(prefixes)) {
+    if (candidatePrefixes.some((prefix) => key === prefix || key.startsWith(prefix))
+      && existsSync(resolve(root, `.env.${candidatePlatform}`))) {
+      return resolve(root, `.env.${candidatePlatform}`);
+    }
+  }
+  if (platform && (prefixes[platform] ?? []).some((prefix) => key === prefix || key.startsWith(prefix))) {
+    return resolve(root, `.env.${platform}`);
   }
   return resolve(root, '.env');
 }
@@ -80,8 +96,24 @@ export function writeEnvUpdate(root: string, update: Record<string, string | nul
     entries[key] = value;
     byPath.set(path, entries);
   }
+  const manifestPath = resolve(root, 'data', 'config-recovery.json');
+  const targets = [...byPath.keys()].map((path) => relative(root, path));
+  const completed: string[] = [];
+  writeJsonWithBackupAtomic(manifestPath, {
+    timestamp: new Date().toISOString(),
+    message: 'Multi-file env update in progress; completed targets have sibling .bak files.',
+    targets,
+    completed,
+  });
   for (const [path, entries] of byPath) {
     const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
     writeFileWithBackupAtomic(path, replaceEnvValues(existing, entries));
+    completed.push(relative(root, path));
+    writeJsonWithBackupAtomic(manifestPath, {
+      timestamp: new Date().toISOString(),
+      message: 'Multi-file env update in progress; completed targets have sibling .bak files.',
+      targets,
+      completed,
+    });
   }
 }

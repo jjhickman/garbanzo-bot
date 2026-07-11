@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
-
-import { randomBytes } from 'node:crypto';
 
 import { redactEnvContent } from '../../config-core/secret-classifier.js';
 import { mergeEnvFileContent } from '../../config-core/fields.js';
@@ -18,6 +17,8 @@ export const IMPORT_LIMITS = {
 } as const;
 
 export type ConfigBundle = { format: 'garbanzo-config-bundle-v1'; files: Record<string, string> };
+export type TargetPrecondition = { exists: boolean; mtimeMs: number | null; sha256: string | null };
+export type BundlePreconditions = Record<string, TargetPrecondition>;
 
 const OMIT_PARTS = new Set(['.git', 'node_modules', 'dist', 'data']);
 
@@ -45,15 +46,19 @@ function redactFile(path: string, content: string): string {
     try {
       return `${JSON.stringify(maskJsonSecrets(JSON.parse(content) as unknown), null, 2)}\n`;
     } catch {
-      return content;
+      return `${JSON.stringify({ __redacted_unparseable__: true }, null, 2)}\n`;
     }
   }
   return content;
 }
 
-export function buildExportBundle(root: string): ConfigBundle {
-  const files = Object.fromEntries(walk(root).map((path) => {
-    const content = readFileSync(resolve(root, path), 'utf8');
+export function buildExportBundle(root: string, sourceOverrides: Record<string, string> = {}): ConfigBundle {
+  const paths = new Set(walk(root).filter((path) => path !== 'config/bridge-map.json'));
+  for (const [logicalPath, source] of Object.entries(sourceOverrides)) {
+    if (logicalPath !== 'config/bridge-map.json' && existsSync(source)) paths.add(logicalPath);
+  }
+  const files = Object.fromEntries([...paths].map((path) => {
+    const content = readFileSync(sourceOverrides[path] ?? resolve(root, path), 'utf8');
     return [path, redactFile(path, content)];
   }));
   return { format: 'garbanzo-config-bundle-v1', files };
@@ -92,6 +97,63 @@ export function stageBundle(root: string, bundle: ConfigBundle): { id: string; d
   return { id, dir };
 }
 
+export function readStagedBundle(dir: string): ConfigBundle {
+  if (!existsSync(dir)) throw new Error('staging id not found');
+  return {
+    format: 'garbanzo-config-bundle-v1',
+    files: Object.fromEntries(walk(dir).map((path) => [path, readFileSync(resolve(dir, path), 'utf8')])),
+  };
+}
+
+function targetPrecondition(path: string): TargetPrecondition {
+  if (!existsSync(path)) return { exists: false, mtimeMs: null, sha256: null };
+  const content = readFileSync(path);
+  return {
+    exists: true,
+    mtimeMs: statSync(path).mtimeMs,
+    sha256: createHash('sha256').update(content).digest('hex'),
+  };
+}
+
+export function captureBundlePreconditions(
+  root: string,
+  bundle: ConfigBundle,
+  targetOverrides: Record<string, string> = {},
+): BundlePreconditions {
+  return Object.fromEntries(Object.keys(bundle.files).filter(recognized).map((path) => [
+    path,
+    targetPrecondition(targetOverrides[path] ?? resolve(root, path)),
+  ]));
+}
+
+export function bundlePreconditionsMatch(
+  root: string,
+  expected: BundlePreconditions,
+  targetOverrides: Record<string, string> = {},
+): boolean {
+  return Object.entries(expected).every(([path, precondition]) => {
+    const current = targetPrecondition(targetOverrides[path] ?? resolve(root, path));
+    return current.exists === precondition.exists
+      && current.mtimeMs === precondition.mtimeMs
+      && current.sha256 === precondition.sha256;
+  });
+}
+
+export function stagingRoot(root: string): string {
+  return resolve(root, 'data', 'config-import-staging');
+}
+
+export function pruneStaleStaging(root: string, maxAgeMs = 24 * 60 * 60 * 1000): void {
+  const parent = stagingRoot(root);
+  if (!existsSync(parent)) return;
+  const cutoff = Date.now() - maxAgeMs;
+  for (const entry of readdirSync(parent, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = resolve(parent, entry.name);
+    if (statSync(path).mtimeMs < cutoff) rmSync(path, { recursive: true, force: true });
+  }
+}
+
 export function envWithoutRedactedPlaceholders(content: string): string {
   return content.split(/(?<=\n)/).filter((line) => !/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*\[REDACTED\]/.test(line)).join('');
 }
@@ -103,10 +165,24 @@ function isSetPlaceholder(value: unknown): value is { set: boolean } {
 }
 
 export function restoreJsonPlaceholders(existing: unknown, candidate: unknown): unknown {
-  if (isSetPlaceholder(candidate)) return existing;
+  if (isSetPlaceholder(candidate)) {
+    if (existing === undefined) throw new Error('secret placeholder identity changed or no longer exists');
+    return existing;
+  }
   if (Array.isArray(candidate)) {
     const existingItems = Array.isArray(existing) ? existing : [];
-    return candidate.map((item, index) => restoreJsonPlaceholders(existingItems[index], item));
+    return candidate.map((item, index) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const identity = ['id', 'jid', 'chatId', 'instance'].find((key) => typeof (item as Record<string, unknown>)[key] === 'string');
+        if (identity) {
+          const identityValue = (item as Record<string, unknown>)[identity];
+          const matching = existingItems.find((existingItem) => existingItem && typeof existingItem === 'object'
+            && !Array.isArray(existingItem) && (existingItem as Record<string, unknown>)[identity] === identityValue);
+          return restoreJsonPlaceholders(matching, item);
+        }
+      }
+      return restoreJsonPlaceholders(existingItems[index], item);
+    });
   }
   if (candidate && typeof candidate === 'object') {
     const existingRecord = existing && typeof existing === 'object' && !Array.isArray(existing)
@@ -120,13 +196,17 @@ export function restoreJsonPlaceholders(existing: unknown, candidate: unknown): 
   return candidate;
 }
 
-export function applyStagedBundle(root: string, stagingDir: string): string[] {
+export function applyStagedBundle(
+  root: string,
+  stagingDir: string,
+  targetOverride: (logicalPath: string) => string | undefined = () => undefined,
+): string[] {
   if (!existsSync(stagingDir)) throw new Error('staging id not found');
   const changed: string[] = [];
   for (const path of walk(stagingDir)) {
     const source = resolve(stagingDir, path);
     if (!statSync(source).isFile()) continue;
-    const destination = resolve(root, path);
+    const destination = targetOverride(path) ?? resolve(root, path);
     const stagedContent = readFileSync(source, 'utf8');
     if (/^\.env(?:\.|$)/.test(path)) {
       const existing = existsSync(destination) ? readFileSync(destination, 'utf8') : '';

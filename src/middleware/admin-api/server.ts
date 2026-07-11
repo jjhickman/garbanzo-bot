@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import {
   addAdminAuditLog,
-  deleteMemory,
+  deleteMemoryWithAudit,
   getAllMemories,
   shareMemory,
   unshareMemory,
@@ -118,18 +118,18 @@ export async function startAdminApiListener(
           writeJson(res, 404, { error: 'Memory not found' });
           return;
         }
-        const deleted = await deleteMemory(id);
-        if (!deleted) {
-          writeJson(res, 404, { error: 'Memory not found' });
-          return;
-        }
-        await addAdminAuditLog({
+        const audit = {
           ts: now(),
           action: 'memory.delete',
           target: String(id),
           summary: truncate(`Memory #${id} deleted: ${memory.fact}`, AUDIT_SUMMARY_MAX_CHARS),
           sourceIp: sourceIp(req),
-        });
+        };
+        const deleted = await deleteMemoryWithAudit(id, audit);
+        if (!deleted) {
+          writeJson(res, 404, { error: 'Memory not found' });
+          return;
+        }
         writeJson(res, 200, { deleted: true, id });
         return;
       }
@@ -156,31 +156,40 @@ export async function startAdminApiListener(
 
       const id = Number(shareMatch[1]);
       const action = shareMatch[2];
+      const auditBase = {
+        target: String(id),
+        sourceIp: sourceIp(req),
+      };
+      await addAdminAuditLog({
+        ...auditBase,
+        ts: now(),
+        action: `memory.${action}.intent`,
+        summary: `Memory #${id} ${action} requested`,
+      });
+      let resultStatus: 'succeeded' | 'not-found' | 'failed' = 'succeeded';
       if (action === 'share') {
         const result = await shareMemory(id);
-        if (result === 'not-found') {
-          writeJson(res, 404, { error: 'Memory not found' });
-          return;
-        }
-        if (result === 'failed') {
-          writeJson(res, 503, { error: 'Memory could not be shared' });
-          return;
-        }
+        if (result === 'not-found') resultStatus = 'not-found';
+        else if (result === 'failed') resultStatus = 'failed';
       } else {
         const unshared = await unshareMemory(id);
-        if (!unshared) {
-          writeJson(res, 503, { error: 'Memory could not be unshared' });
-          return;
-        }
+        if (!unshared) resultStatus = 'failed';
       }
 
       await addAdminAuditLog({
+        ...auditBase,
         ts: now(),
-        action: `memory.${action}`,
-        target: String(id),
-        summary: `Memory #${id} ${action === 'share' ? 'shared' : 'unshared'}`,
-        sourceIp: sourceIp(req),
+        action: `memory.${action}.result`,
+        summary: `Memory #${id} ${action} ${resultStatus}`,
       });
+      if (resultStatus === 'not-found') {
+        writeJson(res, 404, { error: 'Memory not found' });
+        return;
+      }
+      if (resultStatus === 'failed') {
+        writeJson(res, 503, { error: `Memory could not be ${action}d` });
+        return;
+      }
       writeJson(res, 200, { id, [action === 'share' ? 'shared' : 'unshared']: true });
       return;
     }

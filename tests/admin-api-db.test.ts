@@ -5,9 +5,21 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 
 import { describe, expect, it } from 'vitest';
 
-import { addAdminAuditLog, getAdminAuditLog, runMaintenance } from '../src/utils/db.js';
+import { addAdminAuditLog, addMemory, deleteMemoryWithAudit, getAdminAuditLog, getAllMemories, runMaintenance } from '../src/utils/db.js';
 
 describe('admin audit persistence', () => {
+  it('deletes relational memory and writes its audit row in one backend operation', async () => {
+    const memory = await addMemory('Atomic audit canary', 'general', 'owner');
+    expect(await deleteMemoryWithAudit(memory.id, {
+      ts: Date.now(), action: 'memory.delete', target: String(memory.id),
+      summary: `Memory #${memory.id} deleted`, sourceIp: '127.0.0.1',
+    })).toBe(true);
+    expect((await getAllMemories()).some((row) => row.id === memory.id)).toBe(false);
+    expect(await getAdminAuditLog(20)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'memory.delete', target: String(memory.id) }),
+    ]));
+  });
+
   it('stores the required row shape and prunes rows older than 90 days', async () => {
     const recent = await addAdminAuditLog({
       ts: Date.now(),

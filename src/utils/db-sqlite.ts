@@ -1114,6 +1114,16 @@ export function deleteMemory(id: number): boolean {
   return deleteMemoryById.run(id).changes > 0;
 }
 
+const deleteMemoryWithAuditTransaction = db.transaction((id: number, entry: AdminAuditLogInput): boolean => {
+  if (deleteMemoryById.run(id).changes === 0) return false;
+  insertAdminAuditLog.run(entry.ts, entry.action, entry.target, entry.summary, entry.sourceIp);
+  return true;
+});
+
+export function deleteMemoryWithAudit(id: number, entry: AdminAuditLogInput): boolean {
+  return deleteMemoryWithAuditTransaction(id, entry);
+}
+
 /** Search memories by keyword */
 export function searchMemory(keyword: string, limit: number = 10): MemoryEntry[] {
   return (searchMemories.all(`%${keyword}%`, limit) as MemoryRow[]).map(mapMemoryEntry);
@@ -1697,6 +1707,7 @@ export function createSqliteBackend(): DbBackend {
       addMemory(fact, category, source),
     getAllMemories: async () => getAllMemories(),
     deleteMemory: async (id: number) => deleteMemory(id),
+    deleteMemoryWithAudit: async (id: number, entry: AdminAuditLogInput) => deleteMemoryWithAudit(id, entry),
     searchMemory: async (keyword: string, limit?: number) => searchMemory(keyword, limit),
     formatMemoriesForPrompt: async () => formatMemoriesForPrompt(),
 

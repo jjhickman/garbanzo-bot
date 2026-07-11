@@ -1,4 +1,5 @@
 import { z, type ZodType } from 'zod';
+export { maskJsonSecrets } from '../../config-core/secret-classifier.js';
 
 export const CONFIG_FILE_NAMES = [
   'groups',
@@ -113,35 +114,6 @@ export function validateConfigFile(name: ConfigFileName, value: unknown): z.ZodI
   if (name === 'bridge-map') return [];
   const result = schemas[name].safeParse(value);
   return result.success ? [] : result.error.issues;
-}
-
-const PUBLIC_JSON_KEYS = new Set([
-  '_comment', '_comment_embedding_models', 'groups', 'mentionPatterns', 'admins', 'owner', 'moderators',
-  'name', 'jid', 'enabled', 'requireMention', 'enabledFeatures', 'persona', 'ownerId', 'bandRoleIds',
-  'introductionsChannelId', 'eventsChannelId', 'channels', 'features', 'chats', 'rooms', 'alias', 'sources',
-  'id', 'label', 'collection', 'textField', 'embedding', 'provider', 'model', 'dimensions', 'maxHits',
-  'minScore', 'instances', 'routes', 'platform', 'direction', 'from', 'modeToWhatsApp', 'modeToDiscord',
-  'relayCommands', 'ingestRelayed', 'instance', 'chatId',
-]);
-
-function urlHasCredentials(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return !!url.username || !!url.password || [...url.searchParams.keys()].some((key) => /token|key|secret|pass/i.test(key));
-  } catch {
-    return false;
-  }
-}
-
-export function maskJsonSecrets(value: unknown, key = ''): unknown {
-  if (Array.isArray(value)) return value.map((item) => maskJsonSecrets(item));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [childKey, maskJsonSecrets(child, childKey)]));
-  }
-  const secretKey = !PUBLIC_JSON_KEYS.has(key) || /api.?key|token|secret|password/i.test(key);
-  if (secretKey) return { set: value !== null && value !== undefined && value !== '' };
-  if (typeof value === 'string' && urlHasCredentials(value)) return { set: value.length > 0 };
-  return value;
 }
 
 export function zodIssues(issues: z.ZodIssue[]): Array<{ code: string; path: PropertyKey[]; message: string }> {

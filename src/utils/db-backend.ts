@@ -129,6 +129,7 @@ export interface DbBackend {
   addMemory(fact: string, category?: string, source?: string): Promise<LocalMemoryEntry>;
   getAllMemories(): Promise<LocalMemoryEntry[]>;
   deleteMemory(id: number): Promise<boolean>;
+  deleteMemoryWithAudit(id: number, audit: AdminAuditLogInput): Promise<boolean>;
   searchMemory(keyword: string, limit?: number): Promise<MemoryEntry[]>;
   formatMemoriesForPrompt(): Promise<string>;
 

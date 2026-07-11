@@ -55,9 +55,11 @@ describe('host config service mutations', () => {
     const envPath = join(root, '.env');
     writeFileSync(envPath, 'MESSAGING_PLATFORM=discord\nAI_PROVIDER_ORDER=openai\nOPENAI_API_KEY=test_key_old\nOPERATOR_CUSTOM=value\n');
     const read = await call(handle.port, token, '/api/config');
-    const config = JSON.parse(read.body) as { mtimeMs: number };
+    const config = JSON.parse(read.body) as { mtimeMs: number; fileMtimes: Record<string, number | null>; fileHashes: Record<string, string | null> };
     const update = await call(handle.port, token, '/api/config', 'PUT', {
       mtimeMs: config.mtimeMs,
+      fileMtimes: config.fileMtimes,
+      fileHashes: config.fileHashes,
       update: { OPENAI_API_KEY: 'test_key_new', LOG_LEVEL: 'debug' },
     });
     expect(update.status).toBe(200);
@@ -75,10 +77,12 @@ describe('host config service mutations', () => {
   it('writes a secret-safe audit line and rejects unsafe import bundle paths', async () => {
     const { root, handle, token } = await setup();
     writeFileSync(join(root, '.env'), 'MESSAGING_PLATFORM=discord\nAI_PROVIDER_ORDER=openai\nOPENAI_API_KEY=test_key_old\n');
-    const current = JSON.parse((await call(handle.port, token, '/api/config')).body) as { mtimeMs: number };
+    const current = JSON.parse((await call(handle.port, token, '/api/config')).body) as { mtimeMs: number; fileMtimes: Record<string, number | null>; fileHashes: Record<string, string | null> };
     const canary = 'audit_secret_canary_91aa';
     expect((await call(handle.port, token, '/api/config', 'PUT', {
       mtimeMs: current.mtimeMs,
+      fileMtimes: current.fileMtimes,
+      fileHashes: current.fileHashes,
       update: { OPENAI_API_KEY: canary },
     })).status).toBe(200);
     const audit = readFileSync(join(root, 'data', 'config-audit.jsonl'), 'utf8');

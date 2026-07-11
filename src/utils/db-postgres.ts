@@ -1136,6 +1136,30 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return (res.rowCount ?? 0) > 0;
     },
 
+    async deleteMemoryWithAudit(id: number, entry: AdminAuditLogInput): Promise<boolean> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const deleted = await client.query('DELETE FROM memory WHERE id = $1', [id]);
+        if ((deleted.rowCount ?? 0) === 0) {
+          await client.query('ROLLBACK');
+          return false;
+        }
+        await client.query(
+          `INSERT INTO admin_audit_log (ts, action, target, summary, source_ip)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [entry.ts, entry.action, entry.target, entry.summary, entry.sourceIp],
+        );
+        await client.query('COMMIT');
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async addAdminAuditLog(entry: AdminAuditLogInput): Promise<AdminAuditLogEntry> {
       const res = await pool.query<{
         id: number | string;
