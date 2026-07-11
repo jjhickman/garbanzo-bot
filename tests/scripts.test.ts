@@ -543,7 +543,7 @@ describe('ops scripts', () => {
     }
   });
 
-  it('setup dry-run env preview includes preserved operator keys from the merged output', () => {
+  it('setup dry-run env preview preserves but redacts unknown operator keys', () => {
     const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
     try {
       writeFileSync(
@@ -567,7 +567,8 @@ describe('ops scripts', () => {
       ], { GARBANZO_HOME: home });
 
       expect(out).toContain('--- .env (preview) ---');
-      expect(out).toContain('OPERATOR_ONLY=keep-me');
+      expect(out).toContain('OPERATOR_ONLY=[REDACTED]');
+      expect(out).not.toContain('OPERATOR_ONLY=keep-me');
       expect(readFileSync(join(home, '.env'), 'utf8')).toContain('OPERATOR_ONLY=keep-me');
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -1086,7 +1087,9 @@ describe('ops scripts', () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
-  });
+    // 7 sequential wizard spawns; the compat wrapper boots tsx per spawn in
+    // repo-dev (~1-2s each), so the default 5s timeout is far too tight.
+  }, 60000);
 
   it('setup writes docs/personas/discord.md under GARBANZO_HOME when --persona=quill is given (WS10)', () => {
     const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
