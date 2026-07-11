@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { processPrinter, type CliPrinter } from './cli/cli-print.js';
@@ -120,6 +121,30 @@ function resolveMode(garbanzoHome: string | undefined, packaged: boolean): 'repo
   return packaged ? 'packaged' : 'repo';
 }
 
+export interface SetupRunnerPaths {
+  compiledPath: string;
+  sourcePath: string;
+  compiledExists: boolean;
+  sourceExists: boolean;
+  cliIsSource: boolean;
+  tsxResolvable: boolean;
+}
+
+export function resolveSetupRunner(paths: SetupRunnerPaths): string {
+  if (paths.compiledExists) return paths.compiledPath;
+  if (paths.sourceExists && (paths.cliIsSource || paths.tsxResolvable)) return paths.sourcePath;
+  throw new Error('packaged setup runner is missing — reinstall garbanzo-bot');
+}
+
+function canResolveTsx(): boolean {
+  try {
+    createRequire(import.meta.url).resolve('tsx');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function runCli(args: string[] = process.argv.slice(2), printer: CliPrinter = processPrinter): Promise<number> {
   const parsed = parseCliCommand(args);
 
@@ -146,9 +171,15 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
     // run.ts exists — fall back to the TypeScript source in that case
     // (spawnSetup detects the .ts extension and runs it through tsx).
     const compiledPath = fileURLToPath(new URL('./cli/setup/run.js', import.meta.url));
-    const setupPath = existsSync(compiledPath)
-      ? compiledPath
-      : fileURLToPath(new URL('./cli/setup/run.ts', import.meta.url));
+    const sourcePath = fileURLToPath(new URL('./cli/setup/run.ts', import.meta.url));
+    const setupPath = resolveSetupRunner({
+      compiledPath,
+      sourcePath,
+      compiledExists: existsSync(compiledPath),
+      sourceExists: existsSync(sourcePath),
+      cliIsSource: fileURLToPath(import.meta.url).endsWith('.ts'),
+      tsxResolvable: canResolveTsx(),
+    });
     return spawnSetup(setupPath, parsed.args, GARBANZO_HOME_DIR);
   }
 

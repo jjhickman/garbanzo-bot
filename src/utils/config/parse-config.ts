@@ -12,7 +12,7 @@ import { telegramSchema } from './telegram.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
 
-export const configSchema = coreSchema
+const baseConfigSchema = coreSchema
   .merge(aiSchema)
   .merge(whatsappSchema)
   .merge(discordSchema)
@@ -23,8 +23,9 @@ export const configSchema = coreSchema
   .merge(ragSchema)
   .merge(vectorSchema)
   .merge(monitoringSchema)
-  .merge(integrationsSchema)
-  .superRefine((env, ctx) => {
+  .merge(integrationsSchema);
+
+export const configSchema = baseConfigSchema.superRefine((env, ctx) => {
     if (env.MESSAGING_PLATFORM === 'whatsapp' && !env.OWNER_JID) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -108,120 +109,185 @@ export interface ParseConfigContext {
   readonly source?: string;
 }
 
+export interface ConfigIssue {
+  code: string;
+  path: (string | number)[];
+  message: string;
+  source: 'schema' | 'semantic';
+  severity: 'error' | 'warning';
+}
+
 export type ParseConfigResult =
-  | { ok: true; config: Config; warnings: string[] }
-  | { ok: false; errors: string[]; warnings: string[] };
+  | { ok: true; config: Config; issues: ConfigIssue[] }
+  | { ok: false; issues: ConfigIssue[] };
+
+function parsePrerequisites<K extends keyof Config>(
+  rawEnv: Record<string, string | undefined>,
+  keys: readonly K[],
+): Pick<Config, K> | undefined {
+  const values = {} as Pick<Config, K>;
+  for (const key of keys) {
+    const parsed = baseConfigSchema.shape[key].safeParse(rawEnv[String(key)]);
+    if (!parsed.success) return undefined;
+    Reflect.set(values, key, parsed.data);
+  }
+  return values;
+}
+
+function semanticIssue(
+  code: string,
+  path: (string | number)[],
+  message: string,
+): ConfigIssue {
+  return { code, path, message, source: 'semantic', severity: 'error' };
+}
 
 export function parseConfig(
   rawEnv: Record<string, string | undefined>,
   _context?: ParseConfigContext,
 ): ParseConfigResult {
   const parsed = configSchema.safeParse(rawEnv);
-  const warnings: string[] = [];
+  const issues: ConfigIssue[] = parsed.success ? [] : parsed.error.issues.map((issue) => ({
+    code: issue.code,
+    path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'),
+    message: issue.message,
+    source: 'schema',
+    severity: 'error',
+  }));
 
-  if (!parsed.success) {
-    const errors = [
-      'Invalid environment variables:',
-      '  Offending variables:',
-      ...parsed.error.issues.map((issue) => {
-        const name = issue.path.join('.') || '<root>';
-        return `  - ${name}: ${issue.message}`;
-      }),
-      '  Run `npm run setup` to create or repair your .env file.',
-    ];
-    return { ok: false, errors, warnings };
-  }
-
-  const errors: string[] = [];
   const allowedProviders = ['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock'] as const;
-  const requestedProviderOrder = parsed.data.AI_PROVIDER_ORDER
-    .split(',')
-    .map((provider) => provider.trim().toLowerCase())
-    .filter(Boolean);
+  const providerConfig = parsePrerequisites(rawEnv, [
+    'AI_PROVIDER_ORDER',
+    'OPENROUTER_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'OPENAI_AUTH_MODE',
+    'OPENAI_API_KEY',
+    'GEMINI_API_KEY',
+    'BEDROCK_MODEL_ID',
+  ]);
+  let normalizedProviderOrderList: string[] = [];
+  if (providerConfig) {
+    const requestedProviderOrder = providerConfig.AI_PROVIDER_ORDER
+      .split(',')
+      .map((provider) => provider.trim().toLowerCase())
+      .filter(Boolean);
+    normalizedProviderOrderList = Array.from(new Set(requestedProviderOrder));
+    if (requestedProviderOrder.length === 0) {
+      issues.push(semanticIssue(
+        'ai.provider_order_empty',
+        ['AI_PROVIDER_ORDER'],
+        'AI_PROVIDER_ORDER must include at least one provider (openrouter, anthropic, openai, gemini, bedrock)',
+      ));
+    }
 
-  if (requestedProviderOrder.length === 0) {
-    errors.push('❌ AI_PROVIDER_ORDER must include at least one provider (openrouter, anthropic, openai, gemini, bedrock)');
-  }
-
-  const invalidProviders = requestedProviderOrder.filter(
-    (provider) => !allowedProviders.includes(provider as (typeof allowedProviders)[number]),
-  );
-  if (invalidProviders.length > 0) {
-    errors.push(
-      `❌ AI_PROVIDER_ORDER contains invalid providers: ${invalidProviders.join(', ')}`,
-      '   Valid providers: openrouter, anthropic, openai, gemini, bedrock',
+    const invalidProviders = requestedProviderOrder.filter(
+      (provider) => !allowedProviders.includes(provider as (typeof allowedProviders)[number]),
     );
-  }
+    if (invalidProviders.length > 0) {
+      issues.push(semanticIssue(
+        'ai.provider_order_invalid',
+        ['AI_PROVIDER_ORDER'],
+        `AI_PROVIDER_ORDER contains invalid providers: ${invalidProviders.join(', ')}\nValid providers: openrouter, anthropic, openai, gemini, bedrock`,
+      ));
+    }
 
-  const normalizedProviderOrderList = Array.from(new Set(requestedProviderOrder));
-  if (requestedProviderOrder.length > 0 && invalidProviders.length === 0) {
-    const configuredProviders = normalizedProviderOrderList.filter((provider) => {
-      if (provider === 'openrouter') return !!parsed.data.OPENROUTER_API_KEY;
-      if (provider === 'anthropic') return !!parsed.data.ANTHROPIC_API_KEY;
-      if (provider === 'openai') {
-        return parsed.data.OPENAI_AUTH_MODE === 'oauth' || !!parsed.data.OPENAI_API_KEY;
+    if (requestedProviderOrder.length > 0 && invalidProviders.length === 0) {
+      const configuredProviders = normalizedProviderOrderList.filter((provider) => {
+        if (provider === 'openrouter') return !!providerConfig.OPENROUTER_API_KEY;
+        if (provider === 'anthropic') return !!providerConfig.ANTHROPIC_API_KEY;
+        if (provider === 'openai') {
+          return providerConfig.OPENAI_AUTH_MODE === 'oauth' || !!providerConfig.OPENAI_API_KEY;
+        }
+        if (provider === 'gemini') return !!providerConfig.GEMINI_API_KEY;
+        return !!providerConfig.BEDROCK_MODEL_ID;
+      });
+      if (configuredProviders.length === 0) {
+        issues.push(semanticIssue(
+          'ai.no_configured_provider',
+          ['AI_PROVIDER_ORDER'],
+          'No configured AI providers found in AI_PROVIDER_ORDER.\nConfigure at least one of: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, BEDROCK_MODEL_ID',
+        ));
       }
-      if (provider === 'gemini') return !!parsed.data.GEMINI_API_KEY;
-      return !!parsed.data.BEDROCK_MODEL_ID;
-    });
-
-    if (configuredProviders.length === 0) {
-      errors.push(
-        '❌ No configured AI providers found in AI_PROVIDER_ORDER.',
-        '   Configure at least one of: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, BEDROCK_MODEL_ID',
-      );
     }
   }
 
-  if (parsed.data.DB_DIALECT === 'postgres' && !parsed.data.DATABASE_URL) {
+  const postgres = parsePrerequisites(rawEnv, [
+    'DB_DIALECT', 'DATABASE_URL', 'POSTGRES_HOST', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
+  ]);
+  if (postgres?.DB_DIALECT === 'postgres' && !postgres.DATABASE_URL) {
     const missingPostgresFields = [
-      ['POSTGRES_HOST', parsed.data.POSTGRES_HOST],
-      ['POSTGRES_DB', parsed.data.POSTGRES_DB],
-      ['POSTGRES_USER', parsed.data.POSTGRES_USER],
-      ['POSTGRES_PASSWORD', parsed.data.POSTGRES_PASSWORD],
+      ['POSTGRES_HOST', postgres.POSTGRES_HOST],
+      ['POSTGRES_DB', postgres.POSTGRES_DB],
+      ['POSTGRES_USER', postgres.POSTGRES_USER],
+      ['POSTGRES_PASSWORD', postgres.POSTGRES_PASSWORD],
     ].filter(([, value]) => !value).map(([key]) => key);
 
     if (missingPostgresFields.length > 0) {
-      errors.push(
-        '❌ DB_DIALECT=postgres requires DATABASE_URL or POSTGRES_* connection fields.',
-        `   Missing: ${missingPostgresFields.join(', ')}`,
-      );
+      issues.push(semanticIssue(
+        'database.postgres_connection_required',
+        ['DATABASE_URL'],
+        `DB_DIALECT=postgres requires DATABASE_URL or POSTGRES_* connection fields.\nMissing: ${missingPostgresFields.join(', ')}`,
+      ));
     }
   }
 
-  if (!/^[^/\s]+\/[^/\s]+$/.test(parsed.data.GITHUB_ISSUES_REPO)) {
-    errors.push('❌ GITHUB_ISSUES_REPO must be in the form owner/repo');
+  const github = parsePrerequisites(rawEnv, ['GITHUB_ISSUES_REPO']);
+  if (github && !/^[^/\s]+\/[^/\s]+$/.test(github.GITHUB_ISSUES_REPO)) {
+    issues.push(semanticIssue('github.repo_format', ['GITHUB_ISSUES_REPO'], 'GITHUB_ISSUES_REPO must be in the form owner/repo'));
+  }
+
+  const turnstile = parsePrerequisites(rawEnv, [
+    'DEMO_TURNSTILE_ENABLED', 'DEMO_TURNSTILE_SITE_KEY', 'DEMO_TURNSTILE_SECRET_KEY',
+  ]);
+  if (
+    turnstile?.DEMO_TURNSTILE_ENABLED
+    && (!turnstile.DEMO_TURNSTILE_SITE_KEY || !turnstile.DEMO_TURNSTILE_SECRET_KEY)
+  ) {
+    issues.push(semanticIssue(
+      'demo.turnstile_keys_required',
+      ['DEMO_TURNSTILE_ENABLED'],
+      'DEMO_TURNSTILE_ENABLED=true requires DEMO_TURNSTILE_SITE_KEY and DEMO_TURNSTILE_SECRET_KEY',
+    ));
+  }
+
+  const bridge = parsePrerequisites(rawEnv, [
+    'BRIDGE_ENABLED', 'BRIDGE_TRANSPORT', 'BRIDGE_BROKER_URL', 'MONITORING_TOKEN',
+  ]);
+  if (
+    bridge?.BRIDGE_ENABLED
+    && bridge.BRIDGE_TRANSPORT === 'amqp'
+    && !bridge.BRIDGE_BROKER_URL
+  ) {
+    issues.push(semanticIssue(
+      'bridge.amqp_broker_required',
+      ['BRIDGE_BROKER_URL'],
+      'BRIDGE_TRANSPORT=amqp requires BRIDGE_BROKER_URL when BRIDGE_ENABLED=true',
+    ));
   }
 
   if (
-    parsed.data.DEMO_TURNSTILE_ENABLED
-    && (!parsed.data.DEMO_TURNSTILE_SITE_KEY || !parsed.data.DEMO_TURNSTILE_SECRET_KEY)
+    bridge?.BRIDGE_ENABLED
+    && bridge.BRIDGE_TRANSPORT === 'http'
+    && !bridge.MONITORING_TOKEN
   ) {
-    errors.push('❌ DEMO_TURNSTILE_ENABLED=true requires DEMO_TURNSTILE_SITE_KEY and DEMO_TURNSTILE_SECRET_KEY');
+    issues.push(semanticIssue(
+      'bridge.http_monitoring_token_required',
+      ['MONITORING_TOKEN'],
+      'bridge http transport authenticates with MONITORING_TOKEN — set it in .env',
+    ));
   }
 
-  if (
-    parsed.data.BRIDGE_ENABLED
-    && parsed.data.BRIDGE_TRANSPORT === 'amqp'
-    && !parsed.data.BRIDGE_BROKER_URL
-  ) {
-    errors.push('❌ BRIDGE_TRANSPORT=amqp requires BRIDGE_BROKER_URL when BRIDGE_ENABLED=true');
+  const delays = parsePrerequisites(rawEnv, ['WHATSAPP_SAFETY_MIN_DELAY_MS', 'WHATSAPP_SAFETY_MAX_DELAY_MS']);
+  if (delays && delays.WHATSAPP_SAFETY_MIN_DELAY_MS > delays.WHATSAPP_SAFETY_MAX_DELAY_MS) {
+    issues.push(semanticIssue(
+      'whatsapp.safety_delay_order',
+      ['WHATSAPP_SAFETY_MIN_DELAY_MS'],
+      'WHATSAPP_SAFETY_MIN_DELAY_MS must be less than or equal to WHATSAPP_SAFETY_MAX_DELAY_MS',
+    ));
   }
 
-  if (
-    parsed.data.BRIDGE_ENABLED
-    && parsed.data.BRIDGE_TRANSPORT === 'http'
-    && !parsed.data.MONITORING_TOKEN
-  ) {
-    errors.push('❌ bridge http transport authenticates with MONITORING_TOKEN — set it in .env');
-  }
-
-  if (parsed.data.WHATSAPP_SAFETY_MIN_DELAY_MS > parsed.data.WHATSAPP_SAFETY_MAX_DELAY_MS) {
-    errors.push('❌ WHATSAPP_SAFETY_MIN_DELAY_MS must be less than or equal to WHATSAPP_SAFETY_MAX_DELAY_MS');
-  }
-
-  if (errors.length > 0) {
-    return { ok: false, errors, warnings };
+  if (!parsed.success || issues.some((issue) => issue.severity === 'error')) {
+    return { ok: false, issues };
   }
 
   const normalizedProviderOrder = normalizedProviderOrderList.join(',');
@@ -237,6 +303,6 @@ export function parseConfig(
       AI_PROVIDER_ORDER: normalizedProviderOrder,
       QDRANT_COLLECTION: derivedQdrantCollection,
     },
-    warnings,
+    issues,
   };
 }

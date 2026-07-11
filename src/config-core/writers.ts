@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -40,6 +41,7 @@ export function writeFileWithBackupAtomic(
 
   try {
     writeFileSync(tempPath, content, { encoding: 'utf8', mode });
+    chmodSync(tempPath, mode);
     renameSync(tempPath, path);
   } catch (error) {
     rmSync(tempPath, { force: true });

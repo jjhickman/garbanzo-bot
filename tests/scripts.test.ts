@@ -130,6 +130,30 @@ describe('ops scripts', () => {
     }
   });
 
+  it('packaged Docker setup directs operators to the repository Compose stack', () => {
+    const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
+    try {
+      const out = runNodeScriptWithEnv(setupPath, [
+        '--non-interactive',
+        '--dry-run',
+        '--platform=discord',
+        '--deploy=docker',
+        '--discord-bot-token=test_discord_token',
+        '--discord-owner-id=999999999999999999',
+        '--discord-channel-id=111111111111111111',
+        '--providers=openai',
+        '--openai-key=test_key_setup',
+      ], { GARBANZO_HOME: home, GARBANZO_CLI: '1' });
+
+      expect(out).toContain('git clone https://github.com/jjhickman/garbanzo-bot.git');
+      expect(out).toContain('cd garbanzo-bot');
+      expect(out).toContain('docker compose up -d');
+      expect(out).toContain('repository checkout');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('setup native Discord non-interactive run requires an enabled channel or fails clearly', () => {
     const home = mkdtempSync(join(tmpdir(), 'garbanzo-setup-home-'));
     try {

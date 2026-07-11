@@ -51,6 +51,35 @@ describe('deny-by-default secret classifier', () => {
       .toBe('SEARXNG_BASE_URL=[REDACTED]');
   });
 
+  it('redacts complete logical dotenv records and preserves surrounding records', () => {
+    const content = [
+      'export OPENAI_API_KEY="alpha',
+      'beta"',
+      'OPENAI_MODEL="gpt-5.4-mini" # keep this comment',
+      'OPENAI_API_KEY="quoted-canary" # preserve this comment',
+      'SUPPORT_MESSAGE="say \\"hello\\" safely"',
+      'SEARXNG_BASE_URL="https://user:pass@example.test/search"',
+      'OLLAMA_BASE_URL=https://example.test/search?api_key=query-canary',
+      'LOG_LEVEL=info',
+    ].join('\r\n');
+
+    const redacted = redactEnvContent(content);
+
+    expect(redacted).toBe([
+      'export OPENAI_API_KEY=[REDACTED]',
+      'OPENAI_MODEL="gpt-5.4-mini" # keep this comment',
+      'OPENAI_API_KEY=[REDACTED] # preserve this comment',
+      'SUPPORT_MESSAGE="say \\"hello\\" safely"',
+      'SEARXNG_BASE_URL=[REDACTED]',
+      'OLLAMA_BASE_URL=[REDACTED]',
+      'LOG_LEVEL=info',
+    ].join('\r\n'));
+    expect(redacted).not.toContain('alpha');
+    expect(redacted).not.toContain('beta');
+    expect(redacted).not.toContain('query-canary');
+    expect(redacted).not.toContain('quoted-canary');
+  });
+
   it('redacts Matrix and Qdrant secrets in the real wizard dry-run', () => {
     const values = {
       MATRIX_ACCESS_TOKEN: 'ws1b_matrix_canary',

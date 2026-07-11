@@ -2,10 +2,12 @@
 // (no config import), so no env prefix is needed. tsconfig excludes tests/, so
 // importing the TypeScript source keeps repo-dev tests independent of dist/.
 import {
+  chmodSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,6 +65,23 @@ describe('setup field resolver', () => {
       expect(readFileSync(`${path}.bak`, 'utf8')).toBe('OPERATOR_ONLY=before\n');
       expect(readdirSync(dir).some((entry) => entry.endsWith('.tmp'))).toBe(false);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves the exact target mode even when the process umask would mask it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'garbanzo-config-writer-mode-'));
+    const path = join(dir, '.env');
+    const previousUmask = process.umask(0o022);
+    try {
+      writeFileSync(path, 'before\n', 'utf8');
+      chmodSync(path, 0o666);
+
+      writeFileWithBackupAtomic(path, 'after\n');
+
+      expect(statSync(path).mode & 0o777).toBe(0o666);
+    } finally {
+      process.umask(previousUmask);
       rmSync(dir, { recursive: true, force: true });
     }
   });

@@ -1223,8 +1223,10 @@ async function main() {
         const authIndex = await promptChoice(
           rl,
           'OpenAI auth mode:',
-          ['API key (recommended)', 'Sign in with ChatGPT (OAuth — experimental, ToS-grey)'],
-          existing.OPENAI_AUTH_MODE === 'oauth' ? 1 : 0,
+          IS_PACKAGED_RUN
+            ? ['API key (recommended)']
+            : ['API key (recommended)', 'Sign in with ChatGPT (OAuth — experimental, ToS-grey)'],
+          !IS_PACKAGED_RUN && existing.OPENAI_AUTH_MODE === 'oauth' ? 1 : 0,
         );
         openaiAuthMode = authIndex === 1 ? 'oauth' : 'apikey';
         if (openaiAuthMode === 'oauth') {
@@ -1887,8 +1889,18 @@ async function main() {
 
     if (deployTarget === 'docker') {
       output.write('\nNext commands:\n');
-      output.write('  docker compose up -d\n');
-      output.write(`  docker compose logs -f ${messagingPlatform}\n`);
+      if (IS_PACKAGED_RUN) {
+        output.write('  # The npm package does not ship the Compose stack; use a repository checkout:\n');
+        output.write('  git clone https://github.com/jjhickman/garbanzo-bot.git\n');
+        output.write('  cd garbanzo-bot\n');
+        output.write('  npm install\n');
+        output.write('  npm run setup\n');
+        output.write('  docker compose up -d\n');
+        output.write(`  docker compose logs -f ${messagingPlatform}\n`);
+      } else {
+        output.write('  docker compose up -d\n');
+        output.write(`  docker compose logs -f ${messagingPlatform}\n`);
+      }
     } else {
       output.write('\nNext commands:\n');
       // GARBANZO_CLI=1 is set by the packaged `garbanzo` CLI when it spawns

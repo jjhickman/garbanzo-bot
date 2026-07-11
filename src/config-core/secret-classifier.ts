@@ -208,19 +208,42 @@ if (schemaKeys.length !== classifiedKeys.length
 export const KNOWN_SCHEMA_KEYS: readonly string[] = Object.freeze(schemaKeys);
 
 const SECRET_NAME_HEURISTIC = /(?:^|_)(?:TOKEN|KEY|SECRET|PASSWORD|PASS)$/i;
+const SENSITIVE_QUERY_PARAM = /(?:^|[_-])(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|key|secret|password|passwd|pass)(?:$|[_-])/i;
+
+function quotedValueBounds(value: string): { start: number; end: number } | undefined {
+  const start = value.search(/\S/);
+  if (start < 0) return undefined;
+  const quote = value[start];
+  if (quote !== '"' && quote !== "'") return undefined;
+
+  for (let index = start + 1; index < value.length; index += 1) {
+    if (value[index] !== quote) continue;
+    let backslashes = 0;
+    for (let previous = index - 1; previous >= 0 && value[previous] === '\\'; previous -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 0) return { start, end: index };
+  }
+  return { start, end: -1 };
+}
+
+function scalarValue(value: string): string {
+  const bounds = quotedValueBounds(value);
+  if (bounds && bounds.end >= 0) return value.slice(bounds.start + 1, bounds.end);
+  const comment = value.search(/\s+#/);
+  return (comment >= 0 ? value.slice(0, comment) : value).trim();
+}
 
 function hasCredentialsInUrl(value: string): boolean {
-  const trimmed = value.trim();
-  const unquoted = trimmed.length >= 2
-    && ((trimmed.startsWith('"') && trimmed.endsWith('"'))
-      || (trimmed.startsWith("'") && trimmed.endsWith("'")))
-    ? trimmed.slice(1, -1)
-    : trimmed;
+  const unquoted = scalarValue(value);
   try {
     const url = new URL(unquoted);
-    return url.username.length > 0 || url.password.length > 0;
+    return url.username.length > 0
+      || url.password.length > 0
+      || [...url.searchParams.keys()].some((key) => SENSITIVE_QUERY_PARAM.test(key));
   } catch {
-    return /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]+@/i.test(unquoted);
+    return /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]+@/i.test(unquoted)
+      || /[?&][^=&]*(?:api[_-]?key|token|key|secret|password|passwd|pass)[^=&]*=/i.test(unquoted);
   }
 }
 
@@ -243,14 +266,35 @@ export function redactValue(key: string, value: string): string {
 }
 
 export function redactEnvContent(content: string): string {
-  return content
-    .split('\n')
-    .map((line) => {
-      const match = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/);
-      if (!match) return line;
-      const [, prefix, key, separator, value] = match;
-      if (key === undefined || value === undefined) return line;
-      return `${prefix ?? ''}${key}${separator ?? '='}${redactValue(key, value)}`;
-    })
-    .join('\n');
+  const physicalLines = content.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter(Boolean) ?? [];
+  const logicalRecords: string[] = [];
+
+  for (let index = 0; index < physicalLines.length; index += 1) {
+    let record = physicalLines[index] ?? '';
+    const assignment = record.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)([\s\S]*)$/);
+    if (assignment) {
+      let bounds = quotedValueBounds(assignment[4] ?? '');
+      while (bounds?.end === -1 && index + 1 < physicalLines.length) {
+        index += 1;
+        record += physicalLines[index] ?? '';
+        const continued = record.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)([\s\S]*)$/);
+        bounds = quotedValueBounds(continued?.[4] ?? '');
+      }
+    }
+    logicalRecords.push(record);
+  }
+
+  return logicalRecords.map((record) => {
+    const match = record.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)([\s\S]*)$/);
+    if (!match) return record;
+    const [, prefix = '', key, separator = '=', rawValue = ''] = match;
+    if (!key || !rawValue.trim()) return record;
+    if (!isSecretKey(key) && !hasCredentialsInUrl(rawValue)) return record;
+
+    const newline = rawValue.match(/(\r\n|\n|\r)$/)?.[1] ?? '';
+    const valueWithoutNewline = newline ? rawValue.slice(0, -newline.length) : rawValue;
+    const bounds = quotedValueBounds(valueWithoutNewline);
+    const suffix = bounds && bounds.end >= 0 ? valueWithoutNewline.slice(bounds.end + 1) : '';
+    return `${prefix}${key}${separator}[REDACTED]${suffix}${newline}`;
+  }).join('');
 }

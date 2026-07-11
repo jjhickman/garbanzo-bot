@@ -5,6 +5,7 @@ const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as never);
 const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
 const baseEnv = {
   MESSAGING_PLATFORM: 'discord',
@@ -46,6 +47,7 @@ describe('boot config validator safety net', () => {
     process.env = { ...originalEnv };
     exitSpy.mockClear();
     errorSpy.mockClear();
+    warnSpy.mockClear();
   });
 
   it('exits on a Zod schema failure', async () => {
@@ -177,24 +179,47 @@ describe('boot config validator safety net', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
-  it('returns every Zod issue and does not run typed semantic checks after schema failure', async () => {
+  it('returns structured schema issues and independently-detectable semantic issues together', async () => {
     const { parseConfig } = await import('../src/utils/config/parse-config.js');
 
     const result = parseConfig({
-      MESSAGING_PLATFORM: 'matrix',
+      MESSAGING_PLATFORM: 'discord',
+      LOG_LEVEL: 'loud',
       AI_PROVIDER_ORDER: 'openrouter',
       OPENROUTER_API_KEY: 'test_key_ci',
+      BRIDGE_ENABLED: 'true',
+      BRIDGE_TRANSPORT: 'amqp',
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected invalid config');
-    expect(result.errors).toEqual(expect.arrayContaining([
-      expect.stringContaining('MATRIX_HOMESERVER_URL is required'),
-      expect.stringContaining('MATRIX_ACCESS_TOKEN is required'),
-      expect.stringContaining('MATRIX_OWNER_ID is required'),
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: ['LOG_LEVEL'],
+        source: 'schema',
+        severity: 'error',
+      }),
+      expect.objectContaining({
+        code: 'bridge.amqp_broker_required',
+        path: ['BRIDGE_BROKER_URL'],
+        message: expect.stringContaining('BRIDGE_TRANSPORT=amqp requires BRIDGE_BROKER_URL'),
+        source: 'semantic',
+        severity: 'error',
+      }),
     ]));
-    expect(result.errors).not.toEqual(expect.arrayContaining([
-      expect.stringContaining('GITHUB_ISSUES_REPO must be in the form owner/repo'),
-    ]));
+  });
+
+  it('prints the RAG filesystem warning before exiting on semantic errors', async () => {
+    await expect(importConfigWithEnv({
+      RAG_FEDERATION_ENABLED: 'true',
+      BRIDGE_ENABLED: 'true',
+      BRIDGE_TRANSPORT: 'amqp',
+      BRIDGE_BROKER_URL: undefined,
+    })).rejects.toThrow('process.exit called');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '⚠️ RAG_FEDERATION_ENABLED=true but config/rag-sources.json is not readable; federation disabled',
+    );
+    expect(warnSpy.mock.invocationCallOrder[0]).toBeLessThan(errorSpy.mock.invocationCallOrder[0] ?? Infinity);
   });
 });
