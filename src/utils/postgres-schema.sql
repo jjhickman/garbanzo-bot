@@ -63,6 +63,18 @@ CREATE TABLE IF NOT EXISTS memory (
 CREATE INDEX IF NOT EXISTS idx_memory_category
   ON memory (category);
 
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  ts BIGINT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  source_ip TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_ts
+  ON admin_audit_log (ts DESC);
+
 CREATE TABLE IF NOT EXISTS member_profiles (
   jid TEXT PRIMARY KEY,
   name TEXT,

@@ -52,6 +52,18 @@ export interface LocalMemoryEntry {
   shared?: false;
 }
 
+export interface AdminAuditLogInput {
+  ts: number;
+  action: string;
+  target: string;
+  summary: string;
+  sourceIp: string;
+}
+
+export interface AdminAuditLogEntry extends AdminAuditLogInput {
+  id: number;
+}
+
 export interface SharedMemoryEntry {
   fact: string;
   category: string;

@@ -13,6 +13,7 @@ import type { PlatformRuntime } from './platforms/types.js';
 
 let activeRuntime: PlatformRuntime | null = null;
 let activeBridgeStop: (() => Promise<void>) | null = null;
+let activeAdminApiStop: (() => Promise<void>) | null = null;
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | void> {
@@ -93,6 +94,24 @@ async function main(): Promise<void> {
   startHealthServer(config.HEALTH_PORT, config.HEALTH_BIND_HOST, healthOptions);
   startMemoryWatchdog();
 
+  if (config.ADMIN_WRITE_ENABLED) {
+    const { startAdminApiListener } = await import('./middleware/admin-api/index.js');
+    const adminApi = await startAdminApiListener({
+      enabled: config.ADMIN_WRITE_ENABLED,
+      token: config.ADMIN_WRITE_TOKEN,
+      port: config.ADMIN_WRITE_PORT,
+      bindHost: config.ADMIN_WRITE_BIND_HOST,
+      sharedMemoryEnabled: config.SHARED_MEMORY_ENABLED,
+    });
+    if (adminApi) {
+      activeAdminApiStop = adminApi.stop;
+      logger.info(
+        { bindHost: config.ADMIN_WRITE_BIND_HOST, port: adminApi.port },
+        'Admin memory API listener started',
+      );
+    }
+  }
+
   if (whatsAppLoginEnabled) {
     // A wildcard bind (0.0.0.0/::) listens on every interface, so surface the
     // machine's LAN address(es) a remote browser can actually reach — e.g. when
@@ -160,6 +179,14 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   clearRetryQueue();
   stopOllamaWarmup();
   stopHealthServer();
+
+  if (activeAdminApiStop) {
+    try {
+      await withTimeout(activeAdminApiStop(), SHUTDOWN_TIMEOUT_MS, 'adminApi.stop');
+    } catch (err) {
+      logger.error({ err, signal }, 'Admin memory API stop failed during shutdown');
+    }
+  }
 
   if (activeBridgeStop) {
     try {

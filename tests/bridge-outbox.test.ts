@@ -44,6 +44,7 @@ vi.mock('pg', () => {
     'availability',
     'setlists',
     'setlist_songs',
+    'admin_audit_log',
   ];
 
   class Pool {

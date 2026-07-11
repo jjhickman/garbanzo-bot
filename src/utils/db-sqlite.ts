@@ -64,6 +64,8 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  AdminAuditLogEntry,
+  AdminAuditLogInput,
   Availability,
   AvailabilityResponse,
   BackfillSession,
@@ -282,6 +284,12 @@ const insertMemory = db.prepare(
 const selectAllMemories = db.prepare(`SELECT * FROM memory ORDER BY category, created_at DESC`);
 const deleteMemoryById = db.prepare(`DELETE FROM memory WHERE id = ?`);
 const searchMemories = db.prepare(`SELECT * FROM memory WHERE fact LIKE ? ORDER BY created_at DESC LIMIT ?`);
+const insertAdminAuditLog = db.prepare(
+  `INSERT INTO admin_audit_log (ts, action, target, summary, source_ip) VALUES (?, ?, ?, ?, ?)`,
+);
+const selectAdminAuditLog = db.prepare(
+  `SELECT id, ts, action, target, summary, source_ip FROM admin_audit_log ORDER BY ts DESC, id DESC LIMIT ?`,
+);
 const insertSong = db.prepare(
   `INSERT INTO songs (title, song_key, tempo, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 );
@@ -1117,6 +1125,37 @@ export function formatMemoriesForPrompt(): string {
   return formatMemoriesForPromptEntries(memories);
 }
 
+// ── Public API: Admin audit log ────────────────────────────────────
+
+export function addAdminAuditLog(entry: AdminAuditLogInput): AdminAuditLogEntry {
+  const result = insertAdminAuditLog.run(
+    entry.ts,
+    entry.action,
+    entry.target,
+    entry.summary,
+    entry.sourceIp,
+  );
+  return { id: Number(result.lastInsertRowid), ...entry };
+}
+
+export function getAdminAuditLog(limit = 100): AdminAuditLogEntry[] {
+  return (selectAdminAuditLog.all(limit) as Array<{
+    id: number;
+    ts: number;
+    action: string;
+    target: string;
+    summary: string;
+    source_ip: string;
+  }>).map((row) => ({
+    id: row.id,
+    ts: row.ts,
+    action: row.action,
+    target: row.target,
+    summary: row.summary,
+    sourceIp: row.source_ip,
+  }));
+}
+
 // ── Public API: Songs (shared band memory) ──────────────────────────
 
 export interface NewSong {
@@ -1660,6 +1699,9 @@ export function createSqliteBackend(): DbBackend {
     deleteMemory: async (id: number) => deleteMemory(id),
     searchMemory: async (keyword: string, limit?: number) => searchMemory(keyword, limit),
     formatMemoriesForPrompt: async () => formatMemoriesForPrompt(),
+
+    addAdminAuditLog: async (entry: AdminAuditLogInput) => addAdminAuditLog(entry),
+    getAdminAuditLog: async (limit?: number) => getAdminAuditLog(limit),
 
     addSong: async (input: NewSong) => addSong(input),
     getSongById: async (id: number) => getSongById(id),

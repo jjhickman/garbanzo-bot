@@ -26,6 +26,14 @@ const baseConfigSchema = coreSchema
   .merge(integrationsSchema);
 
 export const configSchema = baseConfigSchema.superRefine((env, ctx) => {
+    if (env.ADMIN_WRITE_ENABLED && !env.ADMIN_WRITE_TOKEN) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ADMIN_WRITE_TOKEN'],
+        message: 'ADMIN_WRITE_TOKEN is required when ADMIN_WRITE_ENABLED=true and must be at least 16 characters',
+      });
+    }
+
     if (env.MESSAGING_PLATFORM === 'whatsapp' && !env.OWNER_JID) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

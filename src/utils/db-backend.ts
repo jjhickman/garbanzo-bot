@@ -2,6 +2,8 @@ import type { BridgeEnvelope } from '../bridge/envelope.js';
 import type {
   Availability,
   AvailabilityResponse,
+  AdminAuditLogEntry,
+  AdminAuditLogInput,
   BackfillSession,
   BackupIntegrityStatus,
   BridgeBufferEntry,
@@ -129,6 +131,10 @@ export interface DbBackend {
   deleteMemory(id: number): Promise<boolean>;
   searchMemory(keyword: string, limit?: number): Promise<MemoryEntry[]>;
   formatMemoriesForPrompt(): Promise<string>;
+
+  // Admin mutation audit log
+  addAdminAuditLog(entry: AdminAuditLogInput): Promise<AdminAuditLogEntry>;
+  getAdminAuditLog(limit?: number): Promise<AdminAuditLogEntry[]>;
 
   // Songs (shared band memory)
   addSong(input: { title: string; key?: string | null; tempo?: number | null; status?: SongStatus; notes?: string | null }): Promise<Song>;

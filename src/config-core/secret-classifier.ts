@@ -22,6 +22,10 @@ type SecretClassification = Readonly<Record<string, boolean>>;
  */
 export const SCHEMA_SECRET_CLASSIFICATION = {
   ADMIN_PAGE_ENABLED: false,
+  ADMIN_WRITE_BIND_HOST: false,
+  ADMIN_WRITE_ENABLED: false,
+  ADMIN_WRITE_PORT: false,
+  ADMIN_WRITE_TOKEN: true,
   AI_PROVIDER_ORDER: false,
   AI_TOOL_CALLING: false,
   AI_TOOL_MAX_ITERATIONS: false,

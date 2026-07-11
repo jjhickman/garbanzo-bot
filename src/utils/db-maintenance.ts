@@ -74,6 +74,7 @@ const countMessages = db.prepare(`
 
 /** Max age for bridge_seen dedup keys and terminal bridge_outbox rows, in days. */
 const BRIDGE_RETENTION_DAYS = 30;
+const ADMIN_AUDIT_RETENTION_DAYS = 90;
 
 // bridge_seen.seen_at and bridge_outbox.created_at are stored as Date.now()
 // milliseconds (unlike messages.timestamp, which is epoch seconds), so these
@@ -84,6 +85,10 @@ const pruneOldBridgeSeen = db.prepare(`
 
 const pruneOldTerminalBridgeOutbox = db.prepare(`
   DELETE FROM bridge_outbox WHERE status IN ('sent', 'dead') AND created_at < ?
+`);
+
+const pruneOldAdminAuditLog = db.prepare(`
+  DELETE FROM admin_audit_log WHERE ts < ?
 `);
 
 /**
@@ -103,9 +108,11 @@ export function runMaintenance(): MaintenanceStats {
   const bridgeCutoffMs = Date.now() - (BRIDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const bridgeSeenPruned = pruneOldBridgeSeen.run(bridgeCutoffMs).changes;
   const bridgeOutboxPruned = pruneOldTerminalBridgeOutbox.run(bridgeCutoffMs).changes;
+  const adminAuditCutoffMs = Date.now() - (ADMIN_AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const adminAuditPruned = pruneOldAdminAuditLog.run(adminAuditCutoffMs).changes;
 
   // Only VACUUM if we actually deleted something (VACUUM is expensive)
-  if (pruned > 0 || bridgeSeenPruned > 0 || bridgeOutboxPruned > 0) {
+  if (pruned > 0 || bridgeSeenPruned > 0 || bridgeOutboxPruned > 0 || adminAuditPruned > 0) {
     db.exec('VACUUM');
   }
 
@@ -119,6 +126,8 @@ export function runMaintenance(): MaintenanceStats {
     bridgeSeenPruned,
     bridgeOutboxPruned,
     bridgeRetentionDays: BRIDGE_RETENTION_DAYS,
+    adminAuditPruned,
+    adminAuditRetentionDays: ADMIN_AUDIT_RETENTION_DAYS,
   }, 'Database maintenance complete');
 
   return { pruned, beforeCount, afterCount };
