@@ -96,9 +96,16 @@ describe('first-run wizard (jsdom)', () => {
     await clickButton('Connect securely');
   }
 
-  async function reachReview(): Promise<void> {
+  async function reachReview(deploy: 'docker' | 'native' = 'docker'): Promise<void> {
     await connect();
     await clickButton('Next');
+    if (deploy !== 'docker') {
+      const radio = document.querySelector<HTMLInputElement>(`input[name="deploy"][value="${deploy}"]`);
+      if (!radio) throw new Error(`deploy radio ${deploy} did not render`);
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change', { bubbles: true }));
+      await tick();
+    }
     await clickButton('Next');
     const providerSecret = document.querySelector<HTMLInputElement>('input[name="OPENROUTER_API_KEY"]');
     if (!providerSecret) throw new Error('provider secret input did not render');
@@ -152,6 +159,24 @@ describe('first-run wizard (jsdom)', () => {
       DISCORD_BOT_TOKEN: 'discord-secret-canary',
       DISCORD_OWNER_ID: '123456789012345678',
     }), ['--discord-channel-ids=234567890123456789', '--discord-channel-name=general']);
+  });
+
+  it('defaults a native deployment to VECTOR_STORE=none', async () => {
+    await reachReview('native');
+    await clickButton('Create configuration');
+    expect(apiMocks.submitWizard).toHaveBeenCalledWith(expect.objectContaining({
+      DEPLOY_TARGET: 'native',
+      VECTOR_STORE: 'none',
+    }), expect.anything());
+  });
+
+  it('keeps a docker deployment on VECTOR_STORE=qdrant', async () => {
+    await reachReview('docker');
+    await clickButton('Create configuration');
+    expect(apiMocks.submitWizard).toHaveBeenCalledWith(expect.objectContaining({
+      DEPLOY_TARGET: 'docker',
+      VECTOR_STORE: 'qdrant',
+    }), expect.anything());
   });
 
   it('shows the written files after a 200 response', async () => {

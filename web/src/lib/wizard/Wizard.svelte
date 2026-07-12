@@ -28,7 +28,11 @@
   let deployTarget = $derived(schema.deployTargets[0] ?? 'docker');
   let selectedProviders = $derived(schema.providers.length > 0 ? [schema.providers[0] as string] : [] as string[]);
   let openaiAuthMode = $derived(schema.openaiAuthModes[0] ?? 'apikey');
-  let vectorStore = $derived(schema.vectorStores[0] ?? 'qdrant');
+  // Deployment-aware default: a native deploy has no Qdrant container, so it
+  // must default to keyword-only memory (none); docker defaults to qdrant.
+  // Overridable via the select, and re-derives if the operator switches
+  // deployment. Kept in sync with run.ts's own native/docker vector defaults.
+  let vectorStore = $derived(deployTarget === 'native' ? 'none' : (schema.vectorStores[0] ?? 'qdrant'));
   let persona = $state('default');
   let step = $state(0);
   let pending = $state(false);
