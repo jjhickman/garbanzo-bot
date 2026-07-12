@@ -333,3 +333,46 @@ OpenAI supports two auth modes via `OPENAI_AUTH_MODE`:
   > it your only provider. Tokens are stored in `data/openai-oauth.json`
   > (gitignored, mode `0600`). In oauth mode `OPENAI_MODEL` must be a
   > ChatGPT-backend model slug, not an API model name.
+
+## Troubleshooting: Qdrant on Raspberry Pi 5 (and other 16 KB-page hosts)
+
+**Symptom — Qdrant crash-loops on startup:**
+
+```
+<jemalloc>: Unsupported system page size
+memory allocation of 144 bytes failed
+Aborted (core dumped)
+```
+
+Qdrant's binary bundles jemalloc built for 4 KB memory pages. Some arm64
+hosts run a **16 KB-page kernel** — including the Raspberry Pi 5 default
+(`kernel_2712.img`) — and jemalloc aborts immediately. This is not a config
+or storage problem: do not delete the Qdrant data volume, and version-pinning
+the image does not help (every official Qdrant arm64 image has the same
+jemalloc).
+
+Fix — switch to a 4 KB-page kernel. On Raspberry Pi OS, add this line under
+`[all]` in `/boot/firmware/config.txt`, then reboot:
+
+```
+kernel=kernel8.img
+```
+
+Confirm with `getconf PAGESIZE` (should print `4096`). The same page-size
+requirement affects other jemalloc-based services (MongoDB, etc.). If you
+would rather not change the kernel, set `VECTOR_STORE=none` — the bot runs
+normally on keyword-only memory, but loses semantic recall.
+
+**Symptom — `ERROR qdrant: Error while starting gRPC server: transport error`:**
+
+Harmless. The bot talks to Qdrant over the REST/HTTP API, never gRPC. This
+appears when `QDRANT_PORT` is set to `6334`, which is Qdrant's fixed gRPC
+port, so its HTTP server takes 6334 and gRPC cannot bind. Set `QDRANT_PORT`
+to any other value (the default `6333` is fine; Qdrant is not published to
+the host, so it rarely needs changing).
+
+**Confirming Qdrant is healthy from the bot's side:** a working setup logs
+`Created Qdrant collection` on first run and never logs
+`Qdrant ensureCollection failed; vector memory degraded`. The per-instance
+collection is `garbanzo_memory_<INSTANCE_ID>` unless `QDRANT_COLLECTION` is
+set (see the `QDRANT_COLLECTION` row above).
