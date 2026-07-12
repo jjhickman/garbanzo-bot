@@ -37,7 +37,7 @@ import {
   validateConfigFile,
   zodIssues,
 } from './json-config.js';
-import { CSP, SHELL_CSS, SHELL_HTML, SHELL_JS } from './shell.js';
+import { createSpaAssets, CSP } from './shell.js';
 import { runWizard } from './wizard.js';
 
 const DEFAULT_IDLE_TTL_MS = 30 * 60 * 1000;
@@ -48,6 +48,7 @@ export interface ConfigServiceOptions {
   port?: number;
   idleTtlMs?: number;
   print?: (message: string) => void;
+  webDist?: string;
 }
 
 export interface ConfigServiceHandle {
@@ -267,6 +268,8 @@ function discover(root: string): JsonRecord {
     shape: composeFiles.length > 0 ? 'compose' : packageRepo ? 'package-repo' : 'bare',
     composeFiles,
     packageRepo,
+    platform: env.values.MESSAGING_PLATFORM ?? null,
+    instanceId: env.values.INSTANCE_ID ?? env.values.MESSAGING_PLATFORM ?? null,
     platforms: [...platforms],
     envFiles: Object.fromEntries(Object.entries(env.fileMtimes).map(([name, mtime]) => [name, mtime !== null])),
     configFiles: Object.fromEntries(CONFIG_FILE_NAMES.map((name) => [name, existsSync(configFilePath(root, name))])),
@@ -343,6 +346,7 @@ async function dockerComposeAvailable(root: string): Promise<boolean> {
 
 export async function startConfigService(options: ConfigServiceOptions): Promise<ConfigServiceHandle> {
   const root = resolve(options.root);
+  const spa = createSpaAssets(options.webDist);
   pruneStaleStaging(root);
   const entryToken = randomBytes(32).toString('base64url');
   let sessionToken: string | null = null;
@@ -369,18 +373,19 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (req.method === 'GET' && url.pathname === '/') {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.end(SHELL_HTML);
+      const asset = spa.index();
+      res.setHeader('Content-Type', asset.contentType);
+      res.end(asset.body);
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/shell.css') {
-      res.setHeader('Content-Type', 'text/css; charset=utf-8');
-      res.end(SHELL_CSS);
-      return;
-    }
-    if (req.method === 'GET' && url.pathname === '/shell.js') {
-      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-      res.end(SHELL_JS);
+    if (req.method === 'GET' && url.pathname.startsWith('/assets/')) {
+      const asset = spa.asset(url.pathname);
+      if (!asset) {
+        json(res, 404, { error: 'asset-not-found' });
+        return;
+      }
+      res.setHeader('Content-Type', asset.contentType);
+      res.end(asset.body);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/session') {

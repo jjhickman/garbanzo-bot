@@ -143,6 +143,24 @@ if [[ -z "$CONFIG_TOKEN" ]]; then
   echo "FAIL: installed config service did not print an entry token" >&2
   exit 1
 fi
+SPA_HTML="$(curl -sf "http://127.0.0.1:${CONFIG_PORT}/")"
+if grep -qF 'npm run build:web' <<<"$SPA_HTML"; then
+  echo "FAIL: installed config service served the missing-build fallback page" >&2
+  exit 1
+fi
+SPA_BUNDLE_PATH="$(sed -n 's/.*src="\(\/assets\/[^\"]*\.js\)".*/\1/p' <<<"$SPA_HTML" | head -1)"
+if [[ -z "$SPA_BUNDLE_PATH" ]]; then
+  echo "FAIL: installed config service shell did not reference a hashed SPA bundle" >&2
+  exit 1
+fi
+if [[ ! "$SPA_BUNDLE_PATH" =~ ^/assets/[^/]+-[A-Za-z0-9_-]{8,}\.js$ ]]; then
+  echo "FAIL: installed config service bundle path is not content-hashed: $SPA_BUNDLE_PATH" >&2
+  exit 1
+fi
+if ! curl -sf -o /dev/null "http://127.0.0.1:${CONFIG_PORT}${SPA_BUNDLE_PATH}"; then
+  echo "FAIL: installed config service did not serve SPA bundle $SPA_BUNDLE_PATH" >&2
+  exit 1
+fi
 SESSION_RESPONSE="$(curl -sf -X POST -H "Authorization: Bearer $CONFIG_TOKEN" "http://127.0.0.1:${CONFIG_PORT}/api/session")"
 if ! grep -qF '"token"' <<<"$SESSION_RESPONSE"; then
   echo "FAIL: installed config service session exchange failed" >&2
@@ -151,7 +169,7 @@ fi
 kill "$BOT_PID" 2>/dev/null || true
 wait "$BOT_PID" 2>/dev/null || true
 BOT_PID=""
-echo "  -> shell and one-time session endpoint responded; process killed cleanly"
+echo "  -> built SPA shell, hashed bundle, and one-time session endpoint responded; process killed cleanly"
 
 echo
 echo "== (e) boot the installed package (HEALTH_ONLY=true) and probe /health =="

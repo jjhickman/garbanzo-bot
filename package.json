@@ -3,12 +3,16 @@
   "version": "3.3.0",
   "description": "Multi-platform community lore and operations with cross-platform bridging.",
   "type": "module",
+  "workspaces": [
+    "web"
+  ],
   "main": "dist/index.js",
   "bin": {
     "garbanzo": "dist/cli.js"
   },
   "files": [
     "dist",
+    "web/dist",
     "config/*.example.json",
     "docs/PERSONA.md",
     "docs/personas",
@@ -23,7 +27,9 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "tsc",
+    "build:web": "npm run build --workspace @garbanzo/web",
     "prepack": "npm run build && node scripts/pack-sentinel.mjs write",
     "postpack": "node scripts/pack-sentinel.mjs remove",
     "start": "node dist/index.js",
@@ -32,13 +38,14 @@
     "setup": "tsx src/cli/setup/run.ts",
     "setup:web": "tsx src/cli.ts config",
     "openai:login": "node scripts/openai-login.mjs",
-    "lint": "eslint src/ tests/",
-    "lint:fix": "eslint src/ tests/ --fix",
+    "lint": "eslint src/ tests/ web/src/",
+    "lint:fix": "eslint src/ tests/ web/src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:postgres": "DB_DIALECT=postgres vitest run tests/postgres-backend.test.ts --pool=forks --maxWorkers=1",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist/",
+    "typecheck": "npm run typecheck:server && npm run typecheck --workspace @garbanzo/web",
+    "typecheck:server": "tsc --noEmit",
+    "clean": "rm -rf dist/ web/dist/",
     "audit:secrets": "bash scripts/audit-secrets.sh",
     "audit:deps": "npm audit --audit-level=high",
     "check": "npm run audit:secrets && npm run audit:deps && npm run typecheck && npm run lint && npm run test",
@@ -114,6 +121,7 @@
     "@types/qrcode": "^1.5.5",
     "eslint": "^9.20.0",
     "js-yaml": "^5.2.1",
+    "jsdom": "27.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.62.1",

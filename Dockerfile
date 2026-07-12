@@ -3,6 +3,18 @@
 # better-sqlite3 requires native compilation, so we need build tools here.
 
 ARG APP_VERSION=0.0.0
+ARG BUILDPLATFORM
+
+FROM --platform=$BUILDPLATFORM node:25-alpine AS web-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY web/package.json ./web/package.json
+RUN npm ci --workspace @garbanzo/web --include-workspace-root=false
+
+COPY web/ ./web/
+RUN npm run build:web
 
 FROM node:25-alpine AS builder
 
@@ -16,10 +28,11 @@ WORKDIR /app
 # because E2EE is intentionally unsupported and linux/arm64-musl has no
 # upstream prebuild.
 COPY package.json package-lock.json ./
+COPY web/package.json ./web/package.json
 COPY stubs/ ./stubs/
 
 # Reproducible install with all dependencies (need devDeps for tsc)
-RUN npm ci
+RUN npm ci --workspaces=false
 
 # Copy source code and config
 COPY tsconfig.json ./
@@ -27,10 +40,10 @@ COPY src/ ./src/
 COPY config/ ./config/
 
 # Compile TypeScript
-RUN npm run build
+RUN npm run build:server
 
 # Remove devDependencies, keep only production deps
-RUN npm prune --omit=dev && rm -rf node_modules/typescript
+RUN npm prune --omit=dev --workspaces=false && rm -rf node_modules/typescript
 
 
 # ─── Stage 2: Production ──────────────────────────────────────────────────────
@@ -58,6 +71,7 @@ RUN addgroup -S garbanzo && adduser -S garbanzo -G garbanzo
 
 # Copy production artifacts from builder
 COPY --from=builder --chown=garbanzo:garbanzo /app/dist ./dist
+COPY --from=web-builder --chown=garbanzo:garbanzo /app/web/dist ./web/dist
 COPY --from=builder --chown=garbanzo:garbanzo /app/node_modules ./node_modules
 # The Matrix crypto stub is a file: dependency, so npm installs it as a SYMLINK
 # (node_modules/@matrix-org/matrix-sdk-crypto-nodejs -> ../../stubs/...). The

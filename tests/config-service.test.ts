@@ -50,6 +50,21 @@ describe('host config service mutations', () => {
     });
   });
 
+  it('reports the effective platform and instance identity in state', async () => {
+    const { root, handle, token } = await setup();
+    writeFileSync(join(root, '.env'), 'MESSAGING_PLATFORM=discord\nINSTANCE_ID=community-discord\n');
+
+    const state = await call(handle.port, token, '/api/state');
+
+    expect(state.status).toBe(200);
+    expect(JSON.parse(state.body)).toMatchObject({
+      platform: 'discord',
+      instanceId: 'community-discord',
+      platforms: ['discord'],
+      envFiles: { '.env': true },
+    });
+  });
+
   it('preserves unknown env keys and rejects stale mtimes', async () => {
     const { root, handle, token } = await setup();
     const envPath = join(root, '.env');
