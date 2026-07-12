@@ -12,6 +12,15 @@ import { telegramSchema } from './telegram.js';
 import { vectorSchema } from './vector.js';
 import { whatsappSchema } from './whatsapp.js';
 
+/**
+ * The cloud providers valid in `AI_PROVIDER_ORDER`. Ollama is deliberately NOT
+ * here — it is a separate local fallback (`OLLAMA_BASE_URL`), never a member of
+ * the cloud failover order. This is the single source of truth: the boot-time
+ * validator and the browser wizard's provider picker both consume it, so the
+ * wizard can never offer a provider the validator will reject.
+ */
+export const AI_PROVIDER_ORDER_VALUES = ['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock'] as const;
+
 const baseConfigSchema = coreSchema
   .merge(aiSchema)
   .merge(whatsappSchema)
@@ -163,7 +172,7 @@ export function parseConfig(
     severity: 'error',
   }));
 
-  const allowedProviders = ['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock'] as const;
+  const allowedProviders = AI_PROVIDER_ORDER_VALUES;
   const providerConfig = parsePrerequisites(rawEnv, [
     'AI_PROVIDER_ORDER',
     'OPENROUTER_API_KEY',
@@ -184,7 +193,7 @@ export function parseConfig(
       issues.push(semanticIssue(
         'ai.provider_order_empty',
         ['AI_PROVIDER_ORDER'],
-        'AI_PROVIDER_ORDER must include at least one provider (openrouter, anthropic, openai, gemini, bedrock)',
+        `AI_PROVIDER_ORDER must include at least one provider (${allowedProviders.join(', ')})`,
       ));
     }
 
@@ -195,7 +204,7 @@ export function parseConfig(
       issues.push(semanticIssue(
         'ai.provider_order_invalid',
         ['AI_PROVIDER_ORDER'],
-        `AI_PROVIDER_ORDER contains invalid providers: ${invalidProviders.join(', ')}\nValid providers: openrouter, anthropic, openai, gemini, bedrock`,
+        `AI_PROVIDER_ORDER contains invalid providers: ${invalidProviders.join(', ')}\nValid providers: ${allowedProviders.join(', ')}`,
       ));
     }
 

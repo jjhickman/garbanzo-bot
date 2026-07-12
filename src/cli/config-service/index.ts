@@ -7,9 +7,21 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 import { parse as parseDotenv } from 'dotenv';
 
-import { parseConfig } from '../../utils/config/parse-config.js';
+import { AI_PROVIDER_ORDER_VALUES, parseConfig } from '../../utils/config/parse-config.js';
 import { applyEnvLayers } from '../../utils/config/shared.js';
-import { mergeEnvFileContent, MESSAGING_PLATFORMS } from '../../config-core/fields.js';
+import {
+  DEFAULT_MESSAGING_PLATFORM,
+  DISCORD_FIELDS,
+  MATRIX_FIELDS,
+  mergeEnvFileContent,
+  MESSAGING_PLATFORMS,
+  OPENAI_AUTH_MODES,
+  SHARED_FIELDS,
+  TELEGRAM_FIELDS,
+  WHATSAPP_FIELDS,
+  WHATSAPP_LOGIN_MODES,
+  type SetupField,
+} from '../../config-core/fields.js';
 import { writeFileWithBackupAtomic } from '../../config-core/writers.js';
 import { isSecretKey } from '../../config-core/secret-classifier.js';
 import { writeJsonWithBackupAtomic } from '../../config-core/writers.js';
@@ -276,6 +288,55 @@ function discover(root: string): JsonRecord {
   };
 }
 
+function wizardField(field: Omit<SetupField, 'secret'> & { secret?: boolean }): SetupField {
+  const secret = isSecretKey(field.env);
+  return {
+    env: field.env,
+    cli: field.cli,
+    default: secret ? '' : field.default,
+    secret,
+    ...(field.note ? { note: field.note } : {}),
+  };
+}
+
+/**
+ * Extracts the setup runner's own single-line failure reason (it prints
+ * `❌ Setup failed: <reason>`) so the wizard can show WHY a run failed instead
+ * of an empty error. Only the matched reason line is returned — never raw
+ * stdout/stderr — and it is length-capped defensively.
+ */
+function extractSetupFailure(result: { stdout: string; stderr: string }): string | undefined {
+  const combined = `${result.stdout}\n${result.stderr}`;
+  const match = combined.match(/Setup failed:\s*(.+)/);
+  const reason = match?.[1]?.trim();
+  if (!reason) return undefined;
+  return reason.length > 300 ? `${reason.slice(0, 297)}…` : reason;
+}
+
+function wizardSchema(): JsonRecord {
+  // Only platforms with a field group below are offered: the wizard configures
+  // real instances, and slack is a demo-only platform with no config group, so
+  // offering it would hand the operator an unconfigurable instance.
+  const configurablePlatforms = ['whatsapp', 'discord', 'telegram', 'matrix'];
+  return {
+    platforms: MESSAGING_PLATFORMS.filter((platform) => configurablePlatforms.includes(platform)),
+    defaultPlatform: DEFAULT_MESSAGING_PLATFORM,
+    deployTargets: ['docker', 'native'],
+    providers: [...AI_PROVIDER_ORDER_VALUES],
+    vectorStores: ['qdrant', 'none'],
+    openaiAuthModes: [...OPENAI_AUTH_MODES],
+    whatsappLoginModes: [...WHATSAPP_LOGIN_MODES],
+    chatScopes: ['all', 'configured'],
+    groups: {
+      shared: SHARED_FIELDS.map(wizardField),
+      whatsapp: WHATSAPP_FIELDS.map(wizardField),
+      discord: DISCORD_FIELDS.map(wizardField),
+      telegram: TELEGRAM_FIELDS.map(wizardField),
+      matrix: MATRIX_FIELDS.map(wizardField),
+    },
+  };
+}
+
 function validateCandidates(root: string, payload: JsonRecord): Array<unknown> {
   const candidateRoot = makeCandidateRoot(root);
   const issues: unknown[] = [];
@@ -417,6 +478,10 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
     try {
       if (req.method === 'GET' && url.pathname === '/api/state') {
         json(res, 200, discover(root));
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/api/wizard/schema') {
+        json(res, 200, wizardSchema());
         return;
       }
       if (req.method === 'GET' && url.pathname === '/api/config') {
@@ -593,10 +658,15 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           : null;
         if (result.code !== 0 || !wizardValidation?.ok) {
           rmSync(wizardRoot, { recursive: true, force: true });
-          json(res, 422, {
-            error: 'wizard-validation-failed',
-            issues: wizardValidation && !wizardValidation.ok ? wizardValidation.issues : [],
-          });
+          // When the setup runner itself exits non-zero (missing required field,
+          // bad channel id, unknown persona) there are no structured parseConfig
+          // issues, so surface its own "Setup failed:" reason — otherwise the
+          // wizard shows an empty, unactionable error. Only the controlled
+          // single-line reason is echoed (never raw stderr), and these messages
+          // are validation text about the operator's own inputs, not secrets.
+          const issues = wizardValidation && !wizardValidation.ok ? wizardValidation.issues : [];
+          const message = issues.length === 0 ? extractSetupFailure(result) : undefined;
+          json(res, 422, { error: 'wizard-validation-failed', issues, ...(message ? { message } : {}) });
           return;
         }
         const written = applyStagedBundle(root, wizardRoot);

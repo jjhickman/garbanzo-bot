@@ -29,6 +29,37 @@ export interface ConfigUpdate {
   update: Record<string, string | null>;
 }
 
+export interface WizardField {
+  env: string;
+  cli: string;
+  default: string;
+  secret: boolean;
+  note?: string;
+}
+
+export interface WizardSchema {
+  platforms: string[];
+  defaultPlatform: string;
+  deployTargets: string[];
+  providers: string[];
+  vectorStores: string[];
+  openaiAuthModes: string[];
+  whatsappLoginModes: string[];
+  chatScopes: string[];
+  groups: {
+    shared: WizardField[];
+    whatsapp: WizardField[];
+    discord: WizardField[];
+    telegram: WizardField[];
+    matrix: WizardField[];
+  };
+}
+
+export interface WizardResult {
+  ok: true;
+  written: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -115,6 +146,10 @@ export const validateConfig = (body: unknown): Promise<{ ok: boolean; issues: un
 export const exportConfig = (): Promise<unknown> => authenticated('/api/export');
 export const importConfig = (body: unknown): Promise<unknown> => authenticated('/api/import', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+export const getWizardSchema = (): Promise<WizardSchema> => authenticated('/api/wizard/schema');
+export const submitWizard = (fields: Record<string, string>, args: string[] = []): Promise<WizardResult> => authenticated('/api/wizard', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields, ...(args.length ? { args } : {}) }),
 });
 export const runWizard = (args: string[]): Promise<unknown> => authenticated('/api/wizard', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args }),

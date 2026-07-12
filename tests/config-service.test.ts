@@ -6,15 +6,16 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startConfigService, type ConfigServiceHandle } from '../src/cli/config-service/index.js';
+import { MESSAGING_PLATFORMS } from '../src/config-core/fields.js';
 import { runWizard } from '../src/cli/config-service/wizard.js';
 import { parseCliCommand } from '../src/cli.js';
 
-function call(port: number, token: string, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: string }> {
+function call(port: number, token: string | null, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: string }> {
   const raw = body === undefined ? undefined : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const req = request({ hostname: '127.0.0.1', port, path, method, headers: {
       Host: `localhost:${port}`,
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(raw ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(raw) } : {}),
     } }, (res) => {
       const chunks: Buffer[] = [];
@@ -63,6 +64,37 @@ describe('host config service mutations', () => {
       platforms: ['discord'],
       envFiles: { '.env': true },
     });
+  });
+
+  it('serves a stable, bearer-gated wizard schema without secret defaults', async () => {
+    const { handle, token } = await setup();
+
+    const unauthorized = await call(handle.port, null, '/api/wizard/schema');
+    expect(unauthorized.status).toBe(401);
+
+    const first = await call(handle.port, token, '/api/wizard/schema');
+    const second = await call(handle.port, token, '/api/wizard/schema');
+    expect(first.status).toBe(200);
+    expect(second.body).toBe(first.body);
+
+    const schema = JSON.parse(first.body) as {
+      platforms: string[];
+      providers: string[];
+      groups: Record<string, Array<{ env: string; default: string; secret: boolean }>>;
+    };
+    // Only wizard-configurable platforms are offered: slack (demo-only, no field
+    // group) is excluded even though it is a valid MESSAGING_PLATFORM.
+    expect(schema.platforms).toEqual(MESSAGING_PLATFORMS.filter((p) => p !== 'slack'));
+    expect(schema.platforms).not.toContain('slack');
+    // The provider order picker must never offer a provider parseConfig rejects:
+    // ollama is a local fallback, not a member of AI_PROVIDER_ORDER.
+    expect(schema.providers).not.toContain('ollama');
+    expect(schema.providers).toEqual(['openrouter', 'anthropic', 'openai', 'gemini', 'bedrock']);
+    expect(schema.groups).toHaveProperty('shared');
+    expect(schema.groups).toHaveProperty('discord');
+    expect(schema.groups.discord.some((field) => field.env === 'DISCORD_BOT_TOKEN')).toBe(true);
+    expect(Object.values(schema.groups).flat().filter((field) => field.secret)
+      .every((field) => field.default === '')).toBe(true);
   });
 
   it('preserves unknown env keys and rejects stale mtimes', async () => {
@@ -137,6 +169,27 @@ describe('host config service mutations', () => {
     for (const path of files(twin)) {
       expect(readFileSync(join(root, path))).toEqual(readFileSync(join(twin, path)));
     }
+  });
+
+  it('surfaces the setup runner failure reason without leaking secrets', { timeout: 30_000 }, async () => {
+    const { handle, token } = await setup();
+    const response = await call(handle.port, token, '/api/wizard', 'POST', {
+      fields: {
+        MESSAGING_PLATFORM: 'discord',
+        DEPLOY_TARGET: 'native',
+        AI_PROVIDER_ORDER: 'openai',
+        OPENAI_API_KEY: 'sk-secret-canary-must-not-leak',
+        DISCORD_BOT_TOKEN: 'tok',
+        DISCORD_OWNER_ID: '123456789012345678',
+        persona: 'this-persona-does-not-exist',
+      },
+      args: ['--discord-channel-ids=987654321098765432'],
+    });
+    expect(response.status).toBe(422);
+    const body = JSON.parse(response.body) as { issues: unknown[]; message?: string };
+    expect(body.message).toContain('Unknown persona');
+    // The runner's reason must never echo a submitted secret value.
+    expect(response.body).not.toContain('sk-secret-canary-must-not-leak');
   });
 
   it('rejects an import body over the compressed limit', { timeout: 30_000 }, async () => {
