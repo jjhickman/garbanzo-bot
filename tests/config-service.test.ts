@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -169,6 +169,35 @@ describe('host config service mutations', () => {
     for (const path of files(twin)) {
       expect(readFileSync(join(root, path))).toEqual(readFileSync(join(twin, path)));
     }
+  });
+
+  it('saves a config file PUT of its masked read-back by restoring placeholders', async () => {
+    const { root, handle, token } = await setup();
+    const dir = join(root, 'config');
+    mkdirSync(dir, { recursive: true });
+    // bandRoleIds is a public scalar array whose elements the read-back masks to
+    // {set:true} (their leaf path is the numeric index); the editor loads that
+    // masked document and PUTs it back verbatim, which must NOT 422.
+    const original = {
+      bandRoleIds: ['role-a', 'role-b'],
+      channels: { '111': { name: 'general', enabled: true, requireMention: true } },
+    };
+    writeFileSync(join(dir, 'discord-channels.json'), `${JSON.stringify(original, null, 2)}\n`);
+
+    const cfg = JSON.parse((await call(handle.port, token, '/api/config')).body) as {
+      files: Record<string, { value: unknown; mtimeMs: number } | null>;
+    };
+    const file = cfg.files['discord-channels'];
+    expect(file).toBeTruthy();
+    expect(JSON.stringify(file?.value)).toContain('set'); // masked read-back
+
+    const put = await call(handle.port, token, '/api/config-file/discord-channels', 'PUT', {
+      mtimeMs: file?.mtimeMs, value: file?.value,
+    });
+    expect(put.status).toBe(200);
+
+    const onDisk = JSON.parse(readFileSync(join(dir, 'discord-channels.json'), 'utf8')) as { bandRoleIds: string[] };
+    expect(onDisk.bandRoleIds).toEqual(['role-a', 'role-b']); // real values restored, not {set:true}
   });
 
   it('surfaces the setup runner failure reason without leaking secrets', { timeout: 30_000 }, async () => {

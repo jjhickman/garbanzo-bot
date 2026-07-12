@@ -557,9 +557,16 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           return;
         }
         const existingValue = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as unknown : {};
+        // The editor loads the MASKED read-back (secrets and scalar-array leaves
+        // become {set:true}); on a full-document PUT those placeholders must be
+        // restored to their real on-disk values before validate/write, or the
+        // masked document fails schema validation and the save is rejected.
+        // Mirrors the import path, which restores placeholders the same way.
         const resultingValue = payload.update !== undefined
           ? mergeJsonUpdate(existingValue, payload.update)
-          : payload.value;
+          : payload.value === undefined
+            ? undefined
+            : restoreJsonPlaceholders(existingValue, payload.value);
         if (resultingValue === undefined) throw new Error('value or update required');
         const issues = validateConfigFile(name, resultingValue);
         if (issues.length > 0) {

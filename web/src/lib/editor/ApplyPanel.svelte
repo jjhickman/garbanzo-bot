@@ -1,6 +1,8 @@
 <script lang="ts">
   import { ApiError, applyStream } from '../api.js';
 
+  let { onApplied }: { onApplied?: () => void } = $props();
+
   let output = $state('');
   let pending = $state(false);
   let status = $state('');
@@ -16,6 +18,9 @@
       const result = await applyStream((chunk) => { output += chunk; });
       if (result.exitCode === 0 || result.guidance) {
         status = 'Applied — the config service has exited; run `garbanzo config` again to continue.';
+        // The session is gone and the server has exited; hand control to the
+        // parent so the now-dead editor tabs are replaced with a terminal screen.
+        onApplied?.();
       } else if (result.exitCode !== null) {
         failed = true;
         status = `Apply exited with code ${result.exitCode}. The config service is still available.`;

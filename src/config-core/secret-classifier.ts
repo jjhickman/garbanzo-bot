@@ -284,13 +284,17 @@ export function maskJsonSecrets(value: unknown, path: readonly string[] = []): u
 
 export function isSecretKey(key: string): boolean {
   const normalized = key.trim().toUpperCase();
-  if (SECRET_NAME_HEURISTIC.test(normalized)) return true;
-
+  // Explicit classifications win over the name heuristic so a deliberately
+  // public key (DISCORD_PUBLIC_KEY, DEMO_TURNSTILE_SITE_KEY) isn't force-masked
+  // just because it ends in _KEY. The heuristic and deny-by-default only apply
+  // to keys with no explicit classification.
   const wizardClassification = WIZARD_ONLY_SECRET_CLASSIFICATION[normalized as keyof typeof WIZARD_ONLY_SECRET_CLASSIFICATION];
   if (wizardClassification !== undefined) return wizardClassification;
 
   const schemaClassification = SCHEMA_SECRET_CLASSIFICATION[normalized as keyof typeof SCHEMA_SECRET_CLASSIFICATION];
   if (schemaClassification !== undefined) return schemaClassification;
+
+  if (SECRET_NAME_HEURISTIC.test(normalized)) return true;
 
   return true;
 }

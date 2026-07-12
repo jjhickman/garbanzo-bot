@@ -11,6 +11,7 @@
   let schema = $state<WizardSchema | null>(null);
   let loading = $state(true);
   let error = $state('');
+  let applied = $state(false);
   let tab = $state<'settings' | 'files' | 'transfer' | 'apply'>('settings');
 
   async function load(): Promise<void> {
@@ -41,12 +42,18 @@
     <p class="platform-badge">{platform || 'Unknown'} instance</p>
   </div>
 
-  <nav class="editor-tabs" aria-label="Configuration sections">
-    <button class:active={tab === 'settings'} type="button" onclick={() => { tab = 'settings'; }}>Settings</button>
-    <button class:active={tab === 'files'} type="button" onclick={() => { tab = 'files'; }}>Config files</button>
-    <button class:active={tab === 'transfer'} type="button" onclick={() => { tab = 'transfer'; }}>Transfer</button>
-    <button class:active={tab === 'apply'} type="button" onclick={() => { tab = 'apply'; }}>Apply</button>
-  </nav>
+  <!-- Once Apply succeeds the service has exited and the session is gone; hide the
+       tab nav so the operator can't click into a now-dead editor tab (which would
+       throw "Authentication required"). The Apply panel stays mounted so its
+       streamed output and "service exited" message remain visible. -->
+  {#if !applied}
+    <nav class="editor-tabs" aria-label="Configuration sections">
+      <button class:active={tab === 'settings'} type="button" onclick={() => { tab = 'settings'; }}>Settings</button>
+      <button class:active={tab === 'files'} type="button" onclick={() => { tab = 'files'; }}>Config files</button>
+      <button class:active={tab === 'transfer'} type="button" onclick={() => { tab = 'transfer'; }}>Transfer</button>
+      <button class:active={tab === 'apply'} type="button" onclick={() => { tab = 'apply'; }}>Apply</button>
+    </nav>
+  {/if}
 
   {#if loading}
     <div class="card editor-card"><p class="muted">Loading current configuration…</p></div>
@@ -56,14 +63,14 @@
       <button type="button" onclick={() => void load()}>Try again</button>
     </div>
   {:else if snapshot && schema}
-    {#if tab === 'settings'}
+    {#if applied || tab === 'apply'}
+      <ApplyPanel onApplied={() => { applied = true; }} />
+    {:else if tab === 'settings'}
       <EnvEditor {snapshot} {schema} {platform} onReload={reloadSnapshot} />
     {:else if tab === 'files'}
       <ConfigFiles {snapshot} onReload={reloadSnapshot} />
-    {:else if tab === 'transfer'}
-      <TransferPanel onReload={reloadSnapshot} />
     {:else}
-      <ApplyPanel />
+      <TransferPanel onReload={reloadSnapshot} />
     {/if}
   {/if}
 </section>
