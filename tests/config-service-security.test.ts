@@ -1,5 +1,5 @@
 import { request } from 'node:http';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -97,6 +97,79 @@ describe('host config service security', () => {
     expect(shell.body).toContain('/assets/index-test123.js');
     expect(script.status).toBe(200);
     expect(script.headers['content-type']).toContain('text/javascript');
+  });
+
+  it('refuses assets reached through a symlink escaping web/dist', async () => {
+    const webDist = mkdtempSync(join(tmpdir(), 'garbanzo-symlink-web-'));
+    roots.push(webDist);
+    writeFileSync(join(webDist, 'index.html'), '<!doctype html><script type="module" src="/assets/app.js"></script>');
+    const assets = join(webDist, 'assets');
+    mkdirSync(assets);
+    const secretDir = mkdtempSync(join(tmpdir(), 'garbanzo-symlink-secret-'));
+    roots.push(secretDir);
+    writeFileSync(join(secretDir, 'secret.txt'), 'TOP_SECRET_symlink_abcd');
+    // A poisoned build could plant a symlink inside assets/ pointing outside the
+    // web root; the unauthenticated asset route must not follow it.
+    symlinkSync(join(secretDir, 'secret.txt'), join(assets, 'leak.js'));
+    const { handle } = await service(webDist);
+
+    const leak = await call(handle.port, '/assets/leak.js');
+    expect(leak.status).toBe(404);
+    expect(leak.body).not.toContain('TOP_SECRET_symlink_abcd');
+  });
+
+  it('falls back instead of serving a symlinked index.html', async () => {
+    const webDist = mkdtempSync(join(tmpdir(), 'garbanzo-symlink-index-'));
+    roots.push(webDist);
+    const secretDir = mkdtempSync(join(tmpdir(), 'garbanzo-symlink-index-secret-'));
+    roots.push(secretDir);
+    writeFileSync(join(secretDir, 'secret.html'), '<!doctype html>SECRET_INDEX_wxyz');
+    symlinkSync(join(secretDir, 'secret.html'), join(webDist, 'index.html'));
+    const { handle } = await service(webDist);
+
+    const shell = await call(handle.port, '/');
+    expect(shell.status).toBe(200);
+    expect(shell.body).not.toContain('SECRET_INDEX_wxyz');
+    expect(shell.body).toContain('npm run build:web');
+  });
+
+  it('does not extend the idle auto-exit window on unauthenticated requests', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'garbanzo-idle-unauth-'));
+    roots.push(root);
+    const handle = await startConfigService({ root, port: 0, idleTtlMs: 300, print: () => undefined });
+    services.push(handle);
+    let closed = false;
+    void handle.closed.then(() => { closed = true; });
+    // Hammer the unauthenticated shell for well over one idle window; auto-exit
+    // must still fire because no authenticated activity occurred.
+    const started = Date.now();
+    while (Date.now() - started < 1500 && !closed) {
+      try {
+        await call(handle.port, '/');
+      } catch {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    expect(closed).toBe(true);
+  });
+
+  it('keeps the service alive across continuous authenticated activity', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'garbanzo-idle-auth-'));
+    roots.push(root);
+    const handle = await startConfigService({ root, port: 0, idleTtlMs: 300, print: () => undefined });
+    services.push(handle);
+    const exchange = await call(handle.port, '/api/session', { method: 'POST', token: handle.entryToken });
+    expect(exchange.status).toBe(200);
+    const token = (JSON.parse(exchange.body) as { token: string }).token;
+    let closed = false;
+    void handle.closed.then(() => { closed = true; });
+    // Authenticated calls at a sub-idle cadence, spanning several idle windows.
+    for (let i = 0; i < 6; i += 1) {
+      await new Promise((r) => setTimeout(r, 120));
+      expect((await call(handle.port, '/api/state', { token })).status).toBe(200);
+    }
+    expect(closed).toBe(false);
   });
 
   it('never returns a seeded secret canary', async () => {

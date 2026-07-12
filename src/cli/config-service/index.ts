@@ -355,6 +355,14 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
   const changedTargets = new Set<string>();
   const staging = new Map<string, { dir: string; preconditions: BundlePreconditions }>();
   let idleTimer: NodeJS.Timeout;
+  // Auto-exit is a security control (limits the window an issued entry/session
+  // token stays live), so only *authenticated* activity may extend it. If the
+  // unauthenticated shell/asset routes or rejected requests reset it, any
+  // localhost process could pin the service open indefinitely without a token.
+  const refreshIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => server.close(), options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS);
+  };
   let resolveClosed: () => void = () => undefined;
   const closed = new Promise<void>((resolvePromise) => { resolveClosed = resolvePromise; });
 
@@ -368,8 +376,6 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       json(res, 403, { error: 'origin-not-allowed' });
       return;
     }
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => server.close(), options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS);
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (req.method === 'GET' && url.pathname === '/') {
@@ -396,6 +402,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       }
       entryUsed = true;
       sessionToken = randomBytes(32).toString('base64url');
+      refreshIdle();
       json(res, 200, { token: sessionToken });
       return;
     }
@@ -405,6 +412,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       json(res, 401, { error: 'bearer-required' });
       return;
     }
+    refreshIdle();
 
     try {
       if (req.method === 'GET' && url.pathname === '/api/state') {
@@ -659,7 +667,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('config service failed to bind');
   const port = address.port;
-  idleTimer = setTimeout(() => server.close(), options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS);
+  refreshIdle();
   const print = options.print ?? ((message: string) => process.stdout.write(`${message}\n`));
   print(`One-time token: ${entryToken}`);
   print(`Open: http://127.0.0.1:${port}/`);

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,14 +36,45 @@ export interface SpaAssets {
   asset(pathname: string): SpaAsset | null;
 }
 
+/**
+ * Reads a file only if it is a real regular file whose fully symlink-resolved
+ * path stays inside `realRoot`. The static shell and asset routes are served
+ * unauthenticated, so a symlink planted in `web/dist` (poisoned build artifact,
+ * writable install, compromised build dependency) must never turn `/` or
+ * `/assets/*` into an arbitrary-file-read: lexical `..` rejection is not enough
+ * because `statSync`/`readFileSync` follow symlinks. `lstatSync` rejects a
+ * symlinked final component and `realpathSync` collapses any symlinked parent
+ * directory before the containment check.
+ */
+function readContained(realRoot: string, candidate: string): Buffer | null {
+  try {
+    if (lstatSync(candidate).isSymbolicLink()) return null;
+    const real = realpathSync(candidate);
+    if (relative(realRoot, real).startsWith('..')) return null;
+    if (!lstatSync(real).isFile()) return null;
+    return readFileSync(real);
+  } catch {
+    return null;
+  }
+}
+
 export function createSpaAssets(webDist = DEFAULT_WEB_DIST): SpaAssets {
   const root = resolve(webDist);
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(root);
+  } catch {
+    realRoot = root;
+  }
   const indexPath = resolve(root, 'index.html');
 
   return {
-    index: () => existsSync(indexPath)
-      ? { body: readFileSync(indexPath), contentType: CONTENT_TYPES['.html'] as string }
-      : { body: FALLBACK_HTML, contentType: CONTENT_TYPES['.html'] as string, fallback: true },
+    index: () => {
+      const body = readContained(realRoot, indexPath);
+      return body
+        ? { body, contentType: CONTENT_TYPES['.html'] as string }
+        : { body: FALLBACK_HTML, contentType: CONTENT_TYPES['.html'] as string, fallback: true };
+    },
     asset: (pathname) => {
       let decoded: string;
       try {
@@ -53,10 +84,11 @@ export function createSpaAssets(webDist = DEFAULT_WEB_DIST): SpaAssets {
       }
       if (!decoded.startsWith('/assets/')) return null;
       const path = resolve(root, `.${decoded}`);
-      const rel = relative(root, path);
-      if (rel.startsWith('..') || !existsSync(path) || !statSync(path).isFile()) return null;
+      if (relative(root, path).startsWith('..')) return null;
+      const body = readContained(realRoot, path);
+      if (!body) return null;
       return {
-        body: readFileSync(path),
+        body,
         contentType: CONTENT_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream',
       };
     },
