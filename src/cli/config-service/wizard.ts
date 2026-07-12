@@ -31,7 +31,7 @@ export async function runWizard(root: string, payload: { fields?: Record<string,
   const compiled = fileURLToPath(new URL('../setup/run.js', import.meta.url));
   const source = fileURLToPath(new URL('../setup/run.ts', import.meta.url));
   const runner = existsSync(compiled) ? compiled : source;
-  const args = ['--non-interactive', ...(payload.args ?? fieldArgs(payload.fields ?? {}))];
+  const args = ['--non-interactive', ...fieldArgs(payload.fields ?? {}), ...(payload.args ?? [])];
   const nodeArgs = runner.endsWith('.ts') ? ['--import', 'tsx', runner, ...args] : [runner, ...args];
   return new Promise((resolveRun, reject) => {
     const child = spawn(process.execPath, nodeArgs, {

@@ -1,0 +1,39 @@
+.editor-dashboard { max-width: 78rem; }
+.editor-shell { width: 100%; }
+.editor-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1.5rem; }
+.editor-heading h1 { max-width: 18ch; font-size: clamp(2.4rem, 6vw, 4.7rem); }
+.platform-badge, .file-state, .secret-state { flex: none; padding: .35rem .6rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .78rem; font-weight: 760; text-transform: capitalize; }
+.editor-tabs { display: flex; gap: .4rem; margin-bottom: 1rem; overflow-x: auto; }
+.editor-tabs button, .file-picker button { margin: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.editor-tabs button.active, .file-picker button.active { border-color: var(--accent); background: var(--accent); color: white; }
+.editor-card { padding: clamp(1.3rem, 4vw, 2.3rem); }
+.editor-card h2 { margin: 0; font-size: 1.35rem; letter-spacing: -.02em; }
+.editor-intro { max-width: 55rem; margin: 0; }
+.settings-group { padding-top: 1.5rem; }
+.settings-group + .settings-group { margin-top: 1.5rem; border-top: 1px solid var(--line); }
+.editor-field { padding: .85rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface-strong); }
+.editor-field input:not([type='checkbox']), .editor-field select { width: 100%; margin-top: .4rem; padding: .78rem .85rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--surface-strong); color: var(--text); }
+.secret-heading, .file-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.clear-secret { display: flex !important; align-items: center; gap: .5rem; margin-top: .65rem; color: var(--muted); font-size: .82rem; cursor: pointer; }
+.clear-secret input { width: auto; margin: 0; }
+.editor-actions { display: flex; justify-content: flex-end; gap: .65rem; margin-top: 1.25rem; }
+.editor-actions .secondary { border: 1px solid var(--line); background: transparent; color: var(--text); }
+.editor-status { margin: 1rem 0 0; font-weight: 700; }
+.file-picker { display: flex; gap: .4rem; padding-bottom: 1rem; margin-bottom: 1.2rem; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.file-picker button { flex: none; padding: .55rem .75rem; }
+.file-heading { margin-bottom: .8rem; }
+.file-heading .muted { margin: .25rem 0 0; }
+.notice { padding: .75rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--accent-soft); color: var(--text); }
+.file-editor textarea { width: 100%; min-height: 28rem; padding: 1rem; border: 1px solid var(--line); border-radius: .7rem; background: #121711; color: #e9f2e6; font: .82rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.file-editor textarea:read-only { opacity: .8; }
+.apply-panel > .muted { max-width: 52rem; }
+.apply-console, .import-preview pre { max-height: 28rem; margin: 1.2rem 0 0; padding: 1rem; overflow: auto; border-radius: .7rem; background: #111510; color: #d9ead5; font: .82rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.transfer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.drop-zone { display: block; margin-top: 1rem; padding: 1.25rem; border: 1px dashed var(--accent); border-radius: .7rem; color: var(--accent); cursor: pointer; }
+.import-preview, .transfer-status, .transfer-grid + .editor-card { margin-top: 1rem; }
+@media (max-width: 760px) {
+  .editor-heading { display: block; }
+  .platform-badge { display: inline-block; margin-top: 1rem; }
+  .transfer-grid { grid-template-columns: 1fr; }
+  .editor-actions { flex-wrap: wrap; }
+}

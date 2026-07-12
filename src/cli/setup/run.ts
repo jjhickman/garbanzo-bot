@@ -1308,7 +1308,9 @@ async function main() {
           );
     }
 
-    const monitoringTokenInput = monitoringEnabled ? await resolveText('MONITORING_TOKEN') : '';
+    const monitoringTokenInput = monitoringEnabled || (nonInteractive && cli.options['monitoring-token'] !== undefined)
+      ? await resolveText('MONITORING_TOKEN')
+      : '';
     let monitoringToken = (monitoringTokenInput || existing.MONITORING_TOKEN || '').trim();
     if (monitoringEnabled && !monitoringToken) {
       monitoringToken = generateMonitoringToken();
@@ -1515,6 +1517,8 @@ async function main() {
       MBTA_API_KEY: (existing.MBTA_API_KEY || '').trim(),
       NEWSAPI_KEY: (existing.NEWSAPI_KEY || '').trim(),
       BRAVE_SEARCH_API_KEY: (existing.BRAVE_SEARCH_API_KEY || '').trim(),
+      BRIDGE_ENABLED: resolveEnvField(getField('BRIDGE_ENABLED'), cli, existing).trim(),
+      SHARED_MEMORY_ENABLED: resolveEnvField(getField('SHARED_MEMORY_ENABLED'), cli, existing).trim(),
       GITHUB_SPONSORS_URL: (githubSponsorsUrl || existing.GITHUB_SPONSORS_URL || '').trim(),
       PATREON_URL: (patreonUrl || existing.PATREON_URL || '').trim(),
       KOFI_URL: (kofiUrl || existing.KOFI_URL || '').trim(),
@@ -1568,12 +1572,16 @@ async function main() {
     // memory, no Qdrant container to run). Docker path is unchanged.
     const vectorStoreNote = 'Native default: VECTOR_STORE=none (keyword-only memory, no Qdrant required). '
       + 'Upgrade later by setting VECTOR_STORE=qdrant + QDRANT_URL, or switch to the Docker Compose path.';
+    const vectorStoreValue = (
+      cli.options['vector-store']
+      ?? existing.VECTOR_STORE
+      ?? (deployTarget === 'native' ? 'none' : 'qdrant')
+    ).trim();
     if (deployTarget === 'native') {
       sharedEnvContent = sharedEnvContent
         .split('\n')
         .filter((line) => !line.startsWith('COMPOSE_PROFILES='))
         .join('\n');
-      const vectorStoreValue = (cli.options['vector-store'] ?? existing.VECTOR_STORE ?? 'none').trim();
       sharedEnvContent += [
         '',
         '# Native quickstart default — see docs/QUICKSTART.md to upgrade to Qdrant.',
@@ -1581,6 +1589,11 @@ async function main() {
         '',
       ].join('\n');
       output.write(`\nℹ️ ${vectorStoreNote}\n`);
+    } else if (cli.options['vector-store'] !== undefined || existing.VECTOR_STORE !== undefined) {
+      // Docker defaults to qdrant via the schema, so only pin VECTOR_STORE when
+      // the operator (or the browser wizard) explicitly chose one — keeps a
+      // plain docker run's .env free of a redundant VECTOR_STORE=qdrant line.
+      sharedEnvContent += ['', `VECTOR_STORE=${vectorStoreValue}`, ''].join('\n');
     }
 
     const envTargets = [{ path: ENV_PATH, content: mergeEnvTargetContent(ENV_PATH, sharedEnvContent), label: '.env' }];
