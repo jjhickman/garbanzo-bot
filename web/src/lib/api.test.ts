@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearSession, exchangeEntryToken, getState, getWizardSchema, hasSession, submitWizard } from './api.js';
+import { applyStream, clearSession, exchangeEntryToken, getState, getWizardSchema, hasSession, submitWizard } from './api.js';
 
 describe('config API client authentication', () => {
   afterEach(() => {
@@ -84,6 +84,39 @@ describe('config API client authentication', () => {
       body: JSON.stringify({ fields: { MESSAGING_PLATFORM: 'discord', DISCORD_BOT_TOKEN: 'test_token' } }),
     }));
     expect(fetchMock.mock.calls.flatMap(([url]) => String(url))).not.toContain('wizard-session-secret');
+    expect(window.localStorage).toHaveLength(0);
+    expect(document.cookie).toBe('');
+  });
+
+  it('streams apply output with the bearer token only in the header', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('$ docker compose up -d discord\n'));
+        controller.enqueue(encoder.encode('started\nexit 0\n'));
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'apply-session-secret' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(stream, {
+        status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await exchangeEntryToken('apply-entry-secret');
+    const chunks: string[] = [];
+    const result = await applyStream((chunk) => chunks.push(chunk));
+
+    expect(chunks.join('')).toContain('exit 0');
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/apply', expect.objectContaining({
+      method: 'POST',
+      headers: { Authorization: 'Bearer apply-session-secret' },
+    }));
+    expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain('apply-session-secret');
     expect(window.localStorage).toHaveLength(0);
     expect(document.cookie).toBe('');
   });

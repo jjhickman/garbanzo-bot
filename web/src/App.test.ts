@@ -5,7 +5,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./lib/api.js', () => ({
   ApiError: class ApiError extends Error {},
   exchangeEntryToken: vi.fn(),
-  getWizardSchema: vi.fn(),
+  getWizardSchema: vi.fn().mockResolvedValue({
+    platforms: ['discord'], defaultPlatform: 'discord', deployTargets: ['docker'], providers: [],
+    vectorStores: [], openaiAuthModes: [], whatsappLoginModes: [], chatScopes: [],
+    groups: { shared: [], whatsapp: [], discord: [], telegram: [], matrix: [] },
+  }),
+  getConfig: vi.fn().mockResolvedValue({
+    mtimeMs: 1, fileMtimes: { '.env': 1 }, fileHashes: { '.env': 'hash' }, env: {},
+    files: { groups: null, 'discord-channels': null, 'telegram-chats': null, 'matrix-rooms': null, 'bridge-map': null },
+  }),
+  putConfig: vi.fn(),
+  putConfigFile: vi.fn(),
+  validateConfig: vi.fn(),
+  exportBundle: vi.fn(),
+  importBundle: vi.fn(),
+  confirmImport: vi.fn(),
+  applyStream: vi.fn(),
   submitWizard: vi.fn(),
   getState: vi.fn().mockResolvedValue({
     root: '/srv/garbanzo',
@@ -34,7 +49,7 @@ describe('configuration app shell (jsdom)', () => {
     vi.clearAllMocks();
   });
 
-  it('moves from token entry to the configured-root guard', async () => {
+  it('moves from token entry to the configured-root editor', async () => {
     app = mount(App, { target: document.body });
     const input = document.querySelector<HTMLInputElement>('input[name="entryToken"]');
     const form = document.querySelector<HTMLFormElement>('form');
@@ -50,9 +65,9 @@ describe('configuration app shell (jsdom)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await tick();
 
-    expect(document.body.textContent).toContain('Already configured');
-    expect(document.body.textContent).toContain('Discord');
-    expect(document.body.textContent).toContain('configuration editor');
+    expect(document.body.textContent).toContain('Configuration editor');
+    expect(document.body.textContent).toContain('discord instance');
+    expect(document.body.textContent).toContain('Shared settings');
     expect(document.body.textContent).not.toContain('pasted-token');
   });
 });

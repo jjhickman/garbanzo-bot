@@ -60,6 +60,27 @@ export interface WizardResult {
   written: string[];
 }
 
+export interface ConfigBundle {
+  format: 'garbanzo-config-bundle-v1';
+  files: Record<string, string>;
+}
+
+export interface ImportPreview {
+  stagingId: string;
+  diff: Record<string, string>;
+}
+
+export interface ImportResult {
+  ok: true;
+  changed: string[];
+}
+
+export interface ApplyResult {
+  text: string;
+  exitCode: number | null;
+  guidance?: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -93,6 +114,18 @@ async function responseBody(response: Response): Promise<unknown> {
   return response.text();
 }
 
+function expireSession(): void {
+  clearSession();
+  expiryListeners.forEach((listener) => listener());
+}
+
+function apiError(response: Response, body: unknown): ApiError {
+  const message = typeof body === 'object' && body && 'error' in body
+    ? String((body as { error: unknown }).error)
+    : `Request failed (${response.status})`;
+  return new ApiError(message, response.status, body);
+}
+
 async function authenticated<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!sessionToken) throw new ApiError('Authentication required', 401, null);
   const response = await fetch(path, {
@@ -104,15 +137,9 @@ async function authenticated<T>(path: string, init: RequestInit = {}): Promise<T
   });
   const body = await responseBody(response);
   if (response.status === 401) {
-    clearSession();
-    expiryListeners.forEach((listener) => listener());
+    expireSession();
   }
-  if (!response.ok) {
-    const message = typeof body === 'object' && body && 'error' in body
-      ? String((body as { error: unknown }).error)
-      : `Request failed (${response.status})`;
-    throw new ApiError(message, response.status, body);
-  }
+  if (!response.ok) throw apiError(response, body);
   return body as T;
 }
 
@@ -143,9 +170,31 @@ export const putConfigFile = <T = unknown>(name: string, body: T): Promise<{ ok:
 export const validateConfig = (body: unknown): Promise<{ ok: boolean; issues: unknown[] }> => authenticated('/api/validate', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
-export const exportConfig = (): Promise<unknown> => authenticated('/api/export');
+export const validate = validateConfig;
+export const exportBundle = (): Promise<ConfigBundle> => authenticated('/api/export');
+export const exportConfig = exportBundle;
+
+export function importBundle(fileOrBundle: File | ConfigBundle): Promise<ImportPreview> {
+  if (typeof File !== 'undefined' && fileOrBundle instanceof File) {
+    const form = new FormData();
+    form.append('file', fileOrBundle);
+    return authenticated('/api/import', { method: 'POST', body: form });
+  }
+  return authenticated('/api/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fileOrBundle),
+  });
+}
+
 export const importConfig = (body: unknown): Promise<unknown> => authenticated('/api/import', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+
+export const confirmImport = (stagingId: string): Promise<ImportResult> => authenticated('/api/import', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ confirm: true, stagingId }),
 });
 export const getWizardSchema = (): Promise<WizardSchema> => authenticated('/api/wizard/schema');
 export const submitWizard = (fields: Record<string, string>, args: string[] = []): Promise<WizardResult> => authenticated('/api/wizard', {
@@ -154,4 +203,53 @@ export const submitWizard = (fields: Record<string, string>, args: string[] = []
 export const runWizard = (args: string[]): Promise<unknown> => authenticated('/api/wizard', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args }),
 });
+
+export async function applyStream(onChunk: (chunk: string) => void): Promise<ApplyResult> {
+  if (!sessionToken) throw new ApiError('Authentication required', 401, null);
+  const response = await fetch('/api/apply', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!response.ok) {
+    const body = await responseBody(response);
+    if (response.status === 401) expireSession();
+    throw apiError(response, body);
+  }
+  if (contentType.includes('application/json')) {
+    const body = await response.json() as { guidance?: unknown };
+    const guidance = typeof body.guidance === 'string' ? body.guidance : 'Configuration accepted. Restart Garbanzo to apply it.';
+    onChunk(`${guidance}\n`);
+    clearSession();
+    return { text: `${guidance}\n`, exitCode: null, guidance };
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    if (text) onChunk(text);
+    const exitCode = Number(text.match(/(?:^|\n)exit (\d+)\s*$/)?.[1] ?? Number.NaN);
+    if (exitCode === 0) clearSession();
+    return { text, exitCode: Number.isNaN(exitCode) ? null : exitCode };
+  }
+  const decoder = new TextDecoder();
+  let text = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    text += chunk;
+    onChunk(chunk);
+  }
+  const tail = decoder.decode();
+  if (tail) {
+    text += tail;
+    onChunk(tail);
+  }
+  const match = text.match(/(?:^|\n)exit (\d+)\s*$/);
+  const exitCode = match ? Number(match[1]) : null;
+  if (exitCode === 0) clearSession();
+  return { text, exitCode };
+}
+
 export const applyConfig = (): Promise<unknown> => authenticated('/api/apply', { method: 'POST' });
