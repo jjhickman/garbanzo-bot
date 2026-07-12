@@ -5,13 +5,20 @@
 import { config } from './config.js';
 import { logger } from '../middleware/logger.js';
 import type { DbBackend } from './db-backend.js';
-import type { LocalMemoryEntry, MemoryEntry, SharedMemoryEntry } from './db-types.js';
-import { deleteFact, indexFact } from './vector-memory.js';
+import type { AdminAuditLogInput, LocalMemoryEntry, MemoryEntry, SharedMemoryEntry } from './db-types.js';
+import {
+  deleteFact,
+  deleteSharedFact,
+  indexFact,
+  indexSharedFact,
+} from './vector-memory.js';
 import { truncate } from './formatting.js';
 
 export type {
   Availability,
   AvailabilityResponse,
+  AdminAuditLogEntry,
+  AdminAuditLogInput,
   BackfillSession,
   BackupIntegrityStatus,
   BridgeBufferEntry,
@@ -156,6 +163,14 @@ export async function deleteMemory(id: number): Promise<boolean> {
     .catch((err) => logger.warn({ err }, 'memory fact vector delete failed'));
   return deleted;
 }
+export async function deleteMemoryWithAudit(id: number, audit: AdminAuditLogInput): Promise<boolean> {
+  const deleted = await backend.deleteMemoryWithAudit(id, audit);
+  if (deleted) {
+    void deleteFact(String(id))
+      .catch((err) => logger.warn({ err }, 'memory fact vector delete failed'));
+  }
+  return deleted;
+}
 export async function searchMemory(keyword: string, limit = 10): Promise<MemoryEntry[]> {
   const { searchFacts } = await import('./vector-memory.js');
   const hits = await searchFacts(keyword, limit);
@@ -196,6 +211,27 @@ export async function searchMemory(keyword: string, limit = 10): Promise<MemoryE
   return [...localResults, ...sharedResults];
 }
 export const formatMemoriesForPrompt = backend.formatMemoriesForPrompt;
+export const addAdminAuditLog = backend.addAdminAuditLog;
+export const getAdminAuditLog = backend.getAdminAuditLog;
+
+export type ShareMemoryResult = 'shared' | 'not-found' | 'failed';
+
+/** Share one local memory through the same path used by owner commands and the admin API. */
+export async function shareMemory(id: number): Promise<ShareMemoryResult> {
+  const memory = (await backend.getAllMemories()).find((entry) => entry.id === id);
+  if (!memory) return 'not-found';
+  const shared = await indexSharedFact({
+    localId: id,
+    text: memory.fact,
+    category: memory.category,
+  });
+  return shared ? 'shared' : 'failed';
+}
+
+/** Unshare one local memory through the same path used by owner commands and the admin API. */
+export async function unshareMemory(id: number): Promise<boolean> {
+  return deleteSharedFact(id);
+}
 
 const PROMPT_MEMORY_MAX_CHARS = 4000;
 

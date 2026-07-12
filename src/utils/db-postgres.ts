@@ -58,6 +58,8 @@ import {
   type WhatsAppMetricCountsLike,
 } from './db-query-shape.js';
 import type {
+  AdminAuditLogEntry,
+  AdminAuditLogInput,
   Availability,
   AvailabilityResponse,
   BackupIntegrityStatus,
@@ -98,6 +100,7 @@ const MAX_MESSAGES_PER_CHAT = 5000;
 const MESSAGE_RETENTION_DAYS = 30;
 const CONTEXT_RELEVANT_LIMIT = 6;
 const SESSION_FETCH_LIMIT = 160;
+const ADMIN_AUDIT_RETENTION_DAYS = 90;
 
 const REQUIRED_CORE_TABLES = [
   'member_profiles',
@@ -108,6 +111,7 @@ const REQUIRED_CORE_TABLES = [
   'feedback',
   'event_reminders',
   'memory',
+  'admin_audit_log',
   'whatsapp_outbound_jobs',
   'whatsapp_safety_state',
   'songs',
@@ -420,6 +424,10 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     const pruneRes = await pool.query('DELETE FROM messages WHERE timestamp < $1', [cutoff]);
     const pruned = pruneRes.rowCount ?? 0;
 
+    const adminAuditCutoffMs = Date.now() - (ADMIN_AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const adminAuditPruneRes = await pool.query('DELETE FROM admin_audit_log WHERE ts < $1', [adminAuditCutoffMs]);
+    const adminAuditPruned = adminAuditPruneRes.rowCount ?? 0;
+
     const afterRes = await pool.query<DbCountRow>('SELECT COUNT(*)::bigint as count FROM messages');
     const afterCount = toNumber(afterRes.rows[0]?.count);
 
@@ -429,6 +437,8 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       afterCount,
       retentionDays: MESSAGE_RETENTION_DAYS,
       dialect: 'postgres',
+      adminAuditPruned,
+      adminAuditRetentionDays: ADMIN_AUDIT_RETENTION_DAYS,
     }, 'Database maintenance complete');
 
     return { pruned, beforeCount, afterCount };
@@ -1124,6 +1134,78 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     async deleteMemory(id: number): Promise<boolean> {
       const res = await pool.query('DELETE FROM memory WHERE id = $1', [id]);
       return (res.rowCount ?? 0) > 0;
+    },
+
+    async deleteMemoryWithAudit(id: number, entry: AdminAuditLogInput): Promise<boolean> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const deleted = await client.query('DELETE FROM memory WHERE id = $1', [id]);
+        if ((deleted.rowCount ?? 0) === 0) {
+          await client.query('ROLLBACK');
+          return false;
+        }
+        await client.query(
+          `INSERT INTO admin_audit_log (ts, action, target, summary, source_ip)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [entry.ts, entry.action, entry.target, entry.summary, entry.sourceIp],
+        );
+        await client.query('COMMIT');
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async addAdminAuditLog(entry: AdminAuditLogInput): Promise<AdminAuditLogEntry> {
+      const res = await pool.query<{
+        id: number | string;
+        ts: number | string;
+        action: string;
+        target: string;
+        summary: string;
+        source_ip: string;
+      }>(
+        `INSERT INTO admin_audit_log (ts, action, target, summary, source_ip)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, ts, action, target, summary, source_ip`,
+        [entry.ts, entry.action, entry.target, entry.summary, entry.sourceIp],
+      );
+      const row = res.rows[0];
+      return {
+        id: toNumber(row.id),
+        ts: toNumber(row.ts),
+        action: row.action,
+        target: row.target,
+        summary: row.summary,
+        sourceIp: row.source_ip,
+      };
+    },
+
+    async getAdminAuditLog(limit = 100): Promise<AdminAuditLogEntry[]> {
+      const res = await pool.query<{
+        id: number | string;
+        ts: number | string;
+        action: string;
+        target: string;
+        summary: string;
+        source_ip: string;
+      }>(
+        `SELECT id, ts, action, target, summary, source_ip
+         FROM admin_audit_log ORDER BY ts DESC, id DESC LIMIT $1`,
+        [limit],
+      );
+      return res.rows.map((row) => ({
+        id: toNumber(row.id),
+        ts: toNumber(row.ts),
+        action: row.action,
+        target: row.target,
+        summary: row.summary,
+        sourceIp: row.source_ip,
+      }));
     },
 
     async searchMemory(keyword: string, limit: number = 10): Promise<MemoryEntry[]> {

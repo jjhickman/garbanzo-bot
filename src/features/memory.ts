@@ -19,11 +19,12 @@ import {
   addMemory,
   getAllMemories,
   deleteMemory,
+  shareMemory,
   searchMemory,
+  unshareMemory,
   type MemoryEntry,
 } from '../utils/db.js';
 import { config } from '../utils/config.js';
-import { deleteSharedFact, indexSharedFact } from '../utils/vector-memory.js';
 
 /**
  * Handle !memory owner commands. Returns a response string.
@@ -84,12 +85,9 @@ export async function handleMemory(args: string): Promise<string> {
     const id = parseInt(idStr, 10);
     if (isNaN(id)) return '❌ Provide a memory ID: `!memory share 3`';
 
-    const memories = await getAllMemories();
-    const memory = memories.find((entry) => entry.id === id);
-    if (!memory) return `❌ Memory #${id} not found.`;
-
-    const shared = await indexSharedFact({ localId: id, text: memory.fact, category: memory.category });
-    return shared
+    const result = await shareMemory(id);
+    if (result === 'not-found') return `❌ Memory #${id} not found.`;
+    return result === 'shared'
       ? `✅ Memory #${id} shared.`
       : `❌ Memory #${id} could not be shared right now.`;
   }
@@ -104,7 +102,7 @@ export async function handleMemory(args: string): Promise<string> {
     const id = parseInt(idStr, 10);
     if (isNaN(id)) return '❌ Provide a memory ID: `!memory unshare 3`';
 
-    const unshared = await deleteSharedFact(id);
+    const unshared = await unshareMemory(id);
     return unshared
       ? `🗑️ Memory #${id} unshared.`
       : `❌ Memory #${id} could not be unshared right now.`;

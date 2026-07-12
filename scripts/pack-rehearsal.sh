@@ -113,7 +113,48 @@ done
 echo "  -> file set confirmed under $INSTALLED_HOME"
 
 echo
-echo "== (d) boot the installed package (HEALTH_ONLY=true) and probe /health =="
+echo "== (d) launch installed garbanzo config and probe shell/session =="
+CONFIG_HOME="$WORKDIR/config-home"
+CONFIG_PORT=39312
+CONFIG_LOG="$WORKDIR/config-service.log"
+mkdir -p "$CONFIG_HOME"
+env -i "PATH=$PATH" "HOME=$TEMP_HOME" "GARBANZO_HOME=$CONFIG_HOME" \
+  "$BIN_SYMLINK" config --port="$CONFIG_PORT" >"$CONFIG_LOG" 2>&1 &
+BOT_PID=$!
+
+CONFIG_TOKEN=""
+for _ in $(seq 1 30); do
+  if [[ -z "$CONFIG_TOKEN" ]] && [[ -f "$CONFIG_LOG" ]]; then
+    CONFIG_TOKEN="$(sed -n 's/^One-time token: //p' "$CONFIG_LOG" | head -1)"
+  fi
+  if [[ -n "$CONFIG_TOKEN" ]] && curl -sf -o /dev/null "http://127.0.0.1:${CONFIG_PORT}/"; then
+    break
+  fi
+  if ! kill -0 "$BOT_PID" 2>/dev/null; then
+    echo "FAIL: installed config service exited before shell probe" >&2
+    cat "$CONFIG_LOG" >&2
+    wait "$BOT_PID" 2>/dev/null || true
+    BOT_PID=""
+    exit 1
+  fi
+  sleep 1
+done
+if [[ -z "$CONFIG_TOKEN" ]]; then
+  echo "FAIL: installed config service did not print an entry token" >&2
+  exit 1
+fi
+SESSION_RESPONSE="$(curl -sf -X POST -H "Authorization: Bearer $CONFIG_TOKEN" "http://127.0.0.1:${CONFIG_PORT}/api/session")"
+if ! grep -qF '"token"' <<<"$SESSION_RESPONSE"; then
+  echo "FAIL: installed config service session exchange failed" >&2
+  exit 1
+fi
+kill "$BOT_PID" 2>/dev/null || true
+wait "$BOT_PID" 2>/dev/null || true
+BOT_PID=""
+echo "  -> shell and one-time session endpoint responded; process killed cleanly"
+
+echo
+echo "== (e) boot the installed package (HEALTH_ONLY=true) and probe /health =="
 # Non-default port: a stale listener on 3001 (another CI job, an orphaned
 # earlier run) must not be able to answer the probe and fake a healthy boot.
 HEALTH_PORT=39311
@@ -164,7 +205,7 @@ fi
 echo "  -> /health returned 200; process killed cleanly"
 
 echo
-echo "== (e) service template shipped in the installed tree =="
+echo "== (f) service template shipped in the installed tree =="
 INSTALLED_ROOT="$PREFIX/node_modules/garbanzo-bot"
 SERVICE_TEMPLATE="$INSTALLED_ROOT/scripts/garbanzo.service"
 if [[ ! -f "$SERVICE_TEMPLATE" ]]; then

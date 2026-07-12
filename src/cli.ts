@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { processPrinter, type CliPrinter } from './cli/cli-print.js';
 
 export type CliCommand =
   | { kind: 'setup'; args: string[] }
+  | { kind: 'config'; args: string[] }
   | { kind: 'start' }
   | { kind: 'doctor' }
   | { kind: 'service'; action: 'install' | 'uninstall'; force: boolean; system: boolean }
@@ -21,6 +23,7 @@ function helpText(): string {
     '',
     'Commands:',
     '  setup                 Run the setup wizard',
+    '  config                Run the loopback browser config service',
     '  start                 Start the bot runtime',
     '  doctor                Print an environment report',
     '  service install       Write a systemd user unit or launchd agent',
@@ -42,6 +45,9 @@ export function parseCliCommand(args: string[]): CliCommand {
   }
   if (command === 'setup') {
     return { kind: 'setup', args: rest };
+  }
+  if (command === 'config') {
+    return { kind: 'config', args: rest };
   }
   if (command === 'start') {
     return { kind: 'start' };
@@ -77,23 +83,29 @@ async function packageVersion(): Promise<string> {
 }
 
 function spawnSetup(setupPath: string, args: string[], homeDir: string): Promise<number> {
+  // A .ts runner (repo-dev, no dist build) needs the tsx loader; the compiled
+  // .js runner runs on plain node. tsx is a devDependency, present exactly in
+  // the repo-dev case where the .ts path is chosen.
+  const nodeArgs = setupPath.endsWith('.ts')
+    ? ['--import', 'tsx', setupPath, ...args]
+    : [setupPath, ...args];
   return new Promise((resolveSpawn, reject) => {
-    const child = spawn(process.execPath, [setupPath, ...args], {
+    const child = spawn(process.execPath, nodeArgs, {
       stdio: 'inherit',
       env: {
         ...process.env,
         // GARBANZO_CLI=1 tells the wizard it was spawned by the packaged CLI
-        // binary (scripts/setup.mjs keys packaged-mode behavior off it — no
+        // binary (the compiled setup runner keys packaged-mode behavior off it — no
         // `npm install`, "garbanzo start" as the next-steps command).
         GARBANZO_CLI: '1',
-        // setup.mjs can't import src/utils/paths.js (import-isolation
-        // invariant), so it re-derives its own output root from the raw
+        // The setup runner stays import-isolated from runtime config/paths,
+        // so it re-derives its own output root from the raw
         // GARBANZO_HOME env var. Forward the already-resolved
         // GARBANZO_HOME_DIR so a packaged run — sentinel-driven, no explicit
         // GARBANZO_HOME set by the operator — still writes into ~/.garbanzo
         // instead of falling back to the (possibly read-only) install
         // directory. Byte-identical in repo/Docker mode, where
-        // GARBANZO_HOME_DIR already equals what setup.mjs would resolve on
+        // GARBANZO_HOME_DIR already equals what the runner would resolve on
         // its own.
         GARBANZO_HOME: homeDir,
       },
@@ -112,6 +124,30 @@ function spawnSetup(setupPath: string, args: string[], homeDir: string): Promise
 function resolveMode(garbanzoHome: string | undefined, packaged: boolean): 'repo' | 'packaged' | 'env-set' {
   if (garbanzoHome?.trim()) return 'env-set';
   return packaged ? 'packaged' : 'repo';
+}
+
+export interface SetupRunnerPaths {
+  compiledPath: string;
+  sourcePath: string;
+  compiledExists: boolean;
+  sourceExists: boolean;
+  cliIsSource: boolean;
+  tsxResolvable: boolean;
+}
+
+export function resolveSetupRunner(paths: SetupRunnerPaths): string {
+  if (paths.compiledExists) return paths.compiledPath;
+  if (paths.sourceExists && (paths.cliIsSource || paths.tsxResolvable)) return paths.sourcePath;
+  throw new Error('packaged setup runner is missing — reinstall garbanzo-bot');
+}
+
+function canResolveTsx(): boolean {
+  try {
+    createRequire(import.meta.url).resolve('tsx');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function runCli(args: string[] = process.argv.slice(2), printer: CliPrinter = processPrinter): Promise<number> {
@@ -134,8 +170,27 @@ export async function runCli(args: string[] = process.argv.slice(2), printer: Cl
   }
 
   if (parsed.kind === 'setup') {
-    const { assetPath, GARBANZO_HOME_DIR } = await import('./utils/paths.js');
-    return spawnSetup(assetPath('scripts', 'setup.mjs'), parsed.args, GARBANZO_HOME_DIR);
+    const { GARBANZO_HOME_DIR } = await import('./utils/paths.js');
+    // Packaged/built: this file lives in dist/, so the compiled runner sits
+    // next to it. Repo-dev runs this file from src/ via tsx, where only
+    // run.ts exists — fall back to the TypeScript source in that case
+    // (spawnSetup detects the .ts extension and runs it through tsx).
+    const compiledPath = fileURLToPath(new URL('./cli/setup/run.js', import.meta.url));
+    const sourcePath = fileURLToPath(new URL('./cli/setup/run.ts', import.meta.url));
+    const setupPath = resolveSetupRunner({
+      compiledPath,
+      sourcePath,
+      compiledExists: existsSync(compiledPath),
+      sourceExists: existsSync(sourcePath),
+      cliIsSource: fileURLToPath(import.meta.url).endsWith('.ts'),
+      tsxResolvable: canResolveTsx(),
+    });
+    return spawnSetup(setupPath, parsed.args, GARBANZO_HOME_DIR);
+  }
+
+  if (parsed.kind === 'config') {
+    const { runConfigService } = await import('./cli/config-service/index.js');
+    return runConfigService(parsed.args);
   }
 
   if (parsed.kind === 'doctor') {
@@ -188,4 +243,3 @@ if (isDirectRun()) {
     process.exitCode = 1;
   });
 }
-

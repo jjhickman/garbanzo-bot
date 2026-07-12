@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalString } from './shared.js';
+import { blankToUndefined, optionalString } from './shared.js';
 
 export const telegramSchema = z.object({
   // Telegram runtime (long polling only — see docs/_internal/plans for the
@@ -19,5 +19,5 @@ export const telegramSchema = z.object({
   // by default is unsafe here in a way it isn't for WhatsApp. DMs are never
   // gated by this — see process-inbound-message.ts's shouldIngestGroupChat
   // hook, which only applies to group chats.
-  TELEGRAM_CHAT_SCOPE: z.enum(['all', 'configured']).default('configured'),
+  TELEGRAM_CHAT_SCOPE: z.preprocess(blankToUndefined, z.enum(['all', 'configured']).default('configured')),
 });

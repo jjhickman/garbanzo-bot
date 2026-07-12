@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-import { parseCliCommand, runCli } from '../src/cli.js';
+import { parseCliCommand, resolveSetupRunner, runCli } from '../src/cli.js';
 import {
   collectDoctorReport,
   formatDoctorReport,
@@ -78,6 +78,28 @@ describe('CLI routing', () => {
     expect(code).toBe(1);
     expect(stderr).toContain('Unknown command: nope');
     expect(stdout).toContain('Usage: garbanzo');
+  });
+
+  it('reports a damaged packaged runner instead of falling through to TypeScript', () => {
+    expect(() => resolveSetupRunner({
+      compiledPath: '/package/dist/cli/setup/run.js',
+      sourcePath: '/package/dist/cli/setup/run.ts',
+      compiledExists: false,
+      sourceExists: false,
+      cliIsSource: false,
+      tsxResolvable: false,
+    })).toThrow('packaged setup runner is missing — reinstall garbanzo-bot');
+  });
+
+  it('uses the TypeScript runner only for a resolvable repo-development path', () => {
+    expect(resolveSetupRunner({
+      compiledPath: '/repo/src/cli/setup/run.js',
+      sourcePath: '/repo/src/cli/setup/run.ts',
+      compiledExists: false,
+      sourceExists: true,
+      cliIsSource: true,
+      tsxResolvable: true,
+    })).toBe('/repo/src/cli/setup/run.ts');
   });
 });
 

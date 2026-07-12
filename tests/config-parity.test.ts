@@ -135,6 +135,10 @@ const canonicalEnv = {
   BRIDGE_MAX_TEXT: '800',
   SHARED_MEMORY_ENABLED: 'true',
   QDRANT_SHARED_COLLECTION: 'test_shared_memory',
+  ADMIN_WRITE_ENABLED: 'true',
+  ADMIN_WRITE_TOKEN: 'admin_test_token_1234',
+  ADMIN_WRITE_PORT: '3006',
+  ADMIN_WRITE_BIND_HOST: '127.0.0.1',
   VECTOR_STORE: 'qdrant',
   QDRANT_URL: 'http://qdrant.local:6333',
   QDRANT_API_KEY: '  qdrant-key  ',
@@ -169,6 +173,10 @@ describe('config module parity', () => {
     expect(Object.keys(config).sort()).toMatchInlineSnapshot(`
       [
         "ADMIN_PAGE_ENABLED",
+        "ADMIN_WRITE_BIND_HOST",
+        "ADMIN_WRITE_ENABLED",
+        "ADMIN_WRITE_PORT",
+        "ADMIN_WRITE_TOKEN",
         "AI_PROVIDER_ORDER",
         "AI_TOOL_CALLING",
         "AI_TOOL_MAX_ITERATIONS",
