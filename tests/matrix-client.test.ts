@@ -184,6 +184,26 @@ describe('mapMatrixMessageToPayload', () => {
     expect(payload?.audio).toEqual({ mxcUrl: 'mxc://example.org/media', mimeType: 'audio/ogg' });
   });
 
+  it('maps m.image metadata for conditional bridge download', async () => {
+    const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
+    const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'photo.png',
+        url: 'mxc://example.org/photo',
+        info: { mimetype: 'image/png', size: 123 },
+      },
+    }), BOT);
+
+    expect(payload?.media).toEqual({
+      mxcUrl: 'mxc://example.org/photo',
+      mimeType: 'image/png',
+      fileName: 'photo.png',
+      kind: 'image',
+      size: 123,
+    });
+  });
+
   it('marks fromSelf for bot-authored events', async () => {
     const { mapMatrixMessageToPayload } = await import('../src/platforms/matrix/client.js');
     const payload = mapMatrixMessageToPayload('!room:example.org', baseEvent({ sender: BOT.userId }), BOT);
@@ -193,6 +213,7 @@ describe('mapMatrixMessageToPayload', () => {
 
 describe('Matrix client handler wiring', () => {
   beforeEach(() => {
+    delete process.env.BRIDGE_MEDIA_ENABLED;
     vi.resetModules();
     vi.restoreAllMocks();
   });
@@ -264,6 +285,50 @@ describe('Matrix client handler wiring', () => {
     expect(payload.roomId).toBe('!room:example.org');
     expect(payload.senderId).toBe('@ada:example.org');
     expect(env.botUserId).toBe(BOT.userId);
+  });
+
+  it('conditionally downloads m.image bytes and threads media to the processor', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const { client, fakeClient, processMatrixEvent } = await setup();
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'photo.png',
+        url: 'mxc://example.org/photo',
+        info: { mimetype: 'image/png', size: 3 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).toHaveBeenCalledWith('mxc://example.org/photo');
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({
+      contentType: 'image/png',
+      kind: 'image',
+      buffer: Buffer.from([1, 2, 3]),
+    });
+  });
+
+  it('does not download m.image bytes when bridge media is disabled', async () => {
+    const { client, fakeClient, processMatrixEvent } = await setup();
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'photo.png',
+        url: 'mxc://example.org/photo',
+        info: { mimetype: 'image/png', size: 3 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).not.toHaveBeenCalled();
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({ contentType: 'image/png', kind: 'image' });
+    expect(payload.media).not.toHaveProperty('buffer');
   });
 
   it('passes the resolved owner DM room id separately from the owner MXID', async () => {

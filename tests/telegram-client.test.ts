@@ -128,6 +128,26 @@ describe('mapTelegramMessageToPayload — voice mapping', () => {
   });
 });
 
+describe('mapTelegramMessageToPayload — media mapping', () => {
+  it('surfaces the largest photo for conditional bridge download', () => {
+    const payload = mapTelegramMessageToPayload(baseMessage({
+      text: undefined,
+      photo: [
+        { file_id: 'small', file_unique_id: 'small-u', width: 90, height: 90, file_size: 100 },
+        { file_id: 'large', file_unique_id: 'large-u', width: 1280, height: 720, file_size: 300 },
+      ],
+    }), BOT);
+
+    expect(payload.media).toEqual({
+      fileId: 'large',
+      mimeType: 'image/jpeg',
+      fileName: 'photo.jpg',
+      kind: 'image',
+      size: 300,
+    });
+  });
+});
+
 describe('mapTelegramMessageToPayload — loop prevention (fromSelf)', () => {
   it('marks fromSelf true when the sender is the bot itself', () => {
     const payload = mapTelegramMessageToPayload(baseMessage({ from: { id: BOT.id, is_bot: true } }), BOT);
@@ -142,6 +162,7 @@ describe('mapTelegramMessageToPayload — loop prevention (fromSelf)', () => {
 
 describe('Telegram client — end-to-end message handler wiring', () => {
   beforeEach(() => {
+    delete process.env.BRIDGE_MEDIA_ENABLED;
     vi.resetModules();
     vi.restoreAllMocks();
   });
@@ -164,13 +185,17 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     const isTelegramChatEnabled = vi.fn(options.isChatEnabled ?? (() => true));
     const getTelegramChatName = vi.fn(() => undefined);
     const downloadTelegramVoice = vi.fn(async () => Buffer.from([9, 9, 9]));
+    const downloadTelegramFile = vi.fn(async () => Buffer.from([7, 8, 9]));
     const markConnected = vi.fn();
     const markDisconnected = vi.fn();
 
     vi.doMock('../src/platforms/telegram/adapter.js', () => ({ createTelegramAdapter }));
     vi.doMock('../src/platforms/telegram/processor.js', () => ({ processTelegramEvent }));
     vi.doMock('../src/platforms/telegram/telegram-config.js', () => ({ isTelegramChatEnabled, getTelegramChatName }));
-    vi.doMock('../src/platforms/telegram/telegram-voice.js', () => ({ downloadTelegramVoice }));
+    vi.doMock('../src/platforms/telegram/telegram-voice.js', () => ({
+      downloadTelegramFile,
+      downloadTelegramVoice,
+    }));
     vi.doMock('../src/middleware/health.js', () => ({ markConnected, markDisconnected }));
 
     const module = await import('../src/platforms/telegram/client.js');
@@ -194,7 +219,7 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     });
 
     return {
-      client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramVoice,
+      client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramFile, downloadTelegramVoice,
       markConnected, markDisconnected,
     };
   }
@@ -229,6 +254,57 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     expect(payload.chatId).toBe('-100123');
     expect(payload.senderId).toBe('42');
     expect(env.botUserId).toBe(String(BOT.id));
+  });
+
+  it('conditionally downloads a photo and threads its media buffer to the processor', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const { client, bot, processTelegramEvent, downloadTelegramFile } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 6,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          caption: 'photo caption',
+          photo: [{ file_id: 'photo-file', file_unique_id: 'photo-u', width: 640, height: 480 }],
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramFile).toHaveBeenCalledWith('super-secret-token-abc', 'photo-file', 8_388_608);
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({
+      contentType: 'image/jpeg',
+      kind: 'image',
+      buffer: Buffer.from([7, 8, 9]),
+    });
+  });
+
+  it('does not download photo bytes when bridge media is disabled', async () => {
+    const { client, bot, processTelegramEvent, downloadTelegramFile } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 7,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          photo: [{ file_id: 'photo-file', file_unique_id: 'photo-u', width: 640, height: 480 }],
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramFile).not.toHaveBeenCalled();
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({ contentType: 'image/jpeg', kind: 'image' });
+    expect(payload.media).not.toHaveProperty('buffer');
   });
 
   it('drops the bot\'s own messages (fromSelf) without calling processTelegramEvent', async () => {

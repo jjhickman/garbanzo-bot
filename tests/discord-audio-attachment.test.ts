@@ -130,6 +130,32 @@ describe('Discord audio attachment plumbing', () => {
       expect(payload.attachments.length).toBe(1);
     });
 
+    it('threads the first non-audio attachment with inferred media kind', async () => {
+      const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
+
+      const payload = mapMessageToPayload(createFakeMessage({
+        attachments: new Map<string, unknown>([
+          ['att-audio', {
+            url: 'https://cdn.discordapp.com/attachments/1/2/clip.ogg',
+            contentType: 'audio/ogg',
+            name: 'clip.ogg',
+          }],
+          ['att-image', {
+            url: 'https://cdn.discordapp.com/attachments/1/2/photo.png',
+            contentType: 'image/png',
+            name: 'photo.png',
+          }],
+        ]),
+      }));
+
+      expect(payload.media).toEqual({
+        url: 'https://cdn.discordapp.com/attachments/1/2/photo.png',
+        contentType: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      });
+    });
+
     it('leaves audio undefined when there are no attachments', async () => {
       const { mapMessageToPayload } = await import('../src/platforms/discord/gateway-client.js');
 
@@ -337,6 +363,27 @@ describe('Discord audio attachment plumbing', () => {
         botUserId: 'bot-user',
       });
       expect(processInboundMessage.mock.calls[0]?.[1].senderName).toBeUndefined();
+    });
+
+    it('threads gateway media metadata into InboundMessage', async () => {
+      const { adapter, module, processInboundMessage } = await setupProcessorCapture();
+      const media = {
+        url: 'https://cdn.discordapp.com/photo.png',
+        contentType: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      };
+
+      await module.processDiscordEvent(adapter, eventPayload({ media }), {
+        ownerId: 'owner-dm-channel',
+        ownerUserId: 'author-1',
+        botUserId: 'bot-user',
+      });
+
+      expect(processInboundMessage.mock.calls[0]?.[1]).toMatchObject({
+        media,
+        hasVisualMedia: true,
+      });
     });
   });
 });

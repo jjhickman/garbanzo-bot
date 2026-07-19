@@ -1,8 +1,5 @@
 import { z } from 'zod';
-import {
-  BRIDGE_MEDIA_MAX_BYTES_DEFAULT,
-  bridgeMediaMaxBytesSchema,
-} from '../utils/config/bridge.js';
+import { getBridgeMediaMaxBytes } from '../utils/config/bridge.js';
 
 export { BRIDGE_MEDIA_MAX_BYTES_DEFAULT } from '../utils/config/bridge.js';
 
@@ -42,14 +39,9 @@ export function bridgeMediaBase64MaxLength(maxBytes: number): number {
   return Math.ceil(maxBytes / 3) * 4 + BRIDGE_MEDIA_BASE64_LENGTH_SLACK;
 }
 
-function configuredBridgeMediaMaxBytes(): number {
-  const parsed = bridgeMediaMaxBytesSchema.safeParse(process.env.BRIDGE_MEDIA_MAX_BYTES);
-  return parsed.success ? parsed.data : BRIDGE_MEDIA_MAX_BYTES_DEFAULT;
-}
-
 export const BridgeMediaSchema = z.object({
   data: z.base64().min(1).refine(
-    (data) => data.length <= bridgeMediaBase64MaxLength(configuredBridgeMediaMaxBytes()),
+    (data) => data.length <= bridgeMediaBase64MaxLength(getBridgeMediaMaxBytes()),
     { message: 'Bridge media data exceeds BRIDGE_MEDIA_MAX_BYTES' },
   ),
   mimetype: z.enum(BRIDGE_MEDIA_MIME_TYPES),

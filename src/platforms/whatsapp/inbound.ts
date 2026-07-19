@@ -4,7 +4,7 @@ import {
   type WAMessageContent,
   normalizeMessageContent,
 } from '@whiskeysockets/baileys';
-import { hasVisualMedia } from './media.js';
+import { classifyWhatsAppMedia, hasVisualMedia } from './media.js';
 import { getSenderJid, isGroupJid, isLidJid } from '../../utils/jid.js';
 import type { InboundMessage } from '../../core/inbound-message.js';
 import type { MessageRef } from '../../core/message-ref.js';
@@ -149,6 +149,7 @@ export function normalizeWhatsAppInboundMessage(_sock: WASocket, msg: WAMessage)
     quotedText: extractWhatsAppQuotedText(content),
     mentionedIds: extractWhatsAppMentionedJids(content),
     hasVisualMedia: hasVisualMedia(msg),
+    media: classifyWhatsAppMedia(msg),
     waMessage: msg,
     raw: createWhatsAppInboundMessageRef(chatId, msg),
     content,

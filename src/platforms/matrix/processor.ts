@@ -30,6 +30,14 @@ const MatrixAudioSchema = z.object({
   buffer: z.instanceof(Buffer).optional(),
 });
 
+const MatrixMediaSchema = z.object({
+  url: z.string().optional(),
+  contentType: z.string(),
+  fileName: z.string().optional(),
+  buffer: z.instanceof(Buffer).optional(),
+  kind: z.enum(['image', 'video', 'document']),
+});
+
 const MatrixEventSchema = z.object({
   messageId: z.string(),
   roomId: z.string(),
@@ -42,6 +50,7 @@ const MatrixEventSchema = z.object({
   fromSelf: z.boolean().default(false),
   mentionedIds: z.array(z.string()).optional(),
   audio: MatrixAudioSchema.optional(),
+  media: MatrixMediaSchema.optional(),
 });
 
 type MatrixEvent = z.infer<typeof MatrixEventSchema>;
@@ -62,8 +71,9 @@ function normalizeMatrixInbound(event: MatrixEvent): MatrixInbound {
     text: event.text,
     quotedText: event.quotedText,
     mentionedIds: event.mentionedIds,
-    hasVisualMedia: false,
+    hasVisualMedia: Boolean(event.media),
     audio: event.audio,
+    media: event.media,
     raw: createMessageRef({
       platform: 'matrix',
       chatId: event.roomId,

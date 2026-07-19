@@ -13,6 +13,16 @@ export const bridgeMediaMaxBytesSchema = z.preprocess(
   )).default(BRIDGE_MEDIA_MAX_BYTES_DEFAULT),
 );
 
+export function isBridgeMediaEnabled(value: unknown = process.env.BRIDGE_MEDIA_ENABLED): boolean {
+  const parsed = booleanFromEnv.safeParse(value);
+  return parsed.success ? parsed.data : false;
+}
+
+export function getBridgeMediaMaxBytes(value: unknown = process.env.BRIDGE_MEDIA_MAX_BYTES): number {
+  const parsed = bridgeMediaMaxBytesSchema.safeParse(value);
+  return parsed.success ? parsed.data : BRIDGE_MEDIA_MAX_BYTES_DEFAULT;
+}
+
 export const bridgeSchema = z.object({
   INSTANCE_ID: optionalString,
   BRIDGE_ENABLED: booleanFromEnv.default(false),

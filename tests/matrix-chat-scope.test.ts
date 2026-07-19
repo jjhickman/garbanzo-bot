@@ -86,6 +86,26 @@ describe('Matrix processor chat-scope hook wiring', () => {
     expect(env?.shouldIngestGroupChat).toBeUndefined();
   });
 
+  it('normalizes m.image media into InboundMessage', async () => {
+    const { processInboundMessage } = mockProcessorDeps('configured');
+    const { processMatrixEvent } = await import('../src/platforms/matrix/processor.js');
+    const media = {
+      url: 'mxc://example.org/photo',
+      contentType: 'image/png',
+      fileName: 'photo.png',
+      kind: 'image',
+      buffer: Buffer.from([1, 2, 3]),
+    };
+
+    await processMatrixEvent(
+      { sendText: vi.fn(async () => undefined) } as never,
+      baseEvent({ text: '', media }),
+      { ownerId: '@owner:example.org', botUserId: '@garbanzo:example.org' },
+    );
+
+    expect(processInboundMessage.mock.calls[0]?.[1]).toMatchObject({ media, hasVisualMedia: true });
+  });
+
   it('defaults MATRIX_CHAT_SCOPE to configured in the real env schema', async () => {
     vi.resetModules();
     const { matrixSchema } = await import('../src/utils/config/matrix.js');

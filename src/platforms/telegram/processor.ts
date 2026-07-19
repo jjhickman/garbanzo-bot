@@ -29,6 +29,15 @@ const TelegramAudioSchema = z.object({
   url: z.string(),
   contentType: z.string(),
   buffer: z.instanceof(Buffer).optional(),
+  ptt: z.boolean().optional(),
+});
+
+const TelegramMediaSchema = z.object({
+  url: z.string().optional(),
+  contentType: z.string(),
+  fileName: z.string().optional(),
+  buffer: z.instanceof(Buffer).optional(),
+  kind: z.enum(['image', 'document']),
 });
 
 const TelegramEventSchema = z.object({
@@ -43,6 +52,7 @@ const TelegramEventSchema = z.object({
   fromSelf: z.boolean().default(false),
   mentionedIds: z.array(z.string()).optional(),
   audio: TelegramAudioSchema.optional(),
+  media: TelegramMediaSchema.optional(),
 });
 
 type TelegramEvent = z.infer<typeof TelegramEventSchema>;
@@ -63,8 +73,9 @@ function normalizeTelegramInbound(event: TelegramEvent): TelegramInbound {
     text: event.text,
     quotedText: event.quotedText,
     mentionedIds: event.mentionedIds,
-    hasVisualMedia: false,
+    hasVisualMedia: Boolean(event.media),
     audio: event.audio,
+    media: event.media,
     raw: createMessageRef({
       platform: 'telegram',
       chatId: event.chatId,

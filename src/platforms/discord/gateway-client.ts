@@ -45,6 +45,12 @@ interface DiscordMessagePayload {
   };
   attachments: unknown[];
   audio?: { url: string; contentType: string };
+  media?: {
+    url: string;
+    contentType: string;
+    fileName?: string;
+    kind: 'image' | 'video' | 'document';
+  };
 }
 
 type DiscordClientConstructor = new (options: { intents: unknown[] }) => DiscordClientLike;
@@ -207,11 +213,10 @@ function readAudioAttachment(attachments: unknown[]): { url: string; contentType
 
     const declaredContentType = readString(attachment, 'contentType') ?? readString(attachment, 'content_type');
     const filename = readString(attachment, 'name') ?? readString(attachment, 'filename');
-    const isDeclaredAudio = declaredContentType?.startsWith('audio/') ?? false;
     const inferredContentType = inferAudioContentTypeFromName(filename) ?? inferAudioContentTypeFromName(url);
 
-    if (isDeclaredAudio) {
-      return { url, contentType: declaredContentType! };
+    if (declaredContentType?.startsWith('audio/')) {
+      return { url, contentType: declaredContentType };
     }
 
     if (inferredContentType) {
@@ -225,6 +230,28 @@ function readAudioAttachment(attachments: unknown[]): { url: string; contentType
   return undefined;
 }
 
+function readMediaAttachment(attachments: unknown[]): DiscordMessagePayload['media'] {
+  for (const attachment of attachments) {
+    if (!isRecord(attachment)) continue;
+    const url = readString(attachment, 'url');
+    if (!url) continue;
+
+    const contentType = readString(attachment, 'contentType')
+      ?? readString(attachment, 'content_type')
+      ?? 'application/octet-stream';
+    const fileName = readString(attachment, 'name') ?? readString(attachment, 'filename');
+    if (contentType.startsWith('audio/') || inferAudioContentTypeFromName(fileName ?? url)) continue;
+
+    const kind = contentType.startsWith('image/')
+      ? 'image'
+      : contentType.startsWith('video/')
+        ? 'video'
+        : 'document';
+    return { url, contentType, ...(fileName ? { fileName } : {}), kind };
+  }
+  return undefined;
+}
+
 export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
   const record = isRecord(message) ? message : {};
   const author = readRecord(record, 'author') ?? {};
@@ -235,6 +262,7 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
   const referencedMessage = readReferencedMessage(record);
   const attachments = readCollectionValues(record.attachments);
   const audio = readAudioAttachment(attachments);
+  const media = readMediaAttachment(attachments);
   const authorGlobalName = readNonEmptyString(author, 'globalName')
     ?? readNonEmptyString(author, 'global_name');
   const authorUsername = readNonEmptyString(author, 'username');
@@ -263,6 +291,7 @@ export function mapMessageToPayload(message: unknown): DiscordMessagePayload {
     ...(memberDisplayName ? { member: { displayName: memberDisplayName } } : {}),
     attachments,
     ...(audio ? { audio } : {}),
+    ...(media ? { media } : {}),
   };
 }
 

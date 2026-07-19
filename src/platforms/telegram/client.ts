@@ -5,7 +5,15 @@ import { createTelegramAdapter } from './adapter.js';
 import { isTelegramChatEnabled } from './telegram-config.js';
 import { processTelegramEvent } from './processor.js';
 import { downloadTelegramVoice } from './telegram-voice.js';
+import { getBridgeMediaMaxBytes, isBridgeMediaEnabled } from '../../utils/config/bridge.js';
 import { buildTelegramWelcomeMessage } from './welcome.js';
+import {
+  mapTelegramMedia,
+  prepareTelegramMedia,
+  type RawTelegramDocument,
+  type RawTelegramPhoto,
+  type TelegramMappedMedia,
+} from './telegram-media.js';
 
 // ── Minimal raw Telegram Bot API shapes ────────────────────────────────
 // Deliberately hand-rolled (not imported from grammY's type tree) so the
@@ -42,6 +50,8 @@ export interface RawTelegramMessage {
   caption?: string;
   reply_to_message?: RawTelegramMessage;
   voice?: RawTelegramVoice;
+  photo?: RawTelegramPhoto[];
+  document?: RawTelegramDocument;
   new_chat_members?: RawTelegramUser[];
 }
 
@@ -67,6 +77,7 @@ export interface TelegramMappedMessage {
   fromSelf: boolean;
   mentionedIds: string[];
   voice?: { fileId: string; mimeType: string };
+  media?: TelegramMappedMedia;
 }
 
 function buildSenderName(from: RawTelegramUser | undefined): string | undefined {
@@ -127,6 +138,7 @@ export function mapTelegramMessageToPayload(
     voice: message.voice
       ? { fileId: message.voice.file_id, mimeType: message.voice.mime_type ?? 'audio/ogg' }
       : undefined,
+    media: mapTelegramMedia(message),
   };
 }
 
@@ -206,19 +218,26 @@ export function createTelegramClient(deps: TelegramClientDeps): {
       // here — isTelegramChatEnabled only tracks configured GROUP chats.
       const isDisabledGroupChat = mapped.isGroupChat && !isTelegramChatEnabled(mapped.chatId);
 
-      let audio: { url: string; contentType: string; buffer?: Buffer } | undefined;
+      let audio: { url: string; contentType: string; buffer?: Buffer; ptt?: boolean } | undefined;
       if (mapped.voice && !isDisabledGroupChat) {
-        const buffer = await downloadTelegramVoice(deps.token, mapped.voice.fileId);
+        const buffer = isBridgeMediaEnabled()
+          ? await downloadTelegramVoice(deps.token, mapped.voice.fileId, { maxBytes: getBridgeMediaMaxBytes() })
+          : await downloadTelegramVoice(deps.token, mapped.voice.fileId);
         audio = {
           // CREDENTIAL RULE: a safe, non-token-bearing placeholder — never
           // the real Telegram file URL. See telegram-voice.ts.
           url: `telegram-file:${mapped.voice.fileId}`,
           contentType: mapped.voice.mimeType,
+          ptt: true,
           ...(buffer ? { buffer } : {}),
         };
       }
 
-      await processTelegramEvent(adapter, { ...mapped, audio }, {
+      const media = mapped.media
+        ? await prepareTelegramMedia(deps.token, mapped.media, !isDisabledGroupChat)
+        : undefined;
+
+      await processTelegramEvent(adapter, { ...mapped, audio, media }, {
         ownerId: deps.ownerId,
         ownerUserId: deps.ownerUserId,
         botUserId: botIdentity.id !== undefined ? String(botIdentity.id) : undefined,

@@ -256,7 +256,7 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
   // moderation, recording, bridge capture — ever saw the message.
   function inboundArg(processInboundMessage: ReturnType<typeof vi.fn>) {
     return processInboundMessage.mock.calls[0]?.[1] as
-      | { text: string; synthesizedPlaceholder?: boolean }
+      | { text: string; synthesizedPlaceholder?: boolean; audio?: { buffer?: Buffer; ptt?: boolean } }
       | undefined;
   }
 
@@ -303,5 +303,6 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
     const inbound = inboundArg(processInboundMessage);
     expect(inbound?.text).toBe('hello from voice');
     expect(inbound?.synthesizedPlaceholder).toBeUndefined();
+    expect(inbound?.audio).toMatchObject({ buffer: Buffer.from([1]), ptt: true });
   });
 });

@@ -29,7 +29,7 @@ export interface CoreMessageHooks {
     // doc comment. Downstream consumers (e.g. the songwriting `!idea`
     // handler) prefer it over re-fetching `url`, which for Telegram is a
     // safe, non-fetchable placeholder.
-    audio?: { url: string; contentType: string; buffer?: Buffer };
+    audio?: { url: string; contentType: string; buffer?: Buffer; ptt?: boolean };
   }): Promise<void>;
 
   /** Continue into platform-specific owner DM handling. */
@@ -93,7 +93,7 @@ export async function processInboundMessage(
   }
 
   // Allow messages with visual media through even without text
-  const hasMedia = inbound.hasVisualMedia;
+  const hasMedia = inbound.hasVisualMedia || Boolean(inbound.audio) || Boolean(inbound.media);
   if (!inbound.text && !hasMedia) return;
 
   if (inbound.isGroupChat && env.shouldIngestGroupChat && !env.shouldIngestGroupChat(inbound.chatId)) return;

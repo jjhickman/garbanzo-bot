@@ -2,6 +2,7 @@ import type { ExecFileOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -101,6 +102,49 @@ describe('Media pipeline integration (mocked)', () => {
     expect(vision).toHaveLength(1);
     expect(vision[0]?.mediaType).toBe('image/png');
     expect(vision[0]?.description).toBe('Look at this');
+  });
+
+  it('classifies WhatsApp image media without downloading it', async () => {
+    const downloadMediaMessage = vi.fn(async () => Buffer.from('unused'));
+    vi.doMock('@whiskeysockets/baileys', () => ({
+      downloadMediaMessage,
+      getContentType: vi.fn(() => 'imageMessage'),
+      normalizeMessageContent: vi.fn((content: unknown) => content),
+    }));
+
+    vi.doMock('../src/core/groups-config.js', () => ({ getGroupName: vi.fn(() => 'Unknown Group') }));
+    const { normalizeWhatsAppInboundMessage } = await import('../src/platforms/whatsapp/inbound.js');
+    const inbound = normalizeWhatsAppInboundMessage({} as never, {
+      key: { id: 'm1', remoteJid: 'test@g.us' },
+      messageTimestamp: 1_800_000_000,
+      message: { imageMessage: { mimetype: 'image/png', caption: 'caption' } },
+    } as never);
+
+    expect(inbound?.media).toEqual({ contentType: 'image/png', kind: 'image' });
+    expect(downloadMediaMessage).not.toHaveBeenCalled();
+  });
+
+  it('bounds lazy WhatsApp bridge downloads while streaming', async () => {
+    const stream = Readable.from([Buffer.from([1, 2, 3]), Buffer.from([4, 5, 6])]);
+    const downloadMediaMessage = vi.fn(async () => stream);
+    vi.doMock('@whiskeysockets/baileys', () => ({
+      downloadMediaMessage,
+      getContentType: vi.fn(() => 'imageMessage'),
+      normalizeMessageContent: vi.fn((content: unknown) => content),
+    }));
+
+    const { downloadWhatsAppMedia } = await import('../src/platforms/whatsapp/media.js');
+    const result = await downloadWhatsAppMedia({
+      key: { id: 'm1', remoteJid: 'test@g.us' },
+      message: { imageMessage: { mimetype: 'image/png' } },
+    } as never, 5);
+
+    expect(result).toBeNull();
+    expect(downloadMediaMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      'stream',
+      { options: { signal: expect.any(AbortSignal) } },
+    );
   });
 
   it('extracts quoted image media from contextInfo', async () => {

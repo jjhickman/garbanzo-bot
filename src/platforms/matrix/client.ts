@@ -2,13 +2,14 @@ import { logger } from '../../middleware/logger.js';
 import { markConnected, markDisconnected } from '../../middleware/health.js';
 
 import { createMatrixAdapter, type MatrixSendClient } from './adapter.js';
-import { downloadMatrixAudio } from './matrix-media.js';
+import { downloadMatrixAudio, downloadMatrixMedia } from './matrix-media.js';
 import type { MatrixMediaClient } from './matrix-media.js';
 import { isMatrixRoomEnabled } from './matrix-config.js';
 import { processMatrixEvent } from './processor.js';
 import { buildMatrixWelcomeMessage } from './welcome.js';
 import { createMatrixStorageProvider, type MatrixStorageProvider } from './sync-storage.js';
 import type { MatrixOwnerClient } from './matrix-owner.js';
+import { getBridgeMediaMaxBytes, isBridgeMediaEnabled } from '../../utils/config/bridge.js';
 
 export interface RawMatrixMessageContent {
   msgtype?: string;
@@ -17,7 +18,7 @@ export interface RawMatrixMessageContent {
   format?: string;
   url?: string;
   filename?: string;
-  info?: { mimetype?: string };
+  info?: { mimetype?: string; size?: number };
   membership?: string;
   'm.relates_to'?: {
     'm.in_reply_to'?: { event_id?: string };
@@ -49,6 +50,13 @@ export interface MatrixMappedMessage {
   fromSelf: boolean;
   mentionedIds: string[];
   audio?: { mxcUrl: string; mimeType: string };
+  media?: {
+    mxcUrl: string;
+    mimeType: string;
+    fileName: string;
+    kind: 'image' | 'video' | 'document';
+    size?: number;
+  };
 }
 
 export interface MatrixClientLike extends MatrixSendClient, MatrixMediaClient {
@@ -188,7 +196,7 @@ export function mapMatrixMessageToPayload(
   const content = event.content;
   if (!content) return null;
   const msgtype = content.msgtype;
-  if (msgtype !== 'm.text' && msgtype !== 'm.audio') return null;
+  if (!['m.text', 'm.audio', 'm.image', 'm.file', 'm.video'].includes(msgtype ?? '')) return null;
 
   const textParts = contentText(content);
   // m.audio's body is the FILENAME (or a fallback label like "voice"), not a
@@ -197,10 +205,14 @@ export function mapMatrixMessageToPayload(
   // a real caption only when a separate `filename` field exists and differs
   // from body; everything else clears to empty so the audio path runs.
   const isAudio = msgtype === 'm.audio';
+  const isMedia = msgtype === 'm.image' || msgtype === 'm.file' || msgtype === 'm.video';
   const audioCaption = isAudio && content.filename && content.body !== content.filename
     ? textParts.text
     : '';
-  const text = isAudio ? audioCaption : textParts.text;
+  const mediaCaption = isMedia && content.filename && content.body !== content.filename
+    ? textParts.text
+    : '';
+  const text = isAudio ? audioCaption : isMedia ? mediaCaption : textParts.text;
   const senderId = event.sender ?? '';
   const mentionedIds = new Set<string>(content['m.mentions']?.user_ids ?? []);
   if (mentionsBot(text, bot.userId, bot.displayName)) {
@@ -231,6 +243,15 @@ export function mapMatrixMessageToPayload(
     mentionedIds: Array.from(mentionedIds),
     audio: msgtype === 'm.audio' && content.url
       ? { mxcUrl: content.url, mimeType: content.info?.mimetype ?? 'audio/ogg' }
+      : undefined,
+    media: isMedia && content.url
+      ? {
+        mxcUrl: content.url,
+        mimeType: content.info?.mimetype ?? 'application/octet-stream',
+        fileName: content.filename ?? content.body ?? 'attachment',
+        kind: msgtype === 'm.image' ? 'image' : msgtype === 'm.video' ? 'video' : 'document',
+        ...(content.info?.size === undefined ? {} : { size: content.info.size }),
+      }
       : undefined,
   };
 }
@@ -289,7 +310,14 @@ export function createMatrixClient(deps: MatrixClientDeps): {
       let audio: { url: string; contentType: string; buffer?: Buffer } | undefined;
       if (mapped.audio && !isDisabledGroupRoom) {
         const matrixClient = await getClient();
-        const buffer = await downloadMatrixAudio(matrixClient, deps.accessToken, mapped.audio.mxcUrl);
+        const buffer = isBridgeMediaEnabled()
+          ? await downloadMatrixAudio(
+            matrixClient,
+            deps.accessToken,
+            mapped.audio.mxcUrl,
+            getBridgeMediaMaxBytes(),
+          )
+          : await downloadMatrixAudio(matrixClient, deps.accessToken, mapped.audio.mxcUrl);
         audio = {
           // Safe mxc URI only; access tokens stay inside the SDK's
           // Authorization headers and are never embedded into URLs.
@@ -299,7 +327,31 @@ export function createMatrixClient(deps: MatrixClientDeps): {
         };
       }
 
-      await processMatrixEvent(adapter(), { ...mapped, audio }, {
+      let media: {
+        url: string;
+        contentType: string;
+        fileName: string;
+        kind: 'image' | 'video' | 'document';
+        buffer?: Buffer;
+      } | undefined;
+      if (mapped.media) {
+        const maxBytes = getBridgeMediaMaxBytes();
+        const canDownload = isBridgeMediaEnabled()
+          && !isDisabledGroupRoom
+          && (mapped.media.size === undefined || mapped.media.size <= maxBytes);
+        const buffer = canDownload
+          ? await downloadMatrixMedia(await getClient(), deps.accessToken, mapped.media.mxcUrl, maxBytes)
+          : null;
+        media = {
+          url: mapped.media.mxcUrl,
+          contentType: mapped.media.mimeType,
+          fileName: mapped.media.fileName,
+          kind: mapped.media.kind,
+          ...(buffer ? { buffer } : {}),
+        };
+      }
+
+      await processMatrixEvent(adapter(), { ...mapped, audio, media }, {
         ownerId: deps.ownerId,
         ownerRoomId,
         botUserId: identity.userId,
