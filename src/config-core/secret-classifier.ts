@@ -214,10 +214,12 @@ export const KNOWN_SCHEMA_KEYS: readonly string[] = Object.freeze(schemaKeys);
 const SECRET_NAME_HEURISTIC = /(?:^|_)(?:TOKEN|KEY|SECRET|PASSWORD|PASS)$/i;
 const SENSITIVE_QUERY_PARAM = /(?:^|[_-])(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|key|secret|password|passwd|pass)(?:$|[_-])/i;
 
+const PUBLIC_JSON_SCALAR_ARRAY_KEYS = ['mentionPatterns', 'bandRoleIds', 'enabledFeatures', 'features', 'chats'] as const;
 const PUBLIC_JSON_KEYS = new Set([
-  '_comment', '_comment_embedding_models', 'groups', 'mentionPatterns', 'admins', 'owner', 'moderators',
-  'name', 'enabled', 'requireMention', 'enabledFeatures', 'persona', 'ownerId', 'bandRoleIds',
-  'introductionsChannelId', 'eventsChannelId', 'channels', 'features', 'chats', 'rooms', 'alias', 'sources',
+  ...PUBLIC_JSON_SCALAR_ARRAY_KEYS,
+  '_comment', '_comment_embedding_models', 'groups', 'admins', 'owner', 'moderators',
+  'name', 'enabled', 'requireMention', 'persona', 'ownerId',
+  'introductionsChannelId', 'eventsChannelId', 'channels', 'rooms', 'alias', 'sources',
   'id', 'label', 'collection', 'textField', 'embedding', 'provider', 'model', 'dimensions', 'maxHits',
   'minScore', 'instances', 'routes', 'platform', 'direction', 'from', 'modeToWhatsApp', 'modeToDiscord',
   'relayCommands', 'ingestRelayed', 'instance', 'chatId', 'url',
@@ -261,8 +263,8 @@ export function hasCredentialsInUrl(value: string): boolean {
 }
 
 export function isJsonSecretPath(path: readonly string[], value: unknown): boolean {
-  const key = path.at(-1) ?? '';
-  if (/^(?:jid|api.?key|token|secret|password|passwd|pass)$/i.test(key)) return true;
+  const key = [...path].reverse().find((segment) => !/^\d+$/.test(segment)) ?? '';
+  if (/^(?:jid|api.?key|tokens?|secret|password|passwd|pass)$/i.test(key)) return true;
   if (!PUBLIC_JSON_KEYS.has(key)) return true;
   return typeof value === 'string' && hasCredentialsInUrl(value);
 }

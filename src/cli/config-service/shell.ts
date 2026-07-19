@@ -3,6 +3,10 @@ import { extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="#f5f1e8"/><path d="M20 10c9-5 24 1 28 13 4 13-2 27-15 31-12 4-23-3-25-15-2-11 4-23 12-29Z" fill="#73a942"/>
+<path d="M20 18c4 7 2 13-4 18m27-14c-7 3-11 9-11 18m-14 7c7-4 14-3 20 2" fill="none" stroke="#31572c" stroke-width="4" stroke-linecap="round"/>
+</svg>`;
 
 const DEFAULT_WEB_DIST = fileURLToPath(new URL('../../../web/dist/', import.meta.url));
 const FALLBACK_HTML = `<!doctype html>

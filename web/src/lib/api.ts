@@ -19,7 +19,19 @@ export interface ConfigSnapshot {
   fileMtimes: Record<string, number | null>;
   fileHashes: Record<string, string | null>;
   env: Record<string, EnvValue>;
-  files: Record<string, { value: unknown; mtimeMs: number } | null>;
+  files: Record<string, ConfigFileSnapshot | null>;
+}
+
+export interface ConfigFileSnapshot<T = unknown> {
+  value: T;
+  mtimeMs: number;
+  sha256: string | null;
+}
+
+export interface ConfigFileUpdate<T = unknown> {
+  mtimeMs: number;
+  sha256: string | null;
+  value: T;
 }
 
 export interface ConfigUpdate {
@@ -163,8 +175,8 @@ export const putConfig = (update: ConfigUpdate): Promise<{ ok: true; mtimeMs: nu
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(update),
 });
-export const getConfigFile = <T = unknown>(name: string): Promise<T> => authenticated(`/api/config-file/${encodeURIComponent(name)}`);
-export const putConfigFile = <T = unknown>(name: string, body: T): Promise<{ ok: true; mtimeMs: number }> => authenticated(`/api/config-file/${encodeURIComponent(name)}`, {
+export const getConfigFile = <T = unknown>(name: string): Promise<ConfigFileSnapshot<T>> => authenticated(`/api/config-file/${encodeURIComponent(name)}`);
+export const putConfigFile = <T = unknown>(name: string, body: ConfigFileUpdate<T>): Promise<{ ok: true; mtimeMs: number; sha256: string }> => authenticated(`/api/config-file/${encodeURIComponent(name)}`, {
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
 export const validateConfig = (body: unknown): Promise<{ ok: boolean; issues: unknown[] }> => authenticated('/api/validate', {
