@@ -189,6 +189,29 @@ describe('existing configuration editor (jsdom)', () => {
     });
   });
 
+  it('allows editing and saving the bridge map', async () => {
+    await render();
+    await click('Config files');
+    await click('Bridge Map');
+    const textarea = document.querySelector<HTMLTextAreaElement>('textarea[name="config-json"]');
+    if (!textarea) throw new Error('config JSON textarea did not render');
+    expect(textarea.readOnly).toBe(false);
+    expect(document.body.textContent).not.toContain('editing is deferred');
+
+    const value = {
+      instances: [{ id: 'discord-main', platform: 'discord', url: 'http://discord:${DISCORD_HEALTH_PORT:-3002}' }],
+      routes: [],
+    };
+    textarea.value = JSON.stringify(value);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await click('Save config file');
+    expect(apiMocks.putConfigFile).toHaveBeenCalledWith('bridge-map', {
+      mtimeMs: 23,
+      sha256: 'bridge-map-hash',
+      value,
+    });
+  });
+
   it('renders streamed apply output and the terminal session message', async () => {
     await render();
     await click('Apply');

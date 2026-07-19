@@ -44,6 +44,9 @@ function redactFile(path: string, content: string): string {
   if (/^\.env(?:\.|$)/.test(path)) return redactEnvContent(content);
   if (path.startsWith('config/') && path.endsWith('.json')) {
     try {
+      // Bridge-map topology and placeholder URLs are public config, so they
+      // export unchanged. The shared masker still redacts any URL that embeds
+      // credentials or sensitive query parameters.
       return `${JSON.stringify(maskJsonSecrets(JSON.parse(content) as unknown), null, 2)}\n`;
     } catch {
       return `${JSON.stringify({ __redacted_unparseable__: true }, null, 2)}\n`;
@@ -53,9 +56,9 @@ function redactFile(path: string, content: string): string {
 }
 
 export function buildExportBundle(root: string, sourceOverrides: Record<string, string> = {}): ConfigBundle {
-  const paths = new Set(walk(root).filter((path) => path !== 'config/bridge-map.json'));
+  const paths = new Set(walk(root));
   for (const [logicalPath, source] of Object.entries(sourceOverrides)) {
-    if (logicalPath !== 'config/bridge-map.json' && existsSync(source)) paths.add(logicalPath);
+    if (existsSync(source)) paths.add(logicalPath);
   }
   const files = Object.fromEntries([...paths].map((path) => {
     const content = readFileSync(sourceOverrides[path] ?? resolve(root, path), 'utf8');

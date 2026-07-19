@@ -103,6 +103,13 @@ plain HTTP with no extra containers.
    `BRIDGE_ENABLED=true` and an empty map, the bridge starts but has nothing
    to relay.
 
+   The host configuration editor opened by `garbanzo config` can edit this
+   file with the same mtime and checksum safeguards used for other JSON
+   configuration. Validation expands `${VAR}` and `${VAR:-default}` URL
+   placeholders in memory, while the file keeps the placeholders as entered.
+   Configuration exports include the bridge map. Topology fields and normal
+   placeholder URLs remain visible; a URL that embeds credentials is masked.
+
    The schema has two top-level arrays:
 
    - **`instances`** - one entry per bridged deployment:
@@ -202,10 +209,14 @@ plain HTTP with no extra containers.
    read-only into platform services, so no compose edit is needed for the
    standard profiles; only the file content changes.
 
-3. **Restart both instances:**
+3. **Recreate the configured platform services:**
+
+   The configuration editor's Apply action selects each configured platform
+   represented by `instances[].platform` in the saved map. For a manual
+   two-platform deployment, run:
 
    ```bash
-   docker compose restart discord whatsapp
+   docker compose up -d discord whatsapp
    ```
 
 4. **Verify:**

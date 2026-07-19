@@ -12,8 +12,11 @@ import {
   captureBundlePreconditions,
   IMPORT_LIMITS,
   restoreJsonPlaceholders,
+  stageBundle,
   validateBundleLimits,
 } from '../src/cli/config-service/bundle.js';
+import { deriveConfigFileApplyTargets } from '../src/cli/config-service/index.js';
+import { maskJsonSecrets, validateConfigFile } from '../src/cli/config-service/json-config.js';
 import { parseConfig } from '../src/utils/config/parse-config.js';
 import { parse as parseDotenv } from 'dotenv';
 import { runWizard } from '../src/cli/config-service/wizard.js';
@@ -28,6 +31,92 @@ describe('config service core operations', () => {
   };
 
   afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
+
+  const bridgeMap = () => ({
+    instances: [
+      { id: 'discord-main', platform: 'discord', url: 'http://discord:${DISCORD_HEALTH_PORT:-3002}' },
+      { id: 'discord-backup', platform: 'discord', url: 'http://discord-backup:${DISCORD_BACKUP_HEALTH_PORT:-3012}' },
+      { id: 'whatsapp-main', platform: 'whatsapp', url: 'http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}' },
+      { id: 'telegram-main', platform: 'telegram', url: 'http://telegram:${TELEGRAM_HEALTH_PORT:-3005}' },
+    ],
+    routes: [{
+      id: 'community-main',
+      endpoints: [
+        { instance: 'discord-main', chatId: 'discord-channel' },
+        { instance: 'whatsapp-main', chatId: 'whatsapp-group' },
+      ],
+      direction: 'both',
+      modeToWhatsApp: 'summary',
+      modeToDiscord: 'verbatim',
+      relayCommands: false,
+      ingestRelayed: false,
+    }],
+  });
+
+  const firstBridgeRoute = (raw: ReturnType<typeof bridgeMap>): ReturnType<typeof bridgeMap>['routes'][number] => {
+    const route = raw.routes[0];
+    if (!route) throw new Error('bridge-map fixture has no route');
+    return route;
+  };
+
+  const bridgeInstance = (
+    raw: ReturnType<typeof bridgeMap>,
+    index: number,
+  ): ReturnType<typeof bridgeMap>['instances'][number] => {
+    const instance = raw.instances[index];
+    if (!instance) throw new Error(`bridge-map fixture has no instance ${index}`);
+    return instance;
+  };
+
+  it('validates expanded bridge-map placeholders without mutating the raw document', () => {
+    const raw = bridgeMap();
+    const before = JSON.stringify(raw);
+
+    expect(validateConfigFile('bridge-map', raw)).toEqual([]);
+    expect(JSON.stringify(raw)).toBe(before);
+    expect(raw.instances[0]?.url).toBe('http://discord:${DISCORD_HEALTH_PORT:-3002}');
+  });
+
+  it.each([
+    ['unknown endpoint instance', (raw: ReturnType<typeof bridgeMap>) => {
+      const endpoint = firstBridgeRoute(raw).endpoints[1];
+      if (!endpoint) throw new Error('bridge-map fixture has fewer than two endpoints');
+      endpoint.instance = 'missing-instance';
+    }, /routes entry \(id "community-main"\).*Unknown bridge instance: missing-instance/],
+    ['fewer than two endpoints', (raw: ReturnType<typeof bridgeMap>) => {
+      const route = firstBridgeRoute(raw);
+      route.endpoints = route.endpoints.slice(0, 1);
+    }, /routes entry \(id "community-main"\).*>=2 items/i],
+    ['bad direction', (raw: ReturnType<typeof bridgeMap>) => {
+      (firstBridgeRoute(raw) as { direction: string }).direction = 'sideways';
+    }, /routes entry \(id "community-main"\).*direction/i],
+    ['duplicate ids', (raw: ReturnType<typeof bridgeMap>) => {
+      bridgeInstance(raw, 1).id = 'discord-main';
+    }, /instances entry \(id "discord-main"\).*Duplicate instance id: discord-main/],
+  ])('returns an actionable bridge-map issue for %s', (_label, mutate, expected) => {
+    const raw = bridgeMap();
+    mutate(raw);
+
+    expect(validateConfigFile('bridge-map', raw).map((issue) => issue.message).join('\n')).toMatch(expected);
+  });
+
+  it('keeps credential-free bridge maps visible and masks credential-bearing URLs', () => {
+    const raw = bridgeMap();
+    expect(maskJsonSecrets(raw)).toEqual(raw);
+
+    bridgeInstance(raw, 0).url = 'http://bridge-user:credential-canary@discord:3002';
+    const masked = maskJsonSecrets(raw) as { instances: Array<{ url: unknown }> };
+    expect(masked.instances[0]?.url).toEqual({ set: true });
+  });
+
+  it('derives bridge-map apply targets from configured instance platforms', () => {
+    expect(deriveConfigFileApplyTargets('bridge-map', bridgeMap(), ['discord', 'telegram'])).toEqual([
+      'discord',
+      'telegram',
+    ]);
+    expect(deriveConfigFileApplyTargets('groups', {}, ['discord', 'whatsapp'])).toEqual(['whatsapp']);
+    expect(deriveConfigFileApplyTargets('matrix-rooms', {}, ['matrix'])).toEqual(['matrix']);
+  });
 
   it('exports only secret-masked config content and audits secret changes safely', () => {
     const root = tempRoot();
@@ -83,12 +172,27 @@ describe('config service core operations', () => {
       .toThrow(/identity/i);
   });
 
-  it('omits the read-only bridge map and binds import confirmation to target content', () => {
+  it('exports and imports the bridge map while binding confirmation to target content', () => {
     const root = tempRoot();
     mkdirSync(join(root, 'config'), { recursive: true });
-    writeFileSync(join(root, 'config', 'bridge-map.json'), '{"routes":[]}\n');
+    const raw = `${JSON.stringify(bridgeMap(), null, 2)}\n`;
+    writeFileSync(join(root, 'config', 'bridge-map.json'), raw);
     writeFileSync(join(root, '.env'), 'MESSAGING_PLATFORM=discord\n');
-    expect(buildExportBundle(root).files['config/bridge-map.json']).toBeUndefined();
+    const exported = buildExportBundle(root);
+    const exportedBridge = exported.files['config/bridge-map.json'];
+    expect(exportedBridge).toBe(raw);
+    if (exportedBridge === undefined) throw new Error('bridge map missing from export');
+
+    const importedRoot = tempRoot();
+    const staged = stageBundle(importedRoot, exported);
+    const bridgeOnly = {
+      format: exported.format,
+      files: { 'config/bridge-map.json': exportedBridge },
+    };
+    const bridgePreconditions = captureBundlePreconditions(importedRoot, bridgeOnly);
+    expect(bundlePreconditionsMatch(importedRoot, bridgePreconditions)).toBe(true);
+    applyStagedBundle(importedRoot, staged.dir);
+    expect(readFileSync(join(importedRoot, 'config', 'bridge-map.json'), 'utf8')).toBe(raw);
 
     const bundle = { format: 'garbanzo-config-bundle-v1' as const, files: { '.env': 'MESSAGING_PLATFORM=discord\nLOG_LEVEL=debug\n' } };
     const preconditions = captureBundlePreconditions(root, bundle);

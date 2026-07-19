@@ -48,6 +48,7 @@ import {
   maskJsonSecrets,
   validateConfigFile,
   zodIssues,
+  type ConfigFileName,
 } from './json-config.js';
 import { createSpaAssets, CSP, FAVICON_SVG } from './shell.js';
 import { runWizard } from './wizard.js';
@@ -228,6 +229,29 @@ function readConfigFiles(root: string): Record<string, { value: unknown; masked:
   }));
 }
 
+export function deriveConfigFileApplyTargets(
+  name: ConfigFileName,
+  value: unknown,
+  configuredPlatforms: readonly string[],
+): string[] {
+  if (name !== 'bridge-map') return [name === 'groups' ? 'whatsapp' : name.split('-')[0] ?? 'all'];
+
+  const configured = new Set(configuredPlatforms.filter((platform) => MESSAGING_PLATFORMS.includes(platform)));
+  const instances = value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as { instances?: unknown }).instances
+    : undefined;
+  if (!Array.isArray(instances)) return [];
+
+  const targets = new Set<string>();
+  for (const instance of instances) {
+    const platform = instance && typeof instance === 'object' && !Array.isArray(instance)
+      ? (instance as { platform?: unknown }).platform
+      : undefined;
+    if (typeof platform === 'string' && configured.has(platform)) targets.add(platform);
+  }
+  return [...targets];
+}
+
 function validateWizardArgs(value: unknown): { args: string[] } | { error: string } {
   if (value === undefined) return { args: [] };
   if (!Array.isArray(value)) return { error: 'wizard args must be an array of strings' };
@@ -391,7 +415,7 @@ function validateCandidates(root: string, payload: JsonRecord): Array<unknown> {
   }
   if (payload.files && typeof payload.files === 'object' && !Array.isArray(payload.files)) {
     for (const [name, value] of Object.entries(payload.files as Record<string, unknown>)) {
-      if (!isConfigFileName(name) || name === 'bridge-map') continue;
+      if (!isConfigFileName(name)) continue;
       issues.push(...zodIssues(validateConfigFile(name, value)).map((issue) => ({ ...issue, file: name })));
     }
   }
@@ -406,10 +430,6 @@ function validateImportBundle(root: string, bundle: ConfigBundle): unknown[] {
     const match = path.match(/^config\/([^/]+)\.json$/);
     if (!match) continue;
     const name = match[1] ?? '';
-    if (name === 'bridge-map') {
-      issues.push({ file: path, message: 'bridge-map is read-only in v3.4.0 and omitted from v1 exports' });
-      continue;
-    }
     if (!isConfigFileName(name)) continue;
     try {
       const target = configFilePath(root, name);
@@ -603,10 +623,6 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           json(res, 404, { error: 'unknown-config-file' });
           return;
         }
-        if (name === 'bridge-map') {
-          json(res, 422, { error: 'bridge-map is read-only in v3.4.0; editing is deferred' });
-          return;
-        }
         const { value: payload } = await readJson(req);
         const path = configFilePath(root, name);
         const currentContent = existsSync(path) ? readFileSync(path) : null;
@@ -641,7 +657,9 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           action: 'config-file-update', target: `config/${name}.json`, sourceIp: req.socket.remoteAddress,
           changes: [{ key: name, before, after: maskJsonSecrets(resultingValue) }],
         });
-        changedTargets.add(name === 'groups' ? 'whatsapp' : name.split('-')[0] ?? 'all');
+        for (const target of deriveConfigFileApplyTargets(name, resultingValue, discover(root).platforms as string[])) {
+          changedTargets.add(target);
+        }
         const written = readFileSync(path);
         json(res, 200, { ok: true, mtimeMs: statSync(path).mtimeMs, sha256: sha256(written) });
         return;
