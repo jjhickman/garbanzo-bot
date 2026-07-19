@@ -90,6 +90,24 @@ describe('createRelayDeliverer', () => {
     expect(getLifetimeCounters().bridgeDeliveryLatencyByRoute.get('route-1')?.maxSeconds).toBeGreaterThanOrEqual(0);
   });
 
+  it('continues to deliver the text field of a v2 media envelope', async () => {
+    const { deliver, sendText } = deliverer({ platform: 'discord' });
+    const mediaEnvelope = envelope({
+      v: 2,
+      text: 'caption still relays',
+      media: {
+        data: Buffer.from('small image').toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
+
+    await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): caption still relays');
+  });
+
   it('includes origin chat display name in attribution when present', async () => {
     const { deliver, sendText } = deliverer({ platform: 'discord' });
 

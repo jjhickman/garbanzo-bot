@@ -74,6 +74,8 @@ export const SHARED_FIELDS: readonly RawSetupField[] = [
   { env: 'BRIDGE_BROKER_PASSWORD', cli: 'bridge-broker-password', default: '', secret: true },
   { env: 'BRIDGE_SUMMARY_INTERVAL_MINUTES', cli: 'bridge-summary-interval-minutes', default: '' },
   { env: 'BRIDGE_MAX_TEXT', cli: 'bridge-max-text', default: '' },
+  { env: 'BRIDGE_MEDIA_ENABLED', cli: 'bridge-media-enabled', default: '' },
+  { env: 'BRIDGE_MEDIA_MAX_BYTES', cli: 'bridge-media-max-bytes', default: '' },
   { env: 'SHARED_MEMORY_ENABLED', cli: 'shared-memory-enabled', default: '' },
   { env: 'QDRANT_SHARED_COLLECTION', cli: 'qdrant-shared-collection', default: '' },
 ];
@@ -218,6 +220,8 @@ export function buildSharedEnvLines(values: EnvValues): string[] {
     envLine(values, 'BRIDGE_BROKER_PASSWORD'),
     envLine(values, 'BRIDGE_SUMMARY_INTERVAL_MINUTES'),
     envLine(values, 'BRIDGE_MAX_TEXT'),
+    envLine(values, 'BRIDGE_MEDIA_ENABLED'),
+    envLine(values, 'BRIDGE_MEDIA_MAX_BYTES'),
     envLine(values, 'SHARED_MEMORY_ENABLED'),
     envLine(values, 'QDRANT_SHARED_COLLECTION'),
     '',

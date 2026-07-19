@@ -54,6 +54,7 @@ describe('bridge map config', () => {
       modeToDiscord: 'verbatim',
       relayCommands: false,
       ingestRelayed: false,
+      mediaRelay: false,
     });
   });
 
@@ -137,6 +138,15 @@ describe('bridge map config', () => {
     });
 
     expect(parsed.routes[0]?.ingestRelayed).toBe(true);
+  });
+
+  it('parses routes that opt in to media relay', () => {
+    const parsed = BridgeMapSchema.parse({
+      ...validMap,
+      routes: [{ ...validMap.routes[0], mediaRelay: true }],
+    });
+
+    expect(parsed.routes[0]?.mediaRelay).toBe(true);
   });
 
   it('rejects duplicate instance ids', () => {

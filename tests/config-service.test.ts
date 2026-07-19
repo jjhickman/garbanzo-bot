@@ -240,6 +240,7 @@ describe('host config service mutations', () => {
         modeToDiscord: 'verbatim',
         relayCommands: false,
         ingestRelayed: false,
+        mediaRelay: true,
       }],
     });
 

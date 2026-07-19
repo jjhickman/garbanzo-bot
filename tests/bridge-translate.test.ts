@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parseBridgeEnvelope, buildIdempotencyKey, BridgeEnvelopeSchema } from '../src/bridge/envelope.js';
+import {
+  BRIDGE_MEDIA_MAX_BYTES_DEFAULT,
+  BridgeEnvelopeSchema,
+  bridgeMediaBase64MaxLength,
+  buildIdempotencyKey,
+  envelopeSupportsMedia,
+  parseBridgeEnvelope,
+} from '../src/bridge/envelope.js';
 import { translateFormatting } from '../src/bridge/format-translate.js';
 
 describe('translateFormatting', () => {
@@ -134,6 +141,13 @@ describe('BridgeEnvelopeSchema', () => {
     sentAtMs: 1_788_221_000_000,
     idempotencyKey: '["whatsapp-community","chat-1","message-1","discord-community","channel-1"]',
   } as const;
+  const validMedia = {
+    data: Buffer.from('test image').toString('base64'),
+    mimetype: 'image/png',
+    fileName: 'photo.png',
+    kind: 'image',
+    ptt: false,
+  } as const;
 
   it('accepts a valid bridge envelope and preserves its fields', () => {
     const parsed = BridgeEnvelopeSchema.parse(validEnvelope);
@@ -153,7 +167,7 @@ describe('BridgeEnvelopeSchema', () => {
   });
 
   it('rejects unsupported versions, missing fields, and empty strings', () => {
-    expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, v: 2 }).success).toBe(false);
+    expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, v: 3 }).success).toBe(false);
     expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, routeId: '' }).success).toBe(false);
 
     const { targetChatId: _targetChatId, ...missingTargetChatId } = validEnvelope;
@@ -165,6 +179,38 @@ describe('BridgeEnvelopeSchema', () => {
         origin: { ...validEnvelope.origin, chatId: '' },
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects media on a v1 envelope', () => {
+    expect(BridgeEnvelopeSchema.safeParse({ ...validEnvelope, media: validMedia }).success).toBe(false);
+  });
+
+  it('accepts allowlisted media within the configured cap on a v2 envelope', () => {
+    const envelope = { ...validEnvelope, v: 2, media: validMedia } as const;
+    const parsed = BridgeEnvelopeSchema.parse(envelope);
+
+    expect(parsed).toEqual(envelope);
+    expect(envelopeSupportsMedia(parsed)).toBe(true);
+  });
+
+  it('rejects v2 media whose base64 data exceeds the configured cap', () => {
+    const overLimitData = 'A'.repeat(
+      bridgeMediaBase64MaxLength(BRIDGE_MEDIA_MAX_BYTES_DEFAULT) + 4,
+    );
+
+    expect(BridgeEnvelopeSchema.safeParse({
+      ...validEnvelope,
+      v: 2,
+      media: { ...validMedia, data: overLimitData },
+    }).success).toBe(false);
+  });
+
+  it('rejects v2 media with a non-allowlisted mimetype', () => {
+    expect(BridgeEnvelopeSchema.safeParse({
+      ...validEnvelope,
+      v: 2,
+      media: { ...validMedia, mimetype: 'image/svg+xml' },
+    }).success).toBe(false);
   });
 
   it('builds idempotency keys from origin and target identity', () => {

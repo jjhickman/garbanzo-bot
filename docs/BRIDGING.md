@@ -33,6 +33,8 @@ enabled it are unaffected.
 | `BRIDGE_BROKER_URL` | unset | Required when `BRIDGE_TRANSPORT=amqp` |
 | `BRIDGE_SUMMARY_INTERVAL_MINUTES` | `15` | How often the WhatsApp digest flusher runs |
 | `BRIDGE_MAX_TEXT` | `1500` | Max characters per relayed/digest message |
+| `BRIDGE_MEDIA_ENABLED` | `false` | Instance-wide opt-in for bridged media payloads; routes must also enable `mediaRelay` |
+| `BRIDGE_MEDIA_MAX_BYTES` | `8388608` | Max decoded media payload size; clamped to 65536-20971520 bytes |
 | `SHARED_MEMORY_ENABLED` | `false` | Master switch for Tier 1 shared memory |
 | `QDRANT_SHARED_COLLECTION` | `garbanzo_shared` | Qdrant collection used for shared facts |
 | `QDRANT_COLLECTION` | `garbanzo_memory`, or `garbanzo_memory_<INSTANCE_ID>` when `INSTANCE_ID` is set and this is left unset | Local Qdrant collection for this instance's own facts (see [Local memory isolation](#local-memory-isolation)) |
@@ -171,6 +173,10 @@ plain HTTP with no extra containers.
        to that receiving bot's later context/memory flow, so only enable it
        for routes where both sides should inform the receiver's local context.
        Summary-mode digests and held/buffered sends are never ingested.
+     - `mediaRelay` - `false` by default. Media re-upload is permitted only
+       when this route option and the instance-wide `BRIDGE_MEDIA_ENABLED`
+       flag are both true. The media byte cap is controlled by
+       `BRIDGE_MEDIA_MAX_BYTES` (8 MiB by default).
 
    Example, bridging one conversation group across Discord, WhatsApp,
    Telegram, and Matrix:
@@ -196,7 +202,8 @@ plain HTTP with no extra containers.
          "modeToWhatsApp": "summary",
          "modeToDiscord": "verbatim",
          "relayCommands": false,
-         "ingestRelayed": false
+         "ingestRelayed": false,
+         "mediaRelay": false
        }
      ]
    }

@@ -100,6 +100,7 @@ export interface AdminBridgeRouteRow {
   endpointB: string;
   direction: BridgeRoute['direction'];
   ingestRelayed: boolean;
+  mediaRelay: boolean;
 }
 
 export interface AdminBridgeSection {
@@ -203,6 +204,7 @@ function buildBridgesSection(
       endpointB: bridgeEndpointLabel(route.endpoints[1]),
       direction: route.direction,
       ingestRelayed: route.ingestRelayed,
+      mediaRelay: route.mediaRelay,
     }))
     : [];
 
@@ -346,15 +348,15 @@ function renderBridgesSection(bridges: AdminBridgeSection): string {
   }
 
   const routeRows = bridges.routes.map((r) =>
-    `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.endpointA)} &harr; ${escapeHtml(r.endpointB)}</td><td>${escapeHtml(r.direction)}</td><td>${r.ingestRelayed ? 'yes' : 'no'}</td></tr>`,
-  ).join('') || '<tr><td colspan="4">No routes configured.</td></tr>';
+    `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.endpointA)} &harr; ${escapeHtml(r.endpointB)}</td><td>${escapeHtml(r.direction)}</td><td>${r.ingestRelayed ? 'yes' : 'no'}</td><td>${r.mediaRelay ? 'yes' : 'no'}</td></tr>`,
+  ).join('') || '<tr><td colspan="5">No routes configured.</td></tr>';
 
   const bufferRows = Object.entries(bridges.summaryBufferDepths).map(
     ([route, depth]) => `<tr><td>${escapeHtml(route)}</td><td>${depth}</td></tr>`,
   ).join('') || '<tr><td colspan="2">No routes currently buffering.</td></tr>';
 
   return `<h2>Bridges</h2>
-<table><thead><tr><th>Route</th><th>Endpoints</th><th>Direction</th><th>Ingests relayed</th></tr></thead>
+<table><thead><tr><th>Route</th><th>Endpoints</th><th>Direction</th><th>Ingests relayed</th><th>Relays media</th></tr></thead>
 <tbody>${routeRows}</tbody></table>
 <p class="muted">Outbox: ${bridges.outboxPending} pending (oldest ${formatDuration(bridges.outboxOldestPendingAgeSeconds)}) · ${bridges.deadLettered} dead-lettered</p>
 <h3>Summary buffers</h3>

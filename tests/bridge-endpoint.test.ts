@@ -234,6 +234,26 @@ describe('bridge inbound endpoint', () => {
     expect(bridgeInboundHandler).toHaveBeenCalledWith(envelope());
   });
 
+  it('accepts a v2 media envelope and passes its text through to the inbound handler', async () => {
+    const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
+    const mediaEnvelope = envelope({
+      v: 2,
+      text: 'caption still relays',
+      media: {
+        data: Buffer.from('small image').toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
+
+    const result = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, mediaEnvelope);
+
+    expect(result.status).toBe(202);
+    expect(bridgeInboundHandler).toHaveBeenCalledWith(mediaEnvelope);
+    expect(bridgeInboundHandler.mock.calls[0]?.[0].text).toBe('caption still relays');
+  });
+
   it('returns duplicate when the handler reports an existing idempotency key', async () => {
     const seen = new Set<string>();
     const bridgeInboundHandler = vi.fn(async (message: BridgeEnvelope) => {

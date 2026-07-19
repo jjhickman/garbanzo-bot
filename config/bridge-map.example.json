@@ -28,7 +28,7 @@
   ],
   "routes": [
     {
-      "_comment": "Bridge one conversation group across Discord, WhatsApp, Telegram, and Matrix. Commands are not relayed by default. Two-endpoint routes remain valid for simple pairs.",
+      "_comment": "Bridge one conversation group across Discord, WhatsApp, Telegram, and Matrix. Commands and media are not relayed by default. Media also requires BRIDGE_MEDIA_ENABLED=true. Two-endpoint routes remain valid for simple pairs.",
       "id": "community-main",
       "endpoints": [
         { "instance": "remy", "chatId": "111111111111111111" },
@@ -39,7 +39,8 @@
       "direction": "both",
       "modeToWhatsApp": "summary",
       "modeToDiscord": "verbatim",
-      "relayCommands": false
+      "relayCommands": false,
+      "mediaRelay": false
     }
   ]
 }

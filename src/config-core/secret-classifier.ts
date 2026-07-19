@@ -44,6 +44,8 @@ export const SCHEMA_SECRET_CLASSIFICATION = {
   BRAVE_SEARCH_API_KEY: true,
   BRIDGE_BROKER_URL: true,
   BRIDGE_ENABLED: false,
+  BRIDGE_MEDIA_ENABLED: false,
+  BRIDGE_MEDIA_MAX_BYTES: false,
   BRIDGE_MAX_TEXT: false,
   BRIDGE_SUMMARY_INTERVAL_MINUTES: false,
   BRIDGE_TRANSPORT: false,
@@ -222,7 +224,7 @@ const PUBLIC_JSON_KEYS = new Set([
   'introductionsChannelId', 'eventsChannelId', 'channels', 'rooms', 'alias', 'sources',
   'id', 'label', 'collection', 'textField', 'embedding', 'provider', 'model', 'dimensions', 'maxHits',
   'minScore', 'instances', 'routes', 'platform', 'direction', 'from', 'modeToWhatsApp', 'modeToDiscord',
-  'relayCommands', 'ingestRelayed', 'instance', 'chatId', 'url',
+  'relayCommands', 'ingestRelayed', 'mediaRelay', 'instance', 'chatId', 'url',
 ]);
 
 function quotedValueBounds(value: string): { start: number; end: number } | undefined {
