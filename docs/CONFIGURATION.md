@@ -134,8 +134,8 @@ cp .env.discord.example .env.discord
 | `BRIDGE_BROKER_PASSWORD` | Bridge (amqp, broker profile) | Compose-only interpolation var — RabbitMQ password for the `broker` profile's `rabbitmq` container; the container refuses to start without it. Not read by the bot process itself; only referenced via `${BRIDGE_BROKER_PASSWORD}` in `docker-compose*.yml`. |
 | `BRIDGE_SUMMARY_INTERVAL_MINUTES` | No | Minutes between WhatsApp-bound bridge digest flushes (default: `15`) |
 | `BRIDGE_MAX_TEXT` | No | Max characters per relayed/digest bridge message (default: `1500`) |
-| `BRIDGE_MEDIA_ENABLED` | No | Instance-wide opt-in for bridged media re-upload (default: `false`); the route must also set `mediaRelay: true` |
-| `BRIDGE_MEDIA_MAX_BYTES` | No | Max decoded bridged-media payload size in bytes (default: `8388608`; clamped to `65536`-`20971520`) |
+| `BRIDGE_MEDIA_ENABLED` | No | Sending-instance opt-in for bridged media re-upload (default: `false`); the route must also set `mediaRelay: true` |
+| `BRIDGE_MEDIA_MAX_BYTES` | No | Maximum decoded bridged-media payload size (default: `8388608` bytes / 8 MiB); values clamp to `65536`-`20971520` bytes |
 | `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
 | `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
 

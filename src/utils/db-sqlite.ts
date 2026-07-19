@@ -500,14 +500,21 @@ const claimDueBridgeOutboxRows = db.prepare(
    )
    RETURNING *`,
 );
+// Terminal transitions strip bridge media from the stored envelope:
+// 'sent' rows are never purged and 'dead' rows linger for inspection, so a
+// v2 media payload (megabytes of base64) would otherwise accumulate in the
+// outbox for the lifetime of the deployment. json_remove is a no-op for
+// envelopes without a media field, and the text/audit fields survive.
 const updateBridgeOutboxSent = db.prepare(
   `UPDATE bridge_outbox
-   SET status = 'sent', last_error = NULL
+   SET status = 'sent', last_error = NULL,
+       envelope_json = json_remove(envelope_json, '$.media')
    WHERE id = ? AND status = 'claimed'`,
 );
 const updateBridgeOutboxDead = db.prepare(
   `UPDATE bridge_outbox
-   SET status = 'dead', attempts = attempts + 1, last_error = ?
+   SET status = 'dead', attempts = attempts + 1, last_error = ?,
+       envelope_json = json_remove(envelope_json, '$.media')
    WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
 const updateBridgeOutboxAttempt = db.prepare(
