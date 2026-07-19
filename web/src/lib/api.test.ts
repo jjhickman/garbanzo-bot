@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { applyStream, clearSession, exchangeEntryToken, getState, getWizardSchema, hasSession, submitWizard } from './api.js';
+import {
+  applyStream,
+  clearSession,
+  exchangeEntryToken,
+  getConfigFile,
+  getState,
+  getWizardSchema,
+  hasSession,
+  putConfigFile,
+  submitWizard,
+} from './api.js';
 
 describe('config API client authentication', () => {
   afterEach(() => {
@@ -86,6 +96,30 @@ describe('config API client authentication', () => {
     expect(fetchMock.mock.calls.flatMap(([url]) => String(url))).not.toContain('wizard-session-secret');
     expect(window.localStorage).toHaveLength(0);
     expect(document.cookie).toBe('');
+  });
+
+  it('carries config-file sha256 preconditions through read and write calls', async () => {
+    const response = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ token: 'config-session-secret' }))
+      .mockResolvedValueOnce(response({ value: { groups: {} }, mtimeMs: 12, sha256: 'loaded-hash' }))
+      .mockResolvedValueOnce(response({ ok: true, mtimeMs: 13, sha256: 'written-hash' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await exchangeEntryToken('config-entry-secret');
+    const loaded = await getConfigFile<{ groups: Record<string, unknown> }>('groups');
+    await putConfigFile('groups', {
+      mtimeMs: loaded.mtimeMs,
+      sha256: loaded.sha256,
+      value: loaded.value,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/config-file/groups', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ mtimeMs: 12, sha256: 'loaded-hash', value: { groups: {} } }),
+    }));
   });
 
   it('streams apply output with the bearer token only in the header', async () => {

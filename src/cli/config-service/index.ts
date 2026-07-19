@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -49,11 +49,22 @@ import {
   validateConfigFile,
   zodIssues,
 } from './json-config.js';
-import { createSpaAssets, CSP } from './shell.js';
+import { createSpaAssets, CSP, FAVICON_SVG } from './shell.js';
 import { runWizard } from './wizard.js';
 
 const DEFAULT_IDLE_TTL_MS = 30 * 60 * 1000;
 const BODY_LIMIT = IMPORT_LIMITS.compressedBytes;
+
+export const WIZARD_ARG_ALLOWLIST: ReadonlySet<string> = new Set([
+  '--discord-channel-ids',
+  '--discord-channel-name',
+  '--telegram-chat-ids',
+  '--telegram-chat-name',
+  '--matrix-room-ids',
+  '--matrix-room-name',
+  '--group-id',
+  '--group-name',
+]);
 
 export interface ConfigServiceOptions {
   root: string;
@@ -194,17 +205,46 @@ function effectiveConfigPaths(root: string): Record<string, string> {
   ]));
 }
 
-function readConfigFiles(root: string): Record<string, { value: unknown; masked: unknown; mtimeMs: number } | null> {
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function readConfigFile(root: string, name: string): { value: unknown; masked: unknown; mtimeMs: number; sha256: string } | null {
+  const path = configFilePath(root, name);
+  if (!existsSync(path)) return null;
+  const content = readFileSync(path);
+  const mtimeMs = statSync(path).mtimeMs;
+  try {
+    const value = JSON.parse(content.toString('utf8')) as unknown;
+    return { value, masked: maskJsonSecrets(value), mtimeMs, sha256: sha256(content) };
+  } catch {
+    return { value: null, masked: null, mtimeMs, sha256: sha256(content) };
+  }
+}
+
+function readConfigFiles(root: string): Record<string, { value: unknown; masked: unknown; mtimeMs: number; sha256: string } | null> {
   return Object.fromEntries(CONFIG_FILE_NAMES.map((name) => {
-    const path = configFilePath(root, name);
-    if (!existsSync(path)) return [name, null];
-    try {
-      const value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-      return [name, { value, masked: maskJsonSecrets(value), mtimeMs: statSync(path).mtimeMs }];
-    } catch {
-      return [name, { value: null, masked: null, mtimeMs: statSync(path).mtimeMs }];
-    }
+    return [name, readConfigFile(root, name)];
   }));
+}
+
+function validateWizardArgs(value: unknown): { args: string[] } | { error: string } {
+  if (value === undefined) return { args: [] };
+  if (!Array.isArray(value)) return { error: 'wizard args must be an array of strings' };
+  const args: string[] = [];
+  for (const [index, arg] of value.entries()) {
+    if (typeof arg !== 'string') return { error: `wizard arg at index ${index} must be a string` };
+    const match = /^(--[a-z0-9-]+)(?:=(.*))?$/.exec(arg);
+    const flag = match?.[1];
+    if (!flag || !WIZARD_ARG_ALLOWLIST.has(flag)) {
+      return { error: `wizard arg not allowed: ${flag ?? arg}` };
+    }
+    if (match[2]?.startsWith('-')) {
+      return { error: `wizard arg value must not start with "-": ${flag}` };
+    }
+    args.push(arg);
+  }
+  return { args };
 }
 
 function issueResponse(error: unknown): { error: string } {
@@ -455,6 +495,11 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       res.end(asset.body);
       return;
     }
+    if (req.method === 'GET' && (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.end(FAVICON_SVG);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/session') {
       const supplied = bearer(req);
       if (entryUsed || !supplied || !safeEqual(entryToken, supplied)) {
@@ -495,6 +540,7 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           files: Object.fromEntries(Object.entries(files).map(([name, file]) => [name, file && {
             value: file.masked,
             mtimeMs: file.mtimeMs,
+            sha256: file.sha256,
           }])),
         });
         return;
@@ -539,6 +585,18 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       }
 
       const fileMatch = url.pathname.match(/^\/api\/config-file\/([^/]+)$/);
+      if (req.method === 'GET' && fileMatch) {
+        const name = decodeURIComponent(fileMatch[1] ?? '');
+        if (!isConfigFileName(name)) {
+          json(res, 404, { error: 'unknown-config-file' });
+          return;
+        }
+        const file = readConfigFile(root, name);
+        json(res, 200, file
+          ? { value: file.masked, mtimeMs: file.mtimeMs, sha256: file.sha256 }
+          : { value: null, mtimeMs: 0, sha256: null });
+        return;
+      }
       if (req.method === 'PUT' && fileMatch) {
         const name = decodeURIComponent(fileMatch[1] ?? '');
         if (!isConfigFileName(name)) {
@@ -551,16 +609,19 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
         }
         const { value: payload } = await readJson(req);
         const path = configFilePath(root, name);
-        const currentMtime = existsSync(path) ? statSync(path).mtimeMs : 0;
-        if (payload.mtimeMs !== currentMtime) {
+        const currentContent = existsSync(path) ? readFileSync(path) : null;
+        const currentMtime = currentContent ? statSync(path).mtimeMs : 0;
+        const currentSha256 = currentContent ? sha256(currentContent) : null;
+        if (payload.mtimeMs !== currentMtime
+          || (payload.sha256 !== undefined && payload.sha256 !== currentSha256)) {
           json(res, 409, { reason: 'changed-on-disk' });
           return;
         }
-        const existingValue = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as unknown : {};
-        // The editor loads the MASKED read-back (secrets and scalar-array leaves
-        // become {set:true}); on a full-document PUT those placeholders must be
-        // restored to their real on-disk values before validate/write, or the
-        // masked document fails schema validation and the save is rejected.
+        const existingValue = currentContent ? JSON.parse(currentContent.toString('utf8')) as unknown : {};
+        // The editor loads the masked read-back; on a full-document PUT secret
+        // placeholders must be restored to their real on-disk values before
+        // validate/write, or the masked document fails schema validation and
+        // the save is rejected.
         // Mirrors the import path, which restores placeholders the same way.
         const resultingValue = payload.update !== undefined
           ? mergeJsonUpdate(existingValue, payload.update)
@@ -581,7 +642,8 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           changes: [{ key: name, before, after: maskJsonSecrets(resultingValue) }],
         });
         changedTargets.add(name === 'groups' ? 'whatsapp' : name.split('-')[0] ?? 'all');
-        json(res, 200, { ok: true, mtimeMs: statSync(path).mtimeMs });
+        const written = readFileSync(path);
+        json(res, 200, { ok: true, mtimeMs: statSync(path).mtimeMs, sha256: sha256(written) });
         return;
       }
 
@@ -652,6 +714,11 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
       }
       if (req.method === 'POST' && url.pathname === '/api/wizard') {
         const { value: payload } = await readJson(req);
+        const wizardArgs = validateWizardArgs(payload.args);
+        if ('error' in wizardArgs) {
+          json(res, 422, { error: wizardArgs.error });
+          return;
+        }
         const wizardState = discover(root);
         if (Object.values(wizardState.envFiles as Record<string, boolean>).some(Boolean)
           || Object.values(wizardState.configFiles as Record<string, boolean>).some(Boolean)) {
@@ -659,7 +726,10 @@ export async function startConfigService(options: ConfigServiceOptions): Promise
           return;
         }
         const wizardRoot = mkdtempSync(resolve(tmpdir(), 'garbanzo-config-wizard-'));
-        const result = await runWizard(wizardRoot, payload as { fields?: Record<string, unknown>; args?: string[] });
+        const result = await runWizard(wizardRoot, {
+          fields: payload.fields as Record<string, unknown> | undefined,
+          args: wizardArgs.args,
+        });
         const wizardValidation = result.code === 0
           ? parseConfig(readEnvSnapshot(wizardRoot).values, { source: 'config-service-wizard' })
           : null;

@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { startConfigService, type ConfigServiceHandle } from '../src/cli/config-service/index.js';
+import { startConfigService, WIZARD_ARG_ALLOWLIST, type ConfigServiceHandle } from '../src/cli/config-service/index.js';
 import { MESSAGING_PLATFORMS } from '../src/config-core/fields.js';
 import { runWizard } from '../src/cli/config-service/wizard.js';
 import { parseCliCommand } from '../src/cli.js';
@@ -147,18 +148,19 @@ describe('host config service mutations', () => {
     const { root, handle, token } = await setup();
     const twin = mkdtempSync(join(tmpdir(), 'garbanzo-config-wizard-twin-'));
     roots.push(twin);
-    const args = [
-      '--platform=whatsapp',
-      '--deploy=native',
-      '--providers=openrouter',
-      '--provider-order=openrouter',
-      '--openrouter-key=test_key_ci',
-      '--owner-jid=test_owner@s.whatsapp.net',
-      '--write-groups=false',
-    ];
-    const response = await call(handle.port, token, '/api/wizard', 'POST', { args });
+    const fields = {
+      MESSAGING_PLATFORM: 'whatsapp',
+      DEPLOY_TARGET: 'native',
+      AI_PROVIDER_ORDER: 'openrouter',
+      OPENROUTER_API_KEY: 'test_key_ci',
+      OWNER_JID: 'test_owner@s.whatsapp.net',
+      VECTOR_STORE: 'none',
+    };
+    const args = ['--group-id=test_group@g.us', '--group-name=Events'];
+    expect(args.every((arg) => WIZARD_ARG_ALLOWLIST.has(arg.slice(0, arg.indexOf('='))))).toBe(true);
+    const response = await call(handle.port, token, '/api/wizard', 'POST', { fields, args });
     expect(response.status).toBe(200);
-    expect((await runWizard(twin, { args })).code).toBe(0);
+    expect((await runWizard(twin, { fields, args })).code).toBe(0);
 
     const files = (directory: string): string[] => readdirSync(directory, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())
@@ -171,13 +173,16 @@ describe('host config service mutations', () => {
     }
   });
 
-  it('saves a config file PUT of its masked read-back by restoring placeholders', async () => {
+  it('leaves public scalar arrays unmasked and restores only real secret placeholders on PUT', async () => {
     const { root, handle, token } = await setup();
     const dir = join(root, 'config');
     mkdirSync(dir, { recursive: true });
-    // bandRoleIds is a public scalar array whose elements the read-back masks to
-    // {set:true} (their leaf path is the numeric index); the editor loads that
-    // masked document and PUTs it back verbatim, which must NOT 422.
+    writeFileSync(join(dir, 'groups.json'), `${JSON.stringify({
+      groups: {},
+      mentionPatterns: ['@garbanzo', 'hey bean'],
+      admins: { owner: { name: 'Owner', jid: 'test_owner@s.whatsapp.net' }, moderators: [] },
+      tokens: ['test_secret_token'],
+    }, null, 2)}\n`);
     const original = {
       bandRoleIds: ['role-a', 'role-b'],
       channels: { '111': { name: 'general', enabled: true, requireMention: true } },
@@ -185,19 +190,93 @@ describe('host config service mutations', () => {
     writeFileSync(join(dir, 'discord-channels.json'), `${JSON.stringify(original, null, 2)}\n`);
 
     const cfg = JSON.parse((await call(handle.port, token, '/api/config')).body) as {
-      files: Record<string, { value: unknown; mtimeMs: number } | null>;
+      files: Record<string, { value: unknown; mtimeMs: number; sha256: string } | null>;
     };
     const file = cfg.files['discord-channels'];
+    const groups = cfg.files.groups?.value as {
+      mentionPatterns: string[];
+      admins: { owner: { jid: unknown } };
+      tokens: unknown[];
+    };
     expect(file).toBeTruthy();
-    expect(JSON.stringify(file?.value)).toContain('set'); // masked read-back
+    expect((file?.value as { bandRoleIds: string[] }).bandRoleIds).toEqual(['role-a', 'role-b']);
+    expect(groups.mentionPatterns).toEqual(['@garbanzo', 'hey bean']);
+    expect(groups.admins.owner.jid).toEqual({ set: true });
+    expect(groups.tokens).toEqual([{ set: true }]);
 
     const put = await call(handle.port, token, '/api/config-file/discord-channels', 'PUT', {
-      mtimeMs: file?.mtimeMs, value: file?.value,
+      mtimeMs: file?.mtimeMs, sha256: file?.sha256, value: file?.value,
     });
     expect(put.status).toBe(200);
 
     const onDisk = JSON.parse(readFileSync(join(dir, 'discord-channels.json'), 'utf8')) as { bandRoleIds: string[] };
     expect(onDisk.bandRoleIds).toEqual(['role-a', 'role-b']); // real values restored, not {set:true}
+  });
+
+  it('rejects config-file writes when the sha256 precondition is stale', async () => {
+    const { root, handle, token } = await setup();
+    const dir = join(root, 'config');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'discord-channels.json');
+    const content = Buffer.from('{"channels":{}}\n');
+    writeFileSync(path, content);
+
+    const loaded = await call(handle.port, token, '/api/config-file/discord-channels');
+    expect(loaded.status).toBe(200);
+    const snapshot = JSON.parse(loaded.body) as { value: unknown; mtimeMs: number; sha256: string };
+    expect(snapshot.sha256).toBe(createHash('sha256').update(content).digest('hex'));
+
+    const stale = await call(handle.port, token, '/api/config-file/discord-channels', 'PUT', {
+      mtimeMs: snapshot.mtimeMs,
+      sha256: '0'.repeat(64),
+      value: snapshot.value,
+    });
+    expect(stale.status).toBe(409);
+    expect(JSON.parse(stale.body)).toEqual({ reason: 'changed-on-disk' });
+  });
+
+  it('uses sha256 to catch changed content with a forged matching mtime', async () => {
+    const { root, handle, token } = await setup();
+    const dir = join(root, 'config');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'discord-channels.json');
+    writeFileSync(path, '{"channels":{"111":{"name":"one","enabled":true,"requireMention":true}}}\n');
+    const originalStat = statSync(path);
+    utimesSync(path, originalStat.atime, new Date(1_700_000_000_000));
+    const loaded = JSON.parse((await call(handle.port, token, '/api/config-file/discord-channels')).body) as {
+      value: unknown; mtimeMs: number; sha256: string;
+    };
+
+    writeFileSync(path, '{"channels":{"222":{"name":"two","enabled":true,"requireMention":true}}}\n');
+    const changedStat = statSync(path);
+    utimesSync(path, changedStat.atime, new Date(loaded.mtimeMs));
+    expect(statSync(path).mtimeMs).toBe(loaded.mtimeMs);
+
+    const stale = await call(handle.port, token, '/api/config-file/discord-channels', 'PUT', {
+      mtimeMs: loaded.mtimeMs,
+      sha256: loaded.sha256,
+      value: loaded.value,
+    });
+    expect(stale.status).toBe(409);
+    expect(JSON.parse(stale.body)).toEqual({ reason: 'changed-on-disk' });
+  });
+
+  it('rejects non-allowlisted wizard args before running setup', async () => {
+    const { handle, token } = await setup();
+    const response = await call(handle.port, token, '/api/wizard', 'POST', {
+      args: ['--dry-run'],
+    });
+
+    expect(response.status).toBe(422);
+    expect(JSON.parse(response.body)).toEqual({ error: 'wizard arg not allowed: --dry-run' });
+
+    const injected = await call(handle.port, token, '/api/wizard', 'POST', {
+      args: ['--group-id=--dry-run'],
+    });
+    expect(injected.status).toBe(422);
+    expect(JSON.parse(injected.body)).toEqual({
+      error: 'wizard arg value must not start with "-": --group-id',
+    });
   });
 
   it('surfaces the setup runner failure reason without leaking secrets', { timeout: 30_000 }, async () => {

@@ -99,6 +99,17 @@ describe('host config service security', () => {
     expect(script.headers['content-type']).toContain('text/javascript');
   });
 
+  it('serves favicon requests without bearer authentication', async () => {
+    const { handle } = await service();
+
+    for (const path of ['/favicon.svg', '/favicon.ico']) {
+      const favicon = await call(handle.port, path);
+      expect(favicon.status).toBe(200);
+      expect(favicon.headers['content-type']).toContain('image/svg+xml');
+      expect(favicon.body).toContain('<svg');
+    }
+  });
+
   it('refuses assets reached through a symlink escaping web/dist', async () => {
     const webDist = mkdtempSync(join(tmpdir(), 'garbanzo-symlink-web-'));
     roots.push(webDist);

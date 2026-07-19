@@ -53,11 +53,11 @@ function snapshot(overrides: Record<string, unknown> = {}) {
       DISCORD_BOT_TOKEN: { set: true },
     },
     files: {
-      groups: { value: { groups: [] }, mtimeMs: 21 },
-      'discord-channels': { value: { channels: [] }, mtimeMs: 22 },
+      groups: { value: { groups: [] }, mtimeMs: 21, sha256: 'groups-hash' },
+      'discord-channels': { value: { channels: [] }, mtimeMs: 22, sha256: 'discord-channels-hash' },
       'telegram-chats': null,
       'matrix-rooms': null,
-      'bridge-map': { value: { routes: [] }, mtimeMs: 23 },
+      'bridge-map': { value: { routes: [] }, mtimeMs: 23, sha256: 'bridge-map-hash' },
     },
     ...overrides,
   };
@@ -184,6 +184,7 @@ describe('existing configuration editor (jsdom)', () => {
     await click('Save config file');
     expect(apiMocks.putConfigFile).toHaveBeenCalledWith('groups', {
       mtimeMs: 21,
+      sha256: 'groups-hash',
       value: { groups: [{ id: 'test-group' }] },
     });
   });

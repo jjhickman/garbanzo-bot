@@ -134,11 +134,12 @@ describe('config service core operations', () => {
   it('keeps service wizard output byte-identical to the shared CLI runner', { timeout: 30_000 }, async () => {
     const cliRoot = tempRoot();
     const serviceRoot = tempRoot();
-    const args = [
-      '--platform=whatsapp', '--deploy=native', '--providers=openrouter', '--provider-order=openrouter',
-      '--openrouter-key=test_key_ci', '--owner-jid=test_owner@s.whatsapp.net', '--write-groups=false',
-    ];
-    expect((await runWizard(cliRoot, { args })).code).toBe(0);
+    const fields = {
+      MESSAGING_PLATFORM: 'whatsapp', DEPLOY_TARGET: 'native', AI_PROVIDER_ORDER: 'openrouter',
+      OPENROUTER_API_KEY: 'test_key_ci', OWNER_JID: 'test_owner@s.whatsapp.net', VECTOR_STORE: 'none',
+    };
+    const args = ['--group-id=test_group@g.us', '--group-name=Events'];
+    expect((await runWizard(cliRoot, { fields, args })).code).toBe(0);
     applyStagedBundle(serviceRoot, cliRoot);
 
     const files = (root: string): string[] => readdirSync(root, { recursive: true, withFileTypes: true })

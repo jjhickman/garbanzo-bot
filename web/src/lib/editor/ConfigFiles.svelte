@@ -15,7 +15,7 @@
   const readOnly = $derived(selected === 'bridge-map');
 
   $effect(() => {
-    const key = `${selected}:${current?.mtimeMs ?? 0}`;
+    const key = `${selected}:${current?.mtimeMs ?? 0}:${current?.sha256 ?? ''}`;
     if (key === initializedKey) return;
     text = JSON.stringify(current?.value ?? {}, null, 2);
     initializedKey = key;
@@ -49,7 +49,7 @@
     }
     pending = true;
     try {
-      await putConfigFile(selected, { mtimeMs: current?.mtimeMs ?? 0, value });
+      await putConfigFile(selected, { mtimeMs: current?.mtimeMs ?? 0, sha256: current?.sha256 ?? null, value });
       await onReload();
       status = 'Config file saved.';
     } catch (caught) {
