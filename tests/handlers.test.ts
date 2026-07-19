@@ -15,7 +15,7 @@ function mockHandlerDeps(): HandlerMocks {
   const getResponse = vi.fn(async () => 'retry response');
   const recordBotResponse = vi.fn();
   const isGroupEnabled = vi.fn(() => true);
-  const buildWelcomeMessage = vi.fn(() => 'welcome text');
+  const buildWelcomeMessage = vi.fn(() => ({ text: 'welcome text', mentions: ['user1@s.whatsapp.net'] }));
   const handleOwnerDM = vi.fn(async () => undefined);
   const markMessageReceived = vi.fn();
 
@@ -243,7 +243,7 @@ describe('registerHandlers wiring and edge branches', () => {
 
     expect(mocks.isGroupEnabled).toHaveBeenCalledWith('group@g.us');
     expect(mocks.buildWelcomeMessage).toHaveBeenCalledWith('group@g.us', ['user1@s.whatsapp.net']);
-    expect(sock.sendMessage).toHaveBeenCalledWith('group@g.us', { text: 'welcome text' });
+    expect(sock.sendMessage).toHaveBeenCalledWith('group@g.us', { text: 'welcome text', mentions: ['user1@s.whatsapp.net'] });
   });
 
   it('skips non-notify upserts except for Introductions group catch-up path', async () => {

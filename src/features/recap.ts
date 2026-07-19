@@ -9,7 +9,7 @@
 
 import { logger } from '../middleware/logger.js';
 import { getCurrentStats } from '../middleware/stats.js';
-import { getGroupName } from '../core/groups-config.js';
+import { getChatDisplayName } from '../core/groups-config.js';
 import { loadDailyStatsRange } from '../utils/db.js';
 
 interface ArchivedGroup {
@@ -117,7 +117,7 @@ export async function buildWeeklyRecap(now: Date = new Date()): Promise<string> 
   ];
 
   for (const [jid, agg] of sorted.slice(0, 5)) {
-    lines.push(`  • ${getGroupName(jid)} — ${agg.messages.toLocaleString()} msgs, ${agg.activeUsers.size} people, ${agg.botResponses} replies`);
+    lines.push(`  • ${getChatDisplayName(jid)} — ${agg.messages.toLocaleString()} msgs, ${agg.activeUsers.size} people, ${agg.botResponses} replies`);
   }
 
   const quiet = sorted.filter(([, agg]) => agg.messages === 0).length;

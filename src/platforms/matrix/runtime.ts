@@ -2,9 +2,10 @@ import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import type { PlatformRuntime } from '../types.js';
+import { registerChatNameResolver } from '../../core/groups-config.js';
 
 import { createMatrixClient } from './client.js';
-import { getMatrixOwnerId } from './matrix-config.js';
+import { getMatrixOwnerId, getMatrixRoomName } from './matrix-config.js';
 import { resolveOwnerRoomId } from './matrix-owner.js';
 
 export interface MatrixRuntimeDeps {
@@ -16,6 +17,9 @@ export interface MatrixRuntimeDeps {
 type MatrixClient = ReturnType<typeof createMatrixClient>;
 
 export function createMatrixRuntime(deps: MatrixRuntimeDeps = {}): PlatformRuntime {
+  // Digest/recap chat names resolve through core; register this platform's
+  // resolver so Matrix rooms don't render as 'Unknown Group'.
+  registerChatNameResolver(getMatrixRoomName);
   const runtimeDeps = {
     createClient: deps.createClient ?? createMatrixClient,
     getOwnerId: deps.getOwnerId ?? getMatrixOwnerId,

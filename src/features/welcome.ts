@@ -20,6 +20,16 @@ const GROUP_WELCOMES: Record<string, string> = {
 
 const DEFAULT_WELCOME = `Welcome to the group! Feel free to jump in — @mention me if you need anything.`;
 
+export interface WelcomeMessage {
+  text: string;
+  /**
+   * Full participant JIDs for Baileys' contextInfo.mentionedJid. A bare
+   * `@<number>` in the text renders literally; WhatsApp only substitutes the
+   * member's display name when the JID is also sent in the mentions array.
+   */
+  mentions: string[];
+}
+
 /**
  * Build a welcome message for new members joining a group.
  * Returns null if the group isn't configured for welcomes.
@@ -27,7 +37,7 @@ const DEFAULT_WELCOME = `Welcome to the group! Feel free to jump in — @mention
 export function buildWelcomeMessage(
   groupJid: string,
   participantJids: string[],
-): string | null {
+): WelcomeMessage | null {
   const groupName = getGroupName(groupJid);
   if (groupName === 'Unknown Group') return null;
 
@@ -45,5 +55,8 @@ export function buildWelcomeMessage(
 
   logger.info({ group: groupName, newMembers: count }, 'Welcoming new members');
 
-  return `${greeting}\n\n${bold(groupName)}: ${welcome}`;
+  return {
+    text: `${greeting}\n\n${bold(groupName)}: ${welcome}`,
+    mentions: participantJids,
+  };
 }

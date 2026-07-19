@@ -59,7 +59,7 @@ export function registerWhatsAppHandlers(sock: WASocket): void {
       const welcome = buildWelcomeMessage(update.id, update.participants.map(participantJid));
       if (welcome) {
         try {
-          await sock.sendMessage(update.id, { text: welcome });
+          await sock.sendMessage(update.id, { text: welcome.text, mentions: welcome.mentions });
         } catch (err) {
           logger.error({ err, group: update.id }, 'Failed to send welcome message');
         }

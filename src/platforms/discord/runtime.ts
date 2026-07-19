@@ -2,10 +2,11 @@ import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import type { PlatformRuntime } from '../types.js';
+import { registerChatNameResolver } from '../../core/groups-config.js';
 
 import { createDiscordAdapter } from './adapter.js';
 import { createDiscordDemoServer } from './demo-server.js';
-import { getDiscordOwnerId } from './discord-config.js';
+import { getDiscordChannelName, getDiscordOwnerId } from './discord-config.js';
 import { resolveOwnerDmChannelId } from './discord-owner.js';
 import { createDiscordGatewayClient } from './gateway-client.js';
 import { createDiscordInteractionsServer } from './gateway-runtime.js';
@@ -34,6 +35,9 @@ export interface DiscordRuntimeDeps {
 type DiscordGatewayRuntimeClient = ReturnType<typeof createDiscordGatewayClient>;
 
 export function createDiscordRuntime(deps: DiscordRuntimeDeps = {}): PlatformRuntime {
+  // Digest/recap render channel names via core, which cannot import
+  // discord-config directly — register the resolver at runtime construction.
+  registerChatNameResolver(getDiscordChannelName);
   const runtimeDeps = {
     createAdapter: deps.createAdapter ?? createDiscordAdapter,
     createDemoServer: deps.createDemoServer ?? createDiscordDemoServer,
