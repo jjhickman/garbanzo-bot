@@ -246,6 +246,27 @@ describe('BridgeEnvelopeSchema', () => {
   it('returns null instead of throwing on invalid raw input', () => {
     expect(parseBridgeEnvelope('not json')).toBeNull();
     expect(parseBridgeEnvelope(null)).toBeNull();
+  });
+
+  it('salvages the text of a v2 envelope whose media violates receiver bounds', () => {
+    const overLimitData = 'A'.repeat(
+      bridgeMediaBase64MaxLength(BRIDGE_MEDIA_MAX_BYTES_DEFAULT) + 4,
+    );
+    const oversized = {
+      ...validEnvelope,
+      v: 2,
+      media: { data: overLimitData, mimetype: 'image/png', fileName: 'big.png', kind: 'image' },
+    };
+    // The whole-envelope parse fails, but the text-only relay survives.
+    expect(BridgeEnvelopeSchema.safeParse(oversized).success).toBe(false);
+    expect(parseBridgeEnvelope(oversized)).toEqual({ ...validEnvelope, v: 2 });
+
+    const disallowedMime = {
+      ...validEnvelope,
+      v: 2,
+      media: { data: 'aGk=', mimetype: 'application/x-msdownload', fileName: 'x.exe', kind: 'document' },
+    };
+    expect(parseBridgeEnvelope(disallowedMime)).toEqual({ ...validEnvelope, v: 2 });
     expect(parseBridgeEnvelope({ ...validEnvelope, kind: 'other' })).toBeNull();
   });
 

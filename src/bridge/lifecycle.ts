@@ -21,10 +21,11 @@ import {
   takeBridgeBuffer,
 } from '../utils/db.js';
 import { loadBridgeMap as loadBridgeMapDefault, type BridgeMap, type BridgeRoute } from './bridge-map.js';
-import type { BridgeEnvelope } from './envelope.js';
+import { envelopeSupportsMedia, type BridgeEnvelope } from './envelope.js';
 import { createBridgeOutbox, type BridgeOutboxOps } from './outbox.js';
 import { createRelayCapture } from './relay-capture.js';
 import { attributionPrefix, createRelayDeliverer } from './relay-deliver.js';
+import { envelopeWithoutMedia } from './relay-media.js';
 import { createSummaryBuffer, type BridgeBufferOps } from './summary-buffer.js';
 import { createAmqpBridgeTransport } from './transport-amqp.js';
 import { createHttpBridgeTransport } from './transport-http.js';
@@ -129,7 +130,10 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
   // The messenger only exists once the platform runtime has connected, and it
   // is re-created across WhatsApp reconnects, so the bridge holds a lazy
   // accessor rather than a snapshot taken at assembly time.
-  const lazyMessenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'> = {
+  const lazyMessenger: Pick<
+    PlatformMessenger,
+    'sendText' | 'sendTextForBridge' | 'sendDocument' | 'sendAudio'
+  > = {
     async sendText(chatId: string, text: string): Promise<void> {
       const messenger = deps.getMessenger();
       if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
@@ -143,6 +147,16 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
       } else {
         await messenger.sendText(chatId, text);
       }
+    },
+    async sendDocument(chatId, doc) {
+      const messenger = deps.getMessenger();
+      if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
+      return messenger.sendDocument(chatId, doc);
+    },
+    async sendAudio(chatId, audio) {
+      const messenger = deps.getMessenger();
+      if (!messenger) throw new Error('Bridge: platform messenger is not connected yet');
+      await messenger.sendAudio(chatId, audio);
     },
   };
 
@@ -193,7 +207,13 @@ export async function startBridge(deps: StartBridgeDeps): Promise<BridgeLifecycl
       const route = routeById(envelope.routeId);
       const mode = route ? modeForPlatform(route, platform) : 'verbatim';
       if (mode === 'summary') {
-        await summaryBuffer.bufferEnvelope(envelope);
+        if (envelopeSupportsMedia(envelope) && envelope.media) {
+          logger.debug(
+            { routeId: envelope.routeId, targetChatId: envelope.targetChatId },
+            'Bridge: media relay skipped for summary-mode leg',
+          );
+        }
+        await summaryBuffer.bufferEnvelope(envelopeWithoutMedia(envelope));
       } else {
         const status = await deliverer.deliver(envelope);
         if (status === 'sent' && route?.ingestRelayed) {

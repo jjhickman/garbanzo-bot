@@ -122,5 +122,15 @@ export function buildIdempotencyKey(
 
 export function parseBridgeEnvelope(raw: unknown): BridgeEnvelope | null {
   const parsed = BridgeEnvelopeSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+  // Media must never take the text down with it: a v2 envelope whose media
+  // violates THIS receiver's bounds (a smaller BRIDGE_MEDIA_MAX_BYTES or an
+  // allowlist drift on a differently-configured peer) is salvaged as a
+  // text-only relay instead of being dropped whole.
+  if (raw && typeof raw === 'object' && (raw as { v?: unknown }).v === 2 && 'media' in raw) {
+    const { media: _dropped, ...rest } = raw as Record<string, unknown>;
+    const salvaged = BridgeEnvelopeSchema.safeParse(rest);
+    if (salvaged.success) return salvaged.data;
+  }
+  return null;
 }

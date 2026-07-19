@@ -10,6 +10,19 @@ import { WhatsAppOutboundHeldError } from '../src/platforms/whatsapp/outbound-sa
 import { config } from '../src/utils/config.js';
 
 type SendText = Pick<PlatformMessenger, 'sendText'>['sendText'];
+type SendDocument = PlatformMessenger['sendDocument'];
+type SendAudio = PlatformMessenger['sendAudio'];
+
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('../src/middleware/logger.js', () => ({ logger }));
+
+const ORIGINAL_MEDIA_MAX_BYTES = process.env.BRIDGE_MEDIA_MAX_BYTES;
 
 const BASE_ENVELOPE: BridgeEnvelope = {
   v: 1,
@@ -48,30 +61,45 @@ function deliverer(
     platform?: MessagingPlatform;
     sendText?: SendText;
     sendTextForBridge?: SendTextForBridge;
+    sendDocument?: SendDocument;
+    sendAudio?: SendAudio;
     bufferEnvelope?: (env: BridgeEnvelope) => Promise<void>;
   } = {},
 ): {
   deliver: ReturnType<typeof createRelayDeliverer>;
   sendText: ReturnType<typeof vi.fn<SendText>>;
   sendTextForBridge: ReturnType<typeof vi.fn<SendTextForBridge>> | undefined;
+  sendDocument: ReturnType<typeof vi.fn<SendDocument>>;
+  sendAudio: ReturnType<typeof vi.fn<SendAudio>>;
   bufferEnvelope: ReturnType<typeof vi.fn<(env: BridgeEnvelope) => Promise<void>>>;
 } {
   const sendText = vi.fn<SendText>(options.sendText ?? (async () => undefined));
   const sendTextForBridge = options.sendTextForBridge
     ? vi.fn<SendTextForBridge>(options.sendTextForBridge)
     : undefined;
+  const sendDocument = vi.fn<SendDocument>(options.sendDocument ?? (async (chatId) => ({
+    platform: options.platform ?? 'discord',
+    chatId,
+    id: 'document-1',
+    ref: {},
+  })));
+  const sendAudio = vi.fn<SendAudio>(options.sendAudio ?? (async () => undefined));
   const bufferEnvelope = vi.fn<(env: BridgeEnvelope) => Promise<void>>(
     options.bufferEnvelope ?? (async () => undefined),
   );
 
   return {
     deliver: createRelayDeliverer({
-      messenger: sendTextForBridge ? { sendText, sendTextForBridge } : { sendText },
+      messenger: sendTextForBridge
+        ? { sendText, sendTextForBridge, sendDocument, sendAudio }
+        : { sendText, sendDocument, sendAudio },
       platform: options.platform ?? 'discord',
       bufferEnvelope,
     }),
     sendText,
     sendTextForBridge,
+    sendDocument,
+    sendAudio,
     bufferEnvelope,
   };
 }
@@ -79,6 +107,12 @@ function deliverer(
 describe('createRelayDeliverer', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.clearAllMocks();
+    if (ORIGINAL_MEDIA_MAX_BYTES === undefined) {
+      delete process.env.BRIDGE_MEDIA_MAX_BYTES;
+    } else {
+      process.env.BRIDGE_MEDIA_MAX_BYTES = ORIGINAL_MEDIA_MAX_BYTES;
+    }
   });
 
   it('delivers text with sender name attribution and origin platform label', async () => {
@@ -91,12 +125,74 @@ describe('createRelayDeliverer', () => {
   });
 
   it('continues to deliver the text field of a v2 media envelope', async () => {
-    const { deliver, sendText } = deliverer({ platform: 'discord' });
+    const order: string[] = [];
+    const { deliver, sendText, sendAudio } = deliverer({
+      platform: 'discord',
+      sendText: async () => {
+        order.push('text');
+      },
+      sendAudio: async () => {
+        order.push('media');
+      },
+    });
     const mediaEnvelope = envelope({
       v: 2,
       text: 'caption still relays',
       media: {
-        data: Buffer.from('small image').toString('base64'),
+        data: Buffer.from([1, 2, 3]).toString('base64'),
+        mimetype: 'audio/ogg',
+        fileName: 'voice.ogg',
+        kind: 'audio',
+        ptt: true,
+      },
+    });
+
+    await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
+
+    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): caption still relays');
+    expect(sendAudio).toHaveBeenCalledWith('target-chat', {
+      bytes: new Uint8Array([1, 2, 3]),
+      mimetype: 'audio/ogg',
+      ptt: true,
+    });
+    expect(order).toEqual(['text', 'media']);
+  });
+
+  it.each([
+    ['image', 'image/png', 'photo.png'],
+    ['document', 'application/pdf', 'notes.pdf'],
+  ] as const)('re-uploads v2 %s media as a document with its file name', async (kind, mimetype, fileName) => {
+    const { deliver, sendDocument } = deliverer({ platform: 'discord' });
+    const mediaEnvelope = envelope({
+      v: 2,
+      media: {
+        data: Buffer.from([4, 5, 6]).toString('base64'),
+        mimetype,
+        fileName,
+        kind,
+      },
+    });
+
+    await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
+
+    expect(sendDocument).toHaveBeenCalledWith('target-chat', {
+      bytes: new Uint8Array([4, 5, 6]),
+      mimetype,
+      fileName,
+    });
+  });
+
+  it('keeps delivery successful and warns when media fails after text succeeds', async () => {
+    const mediaFailure = new Error('upload failed');
+    const { deliver, sendText, sendDocument } = deliverer({
+      sendDocument: async () => {
+        throw mediaFailure;
+      },
+    });
+    const mediaEnvelope = envelope({
+      v: 2,
+      media: {
+        data: Buffer.from([7]).toString('base64'),
         mimetype: 'image/png',
         fileName: 'photo.png',
         kind: 'image',
@@ -105,7 +201,66 @@ describe('createRelayDeliverer', () => {
 
     await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
 
-    expect(sendText).toHaveBeenCalledWith('target-chat', 'Ana (WhatsApp): caption still relays');
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: mediaFailure, routeId: 'route-1' }),
+      'Bridge: media relay send failed after text delivery; media skipped',
+    );
+  });
+
+  it('skips held media after successful text without retrying or buffering bytes', async () => {
+    const held = new WhatsAppOutboundHeldError(7, 'daily limit');
+    const { deliver, sendAudio, bufferEnvelope } = deliverer({
+      platform: 'whatsapp',
+      sendAudio: async () => {
+        throw held;
+      },
+    });
+    const mediaEnvelope = envelope({
+      v: 2,
+      media: {
+        data: Buffer.from([8]).toString('base64'),
+        mimetype: 'audio/ogg',
+        fileName: 'voice.ogg',
+        kind: 'audio',
+      },
+    });
+
+    await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
+
+    expect(sendAudio).toHaveBeenCalledTimes(1);
+    expect(bufferEnvelope).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: held, routeId: 'route-1' }),
+      'Bridge: media relay send failed after text delivery; media skipped',
+    );
+  });
+
+  it.each([
+    ['oversized', 'image/png'],
+    ['disallowed mimetype', 'image/svg+xml'],
+  ])('skips %s decoded media at the delivery boundary', async (reason, mimetype) => {
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const bytes = reason === 'oversized' ? Buffer.alloc(65_537, 1) : Buffer.from([1]);
+    const mediaEnvelope = envelope({
+      v: 2,
+      media: {
+        data: bytes.toString('base64'),
+        mimetype,
+        fileName: 'unsafe.bin',
+        kind: 'document',
+      },
+    } as unknown as Partial<BridgeEnvelope>);
+    const { deliver, sendDocument } = deliverer();
+
+    await expect(deliver.deliver(mediaEnvelope)).resolves.toBe('sent');
+
+    expect(sendDocument).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ routeId: 'route-1' }),
+      'Bridge: media relay rejected at delivery boundary',
+    );
   });
 
   it('includes origin chat display name in attribution when present', async () => {
@@ -174,19 +329,29 @@ describe('createRelayDeliverer', () => {
 
   it('buffers WhatsApp held sends without retrying', async () => {
     const held = new WhatsAppOutboundHeldError(7, 'daily limit');
-    const { deliver, sendText, bufferEnvelope } = deliverer({
+    const { deliver, sendText, sendAudio, sendDocument, bufferEnvelope } = deliverer({
       platform: 'whatsapp',
       sendText: async () => {
         throw held;
       },
     });
-    const env = envelope();
+    const env = envelope({
+      v: 2,
+      media: {
+        data: Buffer.from([9]).toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
 
     await expect(deliver.deliver(env)).resolves.toBe('buffered');
 
     expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendAudio).not.toHaveBeenCalled();
+    expect(sendDocument).not.toHaveBeenCalled();
     expect(bufferEnvelope).toHaveBeenCalledTimes(1);
-    expect(bufferEnvelope).toHaveBeenCalledWith(env);
+    expect(bufferEnvelope).toHaveBeenCalledWith(expect.not.objectContaining({ media: expect.anything() }));
     expect(getLifetimeCounters().bridgeHeldByOutboundSafetyByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
   });
 
