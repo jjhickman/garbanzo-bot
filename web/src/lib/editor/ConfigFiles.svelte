@@ -12,7 +12,6 @@
   let conflict = $state(false);
   let issues = $state<string[]>([]);
   const current = $derived(snapshot.files[selected]);
-  const readOnly = $derived(selected === 'bridge-map');
 
   $effect(() => {
     const key = `${selected}:${current?.mtimeMs ?? 0}:${current?.sha256 ?? ''}`;
@@ -36,7 +35,7 @@
   }
 
   async function save(): Promise<void> {
-    if (pending || readOnly) return;
+    if (pending) return;
     status = '';
     conflict = false;
     issues = [];
@@ -80,14 +79,13 @@
     <div><h2>{label(selected)}</h2><p class="muted">config/{selected}.json · last loaded mtime {current?.mtimeMs ?? 0}</p></div>
     {#if !current}<span class="file-state">New file</span>{/if}
   </div>
-  {#if readOnly}<p class="notice">Bridge-map editing is deferred in v3.4.0. This file is shown read-only.</p>{/if}
   <label class="visually-hidden" for="config-json">{label(selected)} JSON</label>
-  <textarea id="config-json" name="config-json" bind:value={text} readonly={readOnly} spellcheck="false" aria-describedby="file-json-help"></textarea>
+  <textarea id="config-json" name="config-json" bind:value={text} spellcheck="false" aria-describedby="file-json-help"></textarea>
   <p id="file-json-help" class="field-help">JSON is parsed in the browser and validated by the config service before it is written.</p>
   {#if status}<p class:error={conflict || issues.length > 0 || status.includes('not valid')} class="editor-status" role="status">{status}</p>{/if}
   {#if issues.length > 0}<ul class="error-list">{#each issues as issue, index (`${index}-${issue}`)}<li>{issue}</li>{/each}</ul>{/if}
   <div class="editor-actions">
     {#if conflict}<button class="secondary" type="button" onclick={() => void onReload()}>Reload</button>{/if}
-    <button type="button" disabled={pending || readOnly} onclick={() => void save()}>{pending ? 'Saving…' : 'Save config file'}</button>
+    <button type="button" disabled={pending} onclick={() => void save()}>{pending ? 'Saving…' : 'Save config file'}</button>
   </div>
 </div>

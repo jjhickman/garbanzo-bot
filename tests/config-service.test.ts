@@ -213,6 +213,89 @@ describe('host config service mutations', () => {
     expect(onDisk.bandRoleIds).toEqual(['role-a', 'role-b']); // real values restored, not {set:true}
   });
 
+  it('saves, masks, exports, and imports bridge maps without expanding placeholder URLs', async () => {
+    const { root, handle, token } = await setup();
+    const dir = join(root, 'config');
+    mkdirSync(dir, { recursive: true });
+    // The exported bundle re-validates every env root on import, so the platform
+    // env files must form a valid layered config, not just name their platform.
+    writeFileSync(join(root, '.env'), 'AI_PROVIDER_ORDER=openrouter\nOPENROUTER_API_KEY=test_key_ci\n');
+    writeFileSync(join(root, '.env.discord'), 'MESSAGING_PLATFORM=discord\n');
+    writeFileSync(join(root, '.env.whatsapp'), 'MESSAGING_PLATFORM=whatsapp\nOWNER_JID=test_owner@s.whatsapp.net\n');
+    writeFileSync(join(dir, 'bridge-map.json'), '{"instances":[],"routes":[]}\n');
+
+    const bridgeMap = () => ({
+      instances: [
+        { id: 'discord-main', platform: 'discord', url: 'http://discord:${DISCORD_HEALTH_PORT:-3002}' },
+        { id: 'whatsapp-main', platform: 'whatsapp', url: 'http://whatsapp:${WHATSAPP_HEALTH_PORT:-3001}' },
+      ],
+      routes: [{
+        id: 'community-main',
+        endpoints: [
+          { instance: 'discord-main', chatId: 'discord-channel' },
+          { instance: 'whatsapp-main', chatId: 'whatsapp-group' },
+        ],
+        direction: 'both',
+        modeToWhatsApp: 'summary',
+        modeToDiscord: 'verbatim',
+        relayCommands: false,
+        ingestRelayed: false,
+      }],
+    });
+
+    const loaded = JSON.parse((await call(handle.port, token, '/api/config-file/bridge-map')).body) as {
+      value: unknown; mtimeMs: number; sha256: string;
+    };
+    const raw = bridgeMap();
+    const saved = await call(handle.port, token, '/api/config-file/bridge-map', 'PUT', {
+      mtimeMs: loaded.mtimeMs,
+      sha256: loaded.sha256,
+      value: raw,
+    });
+    expect(saved.status).toBe(200);
+    expect(readFileSync(join(dir, 'bridge-map.json'), 'utf8')).toBe(`${JSON.stringify(raw, null, 2)}\n`);
+
+    const readBack = JSON.parse((await call(handle.port, token, '/api/config-file/bridge-map')).body) as { value: unknown };
+    expect(readBack.value).toEqual(raw);
+
+    const exported = JSON.parse((await call(handle.port, token, '/api/export')).body) as {
+      format: 'garbanzo-config-bundle-v1'; files: Record<string, string>;
+    };
+    expect(exported.files['config/bridge-map.json']).toBe(`${JSON.stringify(raw, null, 2)}\n`);
+    writeFileSync(join(dir, 'bridge-map.json'), '{"instances":[],"routes":[]}\n');
+    const preview = JSON.parse((await call(handle.port, token, '/api/import', 'POST', exported)).body) as { stagingId: string };
+    const confirmed = await call(handle.port, token, '/api/import', 'POST', { stagingId: preview.stagingId, confirm: true });
+    expect(confirmed.status).toBe(200);
+    expect(readFileSync(join(dir, 'bridge-map.json'), 'utf8')).toBe(`${JSON.stringify(raw, null, 2)}\n`);
+
+    const imported = JSON.parse(confirmed.body) as { changed: string[] };
+    expect(imported.changed).toContain('config/bridge-map.json');
+  });
+
+  it('rejects an invalid bridge map through the config-file endpoint', async () => {
+    const { root, handle, token } = await setup();
+    mkdirSync(join(root, 'config'), { recursive: true });
+
+    const invalid = await call(handle.port, token, '/api/config-file/bridge-map', 'PUT', {
+      mtimeMs: 0,
+      sha256: null,
+      value: {
+        instances: [{ id: 'discord-main', platform: 'discord' }],
+        routes: [{
+          id: 'broken',
+          endpoints: [
+            { instance: 'discord-main', chatId: 'chat-a' },
+            { instance: 'missing-instance', chatId: 'chat-b' },
+          ],
+          direction: 'both',
+        }],
+      },
+    });
+    expect(invalid.status).toBe(422);
+    const body = JSON.parse(invalid.body) as { issues: Array<{ message: string }> };
+    expect(JSON.stringify(body.issues)).toContain('missing-instance');
+  });
+
   it('rejects config-file writes when the sha256 precondition is stale', async () => {
     const { root, handle, token } = await setup();
     const dir = join(root, 'config');

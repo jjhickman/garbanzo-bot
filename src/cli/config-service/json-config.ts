@@ -1,4 +1,10 @@
 import { z, type ZodType } from 'zod';
+
+import {
+  BridgeMapSchema,
+  describeBridgeMapIssue,
+  expandBridgeMapEnvPlaceholders,
+} from '../../bridge/bridge-map-schema.js';
 export { maskJsonSecrets } from '../../config-core/secret-classifier.js';
 
 export const CONFIG_FILE_NAMES = [
@@ -98,12 +104,13 @@ const ragSourcesSchema = z.object({
   }
 });
 
-const schemas: Record<Exclude<ConfigFileName, 'bridge-map'>, ZodType> = {
+const schemas: Record<ConfigFileName, ZodType> = {
   groups: groupsSchema,
   'discord-channels': discordChannelsSchema,
   'telegram-chats': telegramChatsSchema,
   'matrix-rooms': matrixRoomsSchema,
   'rag-sources': ragSourcesSchema,
+  'bridge-map': BridgeMapSchema,
 };
 
 export function isConfigFileName(value: string): value is ConfigFileName {
@@ -111,9 +118,22 @@ export function isConfigFileName(value: string): value is ConfigFileName {
 }
 
 export function validateConfigFile(name: ConfigFileName, value: unknown): z.ZodIssue[] {
-  if (name === 'bridge-map') return [];
-  const result = schemas[name].safeParse(value);
-  return result.success ? [] : result.error.issues;
+  let candidate = value;
+  try {
+    if (name === 'bridge-map') candidate = expandBridgeMapEnvPlaceholders(value);
+  } catch (error) {
+    return [{
+      code: 'custom',
+      path: [],
+      message: error instanceof Error ? error.message : 'Bridge-map placeholder expansion failed',
+    }];
+  }
+
+  const result = schemas[name].safeParse(candidate);
+  if (result.success) return [];
+  return name === 'bridge-map'
+    ? result.error.issues.map((issue) => ({ ...issue, message: describeBridgeMapIssue(issue, value) }))
+    : result.error.issues;
 }
 
 export function zodIssues(issues: z.ZodIssue[]): Array<{ code: string; path: PropertyKey[]; message: string }> {
