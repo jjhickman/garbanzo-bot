@@ -3,7 +3,9 @@ import { blankToUndefined, booleanFromEnv, optionalString } from './shared.js';
 
 export const BRIDGE_MEDIA_MAX_BYTES_DEFAULT = 8_388_608;
 export const BRIDGE_MEDIA_MAX_BYTES_MIN = 65_536;
-export const BRIDGE_MEDIA_MAX_BYTES_MAX = 20_971_520;
+// RabbitMQ 4 defaults to a 16 MiB message limit. Keep base64 expansion plus
+// the surrounding JSON envelope safely below that broker boundary.
+export const BRIDGE_MEDIA_MAX_BYTES_MAX = 11_534_336;
 
 export const bridgeMediaMaxBytesSchema = z.preprocess(
   blankToUndefined,

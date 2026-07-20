@@ -6,6 +6,8 @@ import { isTelegramChatEnabled } from './telegram-config.js';
 import { processTelegramEvent } from './processor.js';
 import { downloadTelegramVoice } from './telegram-voice.js';
 import { getBridgeMediaMaxBytes, isBridgeMediaEnabled } from '../../utils/config/bridge.js';
+import { instanceId } from '../../utils/config.js';
+import { chatHasMediaRelayRoute } from '../../bridge/bridge-map.js';
 import { buildTelegramWelcomeMessage } from './welcome.js';
 import {
   mapTelegramMedia,
@@ -217,10 +219,13 @@ export function createTelegramClient(deps: TelegramClientDeps): {
       // group chat must never cause a voice download. DMs are never gated
       // here — isTelegramChatEnabled only tracks configured GROUP chats.
       const isDisabledGroupChat = mapped.isGroupChat && !isTelegramChatEnabled(mapped.chatId);
+      const bridgeMediaEnabledForChat = !isDisabledGroupChat
+        && isBridgeMediaEnabled()
+        && chatHasMediaRelayRoute(instanceId, mapped.chatId);
 
       let audio: { url: string; contentType: string; buffer?: Buffer; ptt?: boolean } | undefined;
       if (mapped.voice && !isDisabledGroupChat) {
-        const buffer = isBridgeMediaEnabled()
+        const buffer = bridgeMediaEnabledForChat
           ? await downloadTelegramVoice(deps.token, mapped.voice.fileId, { maxBytes: getBridgeMediaMaxBytes() })
           : await downloadTelegramVoice(deps.token, mapped.voice.fileId);
         audio = {
@@ -234,7 +239,7 @@ export function createTelegramClient(deps: TelegramClientDeps): {
       }
 
       const media = mapped.media
-        ? await prepareTelegramMedia(deps.token, mapped.media, !isDisabledGroupChat)
+        ? await prepareTelegramMedia(deps.token, mapped.media, bridgeMediaEnabledForChat)
         : undefined;
 
       await processTelegramEvent(adapter, { ...mapped, audio, media }, {

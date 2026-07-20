@@ -2,6 +2,7 @@ import type { DbBackend } from '../utils/db-backend.js';
 import { recordBridgeDeadLettered, recordBridgeFailed, recordBridgeSent } from '../middleware/stats.js';
 import type { BridgeEnvelope } from './envelope.js';
 import { BridgeDeliveryDeferredError, type BridgeTransport } from './transport.js';
+import { downgradeMediaEnvelopeToV1 } from './relay-media.js';
 
 const PUMP_INTERVAL_MS = 5_000;
 const CLAIM_LIMIT = 10;
@@ -55,6 +56,12 @@ async function logOutboxError(fields: Record<string, unknown>, message: string):
   loggerModulePromise ??= import('../middleware/logger.js');
   const { logger } = await loggerModulePromise;
   logger.error(fields, message);
+}
+
+async function logOutboxWarn(fields: Record<string, unknown>, message: string): Promise<void> {
+  loggerModulePromise ??= import('../middleware/logger.js');
+  const { logger } = await loggerModulePromise;
+  logger.warn(fields, message);
 }
 
 function errorMessage(err: unknown): string {
@@ -113,16 +120,43 @@ export function createBridgeOutbox(options: BridgeOutboxOptions): BridgeOutbox {
             continue;
           }
 
-          const message = errorMessage(err);
+          let terminalError = err;
+          let message = errorMessage(err);
           const retryable = isRetryableTransportError(err) ? err.retryable : true;
           const nextAttempt = row.attempts + 1;
           recordBridgeFailed(routeLabel(envelope));
+
+          if (!retryable) {
+            const legacyEnvelope = downgradeMediaEnvelopeToV1(envelope);
+            if (legacyEnvelope) {
+              await logOutboxWarn(
+                { id: row.id, routeId: envelope.routeId, targetInstance: row.targetInstance },
+                'Bridge outbox: retrying rejected v2 media envelope once as v1 text for rolling upgrade',
+              );
+              try {
+                await options.transport.deliver(
+                  legacyEnvelope,
+                  options.resolveTargetUrl(row.targetInstance),
+                );
+                await options.ops.markBridgeOutboxSent(row.id);
+                stats.delivered++;
+                recordBridgeSent(routeLabel(envelope));
+                continue;
+              } catch (legacyErr) {
+                terminalError = legacyErr;
+                message = errorMessage(legacyErr);
+              }
+            }
+          }
 
           if (!retryable || nextAttempt >= MAX_ATTEMPTS) {
             await options.ops.markBridgeOutboxDead(row.id, message);
             stats.dead++;
             recordBridgeDeadLettered(routeLabel(envelope));
-            await logOutboxError({ err, id: row.id, targetInstance: row.targetInstance }, 'Bridge outbox row dead-lettered');
+            await logOutboxError(
+              { err: terminalError, id: row.id, targetInstance: row.targetInstance },
+              'Bridge outbox row dead-lettered',
+            );
           } else {
             await options.ops.bumpBridgeOutboxAttempt(row.id, nextAttemptAt(row.attempts), message);
           }

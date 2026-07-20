@@ -130,7 +130,7 @@ describe('mapMatrixMessageToPayload', () => {
         msgtype: 'm.audio',
         body: 'voice-message.ogg',
         url: 'mxc://example.org/abc',
-        info: { mimetype: 'audio/ogg' },
+        info: { mimetype: 'audio/ogg', size: 3 },
       },
     }), BOT);
 
@@ -214,12 +214,14 @@ describe('mapMatrixMessageToPayload', () => {
 describe('Matrix client handler wiring', () => {
   beforeEach(() => {
     delete process.env.BRIDGE_MEDIA_ENABLED;
+    delete process.env.BRIDGE_MEDIA_MAX_BYTES;
     vi.resetModules();
     vi.restoreAllMocks();
   });
 
   async function setup(options: {
     isRoomEnabled?: (roomId: string) => boolean;
+    hasMediaRelayRoute?: (instanceId: string, roomId: string) => boolean;
     resolveOwnerRoomId?: () => Promise<string | null>;
   } = {}) {
     const fakeClient = createFakeClient();
@@ -228,6 +230,7 @@ describe('Matrix client handler wiring', () => {
     const markConnected = vi.fn();
     const markDisconnected = vi.fn();
     const loggerWarn = vi.fn();
+    const chatHasMediaRelayRoute = vi.fn(options.hasMediaRelayRoute ?? (() => true));
 
     vi.doMock('../src/platforms/matrix/processor.js', () => ({ processMatrixEvent }));
     vi.doMock('../src/platforms/matrix/matrix-config.js', () => ({
@@ -241,6 +244,7 @@ describe('Matrix client handler wiring', () => {
     vi.doMock('../src/middleware/logger.js', () => ({
       logger: { debug: vi.fn(), info: vi.fn(), warn: loggerWarn, error: vi.fn() },
     }));
+    vi.doMock('../src/bridge/bridge-map.js', () => ({ chatHasMediaRelayRoute }));
 
     const module = await import('../src/platforms/matrix/client.js');
     const client = module.createMatrixClient({
@@ -252,7 +256,10 @@ describe('Matrix client handler wiring', () => {
       resolveOwnerRoomId: vi.fn(options.resolveOwnerRoomId ?? (async () => '!dm:example.org')),
     });
 
-    return { client, fakeClient, processMatrixEvent, isMatrixRoomEnabled, markConnected, markDisconnected, loggerWarn };
+    return {
+      client, fakeClient, processMatrixEvent, isMatrixRoomEnabled, markConnected, markDisconnected,
+      loggerWarn, chatHasMediaRelayRoute,
+    };
   }
 
   it('asserts Node >=22 for Matrix runtime construction', async () => {
@@ -331,6 +338,132 @@ describe('Matrix client handler wiring', () => {
     expect(payload.media).not.toHaveProperty('buffer');
   });
 
+  it('does not download Matrix media when the event omits its declared size', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const { client, fakeClient, processMatrixEvent } = await setup();
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'photo.png',
+        url: 'mxc://example.org/missing-size',
+        info: { mimetype: 'image/png' },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).not.toHaveBeenCalled();
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).not.toHaveProperty('buffer');
+  });
+
+  it('does not download Matrix media whose declared size exceeds the cap', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const { client, fakeClient } = await setup();
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.file',
+        body: 'large.pdf',
+        url: 'mxc://example.org/too-large',
+        info: { mimetype: 'application/pdf', size: 65_537 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).not.toHaveBeenCalled();
+  });
+
+  it('drops Matrix media after download when the homeserver understated the actual bytes', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const { client, fakeClient, processMatrixEvent } = await setup();
+    vi.mocked(fakeClient.downloadContent).mockResolvedValue(Buffer.alloc(65_537));
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'understated.png',
+        url: 'mxc://example.org/understated',
+        info: { mimetype: 'image/png', size: 65_536 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).toHaveBeenCalledWith('mxc://example.org/understated');
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).not.toHaveProperty('buffer');
+  });
+
+  it('keeps visual downloads off and the 20 MiB audio bound when the room has no media-relay route', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const {
+      client, fakeClient, processMatrixEvent, chatHasMediaRelayRoute,
+    } = await setup({ hasMediaRelayRoute: () => false });
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.audio',
+        body: 'voice.ogg',
+        url: 'mxc://example.org/audio-no-route',
+        info: { mimetype: 'audio/ogg', size: 65_537 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(chatHasMediaRelayRoute).toHaveBeenCalledWith(expect.any(String), '!room:example.org');
+    expect(fakeClient.downloadContent).toHaveBeenCalledWith('mxc://example.org/audio-no-route');
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.audio).toHaveProperty('buffer');
+  });
+
+  it('does not download visual media when the room has no media-relay route', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const { client, fakeClient, processMatrixEvent } = await setup({ hasMediaRelayRoute: () => false });
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.image',
+        body: 'photo.png',
+        url: 'mxc://example.org/photo-no-route',
+        info: { mimetype: 'image/png', size: 3 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).not.toHaveBeenCalled();
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).not.toHaveProperty('buffer');
+  });
+
+  it('uses the bridge media cap for audio on an opted-in route', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const { client, fakeClient, processMatrixEvent } = await setup({ hasMediaRelayRoute: () => true });
+    await client.start();
+
+    fakeClient.handlers.get('room.message')?.('!room:example.org', baseEvent({
+      content: {
+        msgtype: 'm.audio',
+        body: 'voice.ogg',
+        url: 'mxc://example.org/audio-media-route',
+        info: { mimetype: 'audio/ogg', size: 65_537 },
+      },
+    }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(fakeClient.downloadContent).not.toHaveBeenCalled();
+    const [, payload] = processMatrixEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.audio).not.toHaveProperty('buffer');
+  });
+
   it('passes the resolved owner DM room id separately from the owner MXID', async () => {
     const { client, fakeClient, processMatrixEvent } = await setup();
     await client.start();
@@ -374,7 +507,7 @@ describe('Matrix client handler wiring', () => {
         msgtype: 'm.audio',
         body: 'voice',
         url: 'mxc://example.org/audio',
-        info: { mimetype: 'audio/ogg' },
+        info: { mimetype: 'audio/ogg', size: 3 },
       },
     }));
     await Promise.resolve();
@@ -394,7 +527,7 @@ describe('Matrix client handler wiring', () => {
         msgtype: 'm.audio',
         body: 'voice',
         url: 'mxc://example.org/audio',
-        info: { mimetype: 'audio/ogg' },
+        info: { mimetype: 'audio/ogg', size: 3 },
       },
     }));
     await Promise.resolve();

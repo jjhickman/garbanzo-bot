@@ -5,6 +5,7 @@ import {
   BRIDGE_MEDIA_MIME_TYPES,
   envelopeSupportsMedia,
   type BridgeEnvelope,
+  type BridgeEnvelopeV1,
   type BridgeMedia,
 } from './envelope.js';
 
@@ -13,6 +14,12 @@ export function envelopeWithoutMedia(envelope: BridgeEnvelope): BridgeEnvelope {
   const textOnlyEnvelope = { ...envelope };
   delete textOnlyEnvelope.media;
   return textOnlyEnvelope;
+}
+
+export function downgradeMediaEnvelopeToV1(envelope: BridgeEnvelope): BridgeEnvelopeV1 | null {
+  if (!envelopeSupportsMedia(envelope) || !envelope.media) return null;
+  const { media: _media, v: _version, ...textOnly } = envelope;
+  return { ...textOnly, v: 1 };
 }
 
 function isAllowedMediaMimetype(mimetype: string): mimetype is BridgeMedia['mimetype'] {

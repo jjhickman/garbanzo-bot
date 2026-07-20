@@ -135,7 +135,7 @@ cp .env.discord.example .env.discord
 | `BRIDGE_SUMMARY_INTERVAL_MINUTES` | No | Minutes between WhatsApp-bound bridge digest flushes (default: `15`) |
 | `BRIDGE_MAX_TEXT` | No | Max characters per relayed/digest bridge message (default: `1500`) |
 | `BRIDGE_MEDIA_ENABLED` | No | Sending-instance opt-in for bridged media re-upload (default: `false`); the route must also set `mediaRelay: true` |
-| `BRIDGE_MEDIA_MAX_BYTES` | No | Maximum decoded bridged-media payload size (default: `8388608` bytes / 8 MiB); values clamp to `65536`-`20971520` bytes |
+| `BRIDGE_MEDIA_MAX_BYTES` | No | Maximum decoded bridged-media payload size (default: `8388608` bytes / 8 MiB); values clamp to `65536`-`11534336` bytes (11 MiB max, keeping base64 + JSON below RabbitMQ 4's default 16 MiB limit) |
 | `SHARED_MEMORY_ENABLED` | No | Master switch for explicit cross-instance shared memory (`!memory share`/`unshare`) (default: `false`) |
 | `QDRANT_SHARED_COLLECTION` | No | Qdrant collection used for shared community facts (default: `garbanzo_shared`) |
 

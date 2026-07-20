@@ -171,7 +171,7 @@ describe('config hardening', () => {
       MESSAGING_PLATFORM: 'discord',
       BRIDGE_MEDIA_MAX_BYTES: '99999999',
     });
-    expect(aboveMaximum.config.BRIDGE_MEDIA_MAX_BYTES).toBe(20_971_520);
+    expect(aboveMaximum.config.BRIDGE_MEDIA_MAX_BYTES).toBe(11_534_336);
   });
 
   it('accepts enabled http bridge config when MONITORING_TOKEN is set', async () => {

@@ -10,6 +10,8 @@ import { buildMatrixWelcomeMessage } from './welcome.js';
 import { createMatrixStorageProvider, type MatrixStorageProvider } from './sync-storage.js';
 import type { MatrixOwnerClient } from './matrix-owner.js';
 import { getBridgeMediaMaxBytes, isBridgeMediaEnabled } from '../../utils/config/bridge.js';
+import { instanceId } from '../../utils/config.js';
+import { chatHasMediaRelayRoute } from '../../bridge/bridge-map.js';
 
 export interface RawMatrixMessageContent {
   msgtype?: string;
@@ -49,7 +51,7 @@ export interface MatrixMappedMessage {
   quotedText?: string;
   fromSelf: boolean;
   mentionedIds: string[];
-  audio?: { mxcUrl: string; mimeType: string };
+  audio?: { mxcUrl: string; mimeType: string; size?: number };
   media?: {
     mxcUrl: string;
     mimeType: string;
@@ -242,7 +244,11 @@ export function mapMatrixMessageToPayload(
     fromSelf: senderId === bot.userId,
     mentionedIds: Array.from(mentionedIds),
     audio: msgtype === 'm.audio' && content.url
-      ? { mxcUrl: content.url, mimeType: content.info?.mimetype ?? 'audio/ogg' }
+      ? {
+        mxcUrl: content.url,
+        mimeType: content.info?.mimetype ?? 'audio/ogg',
+        ...(content.info?.size === undefined ? {} : { size: content.info.size }),
+      }
       : undefined,
     media: isMedia && content.url
       ? {
@@ -307,17 +313,27 @@ export function createMatrixClient(deps: MatrixClientDeps): {
       if (mapped.fromSelf) return;
 
       const isDisabledGroupRoom = mapped.isGroupChat && !isMatrixRoomEnabled(mapped.roomId);
+      const bridgeMediaEnabledForRoom = !isDisabledGroupRoom
+        && isBridgeMediaEnabled()
+        && chatHasMediaRelayRoute(instanceId, mapped.roomId);
       let audio: { url: string; contentType: string; buffer?: Buffer } | undefined;
       if (mapped.audio && !isDisabledGroupRoom) {
         const matrixClient = await getClient();
-        const buffer = isBridgeMediaEnabled()
+        const buffer = bridgeMediaEnabledForRoom
           ? await downloadMatrixAudio(
             matrixClient,
             deps.accessToken,
             mapped.audio.mxcUrl,
             getBridgeMediaMaxBytes(),
+            mapped.audio.size,
           )
-          : await downloadMatrixAudio(matrixClient, deps.accessToken, mapped.audio.mxcUrl);
+          : await downloadMatrixAudio(
+            matrixClient,
+            deps.accessToken,
+            mapped.audio.mxcUrl,
+            undefined,
+            mapped.audio.size,
+          );
         audio = {
           // Safe mxc URI only; access tokens stay inside the SDK's
           // Authorization headers and are never embedded into URLs.
@@ -336,11 +352,14 @@ export function createMatrixClient(deps: MatrixClientDeps): {
       } | undefined;
       if (mapped.media) {
         const maxBytes = getBridgeMediaMaxBytes();
-        const canDownload = isBridgeMediaEnabled()
-          && !isDisabledGroupRoom
-          && (mapped.media.size === undefined || mapped.media.size <= maxBytes);
-        const buffer = canDownload
-          ? await downloadMatrixMedia(await getClient(), deps.accessToken, mapped.media.mxcUrl, maxBytes)
+        const buffer = bridgeMediaEnabledForRoom
+          ? await downloadMatrixMedia(
+            await getClient(),
+            deps.accessToken,
+            mapped.media.mxcUrl,
+            maxBytes,
+            mapped.media.size,
+          )
           : null;
         media = {
           url: mapped.media.mxcUrl,

@@ -183,7 +183,7 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
 
           let media: BridgeMedia | null = null;
           try {
-            media = await captureInboundMedia(inbound, getBridgeMediaMaxBytes(), audioBuffer);
+            media = await captureInboundMedia(inbound, getBridgeMediaMaxBytes(), route.id, audioBuffer);
           } catch (err) {
             logger.warn({ err, routeId: route.id }, 'Bridge capture: media preparation failed');
           }

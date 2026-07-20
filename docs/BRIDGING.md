@@ -34,7 +34,7 @@ enabled it are unaffected.
 | `BRIDGE_SUMMARY_INTERVAL_MINUTES` | `15` | How often the WhatsApp digest flusher runs |
 | `BRIDGE_MAX_TEXT` | `1500` | Max characters per relayed/digest message |
 | `BRIDGE_MEDIA_ENABLED` | `false` | Instance-wide opt-in for bridged media payloads; routes must also enable `mediaRelay` |
-| `BRIDGE_MEDIA_MAX_BYTES` | `8388608` | Max decoded media payload size; clamped to 65536-20971520 bytes |
+| `BRIDGE_MEDIA_MAX_BYTES` | `8388608` | Max decoded media payload size; clamped to 65536-11534336 bytes |
 | `SHARED_MEMORY_ENABLED` | `false` | Master switch for Tier 1 shared memory |
 | `QDRANT_SHARED_COLLECTION` | `garbanzo_shared` | Qdrant collection used for shared facts |
 | `QDRANT_COLLECTION` | `garbanzo_memory`, or `garbanzo_memory_<INSTANCE_ID>` when `INSTANCE_ID` is set and this is left unset | Local Qdrant collection for this instance's own facts (see [Local memory isolation](#local-memory-isolation)) |
@@ -280,8 +280,9 @@ Media relay requires two opt-ins on the sending side:
 If either setting is off, capture stays on the v1 path and does not download
 media for the bridge. `BRIDGE_MEDIA_MAX_BYTES` limits the decoded payload on
 capture and delivery. Its default is 8,388,608 bytes (8 MiB). Values below
-65,536 bytes clamp to 65,536, and values above 20,971,520 bytes clamp to
-20,971,520.
+65,536 bytes clamp to 65,536, and values above 11,534,336 bytes (11 MiB)
+clamp to 11,534,336. This leaves room for base64 and JSON expansion below
+RabbitMQ 4's default 16 MiB message limit.
 
 The MIME allowlist is `image/png`, `image/jpeg`, `image/gif`, `image/webp`,
 `audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/wav`, `audio/webm`, `video/mp4`,
@@ -307,6 +308,9 @@ the complete envelope JSON only while a row is pending delivery; the moment a
 row reaches a terminal state (delivered or dead-lettered) the media field is
 stripped from the stored envelope, so media bytes never accumulate in the
 outbox database beyond the in-flight window.
+
+Upgrade peers together; queued v2 messages are dropped by pre-upgrade AMQP
+consumers.
 
 ## Broker (AMQP)
 

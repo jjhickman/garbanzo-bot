@@ -425,7 +425,8 @@ const selectWhatsAppHeldJobs = db.prepare(
 );
 const updateWhatsAppOutboundStatus = db.prepare(
   `UPDATE whatsapp_outbound_jobs
-   SET status = ?, reason = ?, attempts = attempts + 1, updated_at = ?, sent_at = ?
+   SET status = ?, reason = ?, content_json = COALESCE(?, content_json),
+       attempts = attempts + 1, updated_at = ?, sent_at = ?
    WHERE id = ?`,
 );
 const recoverWhatsAppPending = db.prepare(
@@ -876,9 +877,10 @@ export function updateWhatsAppOutboundJob(
   status: WhatsAppOutboundStatus,
   reason: string | null = null,
   sentAt: number | null = null,
+  contentJson?: string,
 ): boolean {
   const ts = Math.floor(Date.now() / 1000);
-  return updateWhatsAppOutboundStatus.run(status, reason, ts, sentAt, id).changes > 0;
+  return updateWhatsAppOutboundStatus.run(status, reason, contentJson ?? null, ts, sentAt, id).changes > 0;
 }
 
 export function getWhatsAppOutboundJob(id: number): WhatsAppOutboundJob | undefined {
@@ -1655,7 +1657,8 @@ export function createSqliteBackend(): DbBackend {
       status: WhatsAppOutboundStatus,
       reason?: string | null,
       sentAt?: number | null,
-    ) => updateWhatsAppOutboundJob(id, status, reason, sentAt),
+      contentJson?: string,
+    ) => updateWhatsAppOutboundJob(id, status, reason, sentAt, contentJson),
     getWhatsAppOutboundJob: async (id: number) => getWhatsAppOutboundJob(id),
     listWhatsAppHeldJobs: async (limit?: number) => listWhatsAppHeldJobs(limit),
     recoverWhatsAppPendingJobs: async (reason: string) => recoverWhatsAppPendingJobs(reason),

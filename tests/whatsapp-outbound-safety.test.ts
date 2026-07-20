@@ -143,4 +143,88 @@ describe('WhatsApp outbound safety socket', () => {
     expect(raw.sendMessage).toHaveBeenCalledWith('group@g.us', { text: 'hello' }, undefined);
     expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(8, 'sent', 'Released manually by owner', expect.any(Number));
   });
+
+  it('retains a held document payload for release, then strips it on the terminal sent transition', async () => {
+    dbMocks.getWhatsAppSafetyState.mockResolvedValue({
+      paused: true,
+      risk: 'medium',
+      score: 40,
+      reasons: ['paused'],
+      updatedAt: 0,
+    });
+    dbMocks.createWhatsAppOutboundJob.mockResolvedValue({ ...pendingJob(9), kind: 'document' });
+    const raw = { sendMessage: vi.fn(async () => undefined) };
+    const sock = createProtectedWhatsAppSocket(raw as never);
+
+    await expect(sock.sendMessage('group@g.us', {
+      document: Buffer.from([1, 2, 3, 4]),
+      mimetype: 'application/pdf',
+      fileName: 'bridge.pdf',
+    })).rejects.toThrow('held');
+
+    const fullPayload = dbMocks.createWhatsAppOutboundJob.mock.calls[0]?.[2] as string;
+    expect(JSON.parse(fullPayload)).toMatchObject({ document: { data: [1, 2, 3, 4] } });
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(
+      9,
+      'held',
+      'WhatsApp output paused at risk level medium',
+    );
+
+    dbMocks.getWhatsAppOutboundJob.mockResolvedValue({
+      ...pendingJob(9),
+      kind: 'document',
+      status: 'held' as const,
+      contentJson: fullPayload,
+    });
+    const released = await getWhatsAppOutboundSafety(sock)?.releaseHeldJob(9);
+
+    expect(released).toBe(true);
+    expect(raw.sendMessage).toHaveBeenCalledTimes(1);
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenLastCalledWith(
+      9,
+      'sent',
+      'Released manually by owner',
+      expect.any(Number),
+      JSON.stringify({ kind: 'document', strippedBytes: 4 }),
+    );
+  });
+
+  it('strips document bytes when a media job is sent', async () => {
+    dbMocks.createWhatsAppOutboundJob.mockResolvedValue({ ...pendingJob(10), kind: 'document' });
+    const raw = { sendMessage: vi.fn(async () => ({ key: { id: 'sent' } })) };
+    const sock = createProtectedWhatsAppSocket(raw as never);
+
+    await sock.sendMessage('group@g.us', {
+      document: Buffer.alloc(12),
+      mimetype: 'application/pdf',
+      fileName: 'bridge.pdf',
+    });
+
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(
+      10,
+      'sent',
+      null,
+      expect.any(Number),
+      JSON.stringify({ kind: 'document', strippedBytes: 12 }),
+    );
+  });
+
+  it('strips audio bytes when a media job fails', async () => {
+    dbMocks.createWhatsAppOutboundJob.mockResolvedValue({ ...pendingJob(11), kind: 'audio' });
+    const raw = { sendMessage: vi.fn(async () => { throw new Error('send failed'); }) };
+    const sock = createProtectedWhatsAppSocket(raw as never);
+
+    await expect(sock.sendMessage('group@g.us', {
+      audio: Buffer.alloc(7),
+      mimetype: 'audio/ogg',
+    })).rejects.toThrow('send failed');
+
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(
+      11,
+      'failed',
+      'send failed',
+      undefined,
+      JSON.stringify({ kind: 'audio', strippedBytes: 7 }),
+    );
+  });
 });

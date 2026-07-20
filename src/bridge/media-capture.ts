@@ -6,6 +6,9 @@ import {
   type BridgeMedia,
 } from './envelope.js';
 
+const MAX_CONCURRENT_MEDIA_CAPTURES = 4;
+let activeMediaCaptures = 0;
+
 function isAllowedMimeType(value: string): value is BridgeMedia['mimetype'] {
   return (BRIDGE_MEDIA_MIME_TYPES as readonly string[]).includes(value);
 }
@@ -69,6 +72,7 @@ async function mediaBuffer(inbound: InboundMessage, maxBytes: number): Promise<B
 export async function captureInboundMedia(
   inbound: InboundMessage,
   maxBytes: number,
+  routeId: string,
   prefetchedAudio?: Buffer | null,
 ): Promise<BridgeMedia | null> {
   const source = inbound.audio
@@ -81,16 +85,29 @@ export async function captureInboundMedia(
     : inbound.media;
   if (!source || !isAllowedMimeType(source.contentType)) return null;
 
-  const buffer = inbound.audio && prefetchedAudio !== undefined
-    ? prefetchedAudio
-    : await mediaBuffer(inbound, maxBytes);
-  if (!buffer || buffer.byteLength > maxBytes) return null;
+  if (activeMediaCaptures >= MAX_CONCURRENT_MEDIA_CAPTURES) {
+    logger.debug(
+      { routeId },
+      'Bridge capture: media preparation skipped because all capture slots are busy',
+    );
+    return null;
+  }
 
-  return {
-    data: buffer.toString('base64'),
-    mimetype: source.contentType,
-    fileName: source.fileName ?? defaultFileName(source.kind, source.contentType),
-    kind: source.kind,
-    ...(source.ptt === undefined ? {} : { ptt: source.ptt }),
-  };
+  activeMediaCaptures += 1;
+  try {
+    const buffer = inbound.audio && prefetchedAudio !== undefined
+      ? prefetchedAudio
+      : await mediaBuffer(inbound, maxBytes);
+    if (!buffer || buffer.byteLength > maxBytes) return null;
+
+    return {
+      data: buffer.toString('base64'),
+      mimetype: source.contentType,
+      fileName: source.fileName ?? defaultFileName(source.kind, source.contentType),
+      kind: source.kind,
+      ...(source.ptt === undefined ? {} : { ptt: source.ptt }),
+    };
+  } finally {
+    activeMediaCaptures -= 1;
+  }
 }

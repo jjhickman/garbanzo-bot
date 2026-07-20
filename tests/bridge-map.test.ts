@@ -423,6 +423,25 @@ describe('bridge map config', () => {
     expect(loadBridgeMap()?.instances[0]?.url).toBe('http://discord:4922');
   });
 
+  it('uses the cached map and outbound route direction for media-relay chat lookup', async () => {
+    const readFileSyncMock = vi.fn(() => JSON.stringify({
+      ...validMap,
+      routes: [{ ...validMap.routes[0], mediaRelay: true }],
+    }));
+    vi.resetModules();
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return { ...actual, existsSync: vi.fn(() => true), readFileSync: readFileSyncMock };
+    });
+
+    const { chatHasMediaRelayRoute } = await import('../src/bridge/bridge-map.js');
+
+    expect(chatHasMediaRelayRoute('remy', '123')).toBe(true);
+    expect(chatHasMediaRelayRoute('garbanzo', '456@g.us')).toBe(true);
+    expect(chatHasMediaRelayRoute('remy', 'missing')).toBe(false);
+    expect(readFileSyncMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the example file valid against the schema', () => {
     const example = JSON.parse(readFileSync('config/bridge-map.example.json', 'utf8')) as unknown;
 
