@@ -58,6 +58,24 @@ function serializePayload(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function mediaPayloadByteLength(value: unknown): number {
+  if (Buffer.isBuffer(value)) return value.byteLength;
+  if (value instanceof ArrayBuffer) return value.byteLength;
+  if (ArrayBuffer.isView(value)) return value.byteLength;
+  if (typeof value !== 'object' || value === null) return 0;
+
+  const serialized = value as { type?: unknown; data?: unknown };
+  return serialized.type === 'Buffer' && Array.isArray(serialized.data)
+    ? serialized.data.length
+    : 0;
+}
+
+function terminalMediaContentJson(content: SendContent, kind: string): string | undefined {
+  if (kind !== 'document' && kind !== 'audio') return undefined;
+  const media = (content as unknown as Record<string, unknown>)[kind];
+  return JSON.stringify({ kind, strippedBytes: mediaPayloadByteLength(media) });
+}
+
 function parsePayload<T>(value: string | null): T | undefined {
   if (value === null) return undefined;
   return JSON.parse(value) as T;
@@ -145,9 +163,10 @@ export class WhatsAppOutboundSafety {
     }
 
     await this.initialized;
+    const kind = contentKind(content);
     const job = await createWhatsAppOutboundJob(
       chatJid,
-      contentKind(content),
+      kind,
       serializePayload(content),
       options === undefined ? null : serializePayload(options),
     );
@@ -175,13 +194,23 @@ export class WhatsAppOutboundSafety {
     try {
       const sent = await this.rawSocket.sendMessage(chatJid, content, options);
       const sentAt = nowSeconds();
-      await updateWhatsAppOutboundJob(job.id, 'sent', null, sentAt);
+      const terminalContentJson = terminalMediaContentJson(content, kind);
+      if (terminalContentJson) {
+        await updateWhatsAppOutboundJob(job.id, 'sent', null, sentAt, terminalContentJson);
+      } else {
+        await updateWhatsAppOutboundJob(job.id, 'sent', null, sentAt);
+      }
       this.antiBan.afterSend(chatJid, decisionText(content));
       return sent;
     } catch (err) {
       const message = errorText(err);
       this.antiBan.afterSendFailed(message);
-      await updateWhatsAppOutboundJob(job.id, 'failed', message);
+      const terminalContentJson = terminalMediaContentJson(content, kind);
+      if (terminalContentJson) {
+        await updateWhatsAppOutboundJob(job.id, 'failed', message, undefined, terminalContentJson);
+      } else {
+        await updateWhatsAppOutboundJob(job.id, 'failed', message);
+      }
       throw err;
     }
   }
@@ -222,7 +251,18 @@ export class WhatsAppOutboundSafety {
       if (!content) return false;
       const options = parsePayload<SendOptions>(job.optionsJson);
       await this.rawSocket.sendMessage(job.chatJid, content, options);
-      await updateWhatsAppOutboundJob(job.id, 'sent', 'Released manually by owner', nowSeconds());
+      const terminalContentJson = terminalMediaContentJson(content, job.kind);
+      if (terminalContentJson) {
+        await updateWhatsAppOutboundJob(
+          job.id,
+          'sent',
+          'Released manually by owner',
+          nowSeconds(),
+          terminalContentJson,
+        );
+      } else {
+        await updateWhatsAppOutboundJob(job.id, 'sent', 'Released manually by owner', nowSeconds());
+      }
       logger.info({ jobId: job.id, kind: job.kind }, 'Released retained WhatsApp outbound job');
       return true;
     } catch (err) {

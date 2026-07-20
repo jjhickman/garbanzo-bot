@@ -873,13 +873,15 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       status: WhatsAppOutboundStatus,
       reason: string | null = null,
       sentAt: number | null = null,
+      contentJson?: string,
     ): Promise<boolean> {
       const ts = Math.floor(Date.now() / 1000);
       const res = await pool.query(
         `UPDATE whatsapp_outbound_jobs
-         SET status = $1, reason = $2, attempts = attempts + 1, updated_at = $3, sent_at = $4
-         WHERE id = $5`,
-        [status, reason, ts, sentAt, id],
+         SET status = $1, reason = $2, attempts = attempts + 1, updated_at = $3,
+             sent_at = $4, content_json = COALESCE($5, content_json)
+         WHERE id = $6`,
+        [status, reason, ts, sentAt, contentJson ?? null, id],
       );
       return (res.rowCount ?? 0) > 0;
     },

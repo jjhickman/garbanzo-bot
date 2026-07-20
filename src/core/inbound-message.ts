@@ -67,7 +67,17 @@ export interface InboundMessage {
    * bytes for consumers that need the audio content. See
    * `src/platforms/telegram/telegram-voice.ts`.
    */
-  audio?: { url: string; contentType: string; buffer?: Buffer };
+  audio?: { url: string; contentType: string; buffer?: Buffer; ptt?: boolean };
+
+  /** First non-audio attachment available for optional bridge re-upload. */
+  media?: {
+    url?: string;
+    contentType: string;
+    fileName?: string;
+    buffer?: Buffer;
+    kind: 'image' | 'video' | 'audio' | 'sticker' | 'document';
+    ptt?: boolean;
+  };
 
   /**
    * True when `text` is a processor-synthesized placeholder (a voice note

@@ -88,6 +88,8 @@ describe('config hardening', () => {
     expect(config.BRIDGE_BROKER_URL).toBeUndefined();
     expect(config.BRIDGE_SUMMARY_INTERVAL_MINUTES).toBe(15);
     expect(config.BRIDGE_MAX_TEXT).toBe(1500);
+    expect(config.BRIDGE_MEDIA_ENABLED).toBe(false);
+    expect(config.BRIDGE_MEDIA_MAX_BYTES).toBe(8_388_608);
     expect(config.SHARED_MEMORY_ENABLED).toBe(false);
     expect(config.QDRANT_SHARED_COLLECTION).toBe('garbanzo_shared');
     expect(instanceId).toBe('discord');
@@ -144,14 +146,32 @@ describe('config hardening', () => {
       BRIDGE_TRANSPORT: '',
       BRIDGE_SUMMARY_INTERVAL_MINUTES: '',
       BRIDGE_MAX_TEXT: '',
+      BRIDGE_MEDIA_ENABLED: '',
+      BRIDGE_MEDIA_MAX_BYTES: '',
       QDRANT_SHARED_COLLECTION: '',
     });
 
     expect(config.BRIDGE_TRANSPORT).toBe('http');
     expect(config.BRIDGE_SUMMARY_INTERVAL_MINUTES).toBe(15);
     expect(config.BRIDGE_MAX_TEXT).toBe(1500);
+    expect(config.BRIDGE_MEDIA_ENABLED).toBe(false);
+    expect(config.BRIDGE_MEDIA_MAX_BYTES).toBe(8_388_608);
     expect(config.QDRANT_SHARED_COLLECTION).toBe('garbanzo_shared');
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('clamps the bridge media byte cap to its supported bounds', async () => {
+    const belowMinimum = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'discord',
+      BRIDGE_MEDIA_MAX_BYTES: '1',
+    });
+    expect(belowMinimum.config.BRIDGE_MEDIA_MAX_BYTES).toBe(65_536);
+
+    const aboveMaximum = await importConfigWithEnv({
+      MESSAGING_PLATFORM: 'discord',
+      BRIDGE_MEDIA_MAX_BYTES: '99999999',
+    });
+    expect(aboveMaximum.config.BRIDGE_MEDIA_MAX_BYTES).toBe(11_534_336);
   });
 
   it('accepts enabled http bridge config when MONITORING_TOKEN is set', async () => {

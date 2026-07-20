@@ -42,6 +42,12 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       inbound.text = VOICE_NOTE_PLACEHOLDER;
       inbound.synthesizedPlaceholder = true;
     } else {
+      inbound.audio = {
+        url: `whatsapp-message:${inbound.messageId ?? 'unknown'}`,
+        contentType: 'audio/ogg',
+        buffer: audioBuffer,
+        ptt: true,
+      };
       const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
       if (!transcript) {
         logger.debug('Voice message transcription failed — continuing with placeholder');

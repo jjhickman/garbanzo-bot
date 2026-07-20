@@ -427,6 +427,8 @@ describe('layered env example coherence', () => {
       'BRIDGE_BROKER_PASSWORD',
       'BRIDGE_SUMMARY_INTERVAL_MINUTES',
       'BRIDGE_MAX_TEXT',
+      'BRIDGE_MEDIA_ENABLED',
+      'BRIDGE_MEDIA_MAX_BYTES',
       'SHARED_MEMORY_ENABLED',
       'QDRANT_SHARED_COLLECTION',
     ]) {

@@ -1,4 +1,7 @@
 import { logger } from '../../middleware/logger.js';
+import { fetchBoundedBuffer, MEDIA_FETCH_TIMEOUT_MS } from '../../utils/bounded-fetch.js';
+
+const TELEGRAM_VOICE_MAX_BYTES = 20 * 1024 * 1024;
 
 /**
  * CREDENTIAL RULE (plan-critical, review-mandated): Telegram file URLs are
@@ -31,14 +34,20 @@ async function fetchTelegramFilePath(
   fileId: string,
   fetchFn: typeof fetch,
 ): Promise<string | null> {
-  const response = await fetchFn(
-    `https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`,
-  );
-  if (!response.ok) return null;
-
-  const json = await response.json() as TelegramGetFileResponse;
-  if (!json.ok) return null;
-  return json.result?.file_path ?? null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MEDIA_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetchFn(
+      `https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) return null;
+    const json = await response.json() as TelegramGetFileResponse;
+    if (!json.ok) return null;
+    return json.result?.file_path ?? null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -47,9 +56,10 @@ async function fetchTelegramFilePath(
  * stays undefined; downstream consumers still get contentType + a safe
  * file_id-based placeholder url).
  */
-export async function downloadTelegramVoice(
+export async function downloadTelegramFile(
   token: string,
   fileId: string,
+  maxBytes: number,
   deps: { fetchFn?: typeof fetch } = {},
 ): Promise<Buffer | null> {
   const fetchFn = deps.fetchFn ?? fetch;
@@ -63,17 +73,32 @@ export async function downloadTelegramVoice(
 
     // Token-bearing URL — local only. Never logged, returned, or persisted.
     const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
-    const fileResponse = await fetchFn(fileUrl);
-    if (!fileResponse.ok) {
-      logger.warn({ fileId, status: fileResponse.status }, 'Telegram voice file download failed');
-      return null;
-    }
-
-    const arrayBuffer = await fileResponse.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return await fetchBoundedBuffer(fileUrl, {
+      fetchFn,
+      maxBytes,
+      onFailure: (failure) => {
+        if (failure.reason === 'error') {
+          const message = failure.error instanceof Error ? failure.error.message : String(failure.error);
+          logger.warn({ err: redactToken(message, token), fileId }, 'Telegram file download threw');
+        } else {
+          logger.warn(
+            { fileId, ...(failure.reason === 'status' ? { status: failure.status } : {}) },
+            'Telegram file download failed',
+          );
+        }
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.warn({ err: redactToken(message, token), fileId }, 'Telegram voice download threw');
+    logger.warn({ err: redactToken(message, token), fileId }, 'Telegram file download threw');
     return null;
   }
+}
+
+export async function downloadTelegramVoice(
+  token: string,
+  fileId: string,
+  deps: { fetchFn?: typeof fetch; maxBytes?: number } = {},
+): Promise<Buffer | null> {
+  return downloadTelegramFile(token, fileId, deps.maxBytes ?? TELEGRAM_VOICE_MAX_BYTES, deps);
 }

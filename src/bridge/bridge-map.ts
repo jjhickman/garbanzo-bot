@@ -72,3 +72,8 @@ export function findOutboundRoute(
   return outboundRoutesForInstance(map, instanceId).find((route) =>
     route.endpoints.some((endpoint) => endpoint.instance === instanceId && endpoint.chatId === chatId));
 }
+
+export function chatHasMediaRelayRoute(instanceId: string, chatId: string): boolean {
+  const map = loadBridgeMap();
+  return map ? findOutboundRoute(map, instanceId, chatId)?.mediaRelay === true : false;
+}

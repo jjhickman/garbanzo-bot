@@ -239,6 +239,31 @@ describe('createAmqpBridgeTransport', () => {
     await transport.stop();
   });
 
+  it('accepts a v2 media envelope and passes its text through to the inbound handler', async () => {
+    const { createAmqpBridgeTransport } = await loadTransport();
+    const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });
+    const handler = vi.fn<(env: BridgeEnvelope) => Promise<InboundBridgeResult>>(async () => 'accepted');
+    await transport.startInbound(handler);
+    const mediaEnvelope = makeEnvelope({
+      v: 2,
+      text: 'caption still relays',
+      media: {
+        data: Buffer.from('small image').toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
+
+    const msg = fakeConsumeMessage(mediaEnvelope);
+    lastConnection.channel.consumeHandler?.(msg);
+    await vi.waitFor(() => expect(lastConnection.channel.acked).toContain(msg));
+
+    expect(handler).toHaveBeenCalledWith(mediaEnvelope);
+    expect(handler.mock.calls[0]?.[0].text).toBe('caption still relays');
+    await transport.stop();
+  });
+
   it('ack + warns on a poison (invalid) message instead of looping', async () => {
     const { createAmqpBridgeTransport } = await loadTransport();
     const transport = createAmqpBridgeTransport({ instanceId: 'discord-band', brokerUrl: 'amqp://broker' });

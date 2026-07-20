@@ -5,7 +5,11 @@ process.env.AI_PROVIDER_ORDER ??= 'openrouter';
 import { Readable } from 'stream';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BridgeEnvelope } from '../src/bridge/envelope.js';
+import {
+  BRIDGE_MEDIA_MAX_BYTES_DEFAULT,
+  bridgeMediaBase64MaxLength,
+  type BridgeEnvelope,
+} from '../src/bridge/envelope.js';
 import { BridgeDeliveryDeferredError } from '../src/bridge/transport.js';
 
 async function loadHealthModule(): Promise<typeof import('../src/middleware/health.js')> {
@@ -166,26 +170,51 @@ describe('bridge inbound endpoint', () => {
     expect(lastStatus).toBe(429);
   });
 
-  it('rejects request bodies over 64KB', async () => {
+  it('accepts a v2 envelope sized near the default media cap', async () => {
     const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
+    const mediaEnvelope = envelope({
+      v: 2,
+      media: {
+        data: Buffer.alloc(BRIDGE_MEDIA_MAX_BYTES_DEFAULT, 1).toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'near-cap.png',
+        kind: 'image',
+      },
+    });
 
-    const response = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, 'x'.repeat(64 * 1024 + 1));
+    const response = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, mediaEnvelope);
+
+    expect(response.status).toBe(202);
+    expect(bridgeInboundHandler).toHaveBeenCalledWith(mediaEnvelope);
+  });
+
+  it('rejects request bodies over the derived bridge media envelope limit', async () => {
+    const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
+    const derivedLimit = bridgeMediaBase64MaxLength(BRIDGE_MEDIA_MAX_BYTES_DEFAULT) + 64 * 1024;
+
+    const response = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, 'x'.repeat(derivedLimit + 1));
 
     expect(response.status).toBe(413);
     expect(response.json()).toEqual({ error: 'payload_too_large' });
     expect(bridgeInboundHandler).not.toHaveBeenCalled();
   });
 
-  it('rejects and destroys a stream that crosses 64KB mid-body', async () => {
+  it('rejects and destroys a stream that crosses the derived limit mid-body', async () => {
     const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
     const { __testing } = await loadHealthModule();
+    const priorMaxBytes = process.env.BRIDGE_MEDIA_MAX_BYTES;
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const derivedLimit = bridgeMediaBase64MaxLength(65_536) + 64 * 1024;
 
     // Two chunks, each under the cap; the second crosses it mid-stream.
     const req = request('/bridge/inbound', 'POST', undefined, {
       authorization: 'Bearer T',
       'content-type': 'application/json',
     });
-    const stream = Readable.from(['a'.repeat(40 * 1024), 'b'.repeat(40 * 1024)]);
+    const stream = Readable.from([
+      'a'.repeat(Math.floor(derivedLimit * 0.75)),
+      'b'.repeat(Math.floor(derivedLimit * 0.75)),
+    ]);
     const midStreamReq = Object.assign(stream, {
       url: req.url,
       method: req.method,
@@ -194,7 +223,12 @@ describe('bridge inbound endpoint', () => {
     }) as typeof req;
     const res = response();
 
-    await __testing.handleRequest(midStreamReq, res, { authToken: 'T', bridgeInboundHandler });
+    try {
+      await __testing.handleRequest(midStreamReq, res, { authToken: 'T', bridgeInboundHandler });
+    } finally {
+      if (priorMaxBytes === undefined) delete process.env.BRIDGE_MEDIA_MAX_BYTES;
+      else process.env.BRIDGE_MEDIA_MAX_BYTES = priorMaxBytes;
+    }
 
     expect(res.captured.status).toBe(413);
     expect(bridgeInboundHandler).not.toHaveBeenCalled();
@@ -232,6 +266,26 @@ describe('bridge inbound endpoint', () => {
     expect(response.status).toBe(202);
     expect(response.json()).toEqual({ status: 'accepted' });
     expect(bridgeInboundHandler).toHaveBeenCalledWith(envelope());
+  });
+
+  it('accepts a v2 media envelope and passes its text through to the inbound handler', async () => {
+    const bridgeInboundHandler = vi.fn(async () => 'accepted' as const);
+    const mediaEnvelope = envelope({
+      v: 2,
+      text: 'caption still relays',
+      media: {
+        data: Buffer.from('small image').toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
+
+    const result = await postEnvelope({ authToken: 'T', bridgeInboundHandler }, mediaEnvelope);
+
+    expect(result.status).toBe(202);
+    expect(bridgeInboundHandler).toHaveBeenCalledWith(mediaEnvelope);
+    expect(bridgeInboundHandler.mock.calls[0]?.[0].text).toBe('caption still relays');
   });
 
   it('returns duplicate when the handler reports an existing idempotency key', async () => {

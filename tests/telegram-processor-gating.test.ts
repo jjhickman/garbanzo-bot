@@ -402,3 +402,32 @@ describe('Telegram processor — voice transcription (F1, T2 review)', () => {
     expect(messenger.sendText).not.toHaveBeenCalled();
   });
 });
+
+describe('Telegram processor — media normalization', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it('threads photo media into InboundMessage and marks it visual', async () => {
+    const processInboundMessage = vi.fn(async () => undefined);
+    vi.doMock('../src/core/process-inbound-message.js', () => ({ processInboundMessage }));
+    setupMocks();
+    const { processTelegramEvent } = await importProcessor();
+    const media = {
+      url: 'telegram-file:photo-1',
+      contentType: 'image/jpeg',
+      fileName: 'photo.jpg',
+      kind: 'image',
+      buffer: Buffer.from([1, 2, 3]),
+    };
+
+    await processTelegramEvent(
+      createMessenger(),
+      baseEvent({ text: '', media }),
+      { ownerId: 'owner-chat', ownerUserId: '111' },
+    );
+
+    expect(processInboundMessage.mock.calls[0]?.[1]).toMatchObject({ media, hasVisualMedia: true });
+  });
+});

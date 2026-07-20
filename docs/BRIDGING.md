@@ -33,6 +33,8 @@ enabled it are unaffected.
 | `BRIDGE_BROKER_URL` | unset | Required when `BRIDGE_TRANSPORT=amqp` |
 | `BRIDGE_SUMMARY_INTERVAL_MINUTES` | `15` | How often the WhatsApp digest flusher runs |
 | `BRIDGE_MAX_TEXT` | `1500` | Max characters per relayed/digest message |
+| `BRIDGE_MEDIA_ENABLED` | `false` | Instance-wide opt-in for bridged media payloads; routes must also enable `mediaRelay` |
+| `BRIDGE_MEDIA_MAX_BYTES` | `8388608` | Max decoded media payload size; clamped to 65536-11534336 bytes |
 | `SHARED_MEMORY_ENABLED` | `false` | Master switch for Tier 1 shared memory |
 | `QDRANT_SHARED_COLLECTION` | `garbanzo_shared` | Qdrant collection used for shared facts |
 | `QDRANT_COLLECTION` | `garbanzo_memory`, or `garbanzo_memory_<INSTANCE_ID>` when `INSTANCE_ID` is set and this is left unset | Local Qdrant collection for this instance's own facts (see [Local memory isolation](#local-memory-isolation)) |
@@ -171,6 +173,10 @@ plain HTTP with no extra containers.
        to that receiving bot's later context/memory flow, so only enable it
        for routes where both sides should inform the receiver's local context.
        Summary-mode digests and held/buffered sends are never ingested.
+     - `mediaRelay` - `false` by default. Media re-upload is permitted only
+       when this route option and the instance-wide `BRIDGE_MEDIA_ENABLED`
+       flag are both true. The media byte cap is controlled by
+       `BRIDGE_MEDIA_MAX_BYTES` (8 MiB by default).
 
    Example, bridging one conversation group across Discord, WhatsApp,
    Telegram, and Matrix:
@@ -196,7 +202,8 @@ plain HTTP with no extra containers.
          "modeToWhatsApp": "summary",
          "modeToDiscord": "verbatim",
          "relayCommands": false,
-         "ingestRelayed": false
+         "ingestRelayed": false,
+         "mediaRelay": false
        }
      ]
    }
@@ -256,6 +263,54 @@ plain HTTP with no extra containers.
      WhatsApp General — last 15 min:
      • Sam: 7pm as usual
      ```
+
+## Media relay
+
+Media relay re-uploads supported attachments on the destination platform.
+The relay text is sent first and keeps the same attribution, formatting, and
+placeholder behavior as a v1 text-only envelope. When voice transcription
+succeeds, the voice note keeps its transcript text and is re-uploaded as audio
+with `ptt=true`.
+
+Media relay requires two opt-ins on the sending side:
+
+- Set `BRIDGE_MEDIA_ENABLED=true` for the instance.
+- Set `mediaRelay: true` on the route.
+
+If either setting is off, capture stays on the v1 path and does not download
+media for the bridge. `BRIDGE_MEDIA_MAX_BYTES` limits the decoded payload on
+capture and delivery. Its default is 8,388,608 bytes (8 MiB). Values below
+65,536 bytes clamp to 65,536, and values above 11,534,336 bytes (11 MiB)
+clamp to 11,534,336. This leaves room for base64 and JSON expansion below
+RabbitMQ 4's default 16 MiB message limit.
+
+The MIME allowlist is `image/png`, `image/jpeg`, `image/gif`, `image/webp`,
+`audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/wav`, `audio/webm`, `video/mp4`,
+and `application/pdf`.
+
+Media is relayed only on verbatim destination legs. A summary-mode leg removes
+media before the envelope enters the summary buffer. Its text and digest
+behavior stay the same as the v1 path.
+
+Media failures degrade to text:
+
+- An attachment over the sender cap falls back to placeholder text.
+- A MIME type outside the allowlist falls back to placeholder text.
+- A capture-side download failure falls back to placeholder text.
+- A receiver with a smaller bound salvages the envelope as text-only during
+  `parseBridgeEnvelope`.
+- A destination media-send failure leaves the earlier text delivery accepted,
+  so the full envelope is not retried.
+
+Media bytes travel as base64 inside the v2 envelope. Garbanzo creates no
+standalone media file or separate media table. The durable bridge outbox stores
+the complete envelope JSON only while a row is pending delivery; the moment a
+row reaches a terminal state (delivered or dead-lettered) the media field is
+stripped from the stored envelope, so media bytes never accumulate in the
+outbox database beyond the in-flight window.
+
+Upgrade peers together; queued v2 messages are dropped by pre-upgrade AMQP
+consumers.
 
 ## Broker (AMQP)
 
@@ -507,13 +562,11 @@ hard character cut (`...`) only if even the header would otherwise overflow.
 Verbatim relays truncate the message body the same way, keeping the
 attribution prefix intact.
 
-Textless Discord-origin audio attachments can be relayed as transcripts when
-`WHISPER_URL` is set and reachable. The receiving side sees the transcript as
-a normal relayed message prefixed with `🎤`; if fetch or transcription fails,
-the bridge falls back to `[voice note]`. WhatsApp voice notes do not currently
-provide a fetchable URL on `InboundMessage` because Baileys media requires
-`downloadMediaMessage`, so WhatsApp-origin voice notes relay as placeholders
-for now. Cross-platform WhatsApp media download is a roadmap item.
+Textless audio attachments can be relayed as transcripts when `WHISPER_URL` is
+set and reachable. The receiving side sees a successful transcript as a normal
+relayed message prefixed with `🎤`. Fetch or transcription failure falls back
+to `[voice note]`. When [media relay](#media-relay) is enabled, the same audio
+download is reused for transcription and re-upload.
 
 ## Shared memory
 

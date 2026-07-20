@@ -28,8 +28,13 @@ import {
 import { getCurrentStats, getDailyCost, getLifetimeCounters } from './stats.js';
 import { getGroupName } from '../core/groups-config.js';
 import { getVectorStore } from '../utils/vector-memory.js';
-import { parseBridgeEnvelope, type BridgeEnvelope } from '../bridge/envelope.js';
+import {
+  bridgeMediaBase64MaxLength,
+  parseBridgeEnvelope,
+  type BridgeEnvelope,
+} from '../bridge/envelope.js';
 import { BridgeDeliveryDeferredError } from '../bridge/transport.js';
+import { getBridgeMediaMaxBytes } from '../utils/config/bridge.js';
 
 // ── Connection state ────────────────────────────────────────────────
 
@@ -101,7 +106,7 @@ let server: Server | null = null;
 
 const HEALTH_RATE_WINDOW_MS = 60_000;
 const HEALTH_RATE_LIMIT = 120;
-const BRIDGE_INBOUND_BODY_LIMIT_BYTES = 64 * 1024;
+const BRIDGE_INBOUND_ENVELOPE_SLACK_BYTES = 64 * 1024;
 
 const healthRateWindow = new Map<string, { windowStart: number; count: number }>();
 
@@ -241,7 +246,9 @@ async function handleBridgeInbound(
 
   let body: string;
   try {
-    body = await readRequestBody(req, BRIDGE_INBOUND_BODY_LIMIT_BYTES);
+    const maxBytes = bridgeMediaBase64MaxLength(getBridgeMediaMaxBytes())
+      + BRIDGE_INBOUND_ENVELOPE_SLACK_BYTES;
+    body = await readRequestBody(req, maxBytes);
   } catch (err) {
     if (err instanceof PayloadTooLargeError) {
       writeJson(res, 413, { error: 'payload_too_large' });

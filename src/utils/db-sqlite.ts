@@ -425,7 +425,8 @@ const selectWhatsAppHeldJobs = db.prepare(
 );
 const updateWhatsAppOutboundStatus = db.prepare(
   `UPDATE whatsapp_outbound_jobs
-   SET status = ?, reason = ?, attempts = attempts + 1, updated_at = ?, sent_at = ?
+   SET status = ?, reason = ?, content_json = COALESCE(?, content_json),
+       attempts = attempts + 1, updated_at = ?, sent_at = ?
    WHERE id = ?`,
 );
 const recoverWhatsAppPending = db.prepare(
@@ -500,14 +501,21 @@ const claimDueBridgeOutboxRows = db.prepare(
    )
    RETURNING *`,
 );
+// Terminal transitions strip bridge media from the stored envelope:
+// 'sent' rows are never purged and 'dead' rows linger for inspection, so a
+// v2 media payload (megabytes of base64) would otherwise accumulate in the
+// outbox for the lifetime of the deployment. json_remove is a no-op for
+// envelopes without a media field, and the text/audit fields survive.
 const updateBridgeOutboxSent = db.prepare(
   `UPDATE bridge_outbox
-   SET status = 'sent', last_error = NULL
+   SET status = 'sent', last_error = NULL,
+       envelope_json = json_remove(envelope_json, '$.media')
    WHERE id = ? AND status = 'claimed'`,
 );
 const updateBridgeOutboxDead = db.prepare(
   `UPDATE bridge_outbox
-   SET status = 'dead', attempts = attempts + 1, last_error = ?
+   SET status = 'dead', attempts = attempts + 1, last_error = ?,
+       envelope_json = json_remove(envelope_json, '$.media')
    WHERE id = ? AND status IN ('pending', 'claimed')`,
 );
 const updateBridgeOutboxAttempt = db.prepare(
@@ -869,9 +877,10 @@ export function updateWhatsAppOutboundJob(
   status: WhatsAppOutboundStatus,
   reason: string | null = null,
   sentAt: number | null = null,
+  contentJson?: string,
 ): boolean {
   const ts = Math.floor(Date.now() / 1000);
-  return updateWhatsAppOutboundStatus.run(status, reason, ts, sentAt, id).changes > 0;
+  return updateWhatsAppOutboundStatus.run(status, reason, contentJson ?? null, ts, sentAt, id).changes > 0;
 }
 
 export function getWhatsAppOutboundJob(id: number): WhatsAppOutboundJob | undefined {
@@ -1648,7 +1657,8 @@ export function createSqliteBackend(): DbBackend {
       status: WhatsAppOutboundStatus,
       reason?: string | null,
       sentAt?: number | null,
-    ) => updateWhatsAppOutboundJob(id, status, reason, sentAt),
+      contentJson?: string,
+    ) => updateWhatsAppOutboundJob(id, status, reason, sentAt, contentJson),
     getWhatsAppOutboundJob: async (id: number) => getWhatsAppOutboundJob(id),
     listWhatsAppHeldJobs: async (limit?: number) => listWhatsAppHeldJobs(limit),
     recoverWhatsAppPendingJobs: async (reason: string) => recoverWhatsAppPendingJobs(reason),

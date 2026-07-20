@@ -54,6 +54,12 @@ const DiscordMessageCreateSchema = z.object({
     url: z.string(),
     contentType: z.string(),
   }).optional(),
+  media: z.object({
+    url: z.string(),
+    contentType: z.string(),
+    fileName: z.string().optional(),
+    kind: z.enum(['image', 'video', 'document']),
+  }).optional(),
 });
 
 type DiscordMessageCreate = z.infer<typeof DiscordMessageCreateSchema>;
@@ -103,8 +109,9 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
     quotedText: event.referenced_message?.content,
     mentionedIds: event.mentions?.map((mention) => mention.id),
     senderRoleIds: event.senderRoleIds ?? event.member?.roles ?? [],
-    hasVisualMedia: (event.attachments?.length ?? 0) > 0,
+    hasVisualMedia: Boolean(event.media),
     audio: event.audio,
+    media: event.media,
     raw: createMessageRef({
       platform: 'discord',
       chatId: event.channel_id,

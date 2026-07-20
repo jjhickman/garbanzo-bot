@@ -113,9 +113,18 @@ function capture(instanceId: string, map: BridgeMap = MAP) {
   return { relay: createRelayCapture({ instanceId, bridgeMap: map, enqueue }), enqueue };
 }
 
+function withMediaRelay(map: BridgeMap = MAP): BridgeMap {
+  return {
+    ...map,
+    routes: map.routes.map((route) => ({ ...route, mediaRelay: true })),
+  };
+}
+
 describe('createRelayCapture', () => {
   afterEach(() => {
     delete process.env.WHISPER_URL;
+    delete process.env.BRIDGE_MEDIA_ENABLED;
+    delete process.env.BRIDGE_MEDIA_MAX_BYTES;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -459,6 +468,167 @@ describe('createRelayCapture', () => {
     relay.capture(inbound({ text: 'check this out', hasVisualMedia: true }));
 
     expect(enqueue.mock.calls[0]?.[0]).toMatchObject({ kind: 'media-placeholder', text: '[image] check this out' });
+  });
+
+  it('keeps media capture v1 and does no download when the instance flag is off', () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    const mediaMap = withMediaRelay();
+    const { relay, enqueue } = capture('discord-band', mediaMap);
+
+    relay.capture(inbound({
+      text: 'check this out',
+      hasVisualMedia: true,
+      media: { url: 'https://cdn.example/photo.png', contentType: 'image/png', fileName: 'photo.png', kind: 'image' },
+    }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({ v: 1, text: '[image] check this out' });
+    expect(enqueue.mock.calls[0]?.[0]).not.toHaveProperty('media');
+  });
+
+  it('emits v2 image bytes without changing placeholder/caption text', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(Buffer.from('image-bytes'))));
+    const mediaMap = withMediaRelay();
+    const { relay, enqueue } = capture('discord-band', mediaMap);
+
+    relay.capture(inbound({
+      text: 'check this out',
+      hasVisualMedia: true,
+      media: { url: 'https://cdn.example/photo.png', contentType: 'image/png', fileName: 'photo.png', kind: 'image' },
+    }));
+    await tickMicrotasks();
+
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      v: 2,
+      text: '[image] check this out',
+      media: {
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
+  });
+
+  it('keeps route mediaRelay=false on v1 even when the instance flag is enabled', () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    const { relay, enqueue } = capture('discord-band');
+
+    relay.capture(inbound({
+      text: null,
+      hasVisualMedia: true,
+      media: { url: 'https://cdn.example/photo.png', contentType: 'image/png', kind: 'image' },
+    }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({ v: 1, text: '[image]' });
+  });
+
+  it('reuses a voice buffer for transcription and v2 media with ptt', async () => {
+    vi.resetModules();
+    process.env.WHISPER_URL = 'http://whisper.test';
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(Buffer.from('voice-bytes')));
+    const transcribeAudio = vi.fn(async () => 'bring the charts');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('../src/features/voice.js', () => ({ transcribeAudio }));
+    const { createRelayCapture: createRelayCaptureWithMedia } = await import('../src/bridge/relay-capture.js');
+    const enqueue = vi.fn<(env: BridgeEnvelope) => Promise<void>>(async () => undefined);
+    const mediaMap = withMediaRelay();
+    const relay = createRelayCaptureWithMedia({ instanceId: 'discord-band', bridgeMap: mediaMap, enqueue });
+
+    relay.capture(inbound({
+      text: null,
+      audio: { url: 'https://cdn.example/voice.ogg', contentType: 'audio/ogg', ptt: true },
+    }));
+    await tickMicrotasks();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(transcribeAudio).toHaveBeenCalledWith(Buffer.from('voice-bytes'), 'audio/ogg');
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      v: 2,
+      text: '🎤 bring the charts',
+      media: { kind: 'audio', mimetype: 'audio/ogg', ptt: true },
+    });
+  });
+
+  it('reuses WhatsApp voice bytes already downloaded by its transcription path', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    const { relay, enqueue } = capture('whatsapp-band', withMediaRelay());
+
+    relay.capture(inbound({
+      platform: 'whatsapp',
+      chatId: 'group-1@g.us',
+      text: 'hello from voice',
+      audio: {
+        url: 'whatsapp-message:wa-1',
+        contentType: 'audio/ogg',
+        buffer: Buffer.from('wa-voice'),
+        ptt: true,
+      },
+    }));
+    await tickMicrotasks();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      v: 2,
+      text: 'hello from voice',
+      kind: 'message',
+      media: { kind: 'audio', ptt: true, data: Buffer.from('wa-voice').toString('base64') },
+    });
+  });
+
+  it('fans the same v2 media payload out to every target leg', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(Buffer.from('fanout-image'))));
+    const { relay, enqueue } = capture('discord-band', withMediaRelay(GROUP_MAP));
+
+    relay.capture(inbound({
+      text: null,
+      hasVisualMedia: true,
+      media: { url: 'https://cdn.example/photo.png', contentType: 'image/png', kind: 'image' },
+    }));
+    await tickMicrotasks();
+
+    expect(enqueue).toHaveBeenCalledTimes(3);
+    expect(enqueue.mock.calls.every(([envelope]) => envelope.v === 2)).toBe(true);
+    expect(new Set(enqueue.mock.calls.map(([envelope]) => envelope.v === 2 && envelope.media.data)).size).toBe(1);
+  });
+
+  it.each([
+    ['disallowed mime', { contentType: 'image/bmp' }, async () => new Response(Buffer.from('unused'))],
+    ['oversize response', { contentType: 'image/png' }, async () => new Response(Buffer.from([1]), {
+      headers: { 'content-length': '70000' },
+    })],
+    ['download failure', { contentType: 'image/png' }, async () => { throw new Error('cdn down'); }],
+  ])('falls back to v1 on %s', async (_label, mediaOverride, fetchImpl) => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const fetchMock = vi.fn<typeof fetch>(fetchImpl);
+    vi.stubGlobal('fetch', fetchMock);
+    const { relay, enqueue } = capture('discord-band', withMediaRelay());
+
+    relay.capture(inbound({
+      text: 'caption',
+      hasVisualMedia: true,
+      media: {
+        url: 'https://cdn.example/photo',
+        contentType: mediaOverride.contentType,
+        kind: 'image',
+      },
+    }));
+    await tickMicrotasks();
+
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({ v: 1, text: '[image] caption' });
+    expect(enqueue.mock.calls[0]?.[0]).not.toHaveProperty('media');
+    if (mediaOverride.contentType === 'image/bmp') expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('is a no-op for messages with no text, audio, or visual media', () => {

@@ -14,6 +14,7 @@ const BridgeRouteSchema = z.object({
   modeToDiscord: z.enum(['verbatim', 'summary']).default('verbatim'),
   relayCommands: z.boolean().default(false),
   ingestRelayed: z.boolean().default(false),
+  mediaRelay: z.boolean().default(false),
 });
 
 export const BridgeMapSchema = z.object({

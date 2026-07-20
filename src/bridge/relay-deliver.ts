@@ -6,6 +6,7 @@ import { config } from '../utils/config.js';
 import { truncate } from '../utils/formatting.js';
 import type { BridgeEnvelope, BridgeOrigin } from './envelope.js';
 import { translateFormatting } from './format-translate.js';
+import { envelopeWithoutMedia, sendMediaBestEffort } from './relay-media.js';
 import { BridgeDeliveryDeferredError } from './transport.js';
 
 const MAX_DISCORD_RETRY_AFTER_MS = 5_000;
@@ -24,7 +25,7 @@ const SECONDS_TO_MS = 1_000;
 const TELEGRAM_MIN_SEND_INTERVAL_MS = 3_000;
 
 type RelayDelivererOptions = {
-  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge'>;
+  messenger: Pick<PlatformMessenger, 'sendText' | 'sendTextForBridge' | 'sendDocument' | 'sendAudio'>;
   platform: MessagingPlatform;
   bufferEnvelope: (envelope: BridgeEnvelope) => Promise<void>;
 };
@@ -70,11 +71,12 @@ export function createRelayDeliverer({
           await messenger.sendText(envelope.targetChatId, text);
         }
         recordBridgeDeliveryLatency(envelope.routeId, Date.now() - startedAt);
+        await sendMediaBestEffort(messenger, envelope);
         return 'sent';
       } catch (err) {
         if (err instanceof WhatsAppOutboundHeldError) {
           recordBridgeHeldByOutboundSafety(envelope.routeId);
-          await bufferEnvelope(envelope);
+          await bufferEnvelope(envelopeWithoutMedia(envelope));
           return 'buffered';
         }
         throw err;

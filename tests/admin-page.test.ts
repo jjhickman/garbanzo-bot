@@ -121,6 +121,31 @@ describe('admin page', () => {
     expect(html).toContain('Bridging is not enabled');
   });
 
+  it('surfaces the per-route media relay opt-in in the bridge table', async () => {
+    const { buildAdminSnapshot, renderAdminHtml } = await import('../src/middleware/admin-page.js');
+    const snapshot = await buildAdminSnapshot(testOverviewInputs());
+    snapshot.bridges = {
+      enabled: true,
+      routes: [{
+        id: 'community-main',
+        endpointA: 'discord-main:channel-1',
+        endpointB: 'whatsapp-main:group-1',
+        direction: 'both',
+        ingestRelayed: false,
+        mediaRelay: true,
+      }],
+      outboxPending: 0,
+      outboxOldestPendingAgeSeconds: null,
+      deadLettered: 0,
+      summaryBufferDepths: {},
+    };
+
+    const html = renderAdminHtml(snapshot, {});
+
+    expect(html).toContain('Relays media');
+    expect(html).toContain('<td>yes</td>');
+  });
+
   it('renders every section safely on a fresh install with no data', async () => {
     const baseUrl = await startServer({ adminEnabled: true, authToken: 'T' });
     const res = await fetch(`${baseUrl}/admin?token=T`);

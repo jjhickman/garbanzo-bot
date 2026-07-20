@@ -110,6 +110,19 @@ function envelope(id: string, targetInstance = 'discord-main'): BridgeEnvelope {
   };
 }
 
+function mediaEnvelope(id: string): BridgeEnvelope {
+  return {
+    ...envelope(id),
+    v: 2,
+    media: {
+      data: Buffer.from('media').toString('base64'),
+      mimetype: 'image/png',
+      fileName: 'photo.png',
+      kind: 'image',
+    },
+  };
+}
+
 function getOutboxRow(id: number): BridgeOutboxEntry {
   const row = db.prepare('SELECT * FROM bridge_outbox WHERE id = ?').get(id) as {
     id: number;
@@ -266,10 +279,11 @@ describe('bridge durable outbox', () => {
   });
 
   it('dead-letters non-retryable failures immediately', async () => {
+    const deliver = vi.fn<BridgeTransport['deliver']>(async () => {
+      throw new TransportDeliveryError('bad request', false);
+    });
     const outbox = createBridgeOutbox(withOps({
-      transport: fakeTransport(async () => {
-        throw new TransportDeliveryError('bad request', false);
-      }),
+      transport: fakeTransport(deliver),
       resolveTargetUrl: () => 'http://discord.local',
       ops: sqliteOps,
     }));
@@ -280,6 +294,7 @@ describe('bridge durable outbox', () => {
     await outbox.stop();
 
     const deadRow = getOutboxRow(row.id);
+    expect(deliver).toHaveBeenCalledTimes(1);
     expect(deadRow.attempts).toBe(1);
     expect(deadRow.lastError).toBe('bad request');
     expect(bridgeOutboxCounts()).toEqual({ pending: 0, sent: 0, dead: 1, oldestPendingCreatedAt: null });
@@ -287,6 +302,73 @@ describe('bridge durable outbox', () => {
     const counters = getLifetimeCounters();
     expect(counters.bridgeFailedByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
     expect(counters.bridgeDeadLetteredByRoute.get('route-1')).toBeGreaterThanOrEqual(1);
+  });
+
+  it('retries a non-retryable v2 media failure once as v1 text and marks it sent', async () => {
+    const deliver = vi.fn<BridgeTransport['deliver']>()
+      .mockRejectedValueOnce(new TransportDeliveryError('old receiver rejected v2', false))
+      .mockResolvedValueOnce(undefined);
+    const outbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://discord.local',
+      ops: sqliteOps,
+    }));
+
+    const row = await enqueueBridgeOutbox(mediaEnvelope('legacy-success'));
+    outbox.start();
+    await runOnePump();
+    await outbox.stop();
+
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(deliver.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      v: 1,
+      idempotencyKey: 'whatsapp-main:source-chat:legacy-success',
+      text: 'bridge text legacy-success',
+    }));
+    expect(deliver.mock.calls[1]?.[0]).not.toHaveProperty('media');
+    expect(getOutboxRow(row.id)).toMatchObject({ status: 'sent', attempts: 0 });
+  });
+
+  it('dead-letters when the immediate v1 downgrade retry also fails', async () => {
+    const deliver = vi.fn<BridgeTransport['deliver']>()
+      .mockRejectedValueOnce(new TransportDeliveryError('old receiver rejected v2', false))
+      .mockRejectedValueOnce(new TransportDeliveryError('v1 rejected too', false));
+    const outbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://discord.local',
+      ops: sqliteOps,
+    }));
+
+    const row = await enqueueBridgeOutbox(mediaEnvelope('legacy-dead'));
+    outbox.start();
+    await runOnePump();
+    await outbox.stop();
+
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(getOutboxRow(row.id)).toMatchObject({
+      status: 'dead',
+      attempts: 1,
+      lastError: 'v1 rejected too',
+    });
+  });
+
+  it('does not downgrade v2 media envelopes after retryable failures', async () => {
+    const deliver = vi.fn<BridgeTransport['deliver']>(async () => {
+      throw new TransportDeliveryError('temporary v2 outage', true);
+    });
+    const outbox = createBridgeOutbox(withOps({
+      transport: fakeTransport(deliver),
+      resolveTargetUrl: () => 'http://discord.local',
+      ops: sqliteOps,
+    }));
+
+    const row = await enqueueBridgeOutbox(mediaEnvelope('retry-v2'));
+    outbox.start();
+    await runOnePump();
+    await outbox.stop();
+
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(getOutboxRow(row.id)).toMatchObject({ status: 'pending', attempts: 1 });
   });
 
   it('dead-letters retryable rows after 8 failed attempts', async () => {

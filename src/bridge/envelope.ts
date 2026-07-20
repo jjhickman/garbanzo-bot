@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { getBridgeMediaMaxBytes } from '../utils/config/bridge.js';
+
+export { BRIDGE_MEDIA_MAX_BYTES_DEFAULT } from '../utils/config/bridge.js';
 
 // Mirrors MessagingPlatform (src/core/messaging-platform.ts). Defined locally rather
 // than imported so the wire schema stays independent of internal config plumbing.
@@ -16,29 +19,80 @@ export const BridgeOriginSchema = z
   })
   .strict();
 
-export const BridgeEnvelopeSchema = z
-  .object({
-    v: z.literal(1),
-    routeId: z.string().min(1),
-    origin: BridgeOriginSchema,
-    targetInstance: z.string().min(1),
-    targetChatId: z.string().min(1),
-    text: z.string(),
-    kind: z.enum(['message', 'media-placeholder']),
-    sentAtMs: z.number().int().positive(),
-    /**
-     * Dedup key scoped to one origin message and one fan-out target. Produced
-     * by {@link buildIdempotencyKey} as a JSON-array encoding of
-     * `[origin.instance, origin.chatId, origin.messageId, target.instance,
-     * target.chatId]`, which is injective even when any field contains ':'
-     * (e.g. a Matrix room/event id).
-     */
-    idempotencyKey: z.string().min(1),
-  })
-  .strict();
+export const BRIDGE_MEDIA_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/webm',
+  'video/mp4',
+  'application/pdf',
+] as const;
+
+const BRIDGE_MEDIA_BASE64_LENGTH_SLACK = 16;
+
+export function bridgeMediaBase64MaxLength(maxBytes: number): number {
+  return Math.ceil(maxBytes / 3) * 4 + BRIDGE_MEDIA_BASE64_LENGTH_SLACK;
+}
+
+export const BridgeMediaSchema = z.object({
+  data: z.base64().min(1).refine(
+    (data) => data.length <= bridgeMediaBase64MaxLength(getBridgeMediaMaxBytes()),
+    { message: 'Bridge media data exceeds BRIDGE_MEDIA_MAX_BYTES' },
+  ),
+  mimetype: z.enum(BRIDGE_MEDIA_MIME_TYPES),
+  fileName: z.string(),
+  kind: z.enum(['image', 'video', 'audio', 'sticker', 'document']),
+  ptt: z.boolean().optional(),
+}).strict();
+
+const BridgeEnvelopeShape = {
+  routeId: z.string().min(1),
+  origin: BridgeOriginSchema,
+  targetInstance: z.string().min(1),
+  targetChatId: z.string().min(1),
+  text: z.string(),
+  kind: z.enum(['message', 'media-placeholder']),
+  sentAtMs: z.number().int().positive(),
+  /**
+   * Dedup key scoped to one origin message and one fan-out target. Produced
+   * by {@link buildIdempotencyKey} as a JSON-array encoding of
+   * `[origin.instance, origin.chatId, origin.messageId, target.instance,
+   * target.chatId]`, which is injective even when any field contains ':'
+   * (e.g. a Matrix room/event id).
+   */
+  idempotencyKey: z.string().min(1),
+};
+
+export const BridgeEnvelopeV1Schema = z.object({
+  v: z.literal(1),
+  ...BridgeEnvelopeShape,
+}).strict();
+
+export const BridgeEnvelopeV2Schema = z.object({
+  v: z.literal(2),
+  ...BridgeEnvelopeShape,
+  media: BridgeMediaSchema.optional(),
+}).strict();
+
+export const BridgeEnvelopeSchema = z.discriminatedUnion('v', [
+  BridgeEnvelopeV1Schema,
+  BridgeEnvelopeV2Schema,
+]);
 
 export type BridgeOrigin = z.infer<typeof BridgeOriginSchema>;
+export type BridgeMedia = z.infer<typeof BridgeMediaSchema>;
+export type BridgeEnvelopeV1 = z.infer<typeof BridgeEnvelopeV1Schema>;
+export type BridgeEnvelopeV2 = z.infer<typeof BridgeEnvelopeV2Schema>;
 export type BridgeEnvelope = z.infer<typeof BridgeEnvelopeSchema>;
+
+export function envelopeSupportsMedia(envelope: BridgeEnvelope): envelope is BridgeEnvelopeV2 {
+  return envelope.v === 2;
+}
 
 /**
  * Target-scoped dedup key. A single origin message can fan out to multiple
@@ -68,5 +122,15 @@ export function buildIdempotencyKey(
 
 export function parseBridgeEnvelope(raw: unknown): BridgeEnvelope | null {
   const parsed = BridgeEnvelopeSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+  // Media must never take the text down with it: a v2 envelope whose media
+  // violates THIS receiver's bounds (a smaller BRIDGE_MEDIA_MAX_BYTES or an
+  // allowlist drift on a differently-configured peer) is salvaged as a
+  // text-only relay instead of being dropped whole.
+  if (raw && typeof raw === 'object' && (raw as { v?: unknown }).v === 2 && 'media' in raw) {
+    const { media: _dropped, ...rest } = raw as Record<string, unknown>;
+    const salvaged = BridgeEnvelopeSchema.safeParse(rest);
+    if (salvaged.success) return salvaged.data;
+  }
+  return null;
 }

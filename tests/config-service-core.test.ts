@@ -50,6 +50,7 @@ describe('config service core operations', () => {
       modeToDiscord: 'verbatim',
       relayCommands: false,
       ingestRelayed: false,
+      mediaRelay: true,
     }],
   });
 
@@ -103,6 +104,7 @@ describe('config service core operations', () => {
   it('keeps credential-free bridge maps visible and masks credential-bearing URLs', () => {
     const raw = bridgeMap();
     expect(maskJsonSecrets(raw)).toEqual(raw);
+    expect(validateConfigFile('bridge-map', maskJsonSecrets(raw))).toEqual([]);
 
     bridgeInstance(raw, 0).url = 'http://bridge-user:credential-canary@discord:3002';
     const masked = maskJsonSecrets(raw) as { instances: Array<{ url: unknown }> };

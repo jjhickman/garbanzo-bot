@@ -19,10 +19,17 @@ import type { BridgeOutboxEntry } from '../src/utils/db-types.js';
 const { recordMessage } = vi.hoisted(() => ({
   recordMessage: vi.fn(async () => undefined),
 }));
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
 
 vi.mock('../src/middleware/context.js', () => ({
   recordMessage,
 }));
+vi.mock('../src/middleware/logger.js', () => ({ logger }));
 
 const VERBATIM_ROUTE: BridgeMap['routes'][number] = {
   id: 'verbatim-route',
@@ -35,6 +42,7 @@ const VERBATIM_ROUTE: BridgeMap['routes'][number] = {
   modeToDiscord: 'verbatim',
   relayCommands: false,
   ingestRelayed: false,
+  mediaRelay: false,
 };
 
 const MAP: BridgeMap = {
@@ -67,8 +75,11 @@ function makeEnvelope(overrides: Partial<BridgeEnvelope> = {}): BridgeEnvelope {
   };
 }
 
-function fakeMessenger(sendText: PlatformMessenger['sendText']): PlatformMessenger {
-  return { sendText } as unknown as PlatformMessenger;
+function fakeMessenger(
+  sendText: PlatformMessenger['sendText'],
+  extras: Partial<Pick<PlatformMessenger, 'sendDocument' | 'sendAudio'>> = {},
+): PlatformMessenger {
+  return { sendText, ...extras } as unknown as PlatformMessenger;
 }
 
 function fakeTransport(): BridgeTransport {
@@ -140,6 +151,7 @@ function fakeBridgeSeen(): {
 // with MESSAGING_PLATFORM=whatsapp, which would otherwise flip which side of
 // modeToWhatsApp/modeToDiscord is exercised).
 const ORIGINAL_PLATFORM = config.MESSAGING_PLATFORM;
+const ORIGINAL_MEDIA_ENABLED = config.BRIDGE_MEDIA_ENABLED;
 
 beforeEach(() => {
   config.MESSAGING_PLATFORM = 'discord';
@@ -147,6 +159,7 @@ beforeEach(() => {
 
 afterEach(() => {
   config.MESSAGING_PLATFORM = ORIGINAL_PLATFORM;
+  config.BRIDGE_MEDIA_ENABLED = ORIGINAL_MEDIA_ENABLED;
   recordMessage.mockClear();
 });
 
@@ -233,9 +246,12 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     });
     const seen = fakeBridgeSeen();
     const bufferOps = fakeBufferOps();
+    const sendDocument = vi.fn<PlatformMessenger['sendDocument']>(async (chatId) => ({
+      platform: 'whatsapp', chatId, id: 'doc-1', ref: {},
+    }));
 
     const bridge = expectStarted(await startBridge({
-      getMessenger: () => fakeMessenger(sendText),
+      getMessenger: () => fakeMessenger(sendText, { sendDocument }),
       loadBridgeMap: () => MAP,
       bridgeSeenInsert: seen.insert,
       bridgeSeenDelete: seen.del,
@@ -244,12 +260,25 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
       transport: fakeTransport(),
     }));
 
-    const envelope = makeEnvelope();
+    const envelope = makeEnvelope({
+      v: 2,
+      media: {
+        data: Buffer.from([1]).toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    });
 
     const firstResult = await bridge.handler(envelope);
     expect(firstResult).toBe('accepted');
     expect(seen.del).not.toHaveBeenCalled();
     expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledTimes(1);
+    expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledWith(
+      'verbatim-route',
+      expect.not.stringContaining('"media"'),
+    );
+    expect(sendDocument).not.toHaveBeenCalled();
 
     const secondResult = await bridge.handler(envelope);
     expect(secondResult).toBe('duplicate');
@@ -259,7 +288,7 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     await bridge.stop();
   });
 
-  it('routes to the summary buffer (never a direct send) when the route mode for this platform is summary', async () => {
+  it('routes only text to the summary buffer and skips media when the route mode is summary', async () => {
     config.BRIDGE_ENABLED = true;
     const summaryMap: BridgeMap = {
       ...MAP,
@@ -268,9 +297,12 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
     const sendText = vi.fn(async () => undefined);
     const seen = fakeBridgeSeen();
     const bufferOps = fakeBufferOps();
+    const sendDocument = vi.fn<PlatformMessenger['sendDocument']>(async (chatId) => ({
+      platform: 'discord', chatId, id: 'doc-1', ref: {},
+    }));
 
     const bridge = expectStarted(await startBridge({
-      getMessenger: () => fakeMessenger(sendText),
+      getMessenger: () => fakeMessenger(sendText, { sendDocument }),
       loadBridgeMap: () => summaryMap,
       bridgeSeenInsert: seen.insert,
       bridgeSeenDelete: seen.del,
@@ -279,11 +311,66 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
       transport: fakeTransport(),
     }));
 
-    const result = await bridge.handler(makeEnvelope());
+    const result = await bridge.handler(makeEnvelope({
+      v: 2,
+      media: {
+        data: Buffer.from([2]).toString('base64'),
+        mimetype: 'image/png',
+        fileName: 'photo.png',
+        kind: 'image',
+      },
+    }));
 
     expect(result).toBe('accepted');
     expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledTimes(1);
+    expect(bufferOps.appendBridgeBuffer).toHaveBeenCalledWith(
+      'verbatim-route',
+      expect.not.stringContaining('"media"'),
+    );
     expect(sendText).not.toHaveBeenCalled();
+    expect(sendDocument).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ routeId: 'verbatim-route' }),
+      'Bridge: media relay skipped for summary-mode leg',
+    );
+
+    await bridge.stop();
+  });
+
+  it('keeps the dedup key when media fails after successful text delivery', async () => {
+    config.BRIDGE_ENABLED = true;
+    config.BRIDGE_MEDIA_ENABLED = false;
+    const sendText = vi.fn(async () => undefined);
+    const sendDocument = vi.fn<PlatformMessenger['sendDocument']>(async () => {
+      throw new Error('media upload failed');
+    });
+    const seen = fakeBridgeSeen();
+
+    const bridge = expectStarted(await startBridge({
+      getMessenger: () => fakeMessenger(sendText, { sendDocument }),
+      loadBridgeMap: () => MAP,
+      bridgeSeenInsert: seen.insert,
+      bridgeSeenDelete: seen.del,
+      outboxOps: fakeOutboxOps(),
+      bufferOps: fakeBufferOps(),
+      transport: fakeTransport(),
+    }));
+    const envelope = makeEnvelope({
+      v: 2,
+      media: {
+        data: Buffer.from([3]).toString('base64'),
+        mimetype: 'application/pdf',
+        fileName: 'notes.pdf',
+        kind: 'document',
+      },
+    });
+
+    await expect(bridge.handler(envelope)).resolves.toBe('accepted');
+    await expect(bridge.handler(envelope)).resolves.toBe('duplicate');
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+    expect(seen.del).not.toHaveBeenCalled();
 
     await bridge.stop();
   });
@@ -328,9 +415,10 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
       routes: [{ ...VERBATIM_ROUTE, ingestRelayed: true }],
     };
     const sendText = vi.fn(async () => undefined);
+    const sendAudio = vi.fn<PlatformMessenger['sendAudio']>(async () => undefined);
 
     const bridge = expectStarted(await startBridge({
-      getMessenger: () => fakeMessenger(sendText),
+      getMessenger: () => fakeMessenger(sendText, { sendAudio }),
       loadBridgeMap: () => ingestMap,
       bridgeSeenInsert: fakeBridgeSeen().insert,
       bridgeSeenDelete: fakeBridgeSeen().del,
@@ -339,13 +427,22 @@ describe('startBridge — required dedup-ordering fix (T6 review)', () => {
       transport: fakeTransport(),
     }));
 
-    await expect(bridge.handler(makeEnvelope())).resolves.toBe('accepted');
+    await expect(bridge.handler(makeEnvelope({
+      v: 2,
+      media: {
+        data: Buffer.from([4]).toString('base64'),
+        mimetype: 'audio/ogg',
+        fileName: 'voice.ogg',
+        kind: 'audio',
+      },
+    }))).resolves.toBe('accepted');
 
     expect(recordMessage).toHaveBeenCalledWith(
       'chan-1',
       'sender-1',
       'Ana (WhatsApp): hello from whatsapp',
     );
+    expect(sendAudio).toHaveBeenCalledTimes(1);
 
     await bridge.stop();
   });

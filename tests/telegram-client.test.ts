@@ -128,6 +128,26 @@ describe('mapTelegramMessageToPayload — voice mapping', () => {
   });
 });
 
+describe('mapTelegramMessageToPayload — media mapping', () => {
+  it('surfaces the largest photo for conditional bridge download', () => {
+    const payload = mapTelegramMessageToPayload(baseMessage({
+      text: undefined,
+      photo: [
+        { file_id: 'small', file_unique_id: 'small-u', width: 90, height: 90, file_size: 100 },
+        { file_id: 'large', file_unique_id: 'large-u', width: 1280, height: 720, file_size: 300 },
+      ],
+    }), BOT);
+
+    expect(payload.media).toEqual({
+      fileId: 'large',
+      mimeType: 'image/jpeg',
+      fileName: 'photo.jpg',
+      kind: 'image',
+      size: 300,
+    });
+  });
+});
+
 describe('mapTelegramMessageToPayload — loop prevention (fromSelf)', () => {
   it('marks fromSelf true when the sender is the bot itself', () => {
     const payload = mapTelegramMessageToPayload(baseMessage({ from: { id: BOT.id, is_bot: true } }), BOT);
@@ -142,12 +162,15 @@ describe('mapTelegramMessageToPayload — loop prevention (fromSelf)', () => {
 
 describe('Telegram client — end-to-end message handler wiring', () => {
   beforeEach(() => {
+    delete process.env.BRIDGE_MEDIA_ENABLED;
+    delete process.env.BRIDGE_MEDIA_MAX_BYTES;
     vi.resetModules();
     vi.restoreAllMocks();
   });
 
   async function setup(options: {
     isChatEnabled?: (chatId: string) => boolean;
+    hasMediaRelayRoute?: (instanceId: string, chatId: string) => boolean;
     botStartImpl?: (opts?: { onStart?: (info: { id: number; username?: string }) => void }) => Promise<void>;
   } = {}) {
     const sendText = vi.fn(async () => undefined);
@@ -164,14 +187,20 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     const isTelegramChatEnabled = vi.fn(options.isChatEnabled ?? (() => true));
     const getTelegramChatName = vi.fn(() => undefined);
     const downloadTelegramVoice = vi.fn(async () => Buffer.from([9, 9, 9]));
+    const downloadTelegramFile = vi.fn(async () => Buffer.from([7, 8, 9]));
     const markConnected = vi.fn();
     const markDisconnected = vi.fn();
+    const chatHasMediaRelayRoute = vi.fn(options.hasMediaRelayRoute ?? (() => true));
 
     vi.doMock('../src/platforms/telegram/adapter.js', () => ({ createTelegramAdapter }));
     vi.doMock('../src/platforms/telegram/processor.js', () => ({ processTelegramEvent }));
     vi.doMock('../src/platforms/telegram/telegram-config.js', () => ({ isTelegramChatEnabled, getTelegramChatName }));
-    vi.doMock('../src/platforms/telegram/telegram-voice.js', () => ({ downloadTelegramVoice }));
+    vi.doMock('../src/platforms/telegram/telegram-voice.js', () => ({
+      downloadTelegramFile,
+      downloadTelegramVoice,
+    }));
     vi.doMock('../src/middleware/health.js', () => ({ markConnected, markDisconnected }));
+    vi.doMock('../src/bridge/bridge-map.js', () => ({ chatHasMediaRelayRoute }));
 
     const module = await import('../src/platforms/telegram/client.js');
     const bot = {
@@ -194,8 +223,8 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     });
 
     return {
-      client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramVoice,
-      markConnected, markDisconnected,
+      client, bot, processTelegramEvent, sendText, isTelegramChatEnabled, downloadTelegramFile, downloadTelegramVoice,
+      markConnected, markDisconnected, chatHasMediaRelayRoute,
     };
   }
 
@@ -229,6 +258,109 @@ describe('Telegram client — end-to-end message handler wiring', () => {
     expect(payload.chatId).toBe('-100123');
     expect(payload.senderId).toBe('42');
     expect(env.botUserId).toBe(String(BOT.id));
+  });
+
+  it('conditionally downloads a photo and threads its media buffer to the processor', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const { client, bot, processTelegramEvent, downloadTelegramFile } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 6,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          caption: 'photo caption',
+          photo: [{ file_id: 'photo-file', file_unique_id: 'photo-u', width: 640, height: 480 }],
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramFile).toHaveBeenCalledWith('super-secret-token-abc', 'photo-file', 8_388_608);
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({
+      contentType: 'image/jpeg',
+      kind: 'image',
+      buffer: Buffer.from([7, 8, 9]),
+    });
+  });
+
+  it('does not download photo bytes when bridge media is disabled', async () => {
+    const { client, bot, processTelegramEvent, downloadTelegramFile } = await setup();
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 7,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          photo: [{ file_id: 'photo-file', file_unique_id: 'photo-u', width: 640, height: 480 }],
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramFile).not.toHaveBeenCalled();
+    const [, payload] = processTelegramEvent.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.media).toMatchObject({ contentType: 'image/jpeg', kind: 'image' });
+    expect(payload.media).not.toHaveProperty('buffer');
+  });
+
+  it('keeps visual downloads off and the 20 MiB voice bound when the chat has no media-relay route', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const {
+      client, bot, downloadTelegramFile, downloadTelegramVoice, chatHasMediaRelayRoute,
+    } = await setup({ hasMediaRelayRoute: () => false });
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 70,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          voice: { file_id: 'voice-no-route', file_unique_id: 'voice-u', duration: 3 },
+          photo: [{ file_id: 'photo-no-route', file_unique_id: 'photo-u', width: 640, height: 480 }],
+        },
+      },
+      me: BOT,
+    });
+
+    expect(chatHasMediaRelayRoute).toHaveBeenCalledWith(expect.any(String), '-100123');
+    expect(downloadTelegramFile).not.toHaveBeenCalled();
+    expect(downloadTelegramVoice).toHaveBeenCalledWith('super-secret-token-abc', 'voice-no-route');
+  });
+
+  it('uses the bridge media cap for voice when the chat has an opted-in outbound route', async () => {
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    process.env.BRIDGE_MEDIA_MAX_BYTES = '65536';
+    const { client, bot, downloadTelegramVoice } = await setup({ hasMediaRelayRoute: () => true });
+    await client.start();
+
+    await bot.handlers.get('message')?.({
+      update: {
+        message: {
+          message_id: 71,
+          date: 1_735_689_600,
+          chat: { id: -100123, type: 'group' },
+          from: { id: 42, first_name: 'Ada' },
+          voice: { file_id: 'voice-media-route', file_unique_id: 'voice-u', duration: 3 },
+        },
+      },
+      me: BOT,
+    });
+
+    expect(downloadTelegramVoice).toHaveBeenCalledWith(
+      'super-secret-token-abc',
+      'voice-media-route',
+      { maxBytes: 65_536 },
+    );
   });
 
   it('drops the bot\'s own messages (fromSelf) without calling processTelegramEvent', async () => {

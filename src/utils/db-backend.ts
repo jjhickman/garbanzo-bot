@@ -90,7 +90,13 @@ export interface DbBackend {
 
   // WhatsApp outbound safety and retained manual releases
   createWhatsAppOutboundJob(chatJid: string, kind: string, contentJson: string, optionsJson: string | null): Promise<WhatsAppOutboundJob>;
-  updateWhatsAppOutboundJob(id: number, status: WhatsAppOutboundStatus, reason?: string | null, sentAt?: number | null): Promise<boolean>;
+  updateWhatsAppOutboundJob(
+    id: number,
+    status: WhatsAppOutboundStatus,
+    reason?: string | null,
+    sentAt?: number | null,
+    contentJson?: string,
+  ): Promise<boolean>;
   getWhatsAppOutboundJob(id: number): Promise<WhatsAppOutboundJob | undefined>;
   listWhatsAppHeldJobs(limit?: number): Promise<WhatsAppOutboundJob[]>;
   recoverWhatsAppPendingJobs(reason: string): Promise<number>;

@@ -18,6 +18,11 @@ describe('deny-by-default secret classifier', () => {
     expect(KNOWN_SCHEMA_KEYS.length).toBeGreaterThan(0);
   });
 
+  it('classifies bridge media controls as non-secret', () => {
+    expect(isSecretKey('BRIDGE_MEDIA_ENABLED')).toBe(false);
+    expect(isSecretKey('BRIDGE_MEDIA_MAX_BYTES')).toBe(false);
+  });
+
   it('redacts a unique canary for every secret schema field and every unknown key', () => {
     const canaries = new Map<string, string>();
     const keys = [
