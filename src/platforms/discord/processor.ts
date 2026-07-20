@@ -9,7 +9,13 @@ import { createMessageRef } from '../../core/message-ref.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
+import type { VisionImage } from '../../core/vision.js';
 
+import {
+  attachmentContextLine,
+  prepareDiscordVision,
+  transcribeDiscordAttachment,
+} from './attachment-reading.js';
 import type { DiscordInbound } from './inbound.js';
 import {
   discordChannelRequiresMention,
@@ -182,6 +188,29 @@ async function processDiscordInbound(
 
       if (!query && !hasMedia) return;
 
+      // Attachment reading (engagement already decided above). Bang commands
+      // are skipped entirely: feature handlers parse their args from the raw
+      // query (a context line would corrupt e.g. `!song add …`), and `!idea`
+      // consumes the audio ref itself.
+      let visionImages: VisionImage[] | undefined;
+      let enrichedQuery = query;
+      if (!isBang) {
+        if (m.media) {
+          visionImages = await prepareDiscordVision(m.media, query);
+          if (!visionImages) {
+            const context = attachmentContextLine(m.media);
+            enrichedQuery = enrichedQuery ? `${enrichedQuery}\n\n${context}` : context;
+          }
+        }
+        if (audio) {
+          const transcript = await transcribeDiscordAttachment(audio);
+          if (transcript) {
+            const line = `[voice message transcript] ${transcript}`;
+            enrichedQuery = enrichedQuery ? `${enrichedQuery}\n\n${line}` : line;
+          }
+        }
+      }
+
       await processGroupMessage({
         messenger,
         chatId: m.chatId,
@@ -190,12 +219,13 @@ async function processDiscordInbound(
         ownerId: env.ownerId,
         ownerUserId: env.ownerUserId,
         senderIsBandMember,
-        query,
+        query: enrichedQuery,
         isFeatureEnabled: featureEnabled,
         getResponse,
         messageId: m.messageId,
         replyTo: m.raw,
         audio,
+        visionImages,
       });
     },
 
