@@ -657,8 +657,11 @@ describe('Welcome messages', async () => {
       ['15551234567@s.whatsapp.net'],
     );
     expect(msg).not.toBeNull();
-    expect(msg).toContain('General');
-    expect(msg).toContain('@15551234567');
+    expect(msg?.text).toContain('General');
+    expect(msg?.text).toContain('@15551234567');
+    // Baileys renders @<number> as the member's display name only when the
+    // full JID rides along in the mentions array.
+    expect(msg?.mentions).toEqual(['15551234567@s.whatsapp.net']);
   });
 
   it('handles multiple new members', () => {
@@ -666,7 +669,7 @@ describe('Welcome messages', async () => {
       '120363423357339667@g.us',
       ['15551234567@s.whatsapp.net', '15559876543@s.whatsapp.net'],
     );
-    expect(msg).toContain('all 2 of you');
+    expect(msg?.text).toContain('all 2 of you');
   });
 
   it('returns null for unknown groups', () => {
@@ -679,8 +682,8 @@ describe('Welcome messages', async () => {
       '120363405986870419@g.us',  // Introductions
       ['15551234567@s.whatsapp.net'],
     );
-    expect(intro).toContain('Introductions');
-    expect(intro).toContain('Tell us a bit about yourself');
+    expect(intro?.text).toContain('Introductions');
+    expect(intro?.text).toContain('Tell us a bit about yourself');
   });
 });
 

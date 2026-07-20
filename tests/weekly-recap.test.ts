@@ -25,7 +25,7 @@ describe('weekly recap aggregation', () => {
       getCurrentStats: vi.fn(() => ({ date: '2026-07-02', groups: liveGroups, ownerDMs: 0, costs: [], totalCost: 0 })),
     }));
     vi.doMock('../src/core/groups-config.js', () => ({
-      getGroupName: (jid: string) => (jid === 'g1@g.us' ? 'General' : jid),
+      getChatDisplayName: (jid: string) => (jid === 'g1@g.us' ? 'General' : jid),
     }));
   }
 

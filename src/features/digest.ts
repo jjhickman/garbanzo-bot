@@ -7,7 +7,7 @@
 
 import { logger } from '../middleware/logger.js';
 import { getCurrentStats, type DailyStats } from '../middleware/stats.js';
-import { getGroupName } from '../core/groups-config.js';
+import { getChatDisplayName } from '../core/groups-config.js';
 import { getDailyGroupActivity, saveDailyStats } from '../utils/db.js';
 
 export async function archiveDailyDigest(stats: DailyStats): Promise<void> {
@@ -65,7 +65,7 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
       groupCount = fallback.length;
       lines.push('*Group Activity:*');
       for (const row of fallback) {
-        const name = getGroupName(row.chatJid);
+        const name = getChatDisplayName(row.chatJid);
         lines.push(`• *${name}* — ${row.messageCount} msgs, ${row.activeUsers} active users`);
         totalMessages += row.messageCount;
         totalUsers += row.activeUsers;
@@ -76,7 +76,7 @@ export async function formatDigest(stats: DailyStats): Promise<string> {
   } else {
     lines.push('*Group Activity:*');
     for (const [jid, g] of sorted) {
-      const name = getGroupName(jid);
+      const name = getChatDisplayName(jid);
       const userCount = g.activeUsers.size;
       lines.push(`• *${name}* — ${g.messageCount} msgs, ${userCount} active users`);
       if (g.botResponses > 0) {

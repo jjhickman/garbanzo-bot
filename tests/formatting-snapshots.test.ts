@@ -30,12 +30,14 @@ describe('Formatted output snapshots', () => {
       })),
     }));
 
+    const resolveName = (jid: string): string => {
+      if (jid === 'general@g.us') return 'General';
+      if (jid === 'events@g.us') return 'Events';
+      return jid;
+    };
     vi.doMock('../src/core/groups-config.js', () => ({
-      getGroupName: vi.fn((jid: string) => {
-        if (jid === 'general@g.us') return 'General';
-        if (jid === 'events@g.us') return 'Events';
-        return jid;
-      }),
+      getGroupName: vi.fn(resolveName),
+      getChatDisplayName: vi.fn(resolveName),
     }));
 
     const { handleProfile } = await import('../src/features/profiles.js');

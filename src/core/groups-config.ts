@@ -86,6 +86,33 @@ export function getGroupName(jid: string): string {
 }
 
 /**
+ * Platform-registered fallback for resolving a chat id to a display name.
+ * groups.json only knows WhatsApp group JIDs, so Discord channel ids (and
+ * Telegram chat / Matrix room ids) rendered as "Unknown Group" in digests
+ * and recaps. Core must not import platform config (see the band-features
+ * decision), so each platform runtime registers its own resolver at startup.
+ */
+type ChatNameResolver = (chatId: string) => string | undefined;
+
+let chatNameResolver: ChatNameResolver | null = null;
+
+export function registerChatNameResolver(resolver: ChatNameResolver): void {
+  chatNameResolver = resolver;
+}
+
+/**
+ * Resolve a chat id to a display name for stats surfaces (digest, recap):
+ * groups.json first, then the active platform's registered resolver, then
+ * the legacy 'Unknown Group' fallback.
+ */
+export function getChatDisplayName(chatId: string): string {
+  const configured = GROUP_IDS[chatId]?.name;
+  if (configured) return configured;
+  const resolved = chatNameResolver?.(chatId);
+  return resolved !== undefined && resolved.length > 0 ? resolved : 'Unknown Group';
+}
+
+/**
  * Find an enabled group JID by its configured name.
  * Returns null if not found or not enabled.
  */

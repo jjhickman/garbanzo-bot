@@ -170,4 +170,20 @@ describe('groups config loader', () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it('resolves display names through a platform-registered resolver', async () => {
+    const groupsConfig = await loadGroupsConfig(mkdtempSync(join(tmpdir(), 'garbanzo-groups-')));
+
+    // No groups.json entry and no resolver: legacy fallback.
+    expect(groupsConfig.getChatDisplayName('123456789012345678')).toBe('Unknown Group');
+
+    // A platform runtime registers its own resolver (e.g. Discord channel names).
+    groupsConfig.registerChatNameResolver((chatId) => (chatId === '123456789012345678' ? 'songwriting' : undefined));
+    expect(groupsConfig.getChatDisplayName('123456789012345678')).toBe('songwriting');
+
+    // Unresolvable ids and empty resolver results keep the legacy fallback.
+    expect(groupsConfig.getChatDisplayName('999')).toBe('Unknown Group');
+    groupsConfig.registerChatNameResolver(() => '');
+    expect(groupsConfig.getChatDisplayName('123456789012345678')).toBe('Unknown Group');
+  });
 });

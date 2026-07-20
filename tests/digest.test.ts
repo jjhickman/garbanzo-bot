@@ -24,7 +24,7 @@ describe('daily digest formatting', () => {
     }));
 
     vi.doMock('../src/core/groups-config.js', () => ({
-      getGroupName: (jid: string) => {
+      getChatDisplayName: (jid: string) => {
         if (jid === 'bookclub@g.us') return 'Book Club';
         if (jid === 'general@g.us') return 'General';
         return 'Unknown Group';
