@@ -145,6 +145,8 @@ export function createRelayCapture({ instanceId, bridgeMap, enqueue }: RelayCapt
       const route = findOutboundRoute(bridgeMap, instanceId, inbound.chatId);
       if (!route) return;
 
+      // Deliberately ignores `hasReadableAttachment` (see InboundMessage):
+      // reply-path-only attachments are never bridge-relayed.
       if (!inbound.text && !inbound.audio && !inbound.media && !inbound.hasVisualMedia) return;
       if (inbound.text?.startsWith('!') && !route.relayCommands) return;
 

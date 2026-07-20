@@ -17,17 +17,28 @@ export interface RawTelegramDocument {
   file_size?: number;
 }
 
+/** Bot API `Audio` — an audio FILE (mp3 shared as music), not a voice note. */
+export interface RawTelegramAudio {
+  file_id: string;
+  file_unique_id: string;
+  duration: number;
+  file_name?: string;
+  mime_type?: string;
+  file_size?: number;
+}
+
 export interface TelegramMappedMedia {
   fileId: string;
   mimeType: string;
   fileName: string;
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'audio';
   size?: number;
 }
 
 export function mapTelegramMedia(message: {
   photo?: RawTelegramPhoto[];
   document?: RawTelegramDocument;
+  audio?: RawTelegramAudio;
 }): TelegramMappedMedia | undefined {
   const photo = message.photo?.at(-1);
   if (photo) {
@@ -37,6 +48,17 @@ export function mapTelegramMedia(message: {
       fileName: 'photo.jpg',
       kind: 'image',
       ...(photo.file_size === undefined ? {} : { size: photo.file_size }),
+    };
+  }
+  // Audio FILES only (`message.audio`) — voice notes (`message.voice`) stay
+  // with the processor's transcript-as-text flow, never mapped as media.
+  if (message.audio) {
+    return {
+      fileId: message.audio.file_id,
+      mimeType: message.audio.mime_type ?? 'audio/mpeg',
+      fileName: message.audio.file_name ?? 'audio',
+      kind: 'audio',
+      ...(message.audio.file_size === undefined ? {} : { size: message.audio.file_size }),
     };
   }
   if (!message.document) return undefined;
@@ -57,7 +79,7 @@ export async function prepareTelegramMedia(
   url: string;
   contentType: string;
   fileName: string;
-  kind: 'image' | 'document';
+  kind: TelegramMappedMedia['kind'];
   buffer?: Buffer;
 }> {
   const maxBytes = getBridgeMediaMaxBytes();

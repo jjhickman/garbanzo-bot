@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys';
 import { logger } from '../../middleware/logger.js';
 import { markMessageReceived } from '../../middleware/health.js';
-import { isVoiceMessage, downloadVoiceAudio } from './media.js';
+import { classifyDirectAudio, isVoiceMessage, downloadVoiceAudio } from './media.js';
 import { transcribeAudio } from '../../features/voice.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
@@ -58,6 +58,21 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
         inbound.text = transcript;
       }
     }
+  } else {
+    // Non-PTT audio (a shared mp3/m4a) previously vanished: it has no text,
+    // no visual media, and isVoiceMessage is PTT-only, so the core gate
+    // dropped it. Mark it readable so the gate lets it through — download
+    // and transcription happen lazily in the attachment-reading path,
+    // strictly after engagement and gated on WHISPER_URL, never here.
+    // Deliberately NOT `inbound.audio`: a synthetic audio ref would make
+    // bridge capture relay a spurious `[voice note]` placeholder (and try to
+    // fetch a non-URL) for messages that were never bridge-relayed. The
+    // attachment collector reads the bytes off the raw WAMessage instead.
+    // Group chats only: DM audio reading stays out of scope.
+    const directAudio = classifyDirectAudio(msg);
+    if (directAudio && !directAudio.ptt && inbound.isGroupChat) {
+      inbound.hasReadableAttachment = true;
+    }
   }
 
   const adapter = createWhatsAppAdapter(sock);
@@ -79,9 +94,9 @@ export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage):
       await sock.sendMessage(wa.chatId, { react: { text: '🫘', key: wa.waMessage.key } });
     },
 
-    handleGroupMessage: async ({ inbound: m, text, hasMedia }) => {
+    handleGroupMessage: async ({ inbound: m, text }) => {
       const wa = m as WhatsAppInbound;
-      await handleGroupMessage(sock, wa.waMessage, wa.chatId, wa.senderId, text, wa.content, hasMedia);
+      await handleGroupMessage(sock, wa.waMessage, wa.chatId, wa.senderId, text, wa.content);
     },
 
     handleOwnerDM: async ({ inbound: m, text }) => {

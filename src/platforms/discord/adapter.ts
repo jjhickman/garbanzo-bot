@@ -1,11 +1,33 @@
 import { createMessageRef, type MessageRef } from '../../core/message-ref.js';
 import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, DocumentPayload, AudioPayload } from '../../core/platform-messenger.js';
+import { logger } from '../../middleware/logger.js';
+
+import {
+  classifyDiscordMessageAttachments,
+  type DiscordMessageAttachments,
+} from './attachment-classification.js';
 
 export interface DiscordDemoOutboxEntry {
   type: 'text' | 'poll' | 'document' | 'audio' | 'delete';
   chatId: string;
   payload: unknown;
+}
+
+/**
+ * Discord messenger: the shared platform surface plus the lazy
+ * referenced-message attachment fetch the attachment-reading path needs.
+ */
+export interface DiscordMessenger extends PlatformMessenger {
+  /**
+   * Fetch a message's readable attachments via REST
+   * (`GET /channels/{channelId}/messages/{messageId}`), classified with the
+   * SAME logic the gateway applies to a message's own attachments. Called
+   * only for an ENGAGED reply whose own message has no attachment. Returns
+   * null on any failure (404, missing permission) or when the message holds
+   * nothing readable — the reply path degrades, never throws.
+   */
+  fetchMessageAttachments(channelId: string, messageId: string): Promise<DiscordMessageAttachments | null>;
 }
 
 interface DiscordCreateMessageResponse {
@@ -65,9 +87,25 @@ function toDiscordRef(chatId: string, messageId: string): MessageRef {
   });
 }
 
-export function createDiscordAdapter(token: string): PlatformMessenger {
+export function createDiscordAdapter(token: string): DiscordMessenger {
   return {
     platform: 'discord',
+
+    async fetchMessageAttachments(channelId: string, messageId: string): Promise<DiscordMessageAttachments | null> {
+      try {
+        const message = await discordApiRequest<{ attachments?: unknown[] }>(
+          token,
+          `/channels/${channelId}/messages/${messageId}`,
+          { method: 'GET' },
+        );
+        return classifyDiscordMessageAttachments(Array.isArray(message.attachments) ? message.attachments : []);
+      } catch (err) {
+        // 404 (deleted message) or missing permission — degrade to nothing.
+        // Attachment CDN urls carry signed query params; none are logged here.
+        logger.warn({ err, channelId, messageId }, 'Discord referenced message fetch failed');
+        return null;
+      }
+    },
 
     async sendText(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       const replyId = getReplyMessageId(options?.replyTo);
@@ -165,7 +203,7 @@ function getThreadIdFromReplyTo(replyTo: MessageRef | undefined): string | null 
   return typeof r.threadId === 'string' ? r.threadId : null;
 }
 
-export function createDiscordDemoAdapter(outbox: DiscordDemoOutboxEntry[]): PlatformMessenger {
+export function createDiscordDemoAdapter(outbox: DiscordDemoOutboxEntry[]): DiscordMessenger {
   const nextRef = (chatId: string, threadId: string | null): MessageRef => createMessageRef({
     platform: 'discord',
     chatId,
@@ -175,6 +213,11 @@ export function createDiscordDemoAdapter(outbox: DiscordDemoOutboxEntry[]): Plat
 
   return {
     platform: 'discord',
+
+    // Demo messages have no REST backend to fetch referenced messages from.
+    async fetchMessageAttachments(): Promise<DiscordMessageAttachments | null> {
+      return null;
+    },
 
     async sendText(chatId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       outbox.push({

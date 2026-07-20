@@ -1,5 +1,6 @@
 import { logger } from '../../middleware/logger.js';
 
+import { readAudioAttachment, readMediaAttachment } from './attachment-classification.js';
 import { createDiscordAdapter } from './adapter.js';
 import { getDiscordIntroductionsChannelId } from './discord-config.js';
 import { processDiscordEvent } from './processor.js';
@@ -173,13 +174,18 @@ function readMemberRoleIds(message: Record<string, unknown>): string[] {
 }
 
 function readReferencedMessage(message: Record<string, unknown>): DiscordMessagePayload['referenced_message'] {
-  const referencedMessage = readRecord(message, 'referencedMessage');
+  // discord.js v14's Message exposes only `reference` ({ messageId, ... })
+  // plus an async fetchReference() — there is NO synchronous
+  // referencedMessage property and no attachments to read here. Only the
+  // referenced message ID is threaded; quoted attachments are fetched
+  // lazily via REST (adapter.fetchMessageAttachments), strictly after the
+  // engagement decision. Raw-payload `referenced_message` duck-typing is
+  // kept for id/content only.
+  const referencedMessage = readRecord(message, 'referencedMessage')
+    ?? readRecord(message, 'referenced_message');
   const reference = readRecord(message, 'reference');
-  const id = referencedMessage
-    ? readString(referencedMessage, 'id')
-    : reference
-      ? readString(reference, 'messageId') ?? readString(reference, 'message_id')
-      : undefined;
+  const id = (referencedMessage ? readString(referencedMessage, 'id') : undefined)
+    ?? (reference ? readString(reference, 'messageId') ?? readString(reference, 'message_id') : undefined);
   const content = referencedMessage ? readString(referencedMessage, 'content') : undefined;
 
   if (!id && !content) return undefined;
@@ -187,69 +193,6 @@ function readReferencedMessage(message: Record<string, unknown>): DiscordMessage
     ...(id ? { id } : {}),
     ...(content ? { content } : {}),
   };
-}
-
-const AUDIO_EXTENSION_CONTENT_TYPES: Record<string, string> = {
-  '.m4a': 'audio/mp4',
-  '.ogg': 'audio/ogg',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.webm': 'audio/webm',
-};
-
-function inferAudioContentTypeFromName(name: string | undefined): string | undefined {
-  if (!name) return undefined;
-  const lower = name.toLowerCase();
-  const extension = Object.keys(AUDIO_EXTENSION_CONTENT_TYPES).find((ext) => lower.endsWith(ext));
-  return extension ? AUDIO_EXTENSION_CONTENT_TYPES[extension] : undefined;
-}
-
-function readAudioAttachment(attachments: unknown[]): { url: string; contentType: string } | undefined {
-  for (const attachment of attachments) {
-    if (!isRecord(attachment)) continue;
-
-    const url = readString(attachment, 'url');
-    if (!url) continue;
-
-    const declaredContentType = readString(attachment, 'contentType') ?? readString(attachment, 'content_type');
-    const filename = readString(attachment, 'name') ?? readString(attachment, 'filename');
-    const inferredContentType = inferAudioContentTypeFromName(filename) ?? inferAudioContentTypeFromName(url);
-
-    if (declaredContentType?.startsWith('audio/')) {
-      return { url, contentType: declaredContentType };
-    }
-
-    if (inferredContentType) {
-      // Extension says audio but the declared type isn't audio/* (Discord emits
-      // e.g. application/octet-stream for some containers) — trust the inferred
-      // audio type so the transcription consumer gets a usable MIME.
-      return { url, contentType: inferredContentType };
-    }
-  }
-
-  return undefined;
-}
-
-function readMediaAttachment(attachments: unknown[]): DiscordMessagePayload['media'] {
-  for (const attachment of attachments) {
-    if (!isRecord(attachment)) continue;
-    const url = readString(attachment, 'url');
-    if (!url) continue;
-
-    const contentType = readString(attachment, 'contentType')
-      ?? readString(attachment, 'content_type')
-      ?? 'application/octet-stream';
-    const fileName = readString(attachment, 'name') ?? readString(attachment, 'filename');
-    if (contentType.startsWith('audio/') || inferAudioContentTypeFromName(fileName ?? url)) continue;
-
-    const kind = contentType.startsWith('image/')
-      ? 'image'
-      : contentType.startsWith('video/')
-        ? 'video'
-        : 'document';
-    return { url, contentType, ...(fileName ? { fileName } : {}), kind };
-  }
-  return undefined;
 }
 
 export function mapMessageToPayload(message: unknown): DiscordMessagePayload {

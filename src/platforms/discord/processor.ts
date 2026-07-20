@@ -4,17 +4,18 @@ import { logger } from '../../middleware/logger.js';
 import { processInboundMessage } from '../../core/process-inbound-message.js';
 import { processGroupMessage } from '../../core/process-group-message.js';
 import { getResponse } from '../../core/response-router.js';
-import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
 import { handleIntroduction } from '../../features/introductions.js';
 import { handleEventPassive } from '../../features/events.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
 import type { VisionImage } from '../../core/vision.js';
 
+import { readAttachments } from '../../core/attachment-reading.js';
+
+import type { DiscordMessenger } from './adapter.js';
 import {
-  attachmentContextLine,
-  prepareDiscordVision,
-  transcribeDiscordAttachment,
+  collectDiscordDirectAttachments,
+  collectDiscordReferencedAttachments,
 } from './attachment-reading.js';
 import type { DiscordInbound } from './inbound.js';
 import {
@@ -118,6 +119,7 @@ function normalizeDiscordInboundFromMessage(event: DiscordMessageCreate): Discor
     hasVisualMedia: Boolean(event.media),
     audio: event.audio,
     media: event.media,
+    referencedMessageId: event.referenced_message?.id,
     raw: createMessageRef({
       platform: 'discord',
       chatId: event.channel_id,
@@ -142,7 +144,7 @@ function buildDiscordMentionRegex(botUserId: string | undefined): RegExp {
 }
 
 async function processDiscordInbound(
-  messenger: PlatformMessenger,
+  messenger: DiscordMessenger,
   inbound: DiscordInbound,
   env: { ownerId: string; ownerUserId?: string; botUserId?: string },
   options: {
@@ -186,30 +188,31 @@ async function processDiscordInbound(
         query = trimmed.slice(mentionMatch[0].length).trim();
       }
 
-      if (!query && !hasMedia) return;
+      const referencedMessageId = (m as DiscordInbound).referencedMessageId;
+      if (!query && !hasMedia && !referencedMessageId) return;
 
       // Attachment reading (engagement already decided above). Bang commands
       // are skipped entirely: feature handlers parse their args from the raw
       // query (a context line would corrupt e.g. `!song add …`), and `!idea`
-      // consumes the audio ref itself.
+      // consumes the audio ref itself. The engaging message's own attachment
+      // wins; the replied-to message's attachments are fetched lazily via
+      // REST ONLY when the message has none of its own — an unengaged reply
+      // or a bang command never costs an API call.
       let visionImages: VisionImage[] | undefined;
       let enrichedQuery = query;
       if (!isBang) {
-        if (m.media) {
-          visionImages = await prepareDiscordVision(m.media, query);
-          if (!visionImages) {
-            const context = attachmentContextLine(m.media);
-            enrichedQuery = enrichedQuery ? `${enrichedQuery}\n\n${context}` : context;
-          }
+        let attachments = collectDiscordDirectAttachments(m);
+        if (attachments.length === 0 && referencedMessageId) {
+          const referenced = await messenger.fetchMessageAttachments(m.chatId, referencedMessageId);
+          if (referenced) attachments = collectDiscordReferencedAttachments(referenced);
         }
-        if (audio) {
-          const transcript = await transcribeDiscordAttachment(audio);
-          if (transcript) {
-            const line = `[voice message transcript] ${transcript}`;
-            enrichedQuery = enrichedQuery ? `${enrichedQuery}\n\n${line}` : line;
-          }
+        if (attachments.length > 0) {
+          const read = await readAttachments(attachments, query);
+          visionImages = read.visionImages;
+          enrichedQuery = read.enrichedQuery;
         }
       }
+      if (!enrichedQuery && !visionImages) return;
 
       await processGroupMessage({
         messenger,
@@ -262,7 +265,7 @@ async function processDiscordInbound(
  * Process a production Discord MESSAGE_CREATE event.
  */
 export async function processDiscordEvent(
-  messenger: PlatformMessenger,
+  messenger: DiscordMessenger,
   eventPayload: unknown,
   env: { ownerId: string; ownerUserId?: string; botUserId?: string },
 ): Promise<void> {
@@ -311,7 +314,7 @@ export function parseDiscordDemoMessage(input: unknown): DiscordDemoMessage {
 }
 
 export async function processDiscordDemoInbound(
-  messenger: PlatformMessenger,
+  messenger: DiscordMessenger,
   inbound: DiscordInbound,
   env: {
     ownerId: string;

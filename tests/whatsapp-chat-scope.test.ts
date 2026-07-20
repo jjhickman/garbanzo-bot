@@ -200,6 +200,7 @@ describe('WhatsApp processor chat-scope hook wiring', () => {
     vi.doMock('../src/middleware/health.js', () => ({ markMessageReceived: vi.fn() }));
     vi.doMock('../src/platforms/whatsapp/media.js', () => ({
       isVoiceMessage: vi.fn(() => voice.isVoice ?? false),
+      classifyDirectAudio: vi.fn(() => (voice.isVoice ? { contentType: 'audio/ogg', ptt: true } : null)),
       downloadVoiceAudio: vi.fn(async () => voice.audioBuffer ?? null),
     }));
     vi.doMock('../src/features/voice.js', () => ({

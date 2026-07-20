@@ -48,26 +48,17 @@ export function classifyWhatsAppMedia(msg: WAMessage): WhatsAppMedia | undefined
   return classifyContent(content) ?? (content ? classifyContent(quotedContent(content)) : undefined);
 }
 
-export async function downloadWhatsAppMedia(msg: WAMessage, maxBytes: number): Promise<Buffer | null> {
+/**
+ * Bounded (size cap + timeout) streaming download of exactly the given
+ * message's media. Callers that need the direct-or-quoted selection use
+ * `downloadWhatsAppMedia`; the attachment-reading collector targets a
+ * specific (possibly synthesized quoted) message directly.
+ */
+export async function downloadBoundedWhatsAppMedia(msg: WAMessage, maxBytes: number): Promise<Buffer | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MEDIA_FETCH_TIMEOUT_MS);
   try {
-    const content = normalizeMessageContent(msg.message);
-    if (!content) return null;
-    let downloadMessage = msg;
-    if (!classifyContent(content)) {
-      const contextInfo = content.extendedTextMessage?.contextInfo
-        ?? content.imageMessage?.contextInfo
-        ?? content.videoMessage?.contextInfo
-        ?? content.documentMessage?.contextInfo;
-      if (!contextInfo?.quotedMessage || !classifyContent(normalizeMessageContent(contextInfo.quotedMessage))) return null;
-      downloadMessage = {
-        key: { id: contextInfo.stanzaId, remoteJid: msg.key.remoteJid },
-        message: contextInfo.quotedMessage,
-      } as WAMessage;
-    }
-
-    const stream = await downloadMediaMessage(downloadMessage, 'stream', {
+    const stream = await downloadMediaMessage(msg, 'stream', {
       options: { signal: controller.signal },
     });
     const chunks: Buffer[] = [];
@@ -83,11 +74,29 @@ export async function downloadWhatsAppMedia(msg: WAMessage, maxBytes: number): P
     }
     return Buffer.concat(chunks);
   } catch (err) {
-    logger.warn({ err, msgId: msg.key.id }, 'Failed to download WhatsApp bridge media');
+    logger.warn({ err, msgId: msg.key.id }, 'Failed to download WhatsApp media');
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function downloadWhatsAppMedia(msg: WAMessage, maxBytes: number): Promise<Buffer | null> {
+  const content = normalizeMessageContent(msg.message);
+  if (!content) return null;
+  let downloadMessage = msg;
+  if (!classifyContent(content)) {
+    const contextInfo = content.extendedTextMessage?.contextInfo
+      ?? content.imageMessage?.contextInfo
+      ?? content.videoMessage?.contextInfo
+      ?? content.documentMessage?.contextInfo;
+    if (!contextInfo?.quotedMessage || !classifyContent(normalizeMessageContent(contextInfo.quotedMessage))) return null;
+    downloadMessage = {
+      key: { id: contextInfo.stanzaId, remoteJid: msg.key.remoteJid },
+      message: contextInfo.quotedMessage,
+    } as WAMessage;
+  }
+  return downloadBoundedWhatsAppMedia(downloadMessage, maxBytes);
 }
 
 /**
@@ -209,11 +218,25 @@ export function hasVisualMedia(msg: WAMessage): boolean {
   return false;
 }
 
+/**
+ * Direct (non-quoted) audio on a message: mimetype + PTT flag, or null when
+ * the message is not an audio message. PTT voice notes are transcribed
+ * inline by the processor; non-PTT audio (a shared mp3/m4a) is surfaced as
+ * metadata and read lazily by the attachment-reading path after engagement.
+ */
+export function classifyDirectAudio(msg: WAMessage): { contentType: string; ptt: boolean } | null {
+  const content = normalizeMessageContent(msg.message);
+  if (!content) return null;
+  if (getContentType(content) !== 'audioMessage' || !content.audioMessage) return null;
+  return {
+    contentType: content.audioMessage.mimetype ?? 'audio/ogg',
+    ptt: !!content.audioMessage.ptt,
+  };
+}
+
 /** Check if a message is a voice note (PTT audio). */
 export function isVoiceMessage(msg: WAMessage): boolean {
-  const content = normalizeMessageContent(msg.message);
-  if (!content) return false;
-  return getContentType(content) === 'audioMessage' && !!content.audioMessage?.ptt;
+  return classifyDirectAudio(msg)?.ptt === true;
 }
 
 /** Download voice message audio as a Buffer. */

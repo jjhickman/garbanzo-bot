@@ -12,6 +12,7 @@ import { buildTelegramWelcomeMessage } from './welcome.js';
 import {
   mapTelegramMedia,
   prepareTelegramMedia,
+  type RawTelegramAudio,
   type RawTelegramDocument,
   type RawTelegramPhoto,
   type TelegramMappedMedia,
@@ -54,6 +55,8 @@ export interface RawTelegramMessage {
   voice?: RawTelegramVoice;
   photo?: RawTelegramPhoto[];
   document?: RawTelegramDocument;
+  /** Audio FILE (e.g. an mp3 sent as music) — distinct from `voice`. */
+  audio?: RawTelegramAudio;
   new_chat_members?: RawTelegramUser[];
 }
 
@@ -80,6 +83,10 @@ export interface TelegramMappedMessage {
   mentionedIds: string[];
   voice?: { fileId: string; mimeType: string };
   media?: TelegramMappedMedia;
+  /** Replied-to message's voice note (metadata only — no download here). */
+  quotedVoice?: { fileId: string; mimeType: string };
+  /** Replied-to message's photo/document (metadata only — no download here). */
+  quotedMedia?: TelegramMappedMedia;
 }
 
 function buildSenderName(from: RawTelegramUser | undefined): string | undefined {
@@ -141,6 +148,12 @@ export function mapTelegramMessageToPayload(
       ? { fileId: message.voice.file_id, mimeType: message.voice.mime_type ?? 'audio/ogg' }
       : undefined,
     media: mapTelegramMedia(message),
+    // Quoted attachment REFS only: nothing is downloaded until the processor
+    // decides the message is engaged (attachment-reading path).
+    quotedVoice: replyToMessage?.voice
+      ? { fileId: replyToMessage.voice.file_id, mimeType: replyToMessage.voice.mime_type ?? 'audio/ogg' }
+      : undefined,
+    quotedMedia: replyToMessage ? mapTelegramMedia(replyToMessage) : undefined,
   };
 }
 
@@ -242,7 +255,27 @@ export function createTelegramClient(deps: TelegramClientDeps): {
         ? await prepareTelegramMedia(deps.token, mapped.media, bridgeMediaEnabledForChat)
         : undefined;
 
-      await processTelegramEvent(adapter, { ...mapped, audio, media }, {
+      // CREDENTIAL RULE: quoted refs use the same safe `telegram-file:` url
+      // convention — the attachment reader resolves the file id to bytes via
+      // downloadTelegramFile only after engagement; token URLs never leave
+      // telegram-voice.ts.
+      const quotedAudio = mapped.quotedVoice
+        ? {
+          url: `telegram-file:${mapped.quotedVoice.fileId}`,
+          contentType: mapped.quotedVoice.mimeType,
+          ptt: true,
+        }
+        : undefined;
+      const quotedMedia = mapped.quotedMedia
+        ? {
+          url: `telegram-file:${mapped.quotedMedia.fileId}`,
+          contentType: mapped.quotedMedia.mimeType,
+          fileName: mapped.quotedMedia.fileName,
+          kind: mapped.quotedMedia.kind,
+        }
+        : undefined;
+
+      await processTelegramEvent(adapter, { ...mapped, audio, media, quotedAudio, quotedMedia }, {
         ownerId: deps.ownerId,
         ownerUserId: deps.ownerUserId,
         botUserId: botIdentity.id !== undefined ? String(botIdentity.id) : undefined,

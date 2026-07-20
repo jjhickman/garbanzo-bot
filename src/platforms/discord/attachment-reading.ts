@@ -1,22 +1,30 @@
-import { prepareForVision, type VisionImage, type VisionMediaType } from '../../core/vision.js';
+import {
+  ATTACHMENT_READ_MAX_BYTES,
+  type ReadableAttachment,
+  type ReadableAttachmentKind,
+} from '../../core/attachment-reading.js';
 import { fetchBoundedBuffer } from '../../utils/bounded-fetch.js';
-import { transcribeAudio } from '../../features/voice.js';
 import { logger } from '../../middleware/logger.js';
-
-/**
- * Attachment reading for the Discord reply path. WhatsApp has fed images to
- * vision since the beginning (group-handler → extractMedia → prepareForVision);
- * Discord only threaded attachment refs, so the bot was blind to dropped
- * files. These helpers run strictly AFTER the engagement decision — nothing
- * here downloads for a message the bot will not answer.
- */
-
-/** Independent of the bridge media cap: attachment reading is a reply feature. */
-export const ATTACHMENT_READ_MAX_BYTES = 8 * 1024 * 1024;
-
 import type { InboundMessage } from '../../core/inbound-message.js';
 
+import type { DiscordMessageAttachments } from './attachment-classification.js';
+
+/**
+ * Discord collector for the platform-agnostic attachment reader
+ * (src/core/attachment-reading.ts). WhatsApp has fed images to vision since
+ * the beginning; Discord only threaded attachment refs, so the bot was blind
+ * to dropped files. The collector runs strictly AFTER the engagement
+ * decision — nothing here downloads for a message the bot will not answer.
+ *
+ * Direct attachments come off the inbound message; a replied-to message's
+ * attachments are fetched lazily by the processor via
+ * `DiscordMessenger.fetchMessageAttachments` (discord.js threads only the
+ * reference id) and mapped here — the engaging message's own attachment
+ * always wins, so the REST fetch never even happens when one exists.
+ */
+
 export type DiscordMediaRef = NonNullable<InboundMessage['media']>;
+export type DiscordAudioRef = { url: string; contentType: string; ptt?: boolean };
 
 // The discord CDN url can carry signed query params — log the host only.
 function urlHost(url: string): string | undefined {
@@ -27,82 +35,57 @@ function urlHost(url: string): string | undefined {
   }
 }
 
-function visionTypeFor(media: DiscordMediaRef): VisionMediaType | null {
-  if (media.contentType === 'image/gif') return 'gif';
-  if (media.kind === 'sticker') return 'sticker';
-  if (media.contentType.startsWith('image/')) return 'image';
-  if (media.contentType.startsWith('video/')) return 'video';
-  return null;
-}
-
-/**
- * Download an engaged message's image/gif/video attachment (bounded) and
- * prepare it for a vision-capable model. Returns undefined on any failure or
- * for non-visual kinds — the caller falls back to a context line.
- */
-export async function prepareDiscordVision(
-  media: DiscordMediaRef,
-  caption: string,
-): Promise<VisionImage[] | undefined> {
-  const type = visionTypeFor(media);
-  if (!type || !media.url) return undefined;
-  const url = media.url;
-
-  const data = await fetchBoundedBuffer(url, {
+function boundedCdnBytes(url: string): () => Promise<Buffer | null> {
+  return () => fetchBoundedBuffer(url, {
     maxBytes: ATTACHMENT_READ_MAX_BYTES,
     onFailure: (failure) => {
       logger.warn({ host: urlHost(url), reason: failure.reason }, 'Discord attachment fetch failed');
     },
   });
-  if (!data) return undefined;
+}
 
-  try {
-    const images = await prepareForVision({
-      type,
-      data,
-      mimeType: media.contentType,
-      caption: caption || undefined,
-    });
-    return images.length > 0 ? images : undefined;
-  } catch (err) {
-    logger.warn({ err, host: urlHost(url) }, 'Discord attachment vision preparation failed');
-    return undefined;
-  }
+function mediaKind(media: Pick<DiscordMediaRef, 'contentType' | 'kind'>): ReadableAttachmentKind {
+  if (media.contentType === 'image/gif') return 'gif';
+  if (media.kind === 'sticker') return 'sticker';
+  if (media.contentType.startsWith('image/')) return 'image';
+  if (media.contentType.startsWith('video/')) return 'video';
+  return 'document';
+}
+
+function mediaAttachment(media: DiscordMediaRef | undefined): ReadableAttachment[] {
+  if (!media) return [];
+  const url = media.url;
+  return [{
+    kind: mediaKind(media),
+    contentType: media.contentType,
+    ...(media.fileName ? { fileName: media.fileName } : {}),
+    bytes: url ? boundedCdnBytes(url) : async () => null,
+  }];
+}
+
+function audioAttachment(audio: DiscordAudioRef | undefined): ReadableAttachment[] {
+  if (!audio) return [];
+  return [{
+    kind: 'audio',
+    contentType: audio.contentType,
+    ...(audio.ptt === undefined ? {} : { ptt: audio.ptt }),
+    bytes: boundedCdnBytes(audio.url),
+  }];
+}
+
+/** Collect the engaging message's OWN readable attachments. */
+export function collectDiscordDirectAttachments(
+  m: Pick<InboundMessage, 'media' | 'audio'>,
+): ReadableAttachment[] {
+  return [...mediaAttachment(m.media), ...audioAttachment(m.audio)];
 }
 
 /**
- * Context line for attachments the bot cannot ingest (documents, failed
- * vision) so the model can refer to them honestly instead of being blind.
+ * Map a REST-fetched referenced message's classified attachments
+ * (`DiscordMessenger.fetchMessageAttachments`) into readable attachments.
  */
-export function attachmentContextLine(media: DiscordMediaRef): string {
-  return `[attachment: ${media.fileName ?? 'file'} (${media.contentType})]`;
-}
-
-/**
- * Transcribe an engaged message's audio attachment. Gated on an explicit
- * WHISPER_URL (matching the bridge and song-ideas convention) so deployments
- * without a transcription server never pay a doomed fetch per voice message.
- * Any failure returns null and the reply proceeds without a transcript.
- */
-export async function transcribeDiscordAttachment(
-  audio: { url: string; contentType: string },
-): Promise<string | null> {
-  if (!process.env.WHISPER_URL) return null;
-
-  const data = await fetchBoundedBuffer(audio.url, {
-    maxBytes: ATTACHMENT_READ_MAX_BYTES,
-    onFailure: (failure) => {
-      logger.warn({ host: urlHost(audio.url), reason: failure.reason }, 'Discord audio attachment fetch failed');
-    },
-  });
-  if (!data) return null;
-
-  try {
-    const transcript = await transcribeAudio(data, audio.contentType);
-    const clean = transcript?.trim();
-    return clean ? clean : null;
-  } catch (err) {
-    logger.warn({ err, host: urlHost(audio.url) }, 'Discord audio attachment transcription failed');
-    return null;
-  }
+export function collectDiscordReferencedAttachments(
+  referenced: DiscordMessageAttachments,
+): ReadableAttachment[] {
+  return [...mediaAttachment(referenced.media), ...audioAttachment(referenced.audio)];
 }

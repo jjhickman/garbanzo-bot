@@ -2,8 +2,10 @@ import { logger } from '../../middleware/logger.js';
 import { markConnected, markDisconnected } from '../../middleware/health.js';
 
 import { createMatrixAdapter, type MatrixSendClient } from './adapter.js';
-import { downloadMatrixAudio, downloadMatrixMedia } from './matrix-media.js';
+import { downloadMatrixAudio, downloadMatrixMedia, redactToken } from './matrix-media.js';
 import type { MatrixMediaClient } from './matrix-media.js';
+import { ATTACHMENT_READ_MAX_BYTES } from '../../core/attachment-reading.js';
+import type { MatrixAttachmentDeps, MatrixQuotedEventLike } from './attachment-reading.js';
 import { isMatrixRoomEnabled } from './matrix-config.js';
 import { processMatrixEvent } from './processor.js';
 import { buildMatrixWelcomeMessage } from './welcome.js';
@@ -49,6 +51,8 @@ export interface MatrixMappedMessage {
   senderName?: string;
   timestampMs: number;
   quotedText?: string;
+  /** Referenced event id when this message is a rich reply. */
+  quotedEventId?: string;
   fromSelf: boolean;
   mentionedIds: string[];
   audio?: { mxcUrl: string; mimeType: string; size?: number };
@@ -67,6 +71,7 @@ export interface MatrixClientLike extends MatrixSendClient, MatrixMediaClient {
   stop(): Promise<void> | void;
   getUserId(): Promise<string> | string;
   getUserProfile?(mxid: string): Promise<{ displayname?: string }>;
+  getEvent?(roomId: string, eventId: string): Promise<unknown>;
   joinRoom?(roomId: string): Promise<void>;
 }
 
@@ -241,6 +246,7 @@ export function mapMatrixMessageToPayload(
     senderName: senderNameFromMxid(senderId),
     timestampMs: event.origin_server_ts ?? Date.now(),
     quotedText: textParts.quotedText,
+    quotedEventId: content['m.relates_to']?.['m.in_reply_to']?.event_id,
     fromSelf: senderId === bot.userId,
     mentionedIds: Array.from(mentionedIds),
     audio: msgtype === 'm.audio' && content.url
@@ -286,6 +292,31 @@ export function createMatrixClient(deps: MatrixClientDeps): {
     client = new sdk.MatrixClient(deps.homeserverUrl, deps.accessToken, storage);
     return client;
   }
+
+  // Capabilities for the attachment-reading path. Both are invoked lazily by
+  // the processor, strictly after the engagement decision — a reply in a
+  // require-mention room that does not address the bot never fetches the
+  // referenced event, let alone its media.
+  const attachmentDeps: MatrixAttachmentDeps = {
+    fetchEvent: async (roomId, eventId) => {
+      try {
+        const matrixClient = await getClient();
+        if (!matrixClient.getEvent) return null;
+        return await matrixClient.getEvent(roomId, eventId) as MatrixQuotedEventLike;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn({ err: redactToken(message, deps.accessToken), roomId }, 'Matrix referenced event fetch failed');
+        return null;
+      }
+    },
+    download: async (mxcUrl, declaredSize) => downloadMatrixMedia(
+      await getClient(),
+      deps.accessToken,
+      mxcUrl,
+      ATTACHMENT_READ_MAX_BYTES,
+      declaredSize,
+    ),
+  };
 
   async function resolveBotIdentity(matrixClient: MatrixClientLike): Promise<{ userId: string; displayName?: string }> {
     const userId = await matrixClient.getUserId();
@@ -349,6 +380,7 @@ export function createMatrixClient(deps: MatrixClientDeps): {
         fileName: string;
         kind: 'image' | 'video' | 'document';
         buffer?: Buffer;
+        size?: number;
       } | undefined;
       if (mapped.media) {
         const maxBytes = getBridgeMediaMaxBytes();
@@ -367,6 +399,7 @@ export function createMatrixClient(deps: MatrixClientDeps): {
           fileName: mapped.media.fileName,
           kind: mapped.media.kind,
           ...(buffer ? { buffer } : {}),
+          ...(mapped.media.size === undefined ? {} : { size: mapped.media.size }),
         };
       }
 
@@ -375,6 +408,7 @@ export function createMatrixClient(deps: MatrixClientDeps): {
         ownerRoomId,
         botUserId: identity.userId,
         botDisplayName: identity.displayName,
+        attachments: attachmentDeps,
       });
     } catch (err) {
       logger.error({ err }, 'Matrix message handler failed');
