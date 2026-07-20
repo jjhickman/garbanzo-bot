@@ -33,7 +33,10 @@ export type {
   MemberProfile,
   MemoryEntry,
   ModerationEntry,
+  NativeEvent,
+  NativeEventStatus,
   NewEventReminder,
+  NewNativeEvent,
   Rehearsal,
   RehearsalStatus,
   SectionKind,
@@ -103,6 +106,14 @@ export const listPendingEventReminders = backend.listPendingEventReminders;
 export const listUpcomingEventReminders = backend.listUpcomingEventReminders;
 export const markEventReminderSent = backend.markEventReminderSent;
 export const cancelEventReminder = backend.cancelEventReminder;
+export const rescheduleEventReminder = backend.rescheduleEventReminder;
+export const renameEventReminder = backend.renameEventReminder;
+
+// Native platform events (Discord scheduled events / WhatsApp event messages)
+export const addNativeEvent = backend.addNativeEvent;
+export const getNativeEventById = backend.getNativeEventById;
+export const listUpcomingNativeEvents = backend.listUpcomingNativeEvents;
+export const updateNativeEvent = backend.updateNativeEvent;
 
 // WhatsApp safety
 export const createWhatsAppOutboundJob = backend.createWhatsAppOutboundJob;

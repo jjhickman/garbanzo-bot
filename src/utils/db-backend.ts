@@ -18,7 +18,10 @@ import type {
   MemoryEntry,
   LocalMemoryEntry,
   ModerationEntry,
+  NativeEvent,
+  NativeEventStatus,
   NewEventReminder,
+  NewNativeEvent,
   Rehearsal,
   RehearsalStatus,
   SectionKind,
@@ -87,6 +90,28 @@ export interface DbBackend {
   listUpcomingEventReminders(limit?: number): Promise<EventReminder[]>;
   markEventReminderSent(id: number): Promise<boolean>;
   cancelEventReminder(id: number): Promise<boolean>;
+  /** Move a still-pending reminder (times in epoch seconds); false when it already fired/cancelled. */
+  rescheduleEventReminder(id: number, eventAt: number, remindAt: number): Promise<boolean>;
+  /** Rename a still-pending reminder's activity text; false when it already fired/cancelled. */
+  renameEventReminder(id: number, activity: string): Promise<boolean>;
+
+  // Native platform events (Discord scheduled events / WhatsApp event messages)
+  addNativeEvent(input: NewNativeEvent): Promise<NativeEvent>;
+  getNativeEventById(id: number): Promise<NativeEvent | undefined>;
+  listUpcomingNativeEvents(chatId: string, nowMs: number, limit?: number): Promise<NativeEvent[]>;
+  updateNativeEvent(
+    id: number,
+    patch: Partial<{
+      name: string;
+      description: string | null;
+      location: string | null;
+      startAtMs: number;
+      endAtMs: number | null;
+      platformRef: string;
+      status: NativeEventStatus;
+      reminderId: number | null;
+    }>,
+  ): Promise<NativeEvent | undefined>;
 
   // WhatsApp outbound safety and retained manual releases
   createWhatsAppOutboundJob(chatJid: string, kind: string, contentJson: string, optionsJson: string | null): Promise<WhatsAppOutboundJob>;

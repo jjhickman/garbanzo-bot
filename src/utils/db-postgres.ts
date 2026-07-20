@@ -851,6 +851,40 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       return (res.rowCount ?? 0) > 0;
     },
 
+    async rescheduleEventReminder(id: number, eventAt: number, remindAt: number): Promise<boolean> {
+      const res = await pool.query(
+        "UPDATE event_reminders SET event_at = $2, remind_at = $3 WHERE id = $1 AND status = 'pending'",
+        [id, eventAt, remindAt],
+      );
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    async renameEventReminder(id: number, activity: string): Promise<boolean> {
+      const res = await pool.query(
+        "UPDATE event_reminders SET activity = $2 WHERE id = $1 AND status = 'pending'",
+        [id, activity],
+      );
+      return (res.rowCount ?? 0) > 0;
+    },
+
+    // Native platform events follow the bridge-outbox precedent: sqlite is
+    // the implemented backend; postgres throws until ported.
+    async addNativeEvent(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async getNativeEventById(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async listUpcomingNativeEvents(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async updateNativeEvent(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
     async createWhatsAppOutboundJob(
       chatJid: string,
       kind: string,

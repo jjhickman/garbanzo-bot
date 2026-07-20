@@ -176,6 +176,33 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_event_reminders_status_event
     ON event_reminders (status, event_at ASC);
 
+  -- Native platform calendar events (Discord guild scheduled events,
+  -- WhatsApp event messages) created via !event. platform_ref is an opaque
+  -- JSON blob owned by the platform adapter (Discord guild+event ids; the
+  -- LATEST WhatsApp event message key, since WhatsApp updates/cancels are
+  -- replacement messages). Timestamps are epoch millis.
+  CREATE TABLE IF NOT EXISTS native_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    start_at_ms INTEGER NOT NULL,
+    end_at_ms INTEGER,
+    platform_ref TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'scheduled'
+      CHECK (status IN ('scheduled', 'cancelled')),
+    -- Linked event_reminders row so move/cancel can resync/cancel the
+    -- reminder (sqlite FKs are inert here; the link is maintained in code).
+    reminder_id INTEGER,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_native_events_chat_status_start
+    ON native_events (chat_id, status, start_at_ms ASC);
+
   CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_jid TEXT NOT NULL,
@@ -368,6 +395,12 @@ if (!tableHasColumn('feedback', 'github_issue_url')) {
 }
 if (!tableHasColumn('feedback', 'github_issue_created_at')) {
   db.exec('ALTER TABLE feedback ADD COLUMN github_issue_created_at INTEGER');
+}
+
+// Forward-compatible migration for databases created before native events
+// linked their event_reminders row (reminder resync on move/cancel).
+if (!tableHasColumn('native_events', 'reminder_id')) {
+  db.exec('ALTER TABLE native_events ADD COLUMN reminder_id INTEGER');
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────

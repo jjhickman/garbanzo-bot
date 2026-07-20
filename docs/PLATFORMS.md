@@ -326,6 +326,52 @@ curl -s -X POST "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/demo/chat" \
   -d '{"platform":"slack","text":"@garbanzo !help"}'
 ```
 
+## Native Events (`!event`)
+
+The `!event` command creates real calendar entries on platforms that have a
+native event primitive. The owner can always use it; when
+`BAND_FEATURES_ENABLED=true`, band members can too. Other senders get a
+standard permission reply.
+
+```text
+!event <when> | <name> [| location]   create an event
+!event list                           upcoming events in the chat
+!event show <id>                      event details
+!event move <id> <when>               reschedule
+!event rename <id> <name>             rename
+!event cancel <id>                    cancel
+```
+
+`<when>` accepts the same phrases as event reminders: `tomorrow 7pm`,
+`friday 8pm`, `8/2 19:00`, and similar, up to 30 days out. Event names are
+limited to 100 characters and locations to 1000 (Discord's caps, applied on
+every platform). When `EVENT_REMINDERS_ENABLED=true`, creating an event
+also records a standard text reminder that fires
+`EVENT_REMINDER_LEAD_MINUTES` before the start; moving or cancelling the
+event reschedules or cancels that reminder with it.
+
+Platform notes:
+
+- **Discord** creates a guild scheduled event (external type, so no voice
+  channel is required). The bot needs the **Manage Events** permission in
+  the server; without it the command replies with a permission error
+  instead of creating anything. If no end time is given, Discord events
+  default to two hours; if no location is given, the location shows `TBD`.
+- **WhatsApp** sends a native event message in the group. WhatsApp offers
+  no supported way for a linked client to edit an event message after
+  sending, so `!event move` and `!event rename` send a corrected
+  replacement event message, and `!event cancel` sends the event marked as
+  cancelled. The earlier event message stays in the chat history; the bot
+  tracks the latest message. Event sends go through the standard outbound
+  safety layer, so a send can be held for manual release instead of going
+  out immediately. A held send is not lost and does not need the command
+  repeated: the bot records the event (or the move/rename/cancel) in its
+  database right away, replies with the held job number, and the event
+  message posts once you release it with `!whatsapp release <id>`.
+  Re-running the command would create a second event, so don't.
+- **Telegram, Matrix, and Slack** have no native event primitive yet; the
+  command replies that events are not supported on those platforms.
+
 ## Automated / Non-Interactive Setup
 
 Use non-interactive mode for reproducible setup in scripts or CI-like environments:

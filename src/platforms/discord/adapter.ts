@@ -3,10 +3,12 @@ import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, DocumentPayload, AudioPayload } from '../../core/platform-messenger.js';
 import { logger } from '../../middleware/logger.js';
 
+import { discordApiRequest } from './api.js';
 import {
   classifyDiscordMessageAttachments,
   type DiscordMessageAttachments,
 } from './attachment-classification.js';
+import { createDiscordNativeEventMethods } from './native-events.js';
 
 export interface DiscordDemoOutboxEntry {
   type: 'text' | 'poll' | 'document' | 'audio' | 'delete';
@@ -48,31 +50,6 @@ function getChannelFromMessageRef(ref: MessageRef): string | null {
   return typeof value.channelId === 'string' ? value.channelId : ref.chatId;
 }
 
-async function discordApiRequest<T>(
-  token: string,
-  path: string,
-  init: RequestInit,
-): Promise<T> {
-  const response = await fetch(`https://discord.com/api/v10${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bot ${token}`,
-      ...(init.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Discord API ${path} failed (${response.status}): ${text}`);
-  }
-
-  if (response.status === 204) {
-    return {} as T;
-  }
-
-  return await response.json() as T;
-}
-
 function toDiscordRef(chatId: string, messageId: string): MessageRef {
   return createMessageRef({
     platform: 'discord',
@@ -88,8 +65,14 @@ function toDiscordRef(chatId: string, messageId: string): MessageRef {
 }
 
 export function createDiscordAdapter(token: string): DiscordMessenger {
+  const nativeEvents = createDiscordNativeEventMethods(token);
+
   return {
     platform: 'discord',
+
+    createNativeEvent: nativeEvents.createNativeEvent,
+    updateNativeEvent: nativeEvents.updateNativeEvent,
+    cancelNativeEvent: nativeEvents.cancelNativeEvent,
 
     async fetchMessageAttachments(channelId: string, messageId: string): Promise<DiscordMessageAttachments | null> {
       try {
