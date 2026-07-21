@@ -9,7 +9,10 @@ import type { PlatformMessenger } from '../../core/platform-messenger.js';
 import { createMessageRef } from '../../core/message-ref.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
 import { transcribeAudio } from '../../features/voice.js';
+import { readAttachments } from '../../core/attachment-reading.js';
+import type { VisionImage } from '../../core/vision.js';
 
+import { collectTelegramAttachments } from './attachment-reading.js';
 import type { TelegramInbound } from './inbound.js';
 import {
   getTelegramChatName,
@@ -37,7 +40,7 @@ const TelegramMediaSchema = z.object({
   contentType: z.string(),
   fileName: z.string().optional(),
   buffer: z.instanceof(Buffer).optional(),
-  kind: z.enum(['image', 'document']),
+  kind: z.enum(['image', 'document', 'audio']),
 });
 
 const TelegramEventSchema = z.object({
@@ -53,6 +56,8 @@ const TelegramEventSchema = z.object({
   mentionedIds: z.array(z.string()).optional(),
   audio: TelegramAudioSchema.optional(),
   media: TelegramMediaSchema.optional(),
+  quotedAudio: TelegramAudioSchema.optional(),
+  quotedMedia: TelegramMediaSchema.optional(),
 });
 
 type TelegramEvent = z.infer<typeof TelegramEventSchema>;
@@ -73,9 +78,16 @@ function normalizeTelegramInbound(event: TelegramEvent): TelegramInbound {
     text: event.text,
     quotedText: event.quotedText,
     mentionedIds: event.mentionedIds,
-    hasVisualMedia: Boolean(event.media),
+    // Audio FILES ride `media` (kind 'audio') so the core no-content gate
+    // still passes a captionless mp3 through to group dispatch, but they are
+    // NOT visual media: bridge capture must never relay an `[image]`
+    // placeholder for them. (No `hasReadableAttachment` marker needed here,
+    // unlike WhatsApp: `media` presence already satisfies the core gate.)
+    hasVisualMedia: Boolean(event.media && event.media.kind !== 'audio'),
     audio: event.audio,
     media: event.media,
+    quotedAudio: event.quotedAudio,
+    quotedMedia: event.quotedMedia,
     raw: createMessageRef({
       platform: 'telegram',
       chatId: event.chatId,
@@ -167,7 +179,23 @@ async function processTelegramInbound(
 
       const query = mentionMatch ? trimmed.slice(mentionMatch[0].length).trim() : trimmed;
 
-      if (!query && !hasMedia) return;
+      const hasQuotedAttachment = Boolean(m.quotedAudio || m.quotedMedia);
+      if (!query && !hasMedia && !hasQuotedAttachment) return;
+
+      // Attachment reading (engagement already decided above). Bang commands
+      // are skipped entirely: feature handlers own their raw queries. Direct
+      // voice is NOT re-read here — resolveVoiceText already owns that flow.
+      let visionImages: VisionImage[] | undefined;
+      let enrichedQuery = query;
+      if (!isBang) {
+        const attachments = collectTelegramAttachments(m, config.TELEGRAM_BOT_TOKEN);
+        if (attachments.length > 0) {
+          const read = await readAttachments(attachments, query);
+          visionImages = read.visionImages;
+          enrichedQuery = read.enrichedQuery;
+        }
+      }
+      if (!enrichedQuery && !visionImages && !audio) return;
 
       await processGroupMessage({
         messenger,
@@ -176,12 +204,13 @@ async function processTelegramInbound(
         groupName: getTelegramChatName(m.chatId) ?? `Telegram ${m.chatId}`,
         ownerId: env.ownerId,
         ownerUserId: env.ownerUserId,
-        query,
+        query: enrichedQuery,
         isFeatureEnabled: featureEnabled,
         getResponse,
         messageId: m.messageId,
         replyTo: m.raw,
         audio,
+        visionImages,
       });
     },
 

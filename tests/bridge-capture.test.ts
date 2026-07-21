@@ -639,6 +639,31 @@ describe('createRelayCapture', () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
+  it('never relays reply-path-only readable attachments (WhatsApp non-PTT audio)', async () => {
+    // Pin: a WhatsApp shared audio FILE reaches group dispatch via
+    // hasReadableAttachment, but bridge capture deliberately ignores the
+    // flag — no `[voice note]` placeholder, no envelope, and no attempted
+    // fetch of a `whatsapp-message:` placeholder URL, even with WHISPER_URL
+    // and media relay enabled.
+    process.env.WHISPER_URL = 'http://whisper.test';
+    process.env.BRIDGE_MEDIA_ENABLED = 'true';
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3])));
+    vi.stubGlobal('fetch', fetchMock);
+    const { relay, enqueue } = capture('whatsapp-band', withMediaRelay());
+
+    relay.capture(inbound({
+      platform: 'whatsapp',
+      chatId: 'group-1@g.us',
+      messageId: 'wa-audio-1',
+      text: null,
+      hasReadableAttachment: true,
+    }));
+    await tickMicrotasks();
+
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('skips capture when the inbound message has no messageId', () => {
     const { relay, enqueue } = capture('discord-band');
 

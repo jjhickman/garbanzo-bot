@@ -80,6 +80,39 @@ export interface InboundMessage {
   };
 
   /**
+   * Replied-to message's audio attachment, where the platform threads it
+   * (Telegram — same URL-safety rules as `audio`: Telegram uses the
+   * non-fetchable `telegram-file:<file_id>` placeholder, never a token URL).
+   * Read only for engaged messages, and only when the engaging message has
+   * no attachment of its own. WhatsApp reads quoted media off the native
+   * message instead; Discord and Matrix fetch the referenced message/event
+   * lazily after the engagement decision.
+   */
+  quotedAudio?: { url: string; contentType: string; buffer?: Buffer; ptt?: boolean };
+
+  /** Replied-to message's first non-audio attachment (see `quotedAudio`). */
+  quotedMedia?: {
+    url?: string;
+    contentType: string;
+    fileName?: string;
+    buffer?: Buffer;
+    kind: 'image' | 'video' | 'audio' | 'sticker' | 'document';
+  };
+
+  /**
+   * True when the message carries an attachment the reply path can read
+   * lazily off the platform-native message (e.g. a WhatsApp non-PTT audio
+   * file) that is deliberately NOT surfaced on `audio`/`media`. It is
+   * counted by the core no-content gate so the message reaches group
+   * dispatch, where the platform collector reads the bytes strictly after
+   * the engagement decision. Bridge relay capture DELIBERATELY ignores this
+   * flag: such messages are not bridge-relayed (preserving the behavior
+   * from before attachment reading existed), and nothing ever tries to
+   * fetch a placeholder URL for them.
+   */
+  hasReadableAttachment?: boolean;
+
+  /**
    * True when `text` is a processor-synthesized placeholder (a voice note
    * whose transcription failed became VOICE_NOTE_PLACEHOLDER). The message
    * still flows through moderation, recording, and bridge capture, but

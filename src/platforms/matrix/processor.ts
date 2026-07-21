@@ -9,7 +9,10 @@ import { getResponse } from '../../core/response-router.js';
 import { transcribeAudio } from '../../features/voice.js';
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
+import { readAttachments } from '../../core/attachment-reading.js';
+import type { VisionImage } from '../../core/vision.js';
 
+import { collectMatrixAttachments, type MatrixAttachmentDeps } from './attachment-reading.js';
 import type { MatrixInbound } from './inbound.js';
 import {
   getMatrixRoomName,
@@ -36,6 +39,7 @@ const MatrixMediaSchema = z.object({
   fileName: z.string().optional(),
   buffer: z.instanceof(Buffer).optional(),
   kind: z.enum(['image', 'video', 'document']),
+  size: z.number().optional(),
 });
 
 const MatrixEventSchema = z.object({
@@ -47,6 +51,7 @@ const MatrixEventSchema = z.object({
   senderName: z.string().optional(),
   timestampMs: z.number(),
   quotedText: z.string().optional(),
+  quotedEventId: z.string().optional(),
   fromSelf: z.boolean().default(false),
   mentionedIds: z.array(z.string()).optional(),
   audio: MatrixAudioSchema.optional(),
@@ -125,13 +130,24 @@ function buildLeadingMentionRegex(botMxid: string | undefined, botDisplayName: s
   return new RegExp(`^(?:${candidates.join('|')})(?:$|[:,\\s]+)`, 'i');
 }
 
+interface MatrixProcessorEnv {
+  ownerId: string;
+  ownerRoomId?: string;
+  botUserId?: string;
+  botDisplayName?: string;
+  /** Client-supplied lazy event-fetch + bounded-download capabilities. */
+  attachments?: MatrixAttachmentDeps;
+}
+
 async function processMatrixInbound(
   messenger: PlatformMessenger,
   inbound: MatrixInbound,
-  env: { ownerId: string; ownerRoomId?: string; botUserId?: string; botDisplayName?: string },
+  env: MatrixProcessorEnv,
   options: {
     roomEnabled?: MatrixRoomEnabled;
     featureEnabled?: (roomId: string, feature: string) => boolean;
+    /** Attachment refs from the parsed event (direct media + reply target). */
+    attachmentSource?: { media?: MatrixEvent['media']; quotedEventId?: string };
   } = {},
 ): Promise<void> {
   const mentionRegex = buildLeadingMentionRegex(env.botUserId, env.botDisplayName);
@@ -162,7 +178,29 @@ async function processMatrixInbound(
       if (requiresMention && !isAddressed) return;
 
       const query = mentionMatch ? trimmed.slice(mentionMatch[0].length).trim() : trimmed;
-      if (!query && !hasMedia) return;
+      const source = options.attachmentSource;
+      const hasQuotedRef = Boolean(source?.quotedEventId);
+      if (!query && !hasMedia && !hasQuotedRef) return;
+
+      // Attachment reading (engagement already decided above). Bang commands
+      // are skipped entirely: feature handlers own their raw queries. Direct
+      // audio is NOT re-read here — resolveAudioText already owns that flow.
+      let visionImages: VisionImage[] | undefined;
+      let enrichedQuery = query;
+      if (!isBang && source) {
+        const attachments = await collectMatrixAttachments({
+          roomId: m.chatId,
+          media: source.media,
+          quotedEventId: source.quotedEventId,
+          deps: env.attachments,
+        });
+        if (attachments.length > 0) {
+          const read = await readAttachments(attachments, query);
+          visionImages = read.visionImages;
+          enrichedQuery = read.enrichedQuery;
+        }
+      }
+      if (!enrichedQuery && !visionImages && !audio) return;
 
       await processGroupMessage({
         messenger,
@@ -171,12 +209,13 @@ async function processMatrixInbound(
         groupName: getMatrixRoomName(m.chatId) ?? `Matrix ${m.chatId}`,
         ownerId: ownerAlertRoomId,
         ownerUserId: env.ownerId,
-        query,
+        query: enrichedQuery,
         isFeatureEnabled: featureEnabled,
         getResponse,
         messageId: m.messageId,
         replyTo: m.raw,
         audio,
+        visionImages,
       });
     },
 
@@ -214,7 +253,7 @@ async function processMatrixInbound(
 export async function processMatrixEvent(
   messenger: PlatformMessenger,
   eventPayload: unknown,
-  env: { ownerId: string; ownerRoomId?: string; botUserId?: string; botDisplayName?: string },
+  env: MatrixProcessorEnv,
 ): Promise<void> {
   const parsed = MatrixEventSchema.safeParse(eventPayload);
   if (!parsed.success) {
@@ -225,5 +264,10 @@ export async function processMatrixEvent(
   const resolved = await resolveAudioText(parsed.data);
   const inbound = normalizeMatrixInbound({ ...parsed.data, text: resolved.text });
   if (resolved.synthesized) inbound.synthesizedPlaceholder = true;
-  await processMatrixInbound(messenger, inbound, env);
+  await processMatrixInbound(messenger, inbound, env, {
+    attachmentSource: {
+      media: parsed.data.media,
+      quotedEventId: parsed.data.quotedEventId,
+    },
+  });
 }

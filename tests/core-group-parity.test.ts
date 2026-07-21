@@ -86,7 +86,9 @@ function setupMocks() {
     extractMedia: vi.fn(async () => null),
     hasVisualMedia: vi.fn(() => false),
     isVoiceMessage: vi.fn(() => false),
+    classifyDirectAudio: vi.fn(() => null),
     downloadVoiceAudio: vi.fn(async () => null),
+    downloadBoundedWhatsAppMedia: vi.fn(async () => null),
   }));
 
   vi.doMock('../src/core/vision.js', () => ({
@@ -135,7 +137,7 @@ describe('Core group processor parity (WhatsApp)', () => {
     };
 
     const msg = { key: { id: 'm1' } } as unknown as WAMessage;
-    await handleGroupMessage(sock as never, msg, 'group-legacy@g.us', 'user@s.whatsapp.net', '!poll What day? / Fri / Sat', undefined, false);
+    await handleGroupMessage(sock as never, msg, 'group-legacy@g.us', 'user@s.whatsapp.net', '!poll What day? / Fri / Sat', undefined);
 
     const coreCalls: Array<{ type: 'text' | 'textRef' | 'poll'; to: string; payload: unknown }> = [];
     const messenger: PlatformMessenger = {
@@ -202,7 +204,7 @@ describe('Core group processor parity (WhatsApp)', () => {
 
     const msg = { key: { id: 'm2' } } as unknown as WAMessage;
     const text = '!suggest Add a better onboarding guide to the README please';
-    await handleGroupMessage(sock as never, msg, 'group@g.us', 'user@s.whatsapp.net', text, undefined, false);
+    await handleGroupMessage(sock as never, msg, 'group@g.us', 'user@s.whatsapp.net', text, undefined);
 
     const coreCalls: Array<{ type: 'text' | 'textRef' | 'poll'; to: string; payload: unknown }> = [];
     const messenger: PlatformMessenger = {

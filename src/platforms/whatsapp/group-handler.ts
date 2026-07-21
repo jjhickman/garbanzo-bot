@@ -4,8 +4,9 @@ import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import { requiresMention, getGroupName, isFeatureEnabled } from '../../core/groups-config.js';
 import { isMentioned, stripMention } from './mentions.js';
-import { prepareForVision, type VisionImage } from '../../core/vision.js';
-import { extractMedia } from './media.js';
+import type { VisionImage } from '../../core/vision.js';
+import { readAttachments } from '../../core/attachment-reading.js';
+import { collectWhatsAppAttachments } from './attachment-reading.js';
 import {
   extractWhatsAppMentionedJids as extractMentionedJids,
   extractWhatsAppQuotedText as extractQuotedText,
@@ -21,9 +22,10 @@ import { createWhatsAppAdapter } from './adapter.js';
  *
  * Platform-specific responsibilities kept here:
  * - mention detection / mention stripping
- * - media extraction and conversion to vision-ready payloads
+ * - attachment collection (direct + quoted) for the shared reading pipeline
  *
- * Core routing + response generation lives in `processGroupMessage`.
+ * Core routing + response generation lives in `processGroupMessage`;
+ * vision preparation and transcription live in `core/attachment-reading`.
  */
 export async function handleGroupMessage(
   sock: WASocket,
@@ -32,7 +34,6 @@ export async function handleGroupMessage(
   senderJid: string,
   text: string,
   content: WAMessageContent | undefined,
-  hasMedia: boolean,
 ): Promise<void> {
   const mentionedJids = extractMentionedJids(content);
   const botJid = sock.user?.id;
@@ -56,15 +57,19 @@ export async function handleGroupMessage(
 
   logger.info({ group: groupName, sender: senderJid, query }, 'Group mention');
 
-  // Media understanding (images, videos, stickers, GIFs)
+  // Attachment reading (engagement already decided above): the message's own
+  // media/audio, or the quoted message's when it has none. Bang commands are
+  // skipped entirely — feature handlers own their raw queries.
   let visionImages: VisionImage[] | undefined;
-  if (hasMedia) {
-    const media = await extractMedia(msg);
-    if (media) {
-      const images = await prepareForVision(media);
-      if (images.length > 0) {
-        visionImages = images;
-        logger.info({ type: media.type, imageCount: images.length }, 'Media prepared for vision');
+  let enrichedQuery = query;
+  if (!isBangCommand) {
+    const attachments = collectWhatsAppAttachments(msg);
+    if (attachments.length > 0) {
+      const read = await readAttachments(attachments, query);
+      visionImages = read.visionImages;
+      enrichedQuery = read.enrichedQuery;
+      if (visionImages) {
+        logger.info({ imageCount: visionImages.length }, 'Media prepared for vision');
       }
     }
   }
@@ -81,7 +86,7 @@ export async function handleGroupMessage(
     senderId: senderJid,
     groupName,
     ownerId: ownerJid,
-    query,
+    query: enrichedQuery,
     isFeatureEnabled,
     getResponse,
     quotedText: extractQuotedText(content),

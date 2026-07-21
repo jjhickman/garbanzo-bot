@@ -92,8 +92,15 @@ export async function processInboundMessage(
     return;
   }
 
-  // Allow messages with visual media through even without text
-  const hasMedia = inbound.hasVisualMedia || Boolean(inbound.audio) || Boolean(inbound.media);
+  // Allow messages with visual media through even without text.
+  // `hasReadableAttachment` marks platform-native attachments that are
+  // deliberately absent from audio/media (see InboundMessage) — they must
+  // reach group dispatch for lazy reading, but stay invisible to bridge
+  // capture.
+  const hasMedia = inbound.hasVisualMedia
+    || Boolean(inbound.audio)
+    || Boolean(inbound.media)
+    || Boolean(inbound.hasReadableAttachment);
   if (!inbound.text && !hasMedia) return;
 
   if (inbound.isGroupChat && env.shouldIngestGroupChat && !env.shouldIngestGroupChat(inbound.chatId)) return;
