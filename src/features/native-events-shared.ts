@@ -219,9 +219,28 @@ export function computeReminderTimes(startAtMs: number): { eventAt: number; remi
   return { eventAt, remindAt };
 }
 
-/** Create the linked reminder row; returns its id, or null when disabled/failed. */
+/**
+ * Platforms whose runtimes actually consume event_reminders rows — i.e.
+ * bind a poller over listPendingEventReminders (Discord:
+ * src/platforms/discord/schedulers.ts, WhatsApp:
+ * src/platforms/whatsapp/event-reminders.ts). Telegram and Matrix bind no
+ * poller, so a reminder row there would sit pending forever (never
+ * delivered, and monotonically inflating the
+ * garbanzo_event_reminders_pending gauge). A platform must be flipped to
+ * true here ONLY when its runtime gains a reminder poller.
+ */
+export function platformHasEventReminderPoller(platform: string): boolean {
+  return platform === 'discord' || platform === 'whatsapp';
+}
+
+/**
+ * Create the linked reminder row; returns its id, or null when reminders
+ * are disabled, the platform runs no reminder poller, or the insert failed.
+ */
 export async function maybeAddReminderRow(event: NativeEvent): Promise<number | null> {
   if (!config.EVENT_REMINDERS_ENABLED) return null;
+  // No poller = the row could never fire; don't record undeliverable rows.
+  if (!platformHasEventReminderPoller(event.platform)) return null;
 
   const { eventAt, remindAt } = computeReminderTimes(event.startAtMs);
   try {
