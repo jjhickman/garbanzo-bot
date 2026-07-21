@@ -347,6 +347,32 @@ describe('!event command', () => {
     expect(pending[0].activity).toBe('Meetup');
   });
 
+  it('stores the untracked-ref marker (not {"heldJobId":null}) for a held create without a job id', async () => {
+    const messenger = makeMessenger('whatsapp');
+    const heldWithoutId = new Error('WhatsApp outbound job held: paused');
+    heldWithoutId.name = 'WhatsAppOutboundHeldError';
+    messenger.createNativeEvent.mockRejectedValueOnce(heldWithoutId);
+
+    const chatId = nextChatId();
+    const reply = await handleNativeEventCommand('tomorrow 7pm | Meetup', {
+      messenger,
+      chatId,
+      senderId: 'owner-1',
+    });
+
+    // Reply stays generic: queued, recorded, no job number.
+    expect(reply).toContain('queued by the WhatsApp safety layer');
+    expect(reply).not.toContain('job #');
+    expect(reply).toContain('!whatsapp release <id>');
+
+    // A null job id can never be reconciled to the real message ref, so the
+    // row gets the existing untracked-ref convention instead of a dead
+    // {"heldJobId":null} that reconciliation would never match.
+    const events = await listUpcomingNativeEvents(chatId, Date.now());
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0].platformRef)).toEqual({ missingKey: true });
+  });
+
   it('applies a held WhatsApp move to the DB and reminder with a single send attempt', async () => {
     const messenger = makeMessenger('whatsapp');
     const chatId = nextChatId();

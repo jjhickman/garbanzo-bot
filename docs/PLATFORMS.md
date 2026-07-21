@@ -372,6 +372,26 @@ Platform notes:
 - **Telegram, Matrix, and Slack** have no native event primitive yet; the
   command replies that events are not supported on those platforms.
 
+### RSVPs in `!event show`
+
+`!event show <id>` includes attendance where the platform provides it:
+
+- **Discord** shows `Interested: N`, the live interested-user count for the
+  scheduled event. If the count cannot be fetched, the event details are
+  shown without it.
+- **WhatsApp** shows `Going / Maybe / Not going` counts. Members RSVP on
+  the event message itself; those responses arrive as encrypted protocol
+  messages, which the bot decrypts (using the event message's stored
+  secret) and records per member, keeping only each member's latest
+  answer. RSVP responses are protocol traffic, not chat messages — they
+  never trigger replies, moderation, bridge relay, or memory. Counts only
+  are shown; member names and numbers are never listed. Two gaps to know
+  about: RSVPs made on an event message that was later superseded by
+  `!event move`/`!event rename` no longer count (WhatsApp replacement
+  messages start a fresh RSVP list), and RSVPs made while an event's
+  create-message is still held by the safety layer are dropped — counting
+  starts once you release the held job.
+
 ## Automated / Non-Interactive Setup
 
 Use non-interactive mode for reproducible setup in scripts or CI-like environments:

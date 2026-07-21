@@ -73,6 +73,7 @@ export function createDiscordAdapter(token: string): DiscordMessenger {
     createNativeEvent: nativeEvents.createNativeEvent,
     updateNativeEvent: nativeEvents.updateNativeEvent,
     cancelNativeEvent: nativeEvents.cancelNativeEvent,
+    getNativeEventInterestCount: nativeEvents.getNativeEventInterestCount,
 
     async fetchMessageAttachments(channelId: string, messageId: string): Promise<DiscordMessageAttachments | null> {
       try {

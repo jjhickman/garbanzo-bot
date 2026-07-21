@@ -16,6 +16,7 @@ import { processInboundMessage } from '../../core/process-inbound-message.js';
 import { VOICE_NOTE_PLACEHOLDER } from '../../core/inbound-message.js';
 import { getWhatsAppOutboundSafety } from './outbound-safety.js';
 import { captureForBridge } from '../../bridge/capture-hook.js';
+import { maybeIngestWhatsAppEventRsvp } from './event-rsvps.js';
 
 /**
  * WhatsApp platform processor.
@@ -26,6 +27,14 @@ import { captureForBridge } from '../../bridge/capture-hook.js';
 export async function processWhatsAppRawMessage(sock: WASocket, msg: WAMessage): Promise<void> {
   // Track message freshness for staleness detection
   markMessageReceived();
+
+  // Event RSVPs are protocol messages, not chat messages: ingest and stop
+  // BEFORE normal dispatch so they can never trigger replies, moderation,
+  // stats, memory extraction, or bridge capture.
+  // Deliberately skips onIncomingMessage antiban accounting too: RSVPs are
+  // protocol traffic we never reply to, and not counting them errs on the
+  // conservative side for the outbound-safety warm-up/read-receipt logic.
+  if (await maybeIngestWhatsAppEventRsvp(sock, msg)) return;
 
   const inbound = normalizeWhatsAppInboundMessage(sock, msg);
   if (!inbound) return;

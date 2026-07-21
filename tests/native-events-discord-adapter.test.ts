@@ -162,6 +162,35 @@ describe('Discord native event methods', () => {
       .rejects.toThrow(/not in a server/);
   });
 
+  it('fetches the interested-user count with with_user_count=true', async () => {
+    const { requests } = installFetchMock([
+      {
+        match: (url, method) => url.includes('/guilds/guild-9/scheduled-events/ev-1?with_user_count=true') && method === 'GET',
+        status: 200,
+        body: { id: 'ev-1', guild_id: 'guild-9', user_count: 12 },
+      },
+    ]);
+
+    const methods = createDiscordNativeEventMethods(TOKEN);
+    const ref = JSON.stringify({ guildId: 'guild-9', eventId: 'ev-1' });
+    await expect(methods.getNativeEventInterestCount('chan-1', ref)).resolves.toBe(12);
+    expect(requests[0]?.url).toContain('with_user_count=true');
+  });
+
+  it('returns null when the scheduled event carries no user_count', async () => {
+    installFetchMock([
+      {
+        match: (url, method) => url.includes('/scheduled-events/ev-1') && method === 'GET',
+        status: 200,
+        body: { id: 'ev-1', guild_id: 'guild-9' },
+      },
+    ]);
+
+    const methods = createDiscordNativeEventMethods(TOKEN);
+    const ref = JSON.stringify({ guildId: 'guild-9', eventId: 'ev-1' });
+    await expect(methods.getNativeEventInterestCount('chan-1', ref)).resolves.toBeNull();
+  });
+
   it('rejects an unrecognized ref before making any request', async () => {
     const { fetchMock } = installFetchMock([]);
 

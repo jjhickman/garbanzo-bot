@@ -34,6 +34,9 @@ export type {
   MemoryEntry,
   ModerationEntry,
   NativeEvent,
+  NativeEventRsvp,
+  NativeEventRsvpCounts,
+  NativeEventRsvpResponse,
   NativeEventStatus,
   NewEventReminder,
   NewNativeEvent,
@@ -114,6 +117,11 @@ export const addNativeEvent = backend.addNativeEvent;
 export const getNativeEventById = backend.getNativeEventById;
 export const listUpcomingNativeEvents = backend.listUpcomingNativeEvents;
 export const updateNativeEvent = backend.updateNativeEvent;
+export const findWhatsAppNativeEventByMessageId = backend.findWhatsAppNativeEventByMessageId;
+export const reconcileHeldNativeEventRef = backend.reconcileHeldNativeEventRef;
+export const upsertNativeEventRsvp = backend.upsertNativeEventRsvp;
+export const listNativeEventRsvps = backend.listNativeEventRsvps;
+export const countNativeEventRsvps = backend.countNativeEventRsvps;
 
 // WhatsApp safety
 export const createWhatsAppOutboundJob = backend.createWhatsAppOutboundJob;

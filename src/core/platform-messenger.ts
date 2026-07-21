@@ -72,4 +72,13 @@ export interface PlatformMessenger extends MessagingAdapter {
   createNativeEvent?(chatId: string, event: NativeEventPayload): Promise<string>;
   updateNativeEvent?(chatId: string, ref: string, event: NativeEventPayload): Promise<string>;
   cancelNativeEvent?(chatId: string, ref: string, event: NativeEventPayload): Promise<void>;
+
+  /**
+   * Optional live interested-user count for a native event (Discord's
+   * scheduled-event `user_count`). Platforms that ingest individual RSVPs
+   * instead (WhatsApp, into `native_event_rsvps`) omit this. Returns null
+   * when the platform reports no count; callers must degrade to showing
+   * the event without counts on any error.
+   */
+  getNativeEventInterestCount?(chatId: string, ref: string): Promise<number | null>;
 }

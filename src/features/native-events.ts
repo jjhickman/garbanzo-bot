@@ -25,6 +25,7 @@ import {
   addEventReminder,
   addNativeEvent,
   cancelEventReminder,
+  countNativeEventRsvps,
   getNativeEventById,
   listUpcomingNativeEvents,
   renameEventReminder,
@@ -151,8 +152,12 @@ async function handleCreate(text: string, ctx: NativeEventContext): Promise<stri
     heldJob = asHeldJob(err);
     if (!heldJob) return describeSendError(err, 'create');
     // The held job IS the event message: record the event now so it is
-    // tracked; the message posts when the owner releases the job.
-    platformRef = JSON.stringify({ heldJobId: heldJob.jobId });
+    // tracked; the message posts when the owner releases the job. A hold
+    // without a job id can never be reconciled to the real message ref
+    // later, so store the untracked-ref marker instead of {"heldJobId":null}.
+    platformRef = JSON.stringify(
+      heldJob.jobId === null ? { missingKey: true } : { heldJobId: heldJob.jobId },
+    );
   }
 
   let event = await addNativeEvent({
@@ -195,7 +200,37 @@ async function handleShow(idText: string, ctx: NativeEventContext): Promise<stri
 
   const lines = [`📅 ${formatEventLine(event)}`];
   if (event.description) lines.push('', event.description);
+  const rsvpLine = await buildRsvpLine(event, ctx);
+  if (rsvpLine) lines.push('', rsvpLine);
   return lines.join('\n');
+}
+
+/**
+ * RSVP summary for `!event show`. WhatsApp counts come from ingested event
+ * responses (`native_event_rsvps`) — counts only, never responder JIDs;
+ * there is no clean display-name source and raw JIDs must never be
+ * rendered to the group. Discord reports a live interested-user count over
+ * REST. Any failure degrades to showing the event without counts.
+ */
+async function buildRsvpLine(event: NativeEvent, ctx: NativeEventContext): Promise<string | null> {
+  if (event.platform === 'whatsapp') {
+    try {
+      const counts = await countNativeEventRsvps(event.id);
+      return `🙋 Going ${counts.going} · Maybe ${counts.maybe} · Not going ${counts.notGoing}`;
+    } catch (err) {
+      logger.warn({ err, eventId: event.id }, 'Failed to read RSVP counts for native event');
+      return null;
+    }
+  }
+
+  if (!ctx.messenger.getNativeEventInterestCount) return null;
+  try {
+    const count = await ctx.messenger.getNativeEventInterestCount(ctx.chatId, event.platformRef);
+    return count === null ? null : `🙋 Interested: ${count}`;
+  } catch (err) {
+    logger.warn({ err, eventId: event.id }, 'Failed to fetch interest count for native event');
+    return null;
+  }
 }
 
 async function handleMove(rest: string, ctx: NativeEventContext): Promise<string> {

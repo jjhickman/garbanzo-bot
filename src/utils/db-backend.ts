@@ -19,6 +19,9 @@ import type {
   LocalMemoryEntry,
   ModerationEntry,
   NativeEvent,
+  NativeEventRsvp,
+  NativeEventRsvpCounts,
+  NativeEventRsvpResponse,
   NativeEventStatus,
   NewEventReminder,
   NewNativeEvent,
@@ -112,6 +115,19 @@ export interface DbBackend {
       reminderId: number | null;
     }>,
   ): Promise<NativeEvent | undefined>;
+  /** Resolve an inbound WhatsApp event response to its native event via the stored message-key ref. */
+  findWhatsAppNativeEventByMessageId(chatId: string, messageId: string): Promise<NativeEvent | undefined>;
+  /** Repoint a held-created WhatsApp event ref ({heldJobId:N}) at the real message ref after release. */
+  reconcileHeldNativeEventRef(heldJobId: number, platformRef: string): Promise<boolean>;
+  /** Record (or overwrite) one sender's RSVP to a native event. */
+  upsertNativeEventRsvp(
+    eventId: number,
+    senderJid: string,
+    response: NativeEventRsvpResponse,
+    respondedAtMs: number,
+  ): Promise<void>;
+  listNativeEventRsvps(eventId: number): Promise<NativeEventRsvp[]>;
+  countNativeEventRsvps(eventId: number): Promise<NativeEventRsvpCounts>;
 
   // WhatsApp outbound safety and retained manual releases
   createWhatsAppOutboundJob(chatJid: string, kind: string, contentJson: string, optionsJson: string | null): Promise<WhatsAppOutboundJob>;

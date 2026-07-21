@@ -12,6 +12,8 @@ import type {
   MemberProfile,
   LocalMemoryEntry,
   NativeEvent,
+  NativeEventRsvp,
+  NativeEventRsvpResponse,
   NativeEventStatus,
   Rehearsal,
   RehearsalStatus,
@@ -186,6 +188,13 @@ export interface NativeEventRow {
   reminder_id: DbNumeric | null;
   created_by: string;
   created_at: DbNumeric | null;
+}
+
+export interface NativeEventRsvpRow {
+  event_id: DbNumeric | null;
+  sender_jid: string;
+  response: NativeEventRsvpResponse;
+  responded_at: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -427,6 +436,15 @@ export function mapNativeEvent(row: NativeEventRow): NativeEvent {
     reminderId: row.reminder_id === null ? null : toNumber(row.reminder_id),
     createdBy: row.created_by,
     createdAt: toNumber(row.created_at),
+  };
+}
+
+export function mapNativeEventRsvp(row: NativeEventRsvpRow): NativeEventRsvp {
+  return {
+    eventId: toNumber(row.event_id),
+    senderJid: row.sender_jid,
+    response: row.response,
+    respondedAt: toNumber(row.responded_at),
   };
 }
 

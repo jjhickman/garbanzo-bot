@@ -207,6 +207,27 @@ export interface NativeEvent extends NewNativeEvent {
   createdAt: number;
 }
 
+export type NativeEventRsvpResponse = 'going' | 'not_going' | 'maybe';
+
+/**
+ * One responder's current RSVP to a native event (WhatsApp event-message
+ * responses). Repeat responses from the same sender overwrite in place.
+ * `respondedAt` is epoch millis.
+ */
+export interface NativeEventRsvp {
+  eventId: number;
+  senderJid: string;
+  response: NativeEventRsvpResponse;
+  respondedAt: number;
+}
+
+/** Aggregated RSVP counts for one native event. */
+export interface NativeEventRsvpCounts {
+  going: number;
+  notGoing: number;
+  maybe: number;
+}
+
 export interface MemberProfile {
   jid: string;
   name: string | null;
