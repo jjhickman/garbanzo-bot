@@ -130,8 +130,10 @@ usage/cost tables:
 - **Health** — inline AI provider mix, memory-watchdog RSS vs. thresholds,
   and bridge failure counts, with a link to `/metrics` for full history.
 
-Everything here is read-only in v3.3.0. Delete, edit, and import endpoints are
-planned for a later release after the write-gate design is finalized.
+The `/admin` page itself stays read-only in v3.4.0. A separate opt-in memory
+write API (`ADMIN_WRITE_ENABLED`, default off) adds authenticated delete,
+share, and unshare endpoints with confirmation nonces and an audit log;
+broader edit and import endpoints remain planned for a later release.
 
 ## HTTP Health-Check Monitors
 

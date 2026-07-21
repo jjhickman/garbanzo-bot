@@ -38,8 +38,8 @@ cp .env.discord.example .env.discord
 3) Run a pinned release:
 
 ```bash
-APP_VERSION=3.3.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-APP_VERSION=3.3.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+APP_VERSION=3.4.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+APP_VERSION=3.4.0 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Health check:
@@ -83,9 +83,9 @@ This repository publishes both GHCR and Docker Hub tags from the same release wo
 - `latest`
   - Most recent stable release
   - Only published for non-prerelease versions
-- `3.1.0`
+- `3.4.0`
   - Semver tag without the leading `v`
-- `v3.1.0`
+- `v3.4.0`
   - Git tag style (kept for convenience)
 
 All tags are multi-arch where available:

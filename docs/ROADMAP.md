@@ -52,8 +52,8 @@ Priority order:
   secret before the first publish; docs use the git-clone quickstart until
   publish succeeds, then flip to `npx garbanzo-bot setup`. Pending release.
 - Setup guide: [docs/QUICKSTART.md](QUICKSTART.md).
-- Telegram shipped as a fully supported platform adapter (v3.3.0); Matrix is
-  next (see Platform expansion below).
+- Telegram and Matrix shipped as fully supported platform adapters (v3.3.0;
+  see Platform expansion below).
 
 ### Platform Bridging - Delivered (v3)
 
@@ -63,8 +63,10 @@ Priority order:
   over `http` or `amqp` (RabbitMQ) transports. WhatsApp-bound relays flow
   through the existing outbound-safety layer by default. Done.
 - Setup guide: [docs/BRIDGING.md](BRIDGING.md).
-- Tier 3 (single-process multi-runtime) and media re-upload (media relays as
-  typed placeholders today, e.g. "[voice note]") remain deferred.
+- Media re-upload for bridged attachments shipped in v3.4.0 (double opt-in
+  per instance and per route; see the media relay section of
+  [docs/BRIDGING.md](BRIDGING.md)).
+- Tier 3 (single-process multi-runtime) remains deferred.
 
 ### RAG Federation - Delivered (2026-07-07)
 
@@ -86,11 +88,13 @@ Priority order:
 
 - Cross-language bridge translation: reuse the existing language detection
   path for relayed messages.
-- Voice-note transcription relay: reuse the Whisper path and replace the
-  current "[voice note]" bridge placeholder with transcript text when
-  available.
-- Media re-upload for bridged attachments.
-- Digest headers with chat display names, backed by a new envelope field.
+- ~~Voice-note transcription relay~~ — shipped in v3.4.0: bridged voice notes
+  on every platform relay as transcript text when transcription is available,
+  and re-upload as audio when media relay is enabled.
+- ~~Media re-upload for bridged attachments~~ — shipped in v3.4.0 behind
+  per-instance and per-route opt-ins.
+- ~~Digest headers with chat display names~~ — shipped in v3.4.0 through
+  platform name resolvers rather than a new envelope field.
 - Opt-in memory ingestion of bridged content, with clear source attribution
   and per-route controls.
 - Tier 3 single-process multi-runtime remains deferred until the multi-process
