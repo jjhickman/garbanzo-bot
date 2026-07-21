@@ -1,6 +1,6 @@
 {
   "name": "garbanzo-bot",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Multi-platform community lore and operations with cross-platform bridging.",
   "type": "module",
   "workspaces": [

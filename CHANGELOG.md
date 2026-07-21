@@ -6,6 +6,87 @@ All notable changes to Garbanzo are documented here.
 
 ## [Unreleased]
 
+## [3.4.0] — 2026-07-21
+
+Configuration moves to the browser, bridges carry media, the bot reads
+attachments on every platform, and `!event` creates events across Discord,
+WhatsApp, Telegram, and Matrix.
+
+### Added
+
+- **Browser configuration wizard**: `garbanzo config` (also `npm run
+  setup:web`) starts a host-side loopback service that serves a browser app
+  for setup and ongoing configuration. A first-run wizard walks platform,
+  deployment mode, providers and keys, persona and features, and chat
+  bindings, then writes the same env and config files as the terminal
+  wizard, which is unchanged and shares the same config core. The editor
+  reads secrets back masked (leave a field blank to keep the stored value,
+  type to replace it, clear to remove it), saves with optimistic concurrency
+  (modification-time and checksum preconditions, so a stale tab gets a
+  conflict instead of clobbering the file), and includes a bridge-map editor
+  validated against the exact schema the bot boots with. Export produces a
+  redacted bundle and import stages, validates, and diffs before applying.
+  Apply recreates the affected Compose services with streamed output, or
+  prints the exact command on native deployments. Access is loopback-only
+  with a one-time token printed at launch, and the app is served under a
+  strict content security policy.
+- **In-bot memory write API** (`ADMIN_WRITE_ENABLED`, default off): an
+  authenticated listener for community-lore delete (with a confirmation
+  nonce), share, and unshare, recording every action to an
+  `admin_audit_log` table on both database backends. The `/admin` page
+  itself stays read-only.
+- **Media relay for bridges**: bridged attachments can re-upload on the
+  destination platform instead of relaying as `[image]` or `[voice note]`
+  placeholders. Opt-in twice on the sending side: `BRIDGE_MEDIA_ENABLED`
+  for the instance and `mediaRelay` on the route. Payloads are capped by
+  `BRIDGE_MEDIA_MAX_BYTES` (8 MiB default) and limited to a fixed MIME
+  allowlist; relay text always delivers first, media follows best-effort,
+  and any failure falls back to the familiar placeholder text. Voice notes
+  keep their transcript text and re-upload as audio. Media travels only on
+  verbatim legs, and stored bytes are stripped from the bridge outbox the
+  moment delivery reaches a terminal state. Upgrade note: media rides a new
+  v2 bridge envelope, so upgrade bridged instances together; a pre-upgrade
+  receiver rejects v2 and the sender retries that message as text-only,
+  while v2 messages already queued in AMQP are dropped by pre-upgrade
+  consumers. See [docs/BRIDGING.md](docs/BRIDGING.md).
+- **Attachment reading on every platform**: when the bot is engaged, it now
+  reads what members attach on Discord, WhatsApp, Telegram, and Matrix.
+  Images go to vision-capable models, voice notes and audio files become
+  transcripts through the shared Whisper path when `WHISPER_URL` is set,
+  attachments on a replied-to message count too (mentioning the bot in a
+  reply to a photo finally works), and other documents are acknowledged as
+  context. Downloads happen only after the engagement decision and are
+  size- and time-bounded.
+- **Native events (`!event`)**: create, list, show, move, rename, and
+  cancel events from chat on all four platforms. Discord creates real guild
+  scheduled events (the bot needs the Manage Events permission), WhatsApp
+  sends native event messages and `!event show` reports going, maybe, and
+  not-going RSVP counts (counts only; members are never listed), and
+  Telegram and Matrix post a formatted announcement message that is edited
+  in place for changes and cancellation. With band features on,
+  `!rehearsal schedule` also creates a linked platform event and keeps it
+  in sync through cancel and show. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
+
+### Changed
+
+- Bridged voice notes relay as transcript text on every origin platform
+  when transcription is available, replacing the WhatsApp-origin
+  `[voice note]` placeholder behavior.
+- The bridge-map file is editable from the configuration editor with the
+  same validation and concurrency safeguards as other config files; its
+  read-only restriction from the backend cut is lifted.
+
+### Fixed
+
+- Daily digest and weekly recap resolve chat display names on every
+  platform, so Discord channels and Telegram and Matrix chats no longer
+  render as `Unknown Group`.
+- WhatsApp welcome messages carry proper mention metadata, so welcomed
+  members render as display names instead of raw numbers.
+- Dependency advisories that broke the quality gate are patched, and held
+  WhatsApp event sends survive queue round-trips (dates are revived on
+  release instead of crashing the send).
+
 ## [3.3.0] — 2026-07-08
 
 Platform expansion: Telegram and Matrix join Discord and WhatsApp, alongside
