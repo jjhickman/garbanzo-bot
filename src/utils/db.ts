@@ -113,6 +113,7 @@ export const rescheduleEventReminder = backend.rescheduleEventReminder;
 export const renameEventReminder = backend.renameEventReminder;
 
 // Native platform events (Discord scheduled events / WhatsApp event messages)
+export const supportsNativeEvents = backend.supportsNativeEvents;
 export const addNativeEvent = backend.addNativeEvent;
 export const getNativeEventById = backend.getNativeEventById;
 export const listUpcomingNativeEvents = backend.listUpcomingNativeEvents;

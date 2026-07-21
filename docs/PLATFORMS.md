@@ -392,6 +392,36 @@ Platform notes:
   create-message is still held by the safety layer are dropped — counting
   starts once you release the held job.
 
+### Rehearsals and native events (`!rehearsal`)
+
+When band features are on (`BAND_FEATURES_ENABLED=true`) and the platform
+has a native event primitive, `!rehearsal schedule` also creates a real
+platform event named `Band rehearsal` (a Discord guild scheduled event or
+a WhatsApp event message), carrying the rehearsal's agenda as the
+description, its location, and a default two-hour duration. The event is
+linked to the rehearsal, so:
+
+- `!rehearsal cancel <id>` also cancels the linked platform event. A
+  failed or held platform cancel never blocks the rehearsal cancel — the
+  event is marked cancelled in the bot's records and the reply carries a
+  warning line instead.
+- `!rehearsal show <id>` includes the linked event's status line, plus the
+  same RSVP counts `!event show` provides (WhatsApp going/maybe/not-going,
+  Discord interested count).
+
+On platforms without a native event primitive, `!rehearsal` behaves
+exactly as before — no event, no extra reply line. If the platform create
+fails, the rehearsal is still scheduled and the reply notes that the event
+could not be created. Held WhatsApp sends follow the same rule as `!event`:
+the event is recorded immediately and posts when the held job is released —
+never re-run the command.
+
+**No double reminders:** a rehearsal-linked event deliberately gets no
+`event_reminders` row, unlike events created with `!event`. Rehearsals
+already have their own reminder poller (driven by
+`REHEARSAL_REMINDER_LEAD_MINUTES`), so a second reminder for the same
+start time would ping the group twice.
+
 ## Automated / Non-Interactive Setup
 
 Use non-interactive mode for reproducible setup in scripts or CI-like environments:

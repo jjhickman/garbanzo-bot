@@ -868,7 +868,13 @@ export async function createPostgresBackend(): Promise<DbBackend> {
     },
 
     // Native platform events follow the bridge-outbox precedent: sqlite is
-    // the implemented backend; postgres throws until ported.
+    // the implemented backend; postgres throws until ported. The probe lets
+    // feature code skip the live platform call entirely (creating a real
+    // Discord/WhatsApp event and then failing to record it would orphan it).
+    supportsNativeEvents(): boolean {
+      return false;
+    },
+
     async addNativeEvent(): Promise<never> {
       throw new Error('Native events are not implemented for postgres backend yet');
     },
@@ -1448,8 +1454,15 @@ export async function createPostgresBackend(): Promise<DbBackend> {
 
     async updateRehearsal(
       id: number,
-      patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>,
+      patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus; nativeEventId: number | null }>,
     ): Promise<Rehearsal | undefined> {
+      // Native events follow the bridge-outbox precedent: sqlite is the
+      // implemented backend; postgres throws until ported (the rehearsals
+      // table has no native_event_id column on postgres yet).
+      if (patch.nativeEventId !== undefined) {
+        throw new Error('Native events are not implemented for postgres backend yet');
+      }
+
       const existingRes = await pool.query<RehearsalRow>('SELECT * FROM rehearsals WHERE id = $1', [id]);
       const existing = existingRes.rows[0];
       if (!existing) return undefined;

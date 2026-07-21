@@ -38,6 +38,7 @@ function makeRehearsal(overrides: Partial<Rehearsal> = {}): Rehearsal {
     createdBy: '222',
     createdAt: 0,
     updatedAt: 0,
+    nativeEventId: null,
     ...overrides,
   };
 }

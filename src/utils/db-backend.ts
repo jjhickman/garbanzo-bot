@@ -99,6 +99,13 @@ export interface DbBackend {
   renameEventReminder(id: number, activity: string): Promise<boolean>;
 
   // Native platform events (Discord scheduled events / WhatsApp event messages)
+  /**
+   * Whether this backend persists native platform events. When false,
+   * callers must not create live platform events at all: the platform call
+   * would succeed and the row insert would then throw, orphaning a real
+   * event with no link (sqlite true, postgres false until ported).
+   */
+  supportsNativeEvents(): boolean;
   addNativeEvent(input: NewNativeEvent): Promise<NativeEvent>;
   getNativeEventById(id: number): Promise<NativeEvent | undefined>;
   listUpcomingNativeEvents(chatId: string, nowMs: number, limit?: number): Promise<NativeEvent[]>;
@@ -211,7 +218,7 @@ export interface DbBackend {
   getRehearsalById(id: number): Promise<Rehearsal | undefined>;
   listUpcomingRehearsals(nowSeconds: number, limit?: number): Promise<Rehearsal[]>;
   getNextRehearsal(nowSeconds: number): Promise<Rehearsal | undefined>;
-  updateRehearsal(id: number, patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>): Promise<Rehearsal | undefined>;
+  updateRehearsal(id: number, patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus; nativeEventId: number | null }>): Promise<Rehearsal | undefined>;
   cancelRehearsal(id: number): Promise<boolean>;
   listRehearsalsNeedingReminder(nowSeconds: number): Promise<Rehearsal[]>;
   markRehearsalReminderSent(id: number): Promise<boolean>;

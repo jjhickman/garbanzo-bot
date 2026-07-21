@@ -100,6 +100,13 @@ export interface Rehearsal {
   createdBy: string | null;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Linked native_events row created by !rehearsal schedule, or null when
+   * the platform has no native-event capability (or the create failed).
+   * The linked event has NO event_reminders row — rehearsals have their
+   * own reminder poller, and a second reminder would double-ping the band.
+   */
+  nativeEventId: number | null;
 }
 
 export type AvailabilityResponse = 'yes' | 'no' | 'maybe';
