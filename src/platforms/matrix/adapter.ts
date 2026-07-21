@@ -4,6 +4,7 @@ import type { PollPayload } from '../../core/poll-payload.js';
 import { logger } from '../../middleware/logger.js';
 
 import { toMatrixMessageContent } from './markdown.js';
+import { createMatrixNativeEventMethods } from './native-events.js';
 
 const MAX_RETRY_AFTER_MS = 60_000;
 
@@ -156,8 +157,19 @@ export function createMatrixAdapter(client: MatrixSendClient): PlatformMessenger
     return toMatrixRef(roomId, eventId);
   }
 
+  // Native events are announcement messages edited in place via m.replace
+  // (see native-events.ts); they share the direct-send rate-limit budget.
+  const nativeEvents = createMatrixNativeEventMethods(
+    client,
+    (method, action) => matrixClientRequest(method, action),
+  );
+
   return {
     platform: 'matrix',
+
+    createNativeEvent: nativeEvents.createNativeEvent,
+    updateNativeEvent: nativeEvents.updateNativeEvent,
+    cancelNativeEvent: nativeEvents.cancelNativeEvent,
 
     async sendText(roomId: string, text: string, options?: { replyTo?: MessageRef }): Promise<void> {
       await sendContent(roomId, toMatrixMessageContent(roomId, text, getReplyEventId(options?.replyTo)));

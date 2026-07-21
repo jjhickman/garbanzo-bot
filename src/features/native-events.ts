@@ -16,7 +16,10 @@
  * message key. When the WhatsApp outbound-safety layer holds a send, the
  * held job IS the event message: the DB records the event or change
  * immediately and the reply names the held job — never "run the command
- * again". Platforms without the capability get a "not supported" reply.
+ * again". On Telegram and Matrix, which have no calendar primitive, the
+ * event is an announcement message edited in place for updates and
+ * cancellation (see the platform native-events modules). Platforms
+ * without the capability get a "not supported" reply.
  *
  * The platform create/cancel + held-job + reminder plumbing lives in
  * native-events-shared.ts, shared with the !rehearsal tie-in.
@@ -45,15 +48,13 @@ import {
   toEventPayload,
   type HeldJob,
 } from './native-events-shared.js';
+import { formatEventStartTime } from '../core/event-announcement.js';
 import type { PlatformMessenger } from '../core/platform-messenger.js';
 
 // Discord caps scheduled-event names at 100 chars and description/location
 // at 1000; WhatsApp gets the same bounds for cross-platform consistency.
 const NAME_MAX_CHARS = 100;
 const TEXT_FIELD_MAX_CHARS = 1000;
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 export interface NativeEventContext {
   messenger: PlatformMessenger;
@@ -134,7 +135,7 @@ function usage(): string {
 }
 
 export function formatEventLine(event: NativeEvent): string {
-  const parts = [`#${event.id}`, formatEventStart(event.startAtMs), event.name];
+  const parts = [`#${event.id}`, formatEventStartTime(event.startAtMs), event.name];
   if (event.location) parts.push(event.location);
   if (event.status !== 'scheduled') parts.push(event.status);
   return parts.join(' · ');
@@ -367,17 +368,4 @@ function validateEventText(name: string, location?: string): string | null {
     return `❌ Event locations are limited to ${TEXT_FIELD_MAX_CHARS} characters — yours is ${location.length}. Try a shorter location.`;
   }
   return null;
-}
-
-function formatEventStart(startAtMs: number): string {
-  const date = new Date(startAtMs);
-  return `${WEEKDAYS[date.getDay()]} ${MONTHS[date.getMonth()]} ${date.getDate()} ${formatTime(date)}`;
-}
-
-function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const suffix = hours >= 12 ? 'pm' : 'am';
-  const hour12 = hours % 12 || 12;
-  return `${hour12}:${String(minutes).padStart(2, '0')}${suffix}`;
 }

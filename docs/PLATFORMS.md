@@ -328,10 +328,13 @@ curl -s -X POST "http://127.0.0.1:${DISCORD_HEALTH_PORT:-3002}/demo/chat" \
 
 ## Native Events (`!event`)
 
-The `!event` command creates real calendar entries on platforms that have a
-native event primitive. The owner can always use it; when
-`BAND_FEATURES_ENABLED=true`, band members can too. Other senders get a
-standard permission reply.
+The `!event` command manages events on every supported chat platform. On
+platforms with a native event primitive (Discord, WhatsApp) it creates real
+calendar entries; on platforms without one (Telegram, Matrix) it posts a
+formatted announcement message and edits that same message in place for
+changes and cancellation — honestly a chat message, not a platform calendar
+object. The owner can always use it; when `BAND_FEATURES_ENABLED=true`,
+band members can too. Other senders get a standard permission reply.
 
 ```text
 !event <when> | <name> [| location]   create an event
@@ -348,7 +351,10 @@ limited to 100 characters and locations to 1000 (Discord's caps, applied on
 every platform). When `EVENT_REMINDERS_ENABLED=true`, creating an event
 also records a standard text reminder that fires
 `EVENT_REMINDER_LEAD_MINUTES` before the start; moving or cancelling the
-event reschedules or cancels that reminder with it.
+event reschedules or cancels that reminder with it. Reminder delivery runs
+from the Discord and WhatsApp runtimes; on Telegram and Matrix no
+reminder row is recorded, because no reminder poller exists on those
+platforms yet.
 
 Platform notes:
 
@@ -369,8 +375,23 @@ Platform notes:
   database right away, replies with the held job number, and the event
   message posts once you release it with `!whatsapp release <id>`.
   Re-running the command would create a second event, so don't.
-- **Telegram, Matrix, and Slack** have no native event primitive yet; the
-  command replies that events are not supported on those platforms.
+- **Telegram** has no calendar or event object in its Bot API, so the
+  event is an announcement message: the bot posts a formatted message with
+  the event's name, local time, and location, and remembers that message.
+  `!event move` and `!event rename` edit the same message in place (bots
+  can edit their own messages indefinitely), and `!event cancel` edits it
+  to a clearly cancelled rendering — no replacement messages pile up. When
+  the bot has the pin-messages right in the chat, the announcement is also
+  pinned on create and unpinned on cancel; without that right, pinning is
+  silently skipped. Telegram has no RSVP mechanism for these messages.
+- **Matrix** has no stable native event type either (calendar events exist
+  only as unaccepted MSCs), so the same announcement-message approach
+  applies: the bot posts a formatted message and applies an in-place edit
+  (an `m.replace` event) for moves, renames, and cancellation. Clients
+  without edit support show the edit as a follow-up `* `-prefixed message,
+  per the Matrix spec's fallback. There is no RSVP mechanism.
+- **Slack** has no native event primitive supported yet; the command
+  replies that events are not supported there.
 
 ### RSVPs in `!event show`
 
@@ -391,15 +412,18 @@ Platform notes:
   messages start a fresh RSVP list), and RSVPs made while an event's
   create-message is still held by the safety layer are dropped — counting
   starts once you release the held job.
+- **Telegram and Matrix** events are announcement messages, so no RSVP or
+  attendance counts exist; `!event show` displays the event details
+  without a count line rather than inventing one.
 
 ### Rehearsals and native events (`!rehearsal`)
 
 When band features are on (`BAND_FEATURES_ENABLED=true`) and the platform
-has a native event primitive, `!rehearsal schedule` also creates a real
-platform event named `Band rehearsal` (a Discord guild scheduled event or
-a WhatsApp event message), carrying the rehearsal's agenda as the
-description, its location, and a default two-hour duration. The event is
-linked to the rehearsal, so:
+supports `!event`, `!rehearsal schedule` also creates a platform event
+named `Band rehearsal` (a Discord guild scheduled event, a WhatsApp event
+message, or a Telegram/Matrix announcement message), carrying the
+rehearsal's agenda as the description, its location, and a default
+two-hour duration. The event is linked to the rehearsal, so:
 
 - `!rehearsal cancel <id>` also cancels the linked platform event. A
   failed or held platform cancel never blocks the rehearsal cancel — the
@@ -407,9 +431,9 @@ linked to the rehearsal, so:
   warning line instead.
 - `!rehearsal show <id>` includes the linked event's status line, plus the
   same RSVP counts `!event show` provides (WhatsApp going/maybe/not-going,
-  Discord interested count).
+  Discord interested count; none on Telegram/Matrix).
 
-On platforms without a native event primitive, `!rehearsal` behaves
+On platforms without `!event` support, `!rehearsal` behaves
 exactly as before — no event, no extra reply line. If the platform create
 fails, the rehearsal is still scheduled and the reply notes that the event
 could not be created. Held WhatsApp sends follow the same rule as `!event`:
