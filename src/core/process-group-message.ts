@@ -7,6 +7,7 @@ import { handleCharacter } from '../features/character.js';
 import { handleFeedbackSubmit, handleUpvote } from '../features/feedback.js';
 import { handleVoiceCommand, formatVoiceList, textToSpeech, isTTSAvailable } from '../features/voice.js';
 import { handleSongCommand } from '../features/songs.js';
+import { handleNativeEventCommand } from '../features/native-events.js';
 import { handleAvailabilityCommand, handleRehearsalCommand } from '../features/rehearsals.js';
 import { handleSetlistCommand } from '../features/setlists.js';
 import { handleAgendaCommand } from '../features/practice-agenda.js';
@@ -154,6 +155,21 @@ export async function processGroupMessage(params: ProcessGroupMessageParams): Pr
       chatId,
       featureQuery: featureCheck.query,
       quotedText,
+      replyTo,
+    });
+    return;
+  }
+
+  // Native events — !event (Discord scheduled events / WhatsApp event
+  // messages). Owner always; band members too when BAND_FEATURES_ENABLED.
+  if (featureCheck?.feature === 'event') {
+    await handleNativeEventFeature({
+      messenger,
+      chatId,
+      senderId,
+      ownerUserId: ownerUserId ?? ownerId,
+      senderIsBandMember,
+      featureQuery: featureCheck.query,
       replyTo,
     });
     return;
@@ -378,6 +394,30 @@ async function handleFeedbackCommand(params: {
       '  !upvote <id>',
     ].join('\n'), { replyTo });
   }
+}
+
+async function handleNativeEventFeature(params: {
+  messenger: PlatformMessenger;
+  chatId: string;
+  senderId: string;
+  ownerUserId: string;
+  senderIsBandMember?: boolean;
+  featureQuery: string;
+  replyTo?: MessageRef;
+}): Promise<void> {
+  const { messenger, chatId, senderId, ownerUserId, senderIsBandMember, featureQuery, replyTo } = params;
+
+  const isOwner = jidsMatch(senderId, ownerUserId);
+  const isBandManager = config.BAND_FEATURES_ENABLED && senderIsBandMember === true;
+  if (!isOwner && !isBandManager) {
+    await messenger.sendText(chatId, '📅 Only the owner or band members can manage events right now.', { replyTo });
+    return;
+  }
+
+  const result = await handleNativeEventCommand(featureQuery, { messenger, chatId, senderId });
+  await messenger.sendText(chatId, result, { replyTo });
+  recordBotResponse(chatId);
+  recordResponse(senderId, chatId);
 }
 
 async function handleSongFeature(params: {

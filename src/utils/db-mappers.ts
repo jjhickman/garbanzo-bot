@@ -11,6 +11,8 @@ import type {
   FeedbackEntry,
   MemberProfile,
   LocalMemoryEntry,
+  NativeEvent,
+  NativeEventStatus,
   Rehearsal,
   RehearsalStatus,
   SectionKind,
@@ -168,6 +170,22 @@ export interface SongSectionRow {
   chords: string | null;
   created_at: DbNumeric | null;
   updated_at: DbNumeric | null;
+}
+
+export interface NativeEventRow {
+  id: DbNumeric | null;
+  chat_id: string;
+  platform: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  start_at_ms: DbNumeric | null;
+  end_at_ms: DbNumeric | null;
+  platform_ref: string;
+  status: NativeEventStatus;
+  reminder_id: DbNumeric | null;
+  created_by: string;
+  created_at: DbNumeric | null;
 }
 
 export interface EventReminderRow {
@@ -391,6 +409,24 @@ export function mapSongSection(row: SongSectionRow): SongSection {
     chords: row.chords,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
+  };
+}
+
+export function mapNativeEvent(row: NativeEventRow): NativeEvent {
+  return {
+    id: toNumber(row.id),
+    chatId: row.chat_id,
+    platform: row.platform,
+    name: row.name,
+    description: row.description,
+    location: row.location,
+    startAtMs: toNumber(row.start_at_ms),
+    endAtMs: row.end_at_ms === null ? null : toNumber(row.end_at_ms),
+    platformRef: row.platform_ref,
+    status: row.status,
+    reminderId: row.reminder_id === null ? null : toNumber(row.reminder_id),
+    createdBy: row.created_by,
+    createdAt: toNumber(row.created_at),
   };
 }
 

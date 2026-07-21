@@ -15,6 +15,18 @@ export interface AudioPayload {
 }
 
 /**
+ * Platform-agnostic payload for a native calendar event (Discord guild
+ * scheduled event, WhatsApp event message). Timestamps are epoch millis.
+ */
+export interface NativeEventPayload {
+  name: string;
+  description?: string;
+  startAtMs: number;
+  endAtMs?: number;
+  location?: string;
+}
+
+/**
  * Platform messenger interface used by core group handling.
  *
  * It extends the minimal `MessagingAdapter` with the extra send/delete
@@ -45,4 +57,19 @@ export interface PlatformMessenger extends MessagingAdapter {
    * and should keep waiting inline up to the homeserver's own retry_after.
    */
   sendTextForBridge?(chatId: string, text: string): Promise<void>;
+
+  /**
+   * Optional native-event capability. Platforms without a native event
+   * primitive (Telegram, Matrix, Slack) omit these; callers must probe
+   * before use and fall back to a "not supported" reply.
+   *
+   * The returned string is an opaque platform reference (e.g. Discord
+   * guild+event ids, or the WhatsApp message key of the latest event
+   * message) that the caller persists and hands back on update/cancel.
+   * `updateNativeEvent` may return a NEW ref (WhatsApp sends a corrected
+   * replacement event message rather than editing in place).
+   */
+  createNativeEvent?(chatId: string, event: NativeEventPayload): Promise<string>;
+  updateNativeEvent?(chatId: string, ref: string, event: NativeEventPayload): Promise<string>;
+  cancelNativeEvent?(chatId: string, ref: string, event: NativeEventPayload): Promise<void>;
 }

@@ -22,6 +22,7 @@ import {
   mapEventReminder,
   mapFeedbackEntry,
   mapMemoryEntry,
+  mapNativeEvent,
   mapRehearsal,
   mapSessionSummaryHit,
   mapSetlist,
@@ -41,6 +42,7 @@ import {
   type FeedbackRow,
   type MemoryRow,
   type MessageRow,
+  type NativeEventRow,
   type RehearsalRow,
   type SessionSummaryRow,
   type SetlistEntryRow,
@@ -79,7 +81,10 @@ import type {
   LocalMemoryEntry,
   MemoryEntry,
   ModerationEntry,
+  NativeEvent,
+  NativeEventStatus,
   NewEventReminder,
+  NewNativeEvent,
   Rehearsal,
   RehearsalStatus,
   SectionKind,
@@ -256,6 +261,29 @@ const updateEventReminderSent = db.prepare(
 );
 const updateEventReminderCancelled = db.prepare(
   `UPDATE event_reminders SET status = 'cancelled' WHERE id = ? AND status = 'pending'`,
+);
+const updateEventReminderTimes = db.prepare(
+  `UPDATE event_reminders SET event_at = ?, remind_at = ? WHERE id = ? AND status = 'pending'`,
+);
+const updateEventReminderActivity = db.prepare(
+  `UPDATE event_reminders SET activity = ? WHERE id = ? AND status = 'pending'`,
+);
+const insertNativeEvent = db.prepare(
+  `INSERT INTO native_events
+   (chat_id, platform, name, description, location, start_at_ms, end_at_ms, platform_ref, status, created_by, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)`,
+);
+const selectNativeEventById = db.prepare(`SELECT * FROM native_events WHERE id = ?`);
+const selectUpcomingNativeEvents = db.prepare(
+  `SELECT * FROM native_events
+   WHERE chat_id = ? AND status = 'scheduled' AND start_at_ms >= ?
+   ORDER BY start_at_ms ASC, id ASC
+   LIMIT ?`,
+);
+const updateNativeEventRow = db.prepare(
+  `UPDATE native_events
+   SET name = ?, description = ?, location = ?, start_at_ms = ?, end_at_ms = ?, platform_ref = ?, status = ?, reminder_id = ?
+   WHERE id = ?`,
 );
 const countStrikesBySender = db.prepare(
   `SELECT COUNT(*) as count FROM moderation_log WHERE sender = ?`,
@@ -857,6 +885,85 @@ export function markEventReminderSent(id: number): boolean {
 
 export function cancelEventReminder(id: number): boolean {
   return updateEventReminderCancelled.run(id).changes > 0;
+}
+
+/**
+ * Move a still-pending reminder to a new event time (epoch seconds, like
+ * the rest of event_reminders). Returns false when the reminder has already
+ * fired or been cancelled — callers create a fresh row in that case.
+ */
+export function rescheduleEventReminder(id: number, eventAt: number, remindAt: number): boolean {
+  return updateEventReminderTimes.run(eventAt, remindAt, id).changes > 0;
+}
+
+/** Rename a still-pending reminder's activity text. */
+export function renameEventReminder(id: number, activity: string): boolean {
+  return updateEventReminderActivity.run(activity, id).changes > 0;
+}
+
+// ── Public API: Native Events ──────────────────────────────────────
+// Native platform calendar events created via !event. No other table
+// references native_events, so there is no code-level cascade to run on
+// delete (rows are soft-cancelled via status, never hard-deleted).
+
+/** Record a native platform event that was just created. */
+export function addNativeEvent(input: NewNativeEvent): NativeEvent {
+  const ts = Math.floor(Date.now() / 1000);
+  const result = insertNativeEvent.run(
+    input.chatId,
+    input.platform,
+    input.name,
+    input.description,
+    input.location,
+    input.startAtMs,
+    input.endAtMs,
+    input.platformRef,
+    input.createdBy,
+    ts,
+  );
+  return mapNativeEvent(selectNativeEventById.get(result.lastInsertRowid) as NativeEventRow);
+}
+
+/** Get a native event by ID. */
+export function getNativeEventById(id: number): NativeEvent | undefined {
+  const row = selectNativeEventById.get(id) as NativeEventRow | undefined;
+  return row ? mapNativeEvent(row) : undefined;
+}
+
+/** List scheduled native events for one chat starting at or after nowMs. */
+export function listUpcomingNativeEvents(chatId: string, nowMs: number, limit: number = 20): NativeEvent[] {
+  return (selectUpcomingNativeEvents.all(chatId, nowMs, limit) as NativeEventRow[]).map(mapNativeEvent);
+}
+
+/** Update only the provided fields on a native event. */
+export function updateNativeEvent(
+  id: number,
+  patch: Partial<{
+    name: string;
+    description: string | null;
+    location: string | null;
+    startAtMs: number;
+    endAtMs: number | null;
+    platformRef: string;
+    status: NativeEventStatus;
+    reminderId: number | null;
+  }>,
+): NativeEvent | undefined {
+  const existing = selectNativeEventById.get(id) as NativeEventRow | undefined;
+  if (!existing) return undefined;
+
+  updateNativeEventRow.run(
+    patch.name ?? existing.name,
+    patch.description !== undefined ? patch.description : existing.description,
+    patch.location !== undefined ? patch.location : existing.location,
+    patch.startAtMs ?? existing.start_at_ms,
+    patch.endAtMs !== undefined ? patch.endAtMs : existing.end_at_ms,
+    patch.platformRef ?? existing.platform_ref,
+    patch.status ?? existing.status,
+    patch.reminderId !== undefined ? patch.reminderId : existing.reminder_id,
+    id,
+  );
+  return mapNativeEvent(selectNativeEventById.get(id) as NativeEventRow);
 }
 
 // ── Public API: WhatsApp Safety ─────────────────────────────────────
@@ -1649,6 +1756,27 @@ export function createSqliteBackend(): DbBackend {
     listUpcomingEventReminders: async (limit?: number) => listUpcomingEventReminders(limit),
     markEventReminderSent: async (id: number) => markEventReminderSent(id),
     cancelEventReminder: async (id: number) => cancelEventReminder(id),
+    rescheduleEventReminder: async (id: number, eventAt: number, remindAt: number) =>
+      rescheduleEventReminder(id, eventAt, remindAt),
+    renameEventReminder: async (id: number, activity: string) => renameEventReminder(id, activity),
+
+    addNativeEvent: async (input: NewNativeEvent) => addNativeEvent(input),
+    getNativeEventById: async (id: number) => getNativeEventById(id),
+    listUpcomingNativeEvents: async (chatId: string, nowMs: number, limit?: number) =>
+      listUpcomingNativeEvents(chatId, nowMs, limit),
+    updateNativeEvent: async (
+      id: number,
+      patch: Partial<{
+        name: string;
+        description: string | null;
+        location: string | null;
+        startAtMs: number;
+        endAtMs: number | null;
+        platformRef: string;
+        status: NativeEventStatus;
+        reminderId: number | null;
+      }>,
+    ) => updateNativeEvent(id, patch),
 
     createWhatsAppOutboundJob: async (chatJid: string, kind: string, contentJson: string, optionsJson: string | null) =>
       createWhatsAppOutboundJob(chatJid, kind, contentJson, optionsJson),

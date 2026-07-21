@@ -180,6 +180,33 @@ export interface EventReminder extends NewEventReminder {
   createdAt: number;
 }
 
+export type NativeEventStatus = 'scheduled' | 'cancelled';
+
+/**
+ * A native platform calendar event (Discord guild scheduled event, WhatsApp
+ * event message) created via !event. `platformRef` is an opaque string owned
+ * by the platform adapter. Timestamps are epoch millis.
+ */
+export interface NewNativeEvent {
+  chatId: string;
+  platform: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  startAtMs: number;
+  endAtMs: number | null;
+  platformRef: string;
+  createdBy: string;
+}
+
+export interface NativeEvent extends NewNativeEvent {
+  id: number;
+  status: NativeEventStatus;
+  /** Linked event_reminders row id, or null when reminders are disabled. */
+  reminderId: number | null;
+  createdAt: number;
+}
+
 export interface MemberProfile {
   jid: string;
   name: string | null;
