@@ -203,6 +203,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_native_events_chat_status_start
     ON native_events (chat_id, status, start_at_ms ASC);
 
+  -- RSVPs to native events (WhatsApp event-message responses). One row per
+  -- responder per event; repeat responses overwrite (people change their
+  -- minds). event_id references native_events.id, but events are only ever
+  -- soft-cancelled (status = 'cancelled'), never hard-deleted, so there is
+  -- no cascade to run (and sqlite FKs are inert here anyway).
+  CREATE TABLE IF NOT EXISTS native_event_rsvps (
+    event_id INTEGER NOT NULL,
+    sender_jid TEXT NOT NULL,
+    response TEXT NOT NULL
+      CHECK (response IN ('going', 'not_going', 'maybe')),
+    responded_at INTEGER NOT NULL,
+    PRIMARY KEY (event_id, sender_jid)
+  );
+
   CREATE TABLE IF NOT EXISTS whatsapp_outbound_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_jid TEXT NOT NULL,

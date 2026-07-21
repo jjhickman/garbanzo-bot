@@ -885,6 +885,26 @@ export async function createPostgresBackend(): Promise<DbBackend> {
       throw new Error('Native events are not implemented for postgres backend yet');
     },
 
+    async findWhatsAppNativeEventByMessageId(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async reconcileHeldNativeEventRef(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async upsertNativeEventRsvp(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async listNativeEventRsvps(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
+    async countNativeEventRsvps(): Promise<never> {
+      throw new Error('Native events are not implemented for postgres backend yet');
+    },
+
     async createWhatsAppOutboundJob(
       chatJid: string,
       kind: string,

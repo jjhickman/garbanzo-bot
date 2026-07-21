@@ -3,6 +3,7 @@ import type { MessageRef } from '../../core/message-ref.js';
 import { createWhatsAppSentMessageRef, getDeleteKey, getQuotedWAMessage } from './message-ref.js';
 import type { PollPayload } from '../../core/poll-payload.js';
 import type { PlatformMessenger, NativeEventPayload } from '../../core/platform-messenger.js';
+import { buildWhatsAppEventPlatformRef } from './event-rsvps.js';
 
 /**
  * Map the platform-agnostic native-event payload onto the Baileys event
@@ -35,14 +36,18 @@ export function createWhatsAppAdapter(sock: WASocket): PlatformMessenger {
     // that way.
     async createNativeEvent(chatId: string, event: NativeEventPayload): Promise<string> {
       const sent = await sock.sendMessage(chatId, { event: toEventMessageOptions(event, false) });
-      // Send succeeded; a missing key is a Baileys edge case, and the ref is unused for WA update/cancel (replacement sends).
-      return JSON.stringify(sent?.key ?? { missingKey: true });
+      // The ref carries the message key plus the event messageSecret so
+      // inbound RSVPs can be matched and decrypted later; a missing key is
+      // a Baileys edge case, and the ref is unused for WA update/cancel
+      // (replacement sends).
+      return buildWhatsAppEventPlatformRef(sent);
     },
 
     async updateNativeEvent(chatId: string, _ref: string, event: NativeEventPayload): Promise<string> {
       const sent = await sock.sendMessage(chatId, { event: toEventMessageOptions(event, false) });
-      // Send succeeded; a missing key is a Baileys edge case, and the ref is unused for WA update/cancel (replacement sends).
-      return JSON.stringify(sent?.key ?? { missingKey: true });
+      // Fresh key + fresh messageSecret: RSVPs made against the superseded
+      // message no longer match (documented replacement-message limitation).
+      return buildWhatsAppEventPlatformRef(sent);
     },
 
     async cancelNativeEvent(chatId: string, _ref: string, event: NativeEventPayload): Promise<void> {

@@ -406,9 +406,15 @@ describe('whatsapp processor non-PTT audio surfacing', () => {
     const processInboundMessage = vi.fn(async () => undefined);
     const transcribeAudio = vi.fn(async () => 'should not run');
 
+    // The group-handler describe above leaves a partial Baileys mock
+    // registered; the processor's RSVP intercept needs the real module
+    // (proto/crypto helpers), so drop it here.
+    vi.doUnmock('@whiskeysockets/baileys');
     vi.doMock('../src/core/process-inbound-message.js', () => ({ processInboundMessage }));
     vi.doMock('../src/utils/config.js', () => ({
-      config: { OWNER_JID: 'owner@s.whatsapp.net', MESSAGING_PLATFORM: 'whatsapp', WHATSAPP_CHAT_SCOPE: 'all' },
+      // DB_DIALECT: the processor's RSVP intercept imports the db layer,
+      // whose schema module asserts the dialect at import time.
+      config: { OWNER_JID: 'owner@s.whatsapp.net', MESSAGING_PLATFORM: 'whatsapp', WHATSAPP_CHAT_SCOPE: 'all', DB_DIALECT: 'sqlite' },
     }));
     vi.doMock('../src/middleware/logger.js', () => ({
       logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },

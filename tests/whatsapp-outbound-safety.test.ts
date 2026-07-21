@@ -8,6 +8,7 @@ const dbMocks = vi.hoisted(() => ({
   getWhatsAppSafetyState: vi.fn(),
   listWhatsAppHeldJobs: vi.fn(),
   recoverWhatsAppPendingJobs: vi.fn(async () => 0),
+  reconcileHeldNativeEventRef: vi.fn(async () => false),
   setWhatsAppSafetyState: vi.fn(async () => undefined),
   updateWhatsAppOutboundJob: vi.fn(async () => true),
 }));
@@ -142,6 +143,65 @@ describe('WhatsApp outbound safety socket', () => {
     expect(released).toBe(true);
     expect(raw.sendMessage).toHaveBeenCalledWith('group@g.us', { text: 'hello' }, undefined);
     expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(8, 'sent', 'Released manually by owner', expect.any(Number));
+  });
+
+  it('revives held event Dates and links the released event message to its native event record', async () => {
+    // Held { event } content round-trips through JSON, so its Date fields
+    // come back as ISO strings — Baileys would crash on startDate.getTime().
+    const startIso = '2026-08-01T23:00:00.000Z';
+    const heldEventJob = {
+      ...pendingJob(11),
+      status: 'held' as const,
+      kind: 'message',
+      contentJson: JSON.stringify({ event: { name: 'Trivia', startDate: new Date(startIso), isCancelled: false } }),
+    };
+    dbMocks.getWhatsAppOutboundJob.mockResolvedValue(heldEventJob);
+    const messageSecret = Uint8Array.from([1, 2, 3, 4]);
+    const raw = {
+      sendMessage: vi.fn(async () => ({
+        key: { id: 'sent-evt', remoteJid: 'group@g.us', fromMe: true },
+        message: { eventMessage: { name: 'Trivia' }, messageContextInfo: { messageSecret } },
+      })),
+    };
+    const sock = createProtectedWhatsAppSocket(raw as never);
+    dbMocks.reconcileHeldNativeEventRef.mockResolvedValue(true);
+
+    const released = await getWhatsAppOutboundSafety(sock)?.releaseHeldJob(11);
+
+    expect(released).toBe(true);
+    const [, sentContent] = raw.sendMessage.mock.calls[0] as [string, { event: { startDate: Date } }];
+    expect(sentContent.event.startDate).toBeInstanceOf(Date);
+    expect(sentContent.event.startDate.toISOString()).toBe(startIso);
+    // The {heldJobId:11} native-event ref is repointed at the real message
+    // key + messageSecret so member RSVPs match from now on.
+    expect(dbMocks.reconcileHeldNativeEventRef).toHaveBeenCalledTimes(1);
+    const [jobId, ref] = dbMocks.reconcileHeldNativeEventRef.mock.calls[0] as [number, string];
+    expect(jobId).toBe(11);
+    expect(JSON.parse(ref)).toMatchObject({
+      id: 'sent-evt',
+      remoteJid: 'group@g.us',
+      fromMe: true,
+      messageSecret: Buffer.from(messageSecret).toString('base64'),
+    });
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(11, 'sent', 'Released manually by owner', expect.any(Number));
+  });
+
+  it('still releases the event job when the native-event ref link fails', async () => {
+    const heldEventJob = {
+      ...pendingJob(12),
+      status: 'held' as const,
+      kind: 'message',
+      contentJson: JSON.stringify({ event: { name: 'Trivia', startDate: new Date(), isCancelled: false } }),
+    };
+    dbMocks.getWhatsAppOutboundJob.mockResolvedValue(heldEventJob);
+    dbMocks.reconcileHeldNativeEventRef.mockRejectedValue(new Error('db down'));
+    const raw = { sendMessage: vi.fn(async () => ({ key: { id: 'sent-evt-2' } })) };
+    const sock = createProtectedWhatsAppSocket(raw as never);
+
+    const released = await getWhatsAppOutboundSafety(sock)?.releaseHeldJob(12);
+
+    expect(released).toBe(true);
+    expect(dbMocks.updateWhatsAppOutboundJob).toHaveBeenCalledWith(12, 'sent', 'Released manually by owner', expect.any(Number));
   });
 
   it('retains a held document payload for release, then strips it on the terminal sent transition', async () => {

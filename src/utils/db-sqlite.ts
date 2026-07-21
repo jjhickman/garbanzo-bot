@@ -23,6 +23,7 @@ import {
   mapFeedbackEntry,
   mapMemoryEntry,
   mapNativeEvent,
+  mapNativeEventRsvp,
   mapRehearsal,
   mapSessionSummaryHit,
   mapSetlist,
@@ -43,6 +44,7 @@ import {
   type MemoryRow,
   type MessageRow,
   type NativeEventRow,
+  type NativeEventRsvpRow,
   type RehearsalRow,
   type SessionSummaryRow,
   type SetlistEntryRow,
@@ -82,6 +84,9 @@ import type {
   MemoryEntry,
   ModerationEntry,
   NativeEvent,
+  NativeEventRsvp,
+  NativeEventRsvpCounts,
+  NativeEventRsvpResponse,
   NativeEventStatus,
   NewEventReminder,
   NewNativeEvent,
@@ -284,6 +289,34 @@ const updateNativeEventRow = db.prepare(
   `UPDATE native_events
    SET name = ?, description = ?, location = ?, start_at_ms = ?, end_at_ms = ?, platform_ref = ?, status = ?, reminder_id = ?
    WHERE id = ?`,
+);
+// Bounded RSVP-target lookup: platform_ref for WhatsApp is the JSON of the
+// latest event message key, so `$.id` is the message id an inbound event
+// response points at. Newest row wins if a stale duplicate ever exists.
+const selectWhatsAppNativeEventByMessageId = db.prepare(
+  `SELECT * FROM native_events
+   WHERE platform = 'whatsapp' AND chat_id = ? AND json_extract(platform_ref, '$.id') = ?
+   ORDER BY id DESC
+   LIMIT 1`,
+);
+const updateHeldNativeEventRef = db.prepare(
+  `UPDATE native_events SET platform_ref = ? WHERE platform = 'whatsapp' AND platform_ref = ?`,
+);
+// The WHERE guard keeps a replayed/reordered older response (reachable via
+// Baileys history sync through the catch-up path) from clobbering a newer
+// answer; `>=` means equal timestamps stay last-write-wins.
+const upsertNativeEventRsvpRow = db.prepare(
+  `INSERT INTO native_event_rsvps (event_id, sender_jid, response, responded_at)
+   VALUES (?, ?, ?, ?)
+   ON CONFLICT(event_id, sender_jid)
+   DO UPDATE SET response = excluded.response, responded_at = excluded.responded_at
+   WHERE excluded.responded_at >= native_event_rsvps.responded_at`,
+);
+const selectNativeEventRsvps = db.prepare(
+  `SELECT * FROM native_event_rsvps WHERE event_id = ? ORDER BY responded_at ASC, sender_jid ASC`,
+);
+const countNativeEventRsvpsByResponse = db.prepare(
+  `SELECT response, COUNT(*) as count FROM native_event_rsvps WHERE event_id = ? GROUP BY response`,
 );
 const countStrikesBySender = db.prepare(
   `SELECT COUNT(*) as count FROM moderation_log WHERE sender = ?`,
@@ -964,6 +997,63 @@ export function updateNativeEvent(
     id,
   );
   return mapNativeEvent(selectNativeEventById.get(id) as NativeEventRow);
+}
+
+// ── Public API: Native Event RSVPs ─────────────────────────────────
+// Rows only exist for WhatsApp events (Discord exposes an interested-user
+// count over REST instead of individual RSVPs). native_events rows are
+// soft-cancelled, never hard-deleted, so RSVP rows need no cascade cleanup.
+
+/**
+ * Find the WhatsApp event a response message targets: the native event
+ * whose stored platform_ref (the latest event message key) carries the
+ * given message id in this chat. Held (`{heldJobId}`) and `{missingKey}`
+ * refs have no `$.id`, so they never match.
+ */
+export function findWhatsAppNativeEventByMessageId(chatId: string, messageId: string): NativeEvent | undefined {
+  const row = selectWhatsAppNativeEventByMessageId.get(chatId, messageId) as NativeEventRow | undefined;
+  return row ? mapNativeEvent(row) : undefined;
+}
+
+/**
+ * Point a held-created WhatsApp event (`platform_ref = {"heldJobId":N}`) at
+ * the real message ref once the owner releases the held send. Keyed on the
+ * exact ref JSON, so already-reconciled or non-event rows never match.
+ * Returns true when a row was updated.
+ */
+export function reconcileHeldNativeEventRef(heldJobId: number, platformRef: string): boolean {
+  const heldRef = JSON.stringify({ heldJobId });
+  return updateHeldNativeEventRef.run(platformRef, heldRef).changes > 0;
+}
+
+/**
+ * Record (or overwrite — people change their minds) one sender's RSVP.
+ * Older-timestamped responses never overwrite newer ones (replay guard).
+ */
+export function upsertNativeEventRsvp(
+  eventId: number,
+  senderJid: string,
+  response: NativeEventRsvpResponse,
+  respondedAtMs: number,
+): void {
+  upsertNativeEventRsvpRow.run(eventId, senderJid, response, respondedAtMs);
+}
+
+/** List one event's current RSVPs (one row per responder). */
+export function listNativeEventRsvps(eventId: number): NativeEventRsvp[] {
+  return (selectNativeEventRsvps.all(eventId) as NativeEventRsvpRow[]).map(mapNativeEventRsvp);
+}
+
+/** Aggregate RSVP counts for one event. */
+export function countNativeEventRsvps(eventId: number): NativeEventRsvpCounts {
+  const counts: NativeEventRsvpCounts = { going: 0, notGoing: 0, maybe: 0 };
+  const rows = countNativeEventRsvpsByResponse.all(eventId) as Array<{ response: NativeEventRsvpResponse; count: number }>;
+  for (const row of rows) {
+    if (row.response === 'going') counts.going = toNumber(row.count);
+    else if (row.response === 'not_going') counts.notGoing = toNumber(row.count);
+    else if (row.response === 'maybe') counts.maybe = toNumber(row.count);
+  }
+  return counts;
 }
 
 // ── Public API: WhatsApp Safety ─────────────────────────────────────
@@ -1777,6 +1867,20 @@ export function createSqliteBackend(): DbBackend {
         reminderId: number | null;
       }>,
     ) => updateNativeEvent(id, patch),
+    findWhatsAppNativeEventByMessageId: async (chatId: string, messageId: string) =>
+      findWhatsAppNativeEventByMessageId(chatId, messageId),
+    reconcileHeldNativeEventRef: async (heldJobId: number, platformRef: string) =>
+      reconcileHeldNativeEventRef(heldJobId, platformRef),
+    upsertNativeEventRsvp: async (
+      eventId: number,
+      senderJid: string,
+      response: NativeEventRsvpResponse,
+      respondedAtMs: number,
+    ): Promise<void> => {
+      upsertNativeEventRsvp(eventId, senderJid, response, respondedAtMs);
+    },
+    listNativeEventRsvps: async (eventId: number) => listNativeEventRsvps(eventId),
+    countNativeEventRsvps: async (eventId: number) => countNativeEventRsvps(eventId),
 
     createWhatsAppOutboundJob: async (chatJid: string, kind: string, contentJson: string, optionsJson: string | null) =>
       createWhatsAppOutboundJob(chatJid, kind, contentJson, optionsJson),

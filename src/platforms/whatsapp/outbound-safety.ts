@@ -4,10 +4,12 @@ import { AntiBan, type HealthStatus } from 'baileys-antiban';
 import { logger } from '../../middleware/logger.js';
 import { config } from '../../utils/config.js';
 import { homePath } from '../../utils/paths.js';
+import { buildWhatsAppEventPlatformRef } from './event-rsvps.js';
 import {
   countWhatsAppSentSince,
   createWhatsAppOutboundJob,
   getWhatsAppOutboundJob,
+  reconcileHeldNativeEventRef,
   getWhatsAppSafetyMetrics,
   getWhatsAppSafetyState,
   listWhatsAppHeldJobs,
@@ -79,6 +81,24 @@ function terminalMediaContentJson(content: SendContent, kind: string): string | 
 function parsePayload<T>(value: string | null): T | undefined {
   if (value === null) return undefined;
   return JSON.parse(value) as T;
+}
+
+function isEventContent(content: SendContent): boolean {
+  return typeof content === 'object' && content !== null && 'event' in content;
+}
+
+/**
+ * Held `{ event }` sends round-trip through JSON (`content_json`), which
+ * turns the Baileys EventMessageOptions Date fields into ISO strings —
+ * Baileys then crashes on `startDate.getTime()` at release time. Revive
+ * them before resending.
+ */
+function reviveEventDates(content: SendContent): void {
+  if (!isEventContent(content)) return;
+  const event = (content as { event?: { startDate?: unknown; endDate?: unknown } }).event;
+  if (!event) return;
+  if (typeof event.startDate === 'string') event.startDate = new Date(event.startDate);
+  if (typeof event.endDate === 'string') event.endDate = new Date(event.endDate);
 }
 
 function errorText(err: unknown): string {
@@ -249,8 +269,12 @@ export class WhatsAppOutboundSafety {
     try {
       const content = parsePayload<SendContent>(job.contentJson);
       if (!content) return false;
+      reviveEventDates(content);
       const options = parsePayload<SendOptions>(job.optionsJson);
-      await this.rawSocket.sendMessage(job.chatJid, content, options);
+      const sent = await this.rawSocket.sendMessage(job.chatJid, content, options);
+      if (isEventContent(content)) {
+        await this.linkReleasedEventMessage(job.id, sent);
+      }
       const terminalContentJson = terminalMediaContentJson(content, job.kind);
       if (terminalContentJson) {
         await updateWhatsAppOutboundJob(
@@ -269,6 +293,25 @@ export class WhatsAppOutboundSafety {
       await updateWhatsAppOutboundJob(job.id, 'held', `Manual release failed: ${errorText(err)}`);
       logger.error({ err, jobId: job.id, kind: job.kind }, 'Failed to release retained WhatsApp outbound job');
       return false;
+    }
+  }
+
+  /**
+   * A released held job may be the create-message of a native event whose
+   * stored ref is still the `{heldJobId:N}` placeholder — repoint it at
+   * the real message key (+ messageSecret) so member RSVPs match from now
+   * on. Purely a db-level update keyed on the exact ref JSON; held
+   * update/cancel replacement sends have real refs already and are
+   * untouched. Failure never fails the release itself.
+   */
+  private async linkReleasedEventMessage(jobId: number, sent: SendResult): Promise<void> {
+    try {
+      const updated = await reconcileHeldNativeEventRef(jobId, buildWhatsAppEventPlatformRef(sent));
+      if (updated) {
+        logger.info({ jobId }, 'Linked released event message to its native event record');
+      }
+    } catch (err) {
+      logger.warn({ err, jobId }, 'Failed to link released event message to its native event record');
     }
   }
 

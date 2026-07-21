@@ -74,6 +74,7 @@ export interface DiscordNativeEventMethods {
   createNativeEvent(chatId: string, event: NativeEventPayload): Promise<string>;
   updateNativeEvent(chatId: string, ref: string, event: NativeEventPayload): Promise<string>;
   cancelNativeEvent(chatId: string, ref: string, event: NativeEventPayload): Promise<void>;
+  getNativeEventInterestCount(chatId: string, ref: string): Promise<number | null>;
 }
 
 export function createDiscordNativeEventMethods(token: string): DiscordNativeEventMethods {
@@ -131,6 +132,18 @@ export function createDiscordNativeEventMethods(token: string): DiscordNativeEve
       } catch (err) {
         translateApiError(err);
       }
+    },
+
+    async getNativeEventInterestCount(_chatId: string, ref: string): Promise<number | null> {
+      const { guildId, eventId } = parseDiscordEventRef(ref);
+      // No translateApiError here: the caller degrades to showing the event
+      // without counts on ANY failure, so the raw error is fine to throw.
+      const event = await discordApiRequest<DiscordScheduledEventResponse & { user_count?: number }>(
+        token,
+        `/guilds/${guildId}/scheduled-events/${eventId}?with_user_count=true`,
+        { method: 'GET' },
+      );
+      return typeof event.user_count === 'number' ? event.user_count : null;
     },
 
     async cancelNativeEvent(_chatId: string, ref: string): Promise<void> {
