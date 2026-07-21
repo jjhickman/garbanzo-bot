@@ -21,6 +21,7 @@ function makeRehearsal(overrides: Partial<Rehearsal> = {}): Rehearsal {
     createdBy: 'member-1',
     createdAt: Math.floor(new Date(2026, 6, 1, 12, 0, 0, 0).getTime() / 1000),
     updatedAt: Math.floor(new Date(2026, 6, 1, 12, 0, 0, 0).getTime() / 1000),
+    nativeEventId: null,
     ...overrides,
   };
 }

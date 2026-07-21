@@ -460,7 +460,9 @@ async function handleRehearsalFeature(params: {
     return;
   }
 
-  const result = await handleRehearsalCommand(featureQuery, { senderId });
+  // messenger + chatId let schedule/cancel/show manage the linked native
+  // platform event (Discord scheduled event / WhatsApp event message).
+  const result = await handleRehearsalCommand(featureQuery, { senderId, messenger, chatId });
   await messenger.sendText(chatId, result, { replyTo });
   recordBotResponse(chatId);
   recordResponse(senderId, chatId);

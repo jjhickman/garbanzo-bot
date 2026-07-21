@@ -26,7 +26,9 @@ import {
   type AvailabilityResponse,
   type Rehearsal,
 } from '../utils/db.js';
+import { cancelRehearsalEvent, createRehearsalEvent, describeRehearsalEvent } from './rehearsal-events.js';
 import { parseTitleAndFields } from './songs.js';
+import type { PlatformMessenger } from '../core/platform-messenger.js';
 
 const SCHEDULE_FIELDS = ['when', 'location', 'agenda'] as const;
 const DATE_ONLY_DEFAULT_HOUR = 19;
@@ -35,7 +37,18 @@ const DATE_ONLY_DEFAULT_MINUTE = 0;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
-export async function handleRehearsalCommand(args: string, ctx: { senderId: string }): Promise<string> {
+/**
+ * messenger/chatId are optional: when present (group dispatch passes them),
+ * schedule/cancel/show also manage a linked native platform event; when
+ * absent, rehearsals behave exactly as before the tie-in existed.
+ */
+export interface RehearsalContext {
+  senderId: string;
+  messenger?: PlatformMessenger;
+  chatId?: string;
+}
+
+export async function handleRehearsalCommand(args: string, ctx: RehearsalContext): Promise<string> {
   const trimmed = args.trim();
   if (!trimmed) return usage();
 
@@ -49,9 +62,9 @@ export async function handleRehearsalCommand(args: string, ctx: { senderId: stri
     case 'list':
       return handleList();
     case 'show':
-      return handleShow(rest);
+      return handleShow(rest, ctx);
     case 'cancel':
-      return handleCancel(rest);
+      return handleCancel(rest, ctx);
     case 'note':
       return handleNote(rest);
     default:
@@ -134,7 +147,7 @@ function usage(): string {
   ].join('\n');
 }
 
-async function handleSchedule(rest: string, ctx: { senderId: string }): Promise<string> {
+async function handleSchedule(rest: string, ctx: RehearsalContext): Promise<string> {
   const { fields } = parseTitleAndFields(rest, SCHEDULE_FIELDS);
   if (!fields.when) {
     return '❌ Usage: `!rehearsal schedule when=YYYY-MM-DD HH:MM [location=..] [agenda=..]`';
@@ -151,7 +164,12 @@ async function handleSchedule(rest: string, ctx: { senderId: string }): Promise<
     agenda: fields.agenda || undefined,
     createdBy: ctx.senderId,
   });
-  return `✅ Added: ${formatRehearsalLine(rehearsal)}`;
+
+  // Also create a native platform event where supported; the rehearsal is
+  // already saved, so any tie-in outcome only appends a line to the reply.
+  const eventLine = await createRehearsalEvent(rehearsal, ctx);
+  const added = `✅ Added: ${formatRehearsalLine(rehearsal)}`;
+  return eventLine ? `${added}\n${eventLine}` : added;
 }
 
 async function handleList(): Promise<string> {
@@ -166,7 +184,7 @@ async function handleList(): Promise<string> {
   return lines.join('\n');
 }
 
-async function handleShow(idText: string): Promise<string> {
+async function handleShow(idText: string, ctx: RehearsalContext): Promise<string> {
   const id = parseRehearsalId(idText);
   if (id === null) return '❌ Usage: `!rehearsal show <id>`';
 
@@ -179,6 +197,9 @@ async function handleShow(idText: string): Promise<string> {
   const availability = await listAvailability(id);
   const summary = formatAvailabilitySummary(availability);
   if (summary) lines.push('', summary);
+
+  const eventLines = await describeRehearsalEvent(rehearsal, ctx);
+  if (eventLines.length > 0) lines.push('', ...eventLines);
 
   return lines.join('\n');
 }
@@ -204,13 +225,20 @@ function formatAvailabilitySummary(responses: Availability[]): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-async function handleCancel(idText: string): Promise<string> {
+async function handleCancel(idText: string, ctx: RehearsalContext): Promise<string> {
   const id = parseRehearsalId(idText);
   if (id === null) return '❌ Usage: `!rehearsal cancel <id>`';
 
   const cancelled = await cancelRehearsal(id);
   if (!cancelled) return `❌ No rehearsal found with id #${id}.`;
-  return `🗑️ Cancelled rehearsal #${id}.`;
+
+  // Sync the linked native platform event (soft-cancelled row, never
+  // hard-deleted). Read the row back after the cancel: the rehearsal is
+  // already cancelled, so the tie-in only appends a line to the reply.
+  const reply = `🗑️ Cancelled rehearsal #${id}.`;
+  const rehearsal = await getRehearsalById(id);
+  const eventLine = rehearsal ? await cancelRehearsalEvent(rehearsal, ctx) : null;
+  return eventLine ? `${reply}\n${eventLine}` : reply;
 }
 
 async function handleNote(rest: string): Promise<string> {

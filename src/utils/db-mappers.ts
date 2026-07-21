@@ -121,6 +121,8 @@ export interface RehearsalRow {
   created_by: string | null;
   created_at: DbNumeric | null;
   updated_at: DbNumeric | null;
+  // Optional: absent on postgres, where native events are not ported yet.
+  native_event_id?: DbNumeric | null;
 }
 
 export interface AvailabilityRow {
@@ -368,6 +370,8 @@ export function mapRehearsal(row: RehearsalRow): Rehearsal {
     createdBy: row.created_by,
     createdAt: toNumber(row.created_at),
     updatedAt: toNumber(row.updated_at),
+    // == null (not ===) also covers postgres rows, where the column is absent.
+    nativeEventId: row.native_event_id == null ? null : toNumber(row.native_event_id),
   };
 }
 

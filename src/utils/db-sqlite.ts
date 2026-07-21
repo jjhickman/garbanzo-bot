@@ -411,7 +411,7 @@ const selectNextRehearsal = db.prepare(
 );
 const updateRehearsalRow = db.prepare(
   `UPDATE rehearsals
-   SET scheduled_at = ?, location = ?, agenda = ?, status = ?, updated_at = ?
+   SET scheduled_at = ?, location = ?, agenda = ?, status = ?, native_event_id = ?, updated_at = ?
    WHERE id = ?`,
 );
 const updateRehearsalCancelled = db.prepare(
@@ -1545,7 +1545,7 @@ export function getNextRehearsal(nowSeconds: number): Rehearsal | undefined {
 /** Update only the provided fields on a rehearsal and bump updated_at. */
 export function updateRehearsal(
   id: number,
-  patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus }>,
+  patch: Partial<{ scheduledAt: number; location: string | null; agenda: string | null; status: RehearsalStatus; nativeEventId: number | null }>,
 ): Rehearsal | undefined {
   const existing = selectRehearsalById.get(id) as RehearsalRow | undefined;
   if (!existing) return undefined;
@@ -1556,6 +1556,7 @@ export function updateRehearsal(
     patch.location !== undefined ? patch.location : existing.location,
     patch.agenda !== undefined ? patch.agenda : existing.agenda,
     patch.status ?? existing.status,
+    patch.nativeEventId !== undefined ? patch.nativeEventId : existing.native_event_id ?? null,
     ts,
     id,
   );
@@ -1850,6 +1851,7 @@ export function createSqliteBackend(): DbBackend {
       rescheduleEventReminder(id, eventAt, remindAt),
     renameEventReminder: async (id: number, activity: string) => renameEventReminder(id, activity),
 
+    supportsNativeEvents: () => true,
     addNativeEvent: async (input: NewNativeEvent) => addNativeEvent(input),
     getNativeEventById: async (id: number) => getNativeEventById(id),
     listUpcomingNativeEvents: async (chatId: string, nowMs: number, limit?: number) =>

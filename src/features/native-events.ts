@@ -17,27 +17,36 @@
  * held job IS the event message: the DB records the event or change
  * immediately and the reply names the held job — never "run the command
  * again". Platforms without the capability get a "not supported" reply.
+ *
+ * The platform create/cancel + held-job + reminder plumbing lives in
+ * native-events-shared.ts, shared with the !rehearsal tie-in.
  */
 
 import { logger } from '../middleware/logger.js';
-import { config } from '../utils/config.js';
 import {
-  addEventReminder,
-  addNativeEvent,
-  cancelEventReminder,
   countNativeEventRsvps,
   getNativeEventById,
   listUpcomingNativeEvents,
   renameEventReminder,
   rescheduleEventReminder,
+  supportsNativeEvents,
   updateNativeEvent as updateNativeEventRecord,
   type NativeEvent,
 } from '../utils/db.js';
 import { resolveEventTimestamp } from './event-time.js';
-import type { NativeEventPayload, PlatformMessenger } from '../core/platform-messenger.js';
+import {
+  asHeldJob,
+  cancelTrackedNativeEvent,
+  computeReminderTimes,
+  createTrackedNativeEvent,
+  describeSendError,
+  heldReply,
+  maybeAddReminderRow,
+  toEventPayload,
+  type HeldJob,
+} from './native-events-shared.js';
+import type { PlatformMessenger } from '../core/platform-messenger.js';
 
-const REMINDER_MIN_DELAY_SECONDS = 60;
-const ERROR_TEXT_MAX_CHARS = 200;
 // Discord caps scheduled-event names at 100 chars and description/location
 // at 1000; WhatsApp gets the same bounds for cross-platform consistency.
 const NAME_MAX_CHARS = 100;
@@ -75,6 +84,13 @@ export async function handleNativeEventCommand(args: string, ctx: NativeEventCon
 
   if (!ctx.messenger.createNativeEvent) {
     return '📅 Native events are not supported on this platform yet.';
+  }
+
+  // Guard BEFORE any platform call: a backend without native-event
+  // persistence would let the live platform event go out and then throw on
+  // the row insert, orphaning a real event (no link, cancel can't sync it).
+  if (!supportsNativeEvents()) {
+    return '📅 Native events need the sqlite database backend — this database backend doesn\'t store them yet.';
   }
 
   if (trimmed.includes('|')) {
@@ -139,48 +155,19 @@ async function handleCreate(text: string, ctx: NativeEventContext): Promise<stri
     return `❌ I couldn't use "${whenText}" — give me a future time within 30 days, like \`tomorrow 7pm\` or \`friday 8pm\`.`;
   }
 
-  if (!ctx.messenger.createNativeEvent) {
+  const result = await createTrackedNativeEvent(
+    { messenger: ctx.messenger, chatId: ctx.chatId },
+    { name, location: location || undefined, startAtMs, createdBy: ctx.senderId },
+  );
+  if (result.outcome === 'unsupported') {
     return '📅 Native events are not supported on this platform yet.';
   }
+  if (result.outcome === 'failed') return result.errorText;
 
-  const payload: NativeEventPayload = { name, startAtMs, location: location || undefined };
-  let platformRef: string;
-  let heldJob: HeldJob | null = null;
-  try {
-    platformRef = await ctx.messenger.createNativeEvent(ctx.chatId, payload);
-  } catch (err) {
-    heldJob = asHeldJob(err);
-    if (!heldJob) return describeSendError(err, 'create');
-    // The held job IS the event message: record the event now so it is
-    // tracked; the message posts when the owner releases the job. A hold
-    // without a job id can never be reconciled to the real message ref
-    // later, so store the untracked-ref marker instead of {"heldJobId":null}.
-    platformRef = JSON.stringify(
-      heldJob.jobId === null ? { missingKey: true } : { heldJobId: heldJob.jobId },
-    );
+  if (result.heldJob) {
+    return heldReply('event message', `event ${formatEventLine(result.event)}`, result.heldJob.jobId);
   }
-
-  let event = await addNativeEvent({
-    chatId: ctx.chatId,
-    platform: ctx.messenger.platform,
-    name,
-    description: null,
-    location: location || null,
-    startAtMs,
-    endAtMs: null,
-    platformRef,
-    createdBy: ctx.senderId,
-  });
-
-  const reminderId = await maybeAddReminderRow(event);
-  if (reminderId !== null) {
-    event = (await updateNativeEventRecord(event.id, { reminderId })) ?? event;
-  }
-
-  if (heldJob) {
-    return heldReply('event message', `event ${formatEventLine(event)}`, heldJob.jobId);
-  }
-  return `✅ Created event ${formatEventLine(event)}`;
+  return `✅ Created event ${formatEventLine(result.event)}`;
 }
 
 async function handleList(ctx: NativeEventContext): Promise<string> {
@@ -200,19 +187,23 @@ async function handleShow(idText: string, ctx: NativeEventContext): Promise<stri
 
   const lines = [`📅 ${formatEventLine(event)}`];
   if (event.description) lines.push('', event.description);
-  const rsvpLine = await buildRsvpLine(event, ctx);
+  const rsvpLine = await buildNativeEventRsvpLine(event, ctx);
   if (rsvpLine) lines.push('', rsvpLine);
   return lines.join('\n');
 }
 
 /**
- * RSVP summary for `!event show`. WhatsApp counts come from ingested event
- * responses (`native_event_rsvps`) — counts only, never responder JIDs;
- * there is no clean display-name source and raw JIDs must never be
- * rendered to the group. Discord reports a live interested-user count over
- * REST. Any failure degrades to showing the event without counts.
+ * RSVP summary for `!event show` (and reused by `!rehearsal show` for a
+ * linked event). WhatsApp counts come from ingested event responses
+ * (`native_event_rsvps`) — counts only, never responder JIDs; there is no
+ * clean display-name source and raw JIDs must never be rendered to the
+ * group. Discord reports a live interested-user count over REST. Any
+ * failure degrades to showing the event without counts.
  */
-async function buildRsvpLine(event: NativeEvent, ctx: NativeEventContext): Promise<string | null> {
+export async function buildNativeEventRsvpLine(
+  event: NativeEvent,
+  ctx: { messenger?: PlatformMessenger; chatId?: string },
+): Promise<string | null> {
   if (event.platform === 'whatsapp') {
     try {
       const counts = await countNativeEventRsvps(event.id);
@@ -223,7 +214,7 @@ async function buildRsvpLine(event: NativeEvent, ctx: NativeEventContext): Promi
     }
   }
 
-  if (!ctx.messenger.getNativeEventInterestCount) return null;
+  if (!ctx.messenger?.getNativeEventInterestCount || !ctx.chatId) return null;
   try {
     const count = await ctx.messenger.getNativeEventInterestCount(ctx.chatId, event.platformRef);
     return count === null ? null : `🙋 Interested: ${count}`;
@@ -269,33 +260,14 @@ async function handleCancel(idText: string, ctx: NativeEventContext): Promise<st
   const event = await findMutableChatEvent(idText, ctx);
   if (typeof event === 'string') return event;
 
-  if (!ctx.messenger.cancelNativeEvent) {
+  const result = await cancelTrackedNativeEvent(event, { messenger: ctx.messenger, chatId: ctx.chatId });
+  if (result.outcome === 'unsupported') {
     return '📅 Cancelling native events is not supported on this platform yet.';
   }
+  if (result.outcome === 'failed') return result.errorText;
 
-  let heldJob: HeldJob | null = null;
-  try {
-    await ctx.messenger.cancelNativeEvent(ctx.chatId, event.platformRef, toPayload(event));
-  } catch (err) {
-    heldJob = asHeldJob(err);
-    if (!heldJob) return describeSendError(err, 'cancel');
-    // Held cancellation message: the event is still cancelled here; the
-    // notice posts when the owner releases the job.
-  }
-
-  await updateNativeEventRecord(event.id, { status: 'cancelled' });
-  if (event.reminderId !== null) {
-    // 'cancelled' is terminal for the reminder pollers: their due queries
-    // only select status = 'pending' rows, so this can never fire.
-    try {
-      await cancelEventReminder(event.reminderId);
-    } catch (err) {
-      logger.warn({ err, eventId: event.id, reminderId: event.reminderId }, 'Failed to cancel reminder for native event');
-    }
-  }
-
-  if (heldJob) {
-    return heldReply('cancellation message', `the cancellation of event #${event.id} (${event.name})`, heldJob.jobId);
+  if (result.heldJob) {
+    return heldReply('cancellation message', `the cancellation of event #${event.id} (${event.name})`, result.heldJob.jobId);
   }
   return `🗑️ Cancelled event #${event.id} (${event.name}).`;
 }
@@ -310,7 +282,7 @@ async function applyPlatformUpdate(
     return '📅 Updating native events is not supported on this platform yet.';
   }
 
-  const payload = toPayload({ ...event, ...patch });
+  const payload = toEventPayload({ ...event, ...patch });
   let platformRef = event.platformRef;
   let heldJob: HeldJob | null = null;
   try {
@@ -362,16 +334,6 @@ async function syncReminder(
   return event;
 }
 
-function toPayload(event: Pick<NativeEvent, 'name' | 'description' | 'location' | 'startAtMs' | 'endAtMs'>): NativeEventPayload {
-  return {
-    name: event.name,
-    description: event.description ?? undefined,
-    startAtMs: event.startAtMs,
-    endAtMs: event.endAtMs ?? undefined,
-    location: event.location ?? undefined,
-  };
-}
-
 async function findChatEvent(idText: string, ctx: NativeEventContext): Promise<NativeEvent | string> {
   const id = parseEventId(idText);
   if (id === null) return '❌ Give me an event id, e.g. `!event show 3`.';
@@ -405,65 +367,6 @@ function validateEventText(name: string, location?: string): string | null {
     return `❌ Event locations are limited to ${TEXT_FIELD_MAX_CHARS} characters — yours is ${location.length}. Try a shorter location.`;
   }
   return null;
-}
-
-interface HeldJob {
-  jobId: number | null;
-}
-
-/** Recognize the outbound-safety hold (queued for manual release, not a failure). */
-function asHeldJob(err: unknown): HeldJob | null {
-  if (!(err instanceof Error) || err.name !== 'WhatsAppOutboundHeldError') return null;
-  const jobId = (err as { jobId?: number }).jobId;
-  return { jobId: typeof jobId === 'number' ? jobId : null };
-}
-
-/**
- * Reply for a held send. The held job is the message itself — the event or
- * change is already recorded, so the reply must never instruct re-running
- * the command (that would double-send on release).
- */
-function heldReply(what: string, recorded: string, jobId: number | null): string {
-  const job = jobId === null ? '' : ` as job #${jobId}`;
-  return `📨 The ${what} was queued by the WhatsApp safety layer${job} — ${recorded} is recorded and will post when you release it with \`!whatsapp release ${jobId ?? '<id>'}\`.`;
-}
-
-function describeSendError(err: unknown, verb: string): string {
-  const detail = err instanceof Error ? err.message : String(err);
-  logger.warn({ err, verb }, 'Native event platform call failed');
-  return `❌ Couldn't ${verb} the event: ${detail.slice(0, ERROR_TEXT_MAX_CHARS)}`;
-}
-
-/** Reminder times (epoch seconds): lead before start, clamped to now+60s. */
-function computeReminderTimes(startAtMs: number): { eventAt: number; remindAt: number } {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const eventAt = Math.floor(startAtMs / 1000);
-  let remindAt = eventAt - config.EVENT_REMINDER_LEAD_MINUTES * 60;
-  if (remindAt <= nowSeconds) {
-    remindAt = nowSeconds + REMINDER_MIN_DELAY_SECONDS;
-  }
-  return { eventAt, remindAt };
-}
-
-/** Create the linked reminder row; returns its id, or null when disabled/failed. */
-async function maybeAddReminderRow(event: NativeEvent): Promise<number | null> {
-  if (!config.EVENT_REMINDERS_ENABLED) return null;
-
-  const { eventAt, remindAt } = computeReminderTimes(event.startAtMs);
-  try {
-    const reminder = await addEventReminder({
-      chatJid: event.chatId,
-      activity: event.name,
-      location: event.location,
-      eventAt,
-      remindAt,
-      createdBy: event.createdBy,
-    });
-    return reminder.id;
-  } catch (err) {
-    logger.warn({ err, eventId: event.id }, 'Failed to add reminder row for native event');
-    return null;
-  }
 }
 
 function formatEventStart(startAtMs: number): string {

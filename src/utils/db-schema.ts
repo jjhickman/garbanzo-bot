@@ -279,7 +279,13 @@ db.exec(`
     reminder_sent INTEGER NOT NULL DEFAULT 0,
     created_by TEXT,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    -- Linked native_events row created by !rehearsal schedule (sqlite FKs
+    -- are inert here; the link is maintained in code). The linked event
+    -- deliberately has NO event_reminders row: rehearsals already have
+    -- their own reminder poller, and a second reminder would double-ping
+    -- the band. Both sides are soft-cancelled, never hard-deleted.
+    native_event_id INTEGER
   );
 
   CREATE INDEX IF NOT EXISTS idx_rehearsals_status_scheduled
@@ -415,6 +421,12 @@ if (!tableHasColumn('feedback', 'github_issue_created_at')) {
 // linked their event_reminders row (reminder resync on move/cancel).
 if (!tableHasColumn('native_events', 'reminder_id')) {
   db.exec('ALTER TABLE native_events ADD COLUMN reminder_id INTEGER');
+}
+
+// Forward-compatible migration for databases created before !rehearsal
+// schedule linked a native platform event to the rehearsal.
+if (!tableHasColumn('rehearsals', 'native_event_id')) {
+  db.exec('ALTER TABLE rehearsals ADD COLUMN native_event_id INTEGER');
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────
